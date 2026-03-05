@@ -157,7 +157,7 @@ const SSHHostsPage = {
             }
         });
 
-        const footer = DOM.el('div', { style: { display: 'flex', gap: '8px' } });
+        const footer = DOM.el('div', { style: { display: 'flex', gap: '8px', justifyContent: 'flex-end' } });
         footer.appendChild(DOM.el('button', { className: 'btn btn-secondary', textContent: 'Cancel', type: 'button', onClick: () => Modal.hide() }));
         if (isEdit) {
             footer.appendChild(DOM.el('button', {

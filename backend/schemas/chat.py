@@ -6,12 +6,18 @@ from datetime import datetime
 class ChatSessionCreate(BaseModel):
     connection_id: Optional[int] = None
     title: Optional[str] = "New Session"
+    ai_model_id: Optional[int] = None
+    kb_ids: Optional[List[int]] = None
+    disabled_tools: Optional[List[str]] = None
 
 
 class ChatSessionResponse(BaseModel):
     id: int
     connection_id: Optional[int] = None
+    ai_model_id: Optional[int] = None
     title: str
+    kb_ids: Optional[List[int]] = None
+    disabled_tools: Optional[List[str]] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

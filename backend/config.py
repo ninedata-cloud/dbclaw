@@ -19,6 +19,16 @@ class Settings(BaseSettings):
 
     metric_interval: int = 15
 
+    # JWT settings
+    jwt_secret_key: str = "change-me-to-a-random-secret-key"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 1440
+
+    # Knowledge Base settings
+    chroma_persist_dir: str = "./data/chroma"
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    knowledge_base_dir: str = "./data/knowledge_bases"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

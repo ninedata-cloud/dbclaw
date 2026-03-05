@@ -20,6 +20,11 @@ Diagnosis approach:
 3. Give specific fix commands/config changes
 4. Rate severity: CRITICAL / WARNING / INFO
 
+Knowledge base usage:
+- When knowledge bases are available, use search_knowledge_base tool to find relevant documentation before making recommendations
+- When using knowledge base content, cite the source document (e.g., "According to [filename]...")
+- Prioritize organization-specific documentation over generic best practices
+
 Use markdown: headers, code blocks, bullet points. Keep it short."""
 
 TOOL_RESULT_PROMPT = """Here is the result from the tool call. Analyze this data and continue your diagnosis.

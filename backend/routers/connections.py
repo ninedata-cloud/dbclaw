@@ -9,8 +9,9 @@ from backend.schemas.connection import (
     ConnectionCreate, ConnectionUpdate, ConnectionResponse, ConnectionTestResult
 )
 from backend.utils.encryption import encrypt_value, decrypt_value
+from backend.dependencies import get_current_user
 
-router = APIRouter(prefix="/api/connections", tags=["connections"])
+router = APIRouter(prefix="/api/connections", tags=["connections"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("", response_model=List[ConnectionResponse])

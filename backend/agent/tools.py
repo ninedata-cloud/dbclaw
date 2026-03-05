@@ -1,3 +1,19 @@
+# Tools that can modify state or execute arbitrary commands.
+# Users can disable these per-session from the diagnosis UI.
+HIGH_RISK_TOOLS = {
+    "execute_diagnostic_query": "Execute SQL queries on the database",
+    "execute_os_command": "Execute shell commands on the host via SSH",
+    "explain_query": "Run EXPLAIN on SQL queries",
+}
+
+
+def get_filtered_tools(disabled_tools=None):
+    """Return TOOL_DEFINITIONS with disabled tools removed."""
+    if not disabled_tools:
+        return TOOL_DEFINITIONS
+    return [t for t in TOOL_DEFINITIONS if t["function"]["name"] not in disabled_tools]
+
+
 TOOL_DEFINITIONS = [
     {
         "type": "function",
@@ -180,6 +196,26 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_knowledge_base",
+            "description": "Search knowledge bases for relevant documentation. Use when user questions relate to custom configurations, internal procedures, or topics that might be documented in uploaded files.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search query"},
+                    "kb_ids": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "Optional KB IDs to search (if not provided, searches all active KBs in session)"
+                    },
+                    "top_k": {"type": "integer", "description": "Number of results (default: 5)", "default": 5}
+                },
+                "required": ["query"]
             }
         }
     },

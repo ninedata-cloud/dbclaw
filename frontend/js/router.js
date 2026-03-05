@@ -20,6 +20,13 @@ const Router = {
         const hash = window.location.hash.slice(1) || 'dashboard';
         const [page, ...params] = hash.split('/');
 
+        // Auth guard
+        const token = localStorage.getItem('auth_token');
+        if (page !== 'login' && !token) {
+            window.location.hash = 'login';
+            return;
+        }
+
         // Cleanup previous page
         if (this.currentCleanup && typeof this.currentCleanup === 'function') {
             this.currentCleanup();

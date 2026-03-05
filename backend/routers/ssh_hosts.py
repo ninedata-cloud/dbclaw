@@ -9,8 +9,9 @@ from backend.schemas.ssh_host import (
     SSHHostCreate, SSHHostUpdate, SSHHostResponse, SSHTestResult
 )
 from backend.utils.encryption import encrypt_value, decrypt_value
+from backend.dependencies import get_current_user
 
-router = APIRouter(prefix="/api/ssh-hosts", tags=["ssh-hosts"])
+router = APIRouter(prefix="/api/ssh-hosts", tags=["ssh-hosts"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("", response_model=List[SSHHostResponse])

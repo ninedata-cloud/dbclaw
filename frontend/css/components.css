@@ -73,6 +73,163 @@
     border-top: 1px solid var(--border-color);
 }
 
+/* === Knowledge Base Cards === */
+.kb-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+}
+
+.kb-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    transition: all var(--transition);
+}
+
+.kb-card:hover {
+    border-color: var(--accent-blue);
+    box-shadow: var(--shadow-md);
+}
+
+.kb-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.kb-card-header h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0;
+}
+
+.kb-description {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+    min-height: 40px;
+}
+
+.kb-stats {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+}
+
+.kb-stats span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.kb-stats svg {
+    width: 14px;
+    height: 14px;
+}
+
+.kb-actions {
+    display: flex;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+}
+
+/* === Document Manager === */
+.document-manager {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.upload-area {
+    border: 2px dashed var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 40px;
+    text-align: center;
+    cursor: pointer;
+    transition: all var(--transition);
+}
+
+.upload-area:hover {
+    border-color: var(--accent-blue);
+    background: rgba(0, 120, 215, 0.05);
+}
+
+.upload-area.drag-over {
+    border-color: var(--accent-blue);
+    background: rgba(0, 120, 215, 0.1);
+}
+
+.upload-area svg {
+    color: var(--text-muted);
+    margin-bottom: 12px;
+}
+
+.upload-area p {
+    margin: 8px 0;
+}
+
+.document-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.document-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+}
+
+.document-icon {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+}
+
+.document-icon svg {
+    width: 20px;
+    height: 20px;
+    color: var(--accent-blue);
+}
+
+.document-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.document-name {
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.document-meta {
+    display: flex;
+    gap: 12px;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
 /* === Data Table === */
 .data-table-container {
     overflow-x: auto;

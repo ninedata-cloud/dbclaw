@@ -119,7 +119,7 @@ const AIModelsPage = {
             }
         });
 
-        const footer = DOM.el('div', { style: { display: 'flex', gap: '8px' } });
+        const footer = DOM.el('div', { style: { display: 'flex', gap: '8px', justifyContent: 'flex-end' } });
         footer.appendChild(DOM.el('button', { className: 'btn btn-secondary', textContent: 'Cancel', type: 'button', onClick: () => Modal.hide() }));
         footer.appendChild(DOM.el('button', {
             className: 'btn btn-primary', textContent: isEdit ? 'Save' : 'Create', type: 'button',

@@ -57,6 +57,7 @@ async def _dispatch_tool(tool_name: str, args: Dict[str, Any]) -> Any:
         "execute_os_command": _tool_execute_os_command,
         "get_metric_history": _tool_get_metric_history,
         "list_connections": _tool_list_connections,
+        "search_knowledge_base": _tool_search_knowledge_base,
     }
 
     handler = handlers.get(tool_name)
@@ -250,3 +251,80 @@ async def _tool_list_connections(args):
              "host": c.host, "port": c.port, "database": c.database}
             for c in conns
         ]
+
+
+async def _tool_search_knowledge_base(args):
+    """Search knowledge bases for relevant documentation."""
+    from backend.models.knowledge_base import KnowledgeBase
+    from backend.services.vector_store import VectorStore
+    from backend.config import get_settings
+
+    query = args.get("query", "").strip()
+    if not query:
+        return {"error": "Query is required"}
+
+    kb_ids = args.get("kb_ids")
+    top_k = args.get("top_k", 5)
+
+    # Get session context if available (passed via args)
+    session_kb_ids = args.get("session_kb_ids")
+
+    # Determine which KBs to search
+    if kb_ids:
+        search_kb_ids = kb_ids
+    elif session_kb_ids:
+        search_kb_ids = session_kb_ids
+    else:
+        # Search all active KBs
+        async with async_session() as db:
+            result = await db.execute(
+                select(KnowledgeBase.id).where(KnowledgeBase.is_active == True)
+            )
+            search_kb_ids = [row[0] for row in result.all()]
+
+    if not search_kb_ids:
+        return {"message": "No knowledge bases available to search"}
+
+    # Get KBs
+    async with async_session() as db:
+        result = await db.execute(
+            select(KnowledgeBase).where(KnowledgeBase.id.in_(search_kb_ids))
+        )
+        kbs = result.scalars().all()
+
+    if not kbs:
+        return {"message": "No knowledge bases found"}
+
+    # Search each KB
+    settings = get_settings()
+    vector_store = VectorStore(
+        persist_dir=settings.chroma_persist_dir,
+        embedding_model=settings.embedding_model,
+    )
+
+    all_results = []
+    for kb in kbs:
+        try:
+            results = vector_store.search(kb.collection_name, query, top_k=top_k)
+            for result in results:
+                all_results.append({
+                    "content": result["content"][:2000],  # Truncate to avoid token overflow
+                    "filename": result["metadata"].get("filename", "unknown"),
+                    "file_type": result["metadata"].get("file_type", "unknown"),
+                    "document_id": result["metadata"].get("document_id"),
+                    "kb_id": kb.id,
+                    "kb_name": kb.name,
+                    "distance": result["distance"],
+                    "chunk_index": result["metadata"].get("chunk_index", 0),
+                })
+        except Exception as e:
+            logger.warning(f"Error searching KB {kb.id}: {e}")
+
+    # Sort by distance (lower is better) and take top_k
+    all_results.sort(key=lambda x: x["distance"])
+    all_results = all_results[:top_k]
+
+    if not all_results:
+        return {"message": "No relevant documentation found"}
+
+    return {"results": all_results, "query": query}

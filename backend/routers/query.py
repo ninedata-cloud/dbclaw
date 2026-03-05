@@ -10,8 +10,10 @@ from backend.schemas.query import QueryExecuteRequest, QueryExplainRequest, Quer
 from backend.services.db_connector import get_connector
 from backend.utils.encryption import decrypt_value
 
+from backend.dependencies import get_current_user
+
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/query", tags=["query"])
+router = APIRouter(prefix="/api/query", tags=["query"], dependencies=[Depends(get_current_user)])
 
 # In-memory query history (simple approach)
 _query_history = []

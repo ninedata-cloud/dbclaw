@@ -14,7 +14,9 @@ class WSManager {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
 
         const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${location.host}${this.url}`;
+        const token = localStorage.getItem('auth_token');
+        const separator = this.url.includes('?') ? '&' : '?';
+        const wsUrl = `${protocol}//${location.host}${this.url}${token ? separator + 'token=' + token : ''}`;
         this.ws = new WebSocket(wsUrl);
 
         this.ws.onopen = () => {
@@ -31,8 +33,8 @@ class WSManager {
             }
         };
 
-        this.ws.onclose = () => {
-            this._emit('close');
+        this.ws.onclose = (event) => {
+            this._emit('close', event);
             if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
                 this.reconnectAttempts++;
                 setTimeout(() => this.connect(), this.reconnectDelay * this.reconnectAttempts);

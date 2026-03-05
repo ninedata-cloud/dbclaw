@@ -10,6 +10,8 @@ class DiagnosticSession(Base):
     connection_id = Column(Integer, nullable=True)
     ai_model_id = Column(Integer, ForeignKey("ai_models.id"), nullable=True)
     title = Column(String(200), default="New Session")
+    kb_ids = Column(JSON, nullable=True)
+    disabled_tools = Column(JSON, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 

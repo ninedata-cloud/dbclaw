@@ -54,3 +54,24 @@ const Format = {
         return `${mins}m`;
     }
 };
+
+/* Utils namespace for compatibility */
+const Utils = {
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    },
+
+    formatDate(dateStr) {
+        return Format.datetime(dateStr);
+    },
+
+    formatFileSize(bytes) {
+        return Format.bytes(bytes);
+    },
+
+    showToast(message, type = 'info') {
+        Toast.show(message, type);
+    }
+};

@@ -5,12 +5,27 @@ const API = {
             headers: { 'Content-Type': 'application/json' },
         };
         const merged = { ...defaultOpts, ...options };
+
+        // Inject auth token
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+            merged.headers['Authorization'] = `Bearer ${token}`;
+        }
+
         if (merged.body && typeof merged.body === 'object') {
             merged.body = JSON.stringify(merged.body);
         }
         try {
             const response = await fetch(url, merged);
             if (!response.ok) {
+                // Handle 401 - redirect to login
+                if (response.status === 401) {
+                    localStorage.removeItem('auth_token');
+                    localStorage.removeItem('auth_user');
+                    Store.set('currentUser', null);
+                    window.location.hash = 'login';
+                    throw new Error('Session expired. Please login again.');
+                }
                 const err = await response.json().catch(() => ({ detail: response.statusText }));
                 throw new Error(err.detail || err.message || 'Request failed');
             }
@@ -28,6 +43,20 @@ const API = {
     post(url, body) { return this.request(url, { method: 'POST', body }); },
     put(url, body) { return this.request(url, { method: 'PUT', body }); },
     delete(url) { return this.request(url, { method: 'DELETE' }); },
+
+    // Auth endpoints
+    login(username, password) { return this.post('/api/auth/login', { username, password }); },
+    getMe() { return this.get('/api/auth/me'); },
+    changePassword(old_password, new_password) { return this.post('/api/auth/change-password', { old_password, new_password }); },
+
+    // User endpoints
+    getUsers() { return this.get('/api/users'); },
+    createUser(data) { return this.post('/api/users', data); },
+    updateUser(id, data) { return this.put(`/api/users/${id}`, data); },
+    deleteUser(id) { return this.delete(`/api/users/${id}`); },
+    resetUserPassword(id, new_password) { return this.post(`/api/users/${id}/reset-password`, { new_password }); },
+    toggleUserStatus(id) { return this.post(`/api/users/${id}/toggle-status`); },
+    getUserLoginLogs(id) { return this.get(`/api/users/${id}/login-logs`); },
 
     // Connection endpoints
     getConnections() { return this.get('/api/connections'); },
@@ -53,6 +82,7 @@ const API = {
     deleteChatSession(id) { return this.delete(`/api/chat/sessions/${id}`); },
     clearSessionMessages(id) { return this.delete(`/api/chat/sessions/${id}/messages`); },
     getSessionMessages(sessionId) { return this.get(`/api/chat/sessions/${sessionId}/messages`); },
+    getHighRiskTools() { return this.get('/api/chat/high-risk-tools'); },
 
     // Query endpoints
     executeQuery(data) { return this.post('/api/query/execute', data); },
@@ -71,4 +101,45 @@ const API = {
     updateAIModel(id, data) { return this.put(`/api/ai-models/${id}`, data); },
     deleteAIModel(id) { return this.delete(`/api/ai-models/${id}`); },
     setDefaultAIModel(id) { return this.post(`/api/ai-models/${id}/set-default`); },
+
+    // Knowledge Base endpoints
+    getKnowledgeBases() { return this.get('/api/knowledge-bases'); },
+    createKnowledgeBase(data) { return this.post('/api/knowledge-bases', data); },
+    getKnowledgeBase(id) { return this.get(`/api/knowledge-bases/${id}`); },
+    updateKnowledgeBase(id, data) { return this.put(`/api/knowledge-bases/${id}`, data); },
+    deleteKnowledgeBase(id) { return this.delete(`/api/knowledge-bases/${id}`); },
+    getDocuments(kbId) { return this.get(`/api/knowledge-bases/${kbId}/documents`); },
+    async uploadDocument(kbId, file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        const token = localStorage.getItem('auth_token');
+        const headers = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const response = await fetch(`/api/knowledge-bases/${kbId}/documents`, {
+            method: 'POST',
+            headers,
+            body: formData,
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({ detail: response.statusText }));
+            throw new Error(err.detail || 'Upload failed');
+        }
+        return await response.json();
+    },
+    deleteDocument(kbId, docId) { return this.delete(`/api/knowledge-bases/${kbId}/documents/${docId}`); },
+    async getDocumentContent(kbId, docId) {
+        const token = localStorage.getItem('auth_token');
+        const headers = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const response = await fetch(`/api/knowledge-bases/${kbId}/documents/${docId}/content`, { headers });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({ detail: response.statusText }));
+            throw new Error(err.detail || 'Failed to fetch document content');
+        }
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/pdf')) {
+            return { type: 'pdf', url: `/api/knowledge-bases/${kbId}/documents/${docId}/content` };
+        }
+        return await response.json();
+    },
 };

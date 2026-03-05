@@ -1,10 +1,11 @@
 /* Modal component */
 const Modal = {
-    show({ title, content, footer, width }) {
+    show({ title, content, buttons, footer, size = 'medium', width }) {
         const overlay = DOM.$('#modal-overlay');
         const container = DOM.$('#modal-container');
-        if (width) container.style.minWidth = width;
-        else container.style.minWidth = '480px';
+
+        const sizes = { small: '400px', medium: '600px', large: '800px' };
+        container.style.maxWidth = width || sizes[size] || sizes.medium;
 
         container.innerHTML = '';
         const header = DOM.el('div', { className: 'modal-header' },
@@ -23,16 +24,25 @@ const Modal = {
         container.appendChild(body);
 
         if (footer) {
-            const foot = DOM.el('div', { className: 'modal-footer' });
-            if (typeof footer === 'string') foot.innerHTML = footer;
-            else if (footer instanceof Node) foot.appendChild(footer);
-            container.appendChild(foot);
+            if (footer instanceof Node) {
+                container.appendChild(footer);
+            }
+        } else if (buttons && buttons.length > 0) {
+            const footerEl = DOM.el('div', { className: 'modal-footer' });
+            buttons.forEach(btn => {
+                const button = DOM.el('button', {
+                    className: `btn btn-${btn.variant || 'secondary'}`,
+                    textContent: btn.text,
+                    onClick: btn.onClick
+                });
+                footerEl.appendChild(button);
+            });
+            container.appendChild(footerEl);
         }
 
         DOM.show(overlay);
         lucide.createIcons();
 
-        // Close on overlay click
         overlay.onclick = (e) => {
             if (e.target === overlay) this.hide();
         };

@@ -3,7 +3,7 @@ import logging
 from typing import AsyncGenerator, List, Dict, Any, Optional
 
 from backend.agent.prompts import SYSTEM_PROMPT
-from backend.agent.tools import TOOL_DEFINITIONS
+from backend.agent.tools import get_filtered_tools
 from backend.agent.context_builder import execute_tool
 from backend.services.ai_agent import get_ai_client
 
@@ -16,7 +16,9 @@ async def run_conversation(
     messages: List[Dict[str, Any]],
     connection_id: Optional[int] = None,
     model_id: Optional[int] = None,
+    kb_ids: Optional[List[int]] = None,
     db: Optional[Any] = None,
+    disabled_tools: Optional[List[str]] = None,
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """Run the AI conversation loop with tool calling and streaming."""
     from backend.models.ai_model import AIModel
@@ -44,6 +46,13 @@ async def run_conversation(
     if connection_id:
         system_msg += f"\n\nThe user is currently working with database connection ID: {connection_id}. Use this ID when calling tools unless they specify otherwise."
 
+    if kb_ids:
+        system_msg += f"\n\nKnowledge bases are enabled for this session (IDs: {kb_ids}). Use search_knowledge_base tool to find relevant documentation when needed."
+
+    # Filter tools based on session's disabled list
+    active_tools = get_filtered_tools(disabled_tools)
+    disabled_set = set(disabled_tools) if disabled_tools else set()
+
     full_messages = [{"role": "system", "content": system_msg}] + messages
 
     for round_num in range(MAX_TOOL_ROUNDS):
@@ -51,7 +60,7 @@ async def run_conversation(
             response = await client.chat.completions.create(
                 model=client._model_name,
                 messages=full_messages,
-                tools=TOOL_DEFINITIONS,
+                tools=active_tools,
                 tool_choice="auto",
                 stream=True,
             )
@@ -123,6 +132,28 @@ async def run_conversation(
                     tool_args = json.loads(tc["function"]["arguments"])
                 except json.JSONDecodeError:
                     tool_args = {}
+
+                # Server-side guard: block disabled tools even if LLM hallucinates them
+                if tool_name in disabled_set:
+                    tool_result = json.dumps({"error": f"Tool '{tool_name}' is disabled for this session by the user."})
+                    yield {
+                        "type": "tool_call",
+                        "tool_name": tool_name,
+                        "tool_args": tool_args,
+                        "tool_call_id": tc["id"],
+                    }
+                    yield {
+                        "type": "tool_result",
+                        "tool_name": tool_name,
+                        "tool_call_id": tc["id"],
+                        "result": tool_result,
+                    }
+                    full_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "content": tool_result,
+                    })
+                    continue
 
                 yield {
                     "type": "tool_call",

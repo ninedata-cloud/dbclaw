@@ -150,11 +150,64 @@ const ChatWidget = {
         if (lastTool) {
             const resultContainer = lastTool.querySelector('.tool-result-container');
             if (resultContainer) {
+                let displayResult = this._escapeHtml(result);
+
+                if (toolName === 'search_knowledge_base') {
+                    try {
+                        const parsed = JSON.parse(result);
+                        if (parsed.results && Array.isArray(parsed.results)) {
+                            displayResult = this._formatKBResults(parsed.results);
+                        }
+                    } catch (e) { /* use as-is */ }
+                }
+
                 resultContainer.innerHTML = `
                     <div style="margin-top:8px"><strong>Result:</strong></div>
-                    <pre style="margin:4px 0;padding:4px;background:rgba(0,0,0,0.2);border-radius:4px;overflow-x:auto;max-height:200px">${this._escapeHtml(result)}</pre>
+                    <div style="margin:4px 0;padding:4px;background:rgba(0,0,0,0.2);border-radius:4px;overflow-x:auto;max-height:200px">${displayResult}</div>
                 `;
             }
+        }
+    },
+
+    _formatKBResults(results) {
+        if (results.length === 0) return '<em>No results found</em>';
+        return results.map(r => {
+            const preview = this._escapeHtml((r.content || '').substring(0, 150)) + (r.content && r.content.length > 150 ? '...' : '');
+            const previewBtn = r.document_id && r.kb_id
+                ? ` <button class="btn btn-sm btn-secondary" style="padding:1px 6px;font-size:11px;" onclick="ChatWidget.previewKBDocument(${r.kb_id}, ${r.document_id}, '${r.file_type || ''}')"><i data-lucide="eye" style="width:11px;height:11px"></i> Preview</button>`
+                : '';
+            return `<div style="margin-bottom:6px;padding:4px 6px;border-left:2px solid var(--accent-blue);">
+                <div style="font-size:12px;"><strong>${this._escapeHtml(r.filename || 'unknown')}</strong> <span style="opacity:0.7">(${this._escapeHtml(r.kb_name || '')}, chunk ${r.chunk_index || 0})</span>${previewBtn}</div>
+                <div style="font-size:11px;opacity:0.8;margin-top:2px;">${preview}</div>
+            </div>`;
+        }).join('');
+    },
+
+    async previewKBDocument(kbId, docId, fileType) {
+        try {
+            const data = await API.getDocumentContent(kbId, docId);
+            let previewHtml;
+
+            if (data.type === 'pdf') {
+                previewHtml = `<iframe src="${data.url}" style="width:100%;height:70vh;border:none;border-radius:4px;"></iframe>`;
+            } else if (data.file_type === 'md') {
+                const rendered = typeof marked !== 'undefined' ? marked.parse(data.content) : data.content.replace(/\n/g, '<br>');
+                previewHtml = `<div class="markdown-preview" style="max-height:70vh;overflow:auto;padding:16px;background:var(--bg-primary);border-radius:4px;">${rendered}</div>`;
+            } else {
+                previewHtml = `<pre style="max-height:70vh;overflow:auto;padding:16px;background:var(--bg-primary);border-radius:4px;white-space:pre-wrap;word-wrap:break-word;">${this._escapeHtml(data.content)}</pre>`;
+            }
+
+            Modal.show({
+                title: data.filename || 'Document Preview',
+                size: 'large',
+                content: previewHtml,
+                buttons: [
+                    { text: 'Close', variant: 'secondary', onClick: () => Modal.hide() }
+                ]
+            });
+            lucide.createIcons();
+        } catch (error) {
+            Utils.showToast('Failed to preview document: ' + error.message, 'error');
         }
     },
 

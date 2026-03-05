@@ -8,8 +8,9 @@ import os
 from backend.database import get_db
 from backend.models.ai_model import AIModel
 from backend.schemas.ai_model import AIModelCreate, AIModelUpdate, AIModelResponse
+from backend.dependencies import get_current_user
 
-router = APIRouter(prefix="/api/ai-models", tags=["ai-models"])
+router = APIRouter(prefix="/api/ai-models", tags=["ai-models"], dependencies=[Depends(get_current_user)])
 
 # Get or create encryption key
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")

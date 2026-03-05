@@ -7,8 +7,9 @@ from datetime import datetime
 from backend.database import get_db
 from backend.models.metric_snapshot import MetricSnapshot
 from backend.schemas.metrics import MetricResponse
+from backend.dependencies import get_current_user
 
-router = APIRouter(prefix="/api/metrics", tags=["metrics"])
+router = APIRouter(prefix="/api/metrics", tags=["metrics"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("/{conn_id}", response_model=List[MetricResponse])

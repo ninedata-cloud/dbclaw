@@ -3,11 +3,19 @@ const DiagnosisPage = {
     ws: null,
     currentSessionId: null,
     selectedModelId: null,
+    selectedKBIds: [],
+    disabledTools: [],
+    highRiskTools: [],
 
     async render() {
         const content = DOM.$('#page-content');
 
-        // Header with connection and model selectors only
+        // Load high-risk tools list
+        try {
+            this.highRiskTools = await API.getHighRiskTools();
+        } catch (e) { /* ignore */ }
+
+        // Header with connection, model, KB selectors, and tool safety toggle
         const headerActions = DOM.el('div', { className: 'flex gap-8' });
         const connSelect = DOM.el('select', { className: 'form-select', style: { minWidth: '200px' } });
         connSelect.appendChild(DOM.el('option', { value: '', textContent: 'Select connection...' }));
@@ -48,8 +56,42 @@ const DiagnosisPage = {
             this.selectedModelId = modelSelect.value ? parseInt(modelSelect.value) : null;
         });
 
+        // Knowledge Base multi-select
+        const kbSelect = DOM.el('select', {
+            className: 'form-select',
+            style: { minWidth: '200px' },
+            multiple: true,
+            size: 1
+        });
+        kbSelect.appendChild(DOM.el('option', { value: '', textContent: 'No knowledge bases', disabled: true }));
+
+        try {
+            const kbs = await API.getKnowledgeBases();
+            if (kbs.length > 0) {
+                kbSelect.innerHTML = '';
+                for (const kb of kbs.filter(k => k.is_active)) {
+                    const opt = DOM.el('option', { value: kb.id, textContent: kb.name });
+                    kbSelect.appendChild(opt);
+                }
+            }
+        } catch (e) { /* ignore */ }
+
+        kbSelect.addEventListener('change', () => {
+            this.selectedKBIds = Array.from(kbSelect.selectedOptions).map(opt => parseInt(opt.value));
+        });
+
+        // Tool safety settings button
+        const toolSafetyBtn = DOM.el('button', {
+            className: 'btn btn-sm btn-secondary',
+            innerHTML: '<i data-lucide="shield"></i> Tool Safety',
+            title: 'Configure high-risk tool permissions',
+            onClick: () => this._showToolSafetyModal()
+        });
+
         headerActions.appendChild(connSelect);
         headerActions.appendChild(modelSelect);
+        headerActions.appendChild(kbSelect);
+        headerActions.appendChild(toolSafetyBtn);
         Header.render('AI Diagnosis', headerActions);
 
         // Two-column layout: sessions sidebar + chat area
@@ -117,6 +159,71 @@ const DiagnosisPage = {
         return () => this._cleanup();
     },
 
+    _showToolSafetyModal() {
+        if (this.highRiskTools.length === 0) {
+            Toast.info('No high-risk tools available to configure');
+            return;
+        }
+
+        const toolItems = this.highRiskTools.map(tool => {
+            const isDisabled = this.disabledTools.includes(tool.name);
+            return `
+                <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:6px;cursor:pointer;background:var(--bg-secondary);margin-bottom:6px;">
+                    <input type="checkbox" class="tool-toggle" data-tool="${tool.name}" ${isDisabled ? '' : 'checked'}>
+                    <div style="flex:1;">
+                        <div style="font-weight:500;font-size:14px;">${tool.name}</div>
+                        <div style="font-size:12px;opacity:0.7;">${tool.description}</div>
+                    </div>
+                    <span class="badge ${isDisabled ? 'badge-danger' : 'badge-success'}" id="badge-${tool.name}">
+                        ${isDisabled ? 'Disabled' : 'Enabled'}
+                    </span>
+                </label>
+            `;
+        }).join('');
+
+        Modal.show({
+            title: 'Tool Safety Settings',
+            content: `
+                <p style="margin-bottom:12px;font-size:13px;opacity:0.8;">
+                    Control which high-risk tools the AI is allowed to use during diagnosis.
+                    Disabled tools will be blocked for new sessions. Changes apply when creating a new session.
+                </p>
+                <div id="tool-safety-list">${toolItems}</div>
+            `,
+            buttons: [
+                { text: 'Cancel', variant: 'secondary', onClick: () => Modal.hide() },
+                { text: 'Apply', variant: 'primary', onClick: () => this._applyToolSafety() }
+            ]
+        });
+
+        // Add live badge toggle on checkbox change
+        document.querySelectorAll('.tool-toggle').forEach(cb => {
+            cb.addEventListener('change', () => {
+                const badge = document.getElementById(`badge-${cb.dataset.tool}`);
+                if (badge) {
+                    badge.className = `badge ${cb.checked ? 'badge-success' : 'badge-danger'}`;
+                    badge.textContent = cb.checked ? 'Enabled' : 'Disabled';
+                }
+            });
+        });
+    },
+
+    _applyToolSafety() {
+        const checkboxes = document.querySelectorAll('.tool-toggle');
+        this.disabledTools = [];
+        checkboxes.forEach(cb => {
+            if (!cb.checked) {
+                this.disabledTools.push(cb.dataset.tool);
+            }
+        });
+        Modal.hide();
+        if (this.disabledTools.length > 0) {
+            Toast.info(`${this.disabledTools.length} tool(s) disabled. Takes effect on next new session.`);
+        } else {
+            Toast.success('All high-risk tools enabled.');
+        }
+    },
+
     async _loadSessions() {
         try {
             const sessions = await API.getChatSessions();
@@ -174,7 +281,10 @@ const DiagnosisPage = {
         try {
             const session = await API.createChatSession({
                 connection_id: conn?.id || null,
-                title: 'New Session'
+                title: 'New Session',
+                ai_model_id: this.selectedModelId,
+                kb_ids: this.selectedKBIds.length > 0 ? this.selectedKBIds : null,
+                disabled_tools: this.disabledTools.length > 0 ? this.disabledTools : null
             });
             this.currentSessionId = session.id;
             await this._loadSessions();
@@ -188,15 +298,14 @@ const DiagnosisPage = {
         this.currentSessionId = sessionId;
         this._connectWebSocket(sessionId);
 
-        // Update tab styles
-        DOM.$$('#session-tabs .btn').forEach(btn => {
-            btn.className = 'btn btn-sm btn-secondary';
-        });
-        const tabs = DOM.$$('#session-tabs .btn');
-        const sessions = Store.get('chatSessions') || [];
-        const idx = sessions.findIndex(s => s.id === sessionId);
-        if (idx >= 0 && tabs[idx]) {
-            tabs[idx].className = 'btn btn-sm btn-primary';
+        // Update sidebar highlight
+        const list = DOM.$('#session-list');
+        if (list) {
+            list.querySelectorAll('.session-item').forEach(item => {
+                const isActive = item._sessionId === sessionId;
+                item.style.background = isActive ? 'var(--accent-blue)' : 'transparent';
+                item.style.color = isActive ? '#fff' : 'var(--text-primary)';
+            });
         }
 
         // Load messages
@@ -225,7 +334,22 @@ const DiagnosisPage = {
         }
         this.ws = new WSManager(`/ws/chat/${sessionId}`);
         this.ws.on('message', (data) => this._handleWSMessage(data));
-        this.ws.on('error', () => Toast.error('Chat connection error'));
+        this.ws.on('error', () => {
+            // Error will be handled by close event with more details
+        });
+        this.ws.on('close', (event) => {
+            if (event && event.code === 1008) {
+                // Authentication error
+                Toast.error('Session expired. Please log in again.');
+                setTimeout(() => {
+                    localStorage.removeItem('auth_token');
+                    window.location.href = '#/login';
+                }, 2000);
+            } else if (event && event.code !== 1000 && event.code !== 1001) {
+                // Abnormal closure (not normal or going away)
+                Toast.error('Chat connection lost. Please refresh the page.');
+            }
+        });
         this.ws.connect();
     },
 
@@ -312,21 +436,6 @@ const DiagnosisPage = {
         const sessions = Store.get('chatSessions') || [];
         const session = sessions.find(s => s.id === this.currentSessionId);
         if (!confirm(`Delete session "${session?.title || 'Session ' + this.currentSessionId}"?`)) return;
-        try {
-            await API.deleteChatSession(this.currentSessionId);
-            Toast.success('Session deleted');
-            this.currentSessionId = null;
-            await this._loadSessions();
-        } catch (e) {
-            Toast.error('Failed to delete session: ' + e.message);
-        }
-    },
-
-    async _deleteSession() {
-        if (!this.currentSessionId) {
-            Toast.warning('No active session');
-            return;
-        }
         try {
             await API.deleteChatSession(this.currentSessionId);
             this.currentSessionId = null;

@@ -2,7 +2,7 @@ import json
 import asyncio
 import logging
 from datetime import datetime
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from typing import List
@@ -11,13 +11,22 @@ from backend.database import get_db, async_session
 from backend.models.diagnostic_session import DiagnosticSession, ChatMessage
 from backend.schemas.chat import ChatSessionCreate, ChatSessionResponse, ChatMessageResponse
 from backend.agent.conversation import run_conversation
+from backend.agent.tools import HIGH_RISK_TOOLS
+
+from backend.dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
 
 
+@router.get("/api/chat/high-risk-tools")
+async def get_high_risk_tools(user=Depends(get_current_user)):
+    """Return the list of high-risk tools that users can toggle."""
+    return [{"name": name, "description": description} for name, description in HIGH_RISK_TOOLS.items()]
+
+
 @router.get("/api/chat/sessions", response_model=List[ChatSessionResponse])
-async def list_sessions(db: AsyncSession = Depends(get_db)):
+async def list_sessions(db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     result = await db.execute(
         select(DiagnosticSession).order_by(desc(DiagnosticSession.updated_at))
     )
@@ -25,10 +34,13 @@ async def list_sessions(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/api/chat/sessions", response_model=ChatSessionResponse)
-async def create_session(data: ChatSessionCreate, db: AsyncSession = Depends(get_db)):
+async def create_session(data: ChatSessionCreate, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     session = DiagnosticSession(
         connection_id=data.connection_id,
         title=data.title or "New Session",
+        ai_model_id=data.ai_model_id,
+        kb_ids=data.kb_ids,
+        disabled_tools=data.disabled_tools,
     )
     db.add(session)
     await db.commit()
@@ -37,7 +49,7 @@ async def create_session(data: ChatSessionCreate, db: AsyncSession = Depends(get
 
 
 @router.get("/api/chat/sessions/{session_id}/messages", response_model=List[ChatMessageResponse])
-async def get_messages(session_id: int, db: AsyncSession = Depends(get_db)):
+async def get_messages(session_id: int, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     result = await db.execute(
         select(ChatMessage)
         .where(ChatMessage.session_id == session_id)
@@ -47,7 +59,7 @@ async def get_messages(session_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.delete("/api/chat/sessions/{session_id}")
-async def delete_session(session_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_session(session_id: int, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     """Delete a chat session and all its messages."""
     # Delete messages first
     result = await db.execute(
@@ -67,7 +79,7 @@ async def delete_session(session_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.delete("/api/chat/sessions/{session_id}/messages")
-async def clear_session_messages(session_id: int, db: AsyncSession = Depends(get_db)):
+async def clear_session_messages(session_id: int, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     """Clear all messages in a session but keep the session itself."""
     result = await db.execute(
         select(ChatMessage).where(ChatMessage.session_id == session_id)
@@ -86,7 +98,21 @@ async def clear_session_messages(session_id: int, db: AsyncSession = Depends(get
 
 
 @router.websocket("/ws/chat/{session_id}")
-async def chat_websocket(websocket: WebSocket, session_id: int):
+async def chat_websocket(websocket: WebSocket, session_id: int, token: str = Query(default=None)):
+    # Validate token for WebSocket connections
+    if not token:
+        await websocket.close(code=1008, reason="Missing token")
+        return
+    try:
+        from backend.utils.security import decode_access_token
+        payload = decode_access_token(token)
+        if not payload.get("sub"):
+            await websocket.close(code=1008, reason="Invalid token")
+            return
+    except Exception:
+        await websocket.close(code=1008, reason="Invalid or expired token")
+        return
+
     await websocket.accept()
     logger.info(f"Chat WebSocket connected for session {session_id}")
 
@@ -140,10 +166,19 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
                     msg_dict["tool_call_id"] = m.tool_call_id
                 messages.append(msg_dict)
 
+            # Get session kb_ids and disabled_tools
+            async with async_session() as db:
+                session_result = await db.execute(
+                    select(DiagnosticSession).where(DiagnosticSession.id == session_id)
+                )
+                session = session_result.scalar_one_or_none()
+                kb_ids = session.kb_ids if session else None
+                disabled_tools = session.disabled_tools if session else None
+
             # Stream AI response
             full_response = ""
             async with async_session() as db:
-                async for event in run_conversation(messages, connection_id, model_id, db):
+                async for event in run_conversation(messages, connection_id, model_id, kb_ids, db, disabled_tools=disabled_tools):
                     event_type = event.get("type")
 
                     if event_type == "content":

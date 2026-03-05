@@ -12,8 +12,10 @@ from backend.models.connection import Connection
 from backend.schemas.report import ReportGenerateRequest, ReportResponse
 from backend.services.report_generator import generate_report
 
+from backend.dependencies import get_current_user
+
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/reports", tags=["reports"])
+router = APIRouter(prefix="/api/reports", tags=["reports"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("", response_model=List[ReportResponse])
