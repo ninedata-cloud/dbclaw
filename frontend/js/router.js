@@ -1,0 +1,47 @@
+/* Hash-based SPA router */
+const Router = {
+    routes: {},
+    currentCleanup: null,
+
+    register(path, handler) {
+        this.routes[path] = handler;
+    },
+
+    init() {
+        window.addEventListener('hashchange', () => this._handleRoute());
+        this._handleRoute();
+    },
+
+    navigate(path) {
+        window.location.hash = path;
+    },
+
+    _handleRoute() {
+        const hash = window.location.hash.slice(1) || 'dashboard';
+        const [page, ...params] = hash.split('/');
+
+        // Cleanup previous page
+        if (this.currentCleanup && typeof this.currentCleanup === 'function') {
+            this.currentCleanup();
+            this.currentCleanup = null;
+        }
+
+        Store.set('currentPage', page);
+
+        const handler = this.routes[page];
+        if (handler) {
+            const cleanup = handler(params.join('/'));
+            if (typeof cleanup === 'function') {
+                this.currentCleanup = cleanup;
+            }
+        } else {
+            const content = DOM.$('#page-content');
+            content.innerHTML = `<div class="empty-state"><h3>Page not found</h3><p>The page "${page}" does not exist.</p></div>`;
+        }
+
+        // Update sidebar active state
+        DOM.$$('.nav-item').forEach(item => {
+            item.classList.toggle('active', item.dataset.page === page);
+        });
+    }
+};

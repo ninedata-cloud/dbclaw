@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NineData DBMaster</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <!-- CodeMirror 6 -->
+    <script src="https://cdn.jsdelivr.net/npm/@codemirror/lang-sql@6.5.4/dist/index.cjs"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/material-darker.css">
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/sql/sql.min.js"></script>
+
+    <!-- Marked + Highlight.js -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/sql.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/json.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/bash.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css">
+
+    <!-- Lucide Icons -->
+    <script src="https://cdn.jsdelivr.net/npm/lucide@0.302.0/dist/umd/lucide.min.js"></script>
+
+    <!-- App CSS -->
+    <link rel="stylesheet" href="/css/main.css">
+    <link rel="stylesheet" href="/css/sidebar.css">
+    <link rel="stylesheet" href="/css/components.css">
+    <link rel="stylesheet" href="/css/charts.css">
+    <link rel="stylesheet" href="/css/chat.css">
+    <link rel="stylesheet" href="/css/query.css">
+</head>
+<body>
+    <div id="app">
+        <aside id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <img src="/assets/logo.svg" alt="DBMaster" class="sidebar-logo">
+                <span class="sidebar-title">DBMaster</span>
+            </div>
+            <nav id="sidebar-nav" class="sidebar-nav"></nav>
+            <div class="sidebar-footer">
+                <div class="sidebar-version">v1.0.0</div>
+            </div>
+        </aside>
+        <main id="main-content" class="main-content">
+            <header id="page-header" class="page-header"></header>
+            <div id="page-content" class="page-content"></div>
+        </main>
+    </div>
+
+    <!-- Toast container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Modal container -->
+    <div id="modal-overlay" class="modal-overlay hidden">
+        <div id="modal-container" class="modal-container"></div>
+    </div>
+
+    <!-- App JS -->
+    <script src="/js/utils/dom.js"></script>
+    <script src="/js/utils/format.js"></script>
+    <script src="/js/utils/websocket.js"></script>
+    <script src="/js/state.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/router.js"></script>
+    <script src="/js/components/toast.js"></script>
+    <script src="/js/components/modal.js"></script>
+    <script src="/js/components/sidebar.js"></script>
+    <script src="/js/components/header.js"></script>
+    <script src="/js/components/metric-card.js"></script>
+    <script src="/js/components/chart-panel.js"></script>
+    <script src="/js/components/table.js"></script>
+    <script src="/js/components/connection-form.js"></script>
+    <script src="/js/components/chat-widget.js"></script>
+    <script src="/js/components/query-editor.js"></script>
+    <script src="/js/pages/dashboard.js"></script>
+    <script src="/js/pages/connections.js"></script>
+    <script src="/js/pages/ssh-hosts.js"></script>
+    <script src="/js/pages/monitor.js"></script>
+    <script src="/js/pages/diagnosis.js"></script>
+    <script src="/js/pages/query.js"></script>
+    <script src="/js/pages/reports.js"></script>
+    <script src="/js/pages/ai-models.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>

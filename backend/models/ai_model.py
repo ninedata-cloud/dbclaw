@@ -1,0 +1,18 @@
+from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy.sql import func
+from backend.database import Base
+
+
+class AIModel(Base):
+    __tablename__ = "ai_models"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, nullable=False)
+    provider = Column(String, nullable=False)
+    api_key_encrypted = Column(String, nullable=False)
+    base_url = Column(String, nullable=False)
+    model_name = Column(String, nullable=False)
+    is_default = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())

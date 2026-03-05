@@ -1,0 +1,78 @@
+/* === Query Editor === */
+.query-container {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - var(--header-height) - 48px);
+}
+
+.query-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.query-toolbar select {
+    padding: 7px 12px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 13px;
+    min-width: 200px;
+}
+
+.query-editor-wrapper {
+    flex: 0 0 auto;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    margin: 12px 0;
+}
+
+.query-editor-wrapper .CodeMirror {
+    height: 200px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    background: var(--bg-input);
+}
+
+.query-editor-wrapper .CodeMirror-gutters {
+    background: var(--bg-tertiary);
+    border-right: 1px solid var(--border-color);
+}
+
+.query-results {
+    flex: 1;
+    overflow: auto;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+}
+
+.query-status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.query-status-bar .status-info {
+    display: flex;
+    gap: 16px;
+}
+
+/* === Explain Plan === */
+.explain-panel {
+    padding: 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    color: var(--text-primary);
+}

@@ -1,0 +1,26 @@
+from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, ForeignKey
+from sqlalchemy.sql import func
+from backend.database import Base
+
+
+class DiagnosticSession(Base):
+    __tablename__ = "diagnostic_sessions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    connection_id = Column(Integer, nullable=True)
+    ai_model_id = Column(Integer, ForeignKey("ai_models.id"), nullable=True)
+    title = Column(String(200), default="New Session")
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(Integer, nullable=False, index=True)
+    role = Column(String(20), nullable=False)  # user, assistant, tool
+    content = Column(Text, nullable=False)
+    tool_calls = Column(JSON, nullable=True)
+    tool_call_id = Column(String(100), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())

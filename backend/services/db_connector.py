@@ -1,0 +1,89 @@
+from abc import ABC, abstractmethod
+from typing import Any, Dict, List, Optional
+
+
+class DBConnector(ABC):
+    """Abstract base class for all database connectors."""
+
+    def __init__(self, host: str, port: int, username: str = None,
+                 password: str = None, database: str = None):
+        self.host = host
+        self.port = port
+        self.username = username
+        self.password = password
+        self.database = database
+
+    @abstractmethod
+    async def test_connection(self) -> str:
+        """Test connection and return version string."""
+        pass
+
+    @abstractmethod
+    async def get_status(self) -> Dict[str, Any]:
+        """Get database status metrics."""
+        pass
+
+    @abstractmethod
+    async def get_variables(self) -> Dict[str, Any]:
+        """Get database configuration variables."""
+        pass
+
+    @abstractmethod
+    async def get_process_list(self) -> List[Dict[str, Any]]:
+        """Get active processes/sessions."""
+        pass
+
+    @abstractmethod
+    async def get_slow_queries(self) -> List[Dict[str, Any]]:
+        """Get recent slow queries."""
+        pass
+
+    @abstractmethod
+    async def execute_query(self, sql: str, max_rows: int = 1000) -> Dict[str, Any]:
+        """Execute a read-only query and return results."""
+        pass
+
+    @abstractmethod
+    async def explain_query(self, sql: str) -> Dict[str, Any]:
+        """Get query execution plan."""
+        pass
+
+    @abstractmethod
+    async def get_table_stats(self) -> List[Dict[str, Any]]:
+        """Get table-level statistics."""
+        pass
+
+    @abstractmethod
+    async def get_replication_status(self) -> Dict[str, Any]:
+        """Get replication/cluster status."""
+        pass
+
+    async def get_db_size(self) -> Dict[str, Any]:
+        """Get database size information."""
+        return {}
+
+    async def close(self):
+        """Clean up connections."""
+        pass
+
+
+def get_connector(db_type: str, host: str, port: int, username: str = None,
+                  password: str = None, database: str = None, **kwargs) -> DBConnector:
+    """Factory function to create appropriate connector."""
+    connectors = {
+        "mysql": "backend.services.mysql_service.MySQLConnector",
+        "postgresql": "backend.services.postgres_service.PostgreSQLConnector",
+        "mongodb": "backend.services.mongo_service.MongoDBConnector",
+        "redis": "backend.services.redis_service.RedisConnector",
+        "sqlserver": "backend.services.sqlserver_service.SQLServerConnector",
+    }
+
+    if db_type not in connectors:
+        raise ValueError(f"Unsupported database type: {db_type}")
+
+    module_path, class_name = connectors[db_type].rsplit(".", 1)
+    import importlib
+    module = importlib.import_module(module_path)
+    connector_class = getattr(module, class_name)
+    return connector_class(host=host, port=port, username=username,
+                           password=password, database=database, **kwargs)
