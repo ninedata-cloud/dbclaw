@@ -15,6 +15,7 @@ const ConnectionForm = {
                     <select class="form-select" name="db_type" required>
                         <option value="mysql" ${connection?.db_type === 'mysql' ? 'selected' : ''}>MySQL</option>
                         <option value="postgresql" ${connection?.db_type === 'postgresql' ? 'selected' : ''}>PostgreSQL</option>
+                        <option value="oracle" ${connection?.db_type === 'oracle' ? 'selected' : ''}>Oracle</option>
                         <option value="mongodb" ${connection?.db_type === 'mongodb' ? 'selected' : ''}>MongoDB</option>
                         <option value="redis" ${connection?.db_type === 'redis' ? 'selected' : ''}>Redis</option>
                         <option value="sqlserver" ${connection?.db_type === 'sqlserver' ? 'selected' : ''}>SQL Server</option>
@@ -134,7 +135,7 @@ const ConnectionForm = {
     },
 
     _defaultPort(dbType) {
-        const ports = { mysql: 3306, postgresql: 5432, mongodb: 27017, redis: 6379, sqlserver: 1433 };
+        const ports = { mysql: 3306, postgresql: 5432, oracle: 1521, mongodb: 27017, redis: 6379, sqlserver: 1433 };
         return ports[dbType] || 3306;
     },
 

@@ -25,4 +25,5 @@ class ChatMessage(Base):
     content = Column(Text, nullable=False)
     tool_calls = Column(JSON, nullable=True)
     tool_call_id = Column(String(100), nullable=True)
+    attachments = Column(JSON, nullable=True)  # List of attachment metadata
     created_at = Column(DateTime, server_default=func.now())

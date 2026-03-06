@@ -31,6 +31,7 @@ class ChatMessageResponse(BaseModel):
     role: str
     content: str
     tool_calls: Optional[Any] = None
+    attachments: Optional[List[Any]] = None
     created_at: Optional[datetime] = None
 
     class Config:

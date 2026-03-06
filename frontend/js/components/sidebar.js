@@ -17,6 +17,7 @@ const Sidebar = {
         { section: 'Settings', items: [
             { id: 'ai-models', icon: 'brain', label: 'AI Models' },
             { id: 'knowledge-bases', icon: 'book-open', label: 'Knowledge Bases' },
+            { id: 'skills', icon: 'wrench', label: 'Skills' },
         ]},
     ],
 

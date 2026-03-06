@@ -44,6 +44,31 @@ const API = {
     put(url, body) { return this.request(url, { method: 'PUT', body }); },
     delete(url) { return this.request(url, { method: 'DELETE' }); },
 
+    async postFormData(url, formData) {
+        const token = localStorage.getItem('auth_token');
+        const headers = {};
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        const response = await fetch(url, {
+            method: 'POST',
+            headers,
+            body: formData
+        });
+        if (!response.ok) {
+            if (response.status === 401) {
+                localStorage.removeItem('auth_token');
+                localStorage.removeItem('auth_user');
+                Store.set('currentUser', null);
+                window.location.hash = 'login';
+                throw new Error('Session expired. Please login again.');
+            }
+            const err = await response.json().catch(() => ({ detail: response.statusText }));
+            throw new Error(err.detail || err.message || 'Request failed');
+        }
+        return await response.json();
+    },
+
     // Auth endpoints
     login(username, password) { return this.post('/api/auth/login', { username, password }); },
     getMe() { return this.get('/api/auth/me'); },

@@ -137,14 +137,110 @@ const DiagnosisPage = {
         sidebar.appendChild(sidebarHeader);
         sidebar.appendChild(sessionList);
 
-        // Right area: chat
+        // Right area: chat with tool panel
         const chatContainer = DOM.el('div', {
             className: 'chat-container',
-            style: { flex: '1', display: 'flex', flexDirection: 'column' }
+            style: { flex: '1', display: 'flex', flexDirection: 'row', gap: '0' }
         });
 
-        chatContainer.appendChild(ChatWidget.createMessagesContainer());
-        chatContainer.appendChild(ChatWidget.createInputBar((text) => this._sendMessage(text)));
+        // Main chat area
+        const chatMain = DOM.el('div', {
+            style: { flex: '1', display: 'flex', flexDirection: 'column', minWidth: '0' }
+        });
+
+        chatMain.appendChild(ChatWidget.createMessagesContainer());
+        chatMain.appendChild(ChatWidget.createInputBar(
+            (text, attachments) => this._sendMessage(text, attachments),
+            () => this.currentSessionId
+        ));
+
+        // Tool execution panel (right side)
+        const toolPanel = DOM.el('div', {
+            id: 'tool-execution-panel',
+            style: {
+                width: '400px',
+                borderLeft: '1px solid var(--border-color)',
+                background: 'var(--bg-secondary)',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                transition: 'width 0.3s ease'
+            }
+        });
+
+        const toolPanelHeader = DOM.el('div', {
+            style: {
+                padding: '12px 16px',
+                borderBottom: '1px solid var(--border-color)',
+                fontWeight: '600',
+                fontSize: '13px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+            }
+        });
+
+        const toolHeaderLeft = DOM.el('div', {
+            style: { flex: '1', display: 'flex', alignItems: 'center', gap: '8px' }
+        });
+        toolHeaderLeft.innerHTML = '<i data-lucide="activity"></i> Tool Execution';
+
+        const togglePanelBtn = DOM.el('button', {
+            className: 'btn btn-sm btn-secondary',
+            innerHTML: '<i data-lucide="panel-right-close"></i>',
+            title: 'Toggle tool panel',
+            id: 'toggle-tool-panel-btn',
+            style: { padding: '4px 8px' },
+            onClick: () => {
+                const panel = DOM.$('#tool-execution-panel');
+                const btn = DOM.$('#toggle-tool-panel-btn');
+                if (panel && btn) {
+                    const isCollapsed = panel.style.width === '0px' || panel.style.width === '0';
+                    if (isCollapsed) {
+                        panel.style.width = '400px';
+                        btn.innerHTML = '<i data-lucide="panel-right-close"></i>';
+                    } else {
+                        panel.style.width = '0px';
+                        btn.innerHTML = '<i data-lucide="panel-right-open"></i>';
+                    }
+                    lucide.createIcons();
+                }
+            }
+        });
+
+        const clearToolsBtn = DOM.el('button', {
+            className: 'btn btn-sm btn-secondary',
+            innerHTML: '<i data-lucide="trash-2"></i>',
+            title: 'Clear tool history',
+            style: { padding: '4px 8px' },
+            onClick: () => {
+                const toolPanelContent = DOM.$('#tool-panel-content');
+                if (toolPanelContent) {
+                    toolPanelContent.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">No tool executions yet</div>';
+                    lucide.createIcons();
+                }
+            }
+        });
+
+        toolPanelHeader.appendChild(toolHeaderLeft);
+        toolPanelHeader.appendChild(togglePanelBtn);
+        toolPanelHeader.appendChild(clearToolsBtn);
+
+        const toolPanelContent = DOM.el('div', {
+            id: 'tool-panel-content',
+            style: {
+                flex: '1',
+                overflowY: 'auto',
+                padding: '12px'
+            }
+        });
+        toolPanelContent.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">No tool executions yet</div>';
+
+        toolPanel.appendChild(toolPanelHeader);
+        toolPanel.appendChild(toolPanelContent);
+
+        chatContainer.appendChild(chatMain);
+        chatContainer.appendChild(toolPanel);
 
         ChatWidget.onStop = () => this._stopGeneration();
         ChatWidget.onClear = () => this._clearSession();
@@ -255,6 +351,7 @@ const DiagnosisPage = {
                     textContent: s.title.substring(0, 40) || 'Session ' + s.id,
                     onClick: () => this._switchSession(s.id)
                 });
+                item._sessionId = s.id;
                 item.addEventListener('mouseenter', () => {
                     if (this.currentSessionId !== s.id) {
                         item.style.background = 'var(--bg-hover)';
@@ -311,16 +408,35 @@ const DiagnosisPage = {
         // Load messages
         try {
             const messages = await API.getSessionMessages(sessionId);
-            ChatWidget.loadMessages(messages);
+            console.log(`Loaded ${messages.length} messages for session ${sessionId}`, messages);
+
+            if (messages && messages.length > 0) {
+                ChatWidget.loadMessages(messages);
+            } else {
+                // Empty session - show welcome message
+                const container = DOM.$('#chat-messages');
+                if (container) {
+                    container.innerHTML = `
+                        <div class="empty-state" style="padding:40px">
+                            <i data-lucide="bot"></i>
+                            <h3>DBMaster AI</h3>
+                            <p>Ask me anything about your database. I can analyze performance, diagnose issues, review configurations, and suggest optimizations.</p>
+                        </div>
+                    `;
+                    lucide.createIcons();
+                }
+            }
         } catch (e) {
-            // Empty session
+            console.error('Failed to load messages:', e);
+            Toast.error('Failed to load session messages: ' + e.message);
+            // Show empty state on error
             const container = DOM.$('#chat-messages');
             if (container) {
                 container.innerHTML = `
                     <div class="empty-state" style="padding:40px">
-                        <i data-lucide="bot"></i>
-                        <h3>DBMaster AI</h3>
-                        <p>Ask me anything about your database. I can analyze performance, diagnose issues, review configurations, and suggest optimizations.</p>
+                        <i data-lucide="alert-circle"></i>
+                        <h3>Error Loading Messages</h3>
+                        <p>${e.message}</p>
                     </div>
                 `;
                 lucide.createIcons();
@@ -330,14 +446,26 @@ const DiagnosisPage = {
 
     _connectWebSocket(sessionId) {
         if (this.ws) {
+            this.ws.shouldReconnect = false; // Disable reconnect before manual disconnect
             this.ws.disconnect();
         }
-        this.ws = new WSManager(`/ws/chat/${sessionId}`);
-        this.ws.on('message', (data) => this._handleWSMessage(data));
-        this.ws.on('error', () => {
+
+        const ws = new WSManager(`/ws/chat/${sessionId}`);
+        this.ws = ws;
+
+        ws.on('message', (data) => this._handleWSMessage(data));
+        ws.on('error', () => {
             // Error will be handled by close event with more details
         });
-        this.ws.on('close', (event) => {
+        ws.on('close', (event) => {
+            // Log close event for debugging
+            console.log('WebSocket closed:', {
+                code: event?.code,
+                reason: event?.reason,
+                wasClean: event?.wasClean,
+                shouldReconnect: ws.shouldReconnect
+            });
+
             if (event && event.code === 1008) {
                 // Authentication error
                 Toast.error('Session expired. Please log in again.');
@@ -345,30 +473,42 @@ const DiagnosisPage = {
                     localStorage.removeItem('auth_token');
                     window.location.href = '#/login';
                 }, 2000);
-            } else if (event && event.code !== 1000 && event.code !== 1001) {
-                // Abnormal closure (not normal or going away)
-                Toast.error('Chat connection lost. Please refresh the page.');
+            } else if (event && event.code === 1000) {
+                // Normal closure - no error needed
+                console.log('WebSocket closed normally');
+            } else if (event && event.code === 1001) {
+                // Going away (e.g., page navigation) - no error needed
+                console.log('WebSocket closed: going away');
+            } else if (event && ws.shouldReconnect) {
+                // Abnormal closure and not manually disconnected
+                const reason = event.reason || 'Unknown error';
+                console.error('WebSocket abnormal closure:', event.code, reason);
+                Toast.error(`Chat connection lost: ${reason}. Please refresh the page.`);
             }
         });
-        this.ws.connect();
+        ws.connect();
     },
 
     _sendMessage(text) {
-        if (!text || ChatWidget.isStreaming) return;
+        if (!text && (!ChatWidget.attachments || ChatWidget.attachments.length === 0)) return;
+        if (ChatWidget.isStreaming) return;
         if (!this.ws || !this.currentSessionId) {
             Toast.warning('No active session');
             return;
         }
 
         const conn = Store.get('currentConnection');
-        ChatWidget.addUserMessage(text);
+        const attachments = ChatWidget.attachments || [];
+
+        ChatWidget.addUserMessage(text, attachments);
         ChatWidget.startAssistantMessage();
         ChatWidget.isStreaming = true;
 
         this.ws.send({
             message: text,
             connection_id: conn?.id || null,
-            model_id: this.selectedModelId
+            model_id: this.selectedModelId,
+            attachments: attachments
         });
     },
 

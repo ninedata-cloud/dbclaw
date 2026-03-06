@@ -16,7 +16,16 @@ class SQLServerConnector(DBConnector):
 
     def _connect(self):
         import pyodbc
-        return pyodbc.connect(self._get_conn_string(), autocommit=True)
+        conn = pyodbc.connect(self._get_conn_string(), autocommit=True)
+
+        # Add output converter for sql_variant type (ODBC type -16)
+        # This handles columns like sys.configurations.value
+        def handle_sql_variant(value):
+            return str(value) if value is not None else None
+
+        conn.add_output_converter(-16, handle_sql_variant)
+
+        return conn
 
     async def test_connection(self) -> str:
         import asyncio
@@ -123,18 +132,22 @@ class SQLServerConnector(DBConnector):
                 if cursor.description:
                     columns = [col[0] for col in cursor.description]
                     rows = cursor.fetchmany(max_rows)
-                    return {
+                    result = {
                         "columns": columns,
                         "rows": [list(r) for r in rows],
                         "row_count": len(rows),
                         "execution_time_ms": elapsed,
                         "truncated": len(rows) >= max_rows,
                     }
-                return {
+                    cursor.close()  # Close cursor to free connection
+                    return result
+                result = {
                     "columns": [], "rows": [], "row_count": cursor.rowcount,
                     "execution_time_ms": elapsed,
                     "message": f"Query OK, {cursor.rowcount} rows affected",
                 }
+                cursor.close()  # Close cursor to free connection
+                return result
             finally:
                 conn.close()
         return await asyncio.get_event_loop().run_in_executor(None, _exec)

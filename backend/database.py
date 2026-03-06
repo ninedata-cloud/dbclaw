@@ -22,10 +22,15 @@ async def get_db() -> AsyncSession:
 
 async def init_db():
     # Import all models so Base.metadata knows about them
+    import backend.models.connection  # noqa: F401
+    import backend.models.ssh_host  # noqa: F401
+    import backend.models.metric_snapshot  # noqa: F401
+    import backend.models.diagnostic_session  # noqa: F401
     import backend.models.ai_model  # noqa: F401
     import backend.models.knowledge_base  # noqa: F401
     import backend.models.user  # noqa: F401
     import backend.models.login_log  # noqa: F401
+    import backend.skills.models  # noqa: F401
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -42,6 +47,11 @@ async def init_db():
                     connection.execute(text("ALTER TABLE diagnostic_sessions ADD COLUMN kb_ids TEXT"))
                 if "disabled_tools" not in columns:
                     connection.execute(text("ALTER TABLE diagnostic_sessions ADD COLUMN disabled_tools TEXT"))
+
+            if "chat_messages" in insp.get_table_names():
+                columns = [c["name"] for c in insp.get_columns("chat_messages")]
+                if "attachments" not in columns:
+                    connection.execute(text("ALTER TABLE chat_messages ADD COLUMN attachments TEXT"))
 
         await conn.run_sync(_migrate)
 
@@ -62,3 +72,9 @@ async def init_db():
             )
             session.add(admin)
             await session.commit()
+
+    # Load built-in skills
+    from backend.skills.builtin_loader import load_builtin_skills
+
+    async with async_session() as session:
+        await load_builtin_skills(session)

@@ -11,6 +11,7 @@
     Router.register('reports', () => ReportsPage.render());
     Router.register('ai-models', () => AIModelsPage.render());
     Router.register('knowledge-bases', () => KnowledgeBasesPage.render());
+    Router.register('skills', () => SkillsPage.render());
     Router.register('users', () => UsersPage.render());
 
     // Check auth

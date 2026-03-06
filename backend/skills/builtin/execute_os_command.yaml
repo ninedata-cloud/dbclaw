@@ -1,0 +1,30 @@
+id: execute_os_command
+name: Execute OS Command
+version: 1.0.0
+author: SmartDBA
+category: system
+description: Execute a shell command on the database host server via SSH. Use this to inspect OS-level details like disk usage, process info, network, logs, etc. Only read-only diagnostic commands are allowed
+tags: [linux, ssh, command, system, diagnostic]
+
+parameters:
+  - name: connection_id
+    type: integer
+    required: true
+    description: The database connection ID (must have SSH host configured)
+  - name: command
+    type: string
+    required: true
+    description: The shell command to execute
+
+permissions:
+  - execute_command
+
+code: |
+  async def execute(context, params):
+      connection_id = params['connection_id']
+      command = params['command']
+
+      # Execute the command
+      result = await context.execute_command(command, connection_id)
+
+      return result

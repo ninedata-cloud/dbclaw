@@ -8,7 +8,7 @@ class Connection(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), nullable=False)
-    db_type = Column(String(20), nullable=False)  # mysql, postgresql, mongodb, redis, sqlserver
+    db_type = Column(String(20), nullable=False)  # mysql, postgresql, mongodb, redis, sqlserver, oracle
     host = Column(String(255), nullable=False)
     port = Column(Integer, nullable=False)
     username = Column(String(100), nullable=True)

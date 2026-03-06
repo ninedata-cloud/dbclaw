@@ -1,0 +1,36 @@
+id: list_connections
+name: List Connections
+version: 1.0.0
+author: SmartDBA
+category: system
+description: List all configured database connections
+tags: [connections, configuration]
+
+permissions: []
+
+code: |
+  async def execute(context, params):
+      from backend.models.connection import Connection
+      from sqlalchemy import select
+
+      # Get all connections
+      result = await context.db.execute(select(Connection))
+      connections = result.scalars().all()
+
+      # Format connection info
+      conn_list = []
+      for conn in connections:
+          conn_list.append({
+              "id": conn.id,
+              "name": conn.name,
+              "db_type": conn.db_type,
+              "host": conn.host,
+              "port": conn.port,
+              "database": conn.database,
+              "has_ssh": conn.ssh_host_id is not None
+          })
+
+      return {
+          "success": True,
+          "connections": conn_list
+      }

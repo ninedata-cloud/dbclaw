@@ -2,7 +2,7 @@ import json
 import asyncio
 import logging
 from datetime import datetime
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query, UploadFile, File, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from typing import List
@@ -11,6 +11,7 @@ from backend.database import get_db, async_session
 from backend.models.diagnostic_session import DiagnosticSession, ChatMessage
 from backend.schemas.chat import ChatSessionCreate, ChatSessionResponse, ChatMessageResponse
 from backend.agent.conversation import run_conversation
+from backend.agent.conversation_skills import run_conversation_with_skills
 from backend.agent.tools import HIGH_RISK_TOOLS
 
 from backend.dependencies import get_current_user
@@ -46,6 +47,33 @@ async def create_session(data: ChatSessionCreate, db: AsyncSession = Depends(get
     await db.commit()
     await db.refresh(session)
     return session
+
+
+@router.post("/api/chat/sessions/{session_id}/upload")
+async def upload_attachment(
+    session_id: int,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user)
+):
+    """Upload file attachment for chat session"""
+    from backend.utils.attachment_handler import AttachmentHandler
+
+    # Check file size
+    file_content = await file.read()
+    if len(file_content) > AttachmentHandler.MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File too large (max 10MB)")
+
+    # Check file type
+    if not AttachmentHandler.is_allowed_file(file.filename):
+        raise HTTPException(status_code=400, detail="File type not allowed")
+
+    # Save attachment
+    try:
+        metadata = await AttachmentHandler.save_attachment(file_content, file.filename, session_id)
+        return metadata
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save attachment: {str(e)}")
 
 
 @router.get("/api/chat/sessions/{session_id}/messages", response_model=List[ChatMessageResponse])
@@ -122,8 +150,9 @@ async def chat_websocket(websocket: WebSocket, session_id: int, token: str = Que
             user_message = data.get("message", "")
             connection_id = data.get("connection_id")
             model_id = data.get("model_id")
+            attachments = data.get("attachments", [])  # List of attachment IDs
 
-            if not user_message:
+            if not user_message and not attachments:
                 continue
 
             # Save user message
@@ -131,7 +160,8 @@ async def chat_websocket(websocket: WebSocket, session_id: int, token: str = Que
                 msg = ChatMessage(
                     session_id=session_id,
                     role="user",
-                    content=user_message,
+                    content=user_message or "[Attachment]",
+                    attachments=attachments,
                 )
                 db.add(msg)
 
@@ -158,8 +188,32 @@ async def chat_websocket(websocket: WebSocket, session_id: int, token: str = Que
 
             # Build messages for LLM
             messages = []
+            from backend.utils.attachment_handler import AttachmentHandler
+
             for m in all_msgs:
-                msg_dict = {"role": m.role, "content": m.content}
+                # Handle attachments
+                if m.attachments:
+                    # Build content array for multimodal messages
+                    content_parts = []
+                    if m.content and m.content != "[Attachment]":
+                        content_parts.append({"type": "text", "text": m.content})
+
+                    # Add attachments
+                    for att in m.attachments:
+                        try:
+                            att_content = await AttachmentHandler.format_attachment_for_llm(att)
+                            content_parts.append(att_content)
+                        except Exception as e:
+                            logger.error(f"Error processing attachment: {e}")
+                            content_parts.append({
+                                "type": "text",
+                                "text": f"[Error loading attachment: {att.get('filename', 'unknown')}]"
+                            })
+
+                    msg_dict = {"role": m.role, "content": content_parts}
+                else:
+                    msg_dict = {"role": m.role, "content": m.content}
+
                 if m.tool_calls:
                     msg_dict["tool_calls"] = m.tool_calls
                 if m.tool_call_id:
@@ -175,10 +229,26 @@ async def chat_websocket(websocket: WebSocket, session_id: int, token: str = Que
                 kb_ids = session.kb_ids if session else None
                 disabled_tools = session.disabled_tools if session else None
 
-            # Stream AI response
+            # Stream AI response using skill-based system
             full_response = ""
             async with async_session() as db:
-                async for event in run_conversation(messages, connection_id, model_id, kb_ids, db, disabled_tools=disabled_tools):
+                # Get user_id from token (sub contains username, not user_id)
+                username = payload.get("sub")
+                from backend.models.user import User
+                user_result = await db.execute(select(User).where(User.username == username))
+                user = user_result.scalar_one_or_none()
+                user_id = user.id if user else None
+
+                async for event in run_conversation_with_skills(
+                    messages,
+                    connection_id,
+                    model_id,
+                    kb_ids,
+                    db,
+                    user_id=user_id,
+                    session_id=session_id,
+                    disabled_tools=disabled_tools
+                ):
                     event_type = event.get("type")
 
                     if event_type == "content":

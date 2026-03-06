@@ -25,7 +25,19 @@
     <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/sql.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/json.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/bash.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/python.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/javascript.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css">
+    <script>
+        // Register highlight.js languages
+        if (typeof hljs !== 'undefined') {
+            hljs.registerLanguage('sql', window.hljsDefineSql);
+            hljs.registerLanguage('json', window.hljsDefineJson);
+            hljs.registerLanguage('bash', window.hljsDefineBash);
+            hljs.registerLanguage('python', window.hljsDefinePython);
+            hljs.registerLanguage('javascript', window.hljsDefineJavascript);
+        }
+    </script>
 
     <!-- Lucide Icons -->
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.302.0/dist/umd/lucide.min.js"></script>
@@ -36,7 +48,9 @@
     <link rel="stylesheet" href="/css/components.css">
     <link rel="stylesheet" href="/css/charts.css">
     <link rel="stylesheet" href="/css/chat.css">
+    <link rel="stylesheet" href="/css/chat-attachments.css">
     <link rel="stylesheet" href="/css/query.css">
+    <link rel="stylesheet" href="/css/skills.css">
     <link rel="stylesheet" href="/css/auth.css">
 </head>
 <body>
@@ -91,6 +105,7 @@
     <script src="/js/pages/reports.js"></script>
     <script src="/js/pages/ai-models.js"></script>
     <script src="/js/pages/knowledge-bases.js"></script>
+    <script src="/js/pages/skills.js"></script>
     <script src="/js/pages/login.js"></script>
     <script src="/js/pages/users.js"></script>
     <script src="/js/app.js"></script>

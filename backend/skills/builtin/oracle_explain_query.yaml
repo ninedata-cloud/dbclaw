@@ -1,0 +1,71 @@
+id: oracle_explain_query
+name: Oracle Explain Query
+version: 1.0.0
+author: SmartDBA
+category: oracle
+description: Get Oracle execution plan for a SQL query
+tags: [oracle, explain, execution-plan, performance]
+
+parameters:
+  - name: connection_id
+    type: integer
+    required: true
+    description: The database connection ID
+  - name: sql
+    type: string
+    required: true
+    description: The SQL query to explain
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      connection_id = params['connection_id']
+      sql = params['sql'].strip()
+
+      # Generate a unique statement ID
+      import time
+      statement_id = f"SMARTDBA_{int(time.time())}"
+
+      # First, explain the query
+      explain_sql = f"EXPLAIN PLAN SET STATEMENT_ID = '{statement_id}' FOR {sql}"
+
+      explain_result = await context.execute_query(explain_sql, connection_id)
+
+      if not explain_result.get("success"):
+          return {"success": False, "error": explain_result.get("error", "Failed to explain query")}
+
+      # Get the execution plan
+      plan_query = f"""
+      SELECT
+          LPAD(' ', 2 * (level - 1)) || operation || ' ' || options as operation,
+          object_name,
+          cost,
+          cardinality,
+          bytes,
+          cpu_cost,
+          io_cost,
+          access_predicates,
+          filter_predicates
+      FROM plan_table
+      WHERE statement_id = '{statement_id}'
+      START WITH id = 0
+      CONNECT BY PRIOR id = parent_id AND statement_id = '{statement_id}'
+      ORDER SIBLINGS BY position
+      """
+
+      plan_result = await context.execute_query(plan_query, connection_id)
+
+      # Clean up
+      cleanup_sql = f"DELETE FROM plan_table WHERE statement_id = '{statement_id}'"
+      await context.execute_query(cleanup_sql, connection_id)
+
+      if not plan_result.get("success"):
+          return {"success": False, "error": plan_result.get("error", "Failed to get execution plan")}
+
+      return {
+          "success": True,
+          "plan": plan_result.get("data", []),
+          "columns": plan_result.get("columns", [])
+      }
