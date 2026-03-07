@@ -5,12 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NineData DBMaster</title>
 
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+    <link rel="alternate icon" href="/assets/favicon.ico">
+
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <!-- Monaco Editor -->
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
+
+    <!-- Disable AMD for UMD libraries to prevent conflicts with Monaco's loader -->
+    <script>
+        var oldDefine = window.define;
+        window.define = undefined;
+    </script>
 
     <!-- CodeMirror 6 -->
     <script src="https://cdn.jsdelivr.net/npm/@codemirror/lang-sql@6.5.4/dist/index.cjs"></script>
@@ -41,6 +54,11 @@
 
     <!-- Lucide Icons -->
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.302.0/dist/umd/lucide.min.js"></script>
+
+    <!-- Restore AMD define after all UMD libraries are loaded -->
+    <script>
+        window.define = oldDefine;
+    </script>
 
     <!-- App CSS -->
     <link rel="stylesheet" href="/css/main.css">
@@ -83,6 +101,8 @@
     <script src="/js/utils/dom.js"></script>
     <script src="/js/utils/format.js"></script>
     <script src="/js/utils/websocket.js"></script>
+    <script src="/js/utils/schema-cache.js"></script>
+    <script src="/js/utils/sql-completion-provider.js"></script>
     <script src="/js/state.js"></script>
     <script src="/js/api.js"></script>
     <script src="/js/router.js"></script>
@@ -93,11 +113,11 @@
     <script src="/js/components/metric-card.js"></script>
     <script src="/js/components/chart-panel.js"></script>
     <script src="/js/components/table.js"></script>
-    <script src="/js/components/connection-form.js"></script>
+    <script src="/js/components/datasource-form.js"></script>
     <script src="/js/components/chat-widget.js"></script>
     <script src="/js/components/query-editor.js"></script>
     <script src="/js/pages/dashboard.js"></script>
-    <script src="/js/pages/connections.js"></script>
+    <script src="/js/pages/datasources.js"></script>
     <script src="/js/pages/ssh-hosts.js"></script>
     <script src="/js/pages/monitor.js"></script>
     <script src="/js/pages/diagnosis.js"></script>

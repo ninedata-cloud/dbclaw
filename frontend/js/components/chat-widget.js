@@ -169,7 +169,7 @@ const ChatWidget = {
                 </button>
             </div>
         `).join('');
-        lucide.createIcons();
+        DOM.createIcons();
     },
 
     getFileIcon(fileType) {
@@ -216,7 +216,7 @@ const ChatWidget = {
             </div>
         `;
         messages.appendChild(msg);
-        lucide.createIcons();
+        DOM.createIcons();
         this._scrollToBottom();
     },
 
@@ -240,7 +240,7 @@ const ChatWidget = {
         const streamingMsg = DOM.$('#streaming-message');
         if (streamingMsg) {
             const bubble = streamingMsg.querySelector('.chat-bubble');
-            bubble.innerHTML = marked.parse(this.currentContent);
+            bubble.innerHTML = typeof marked !== 'undefined' ? marked.parse(this.currentContent) : this.currentContent.replace(/\n/g, '<br>');
             this._highlightCode(bubble);
             this._scrollToBottom();
         }
@@ -309,7 +309,7 @@ const ChatWidget = {
         `;
 
         toolPanel.insertBefore(toolMsg, toolPanel.firstChild);
-        lucide.createIcons();
+        DOM.createIcons();
 
         // Auto-scroll tool panel
         toolPanel.scrollTop = 0;
@@ -319,7 +319,7 @@ const ChatWidget = {
         this.pendingTools.set(toolName, toolId);
     },
 
-    addToolResult(toolName, result) {
+    addToolResult(toolName, result, executionTimeMs = null) {
         if (!this.pendingTools) return;
 
         const toolId = this.pendingTools.get(toolName);
@@ -358,14 +358,15 @@ const ChatWidget = {
             (typeof result === 'string' && (result.toLowerCase().includes('error') || result.includes('"error"')))
         );
 
-        // Update status
+        // Update status with execution time
         const status = toolMsg.querySelector('.chat-tool-status');
         if (status) {
             status.className = `chat-tool-status ${isError ? 'error' : 'success'}`;
+            const timeStr = executionTimeMs !== null ? ` (${executionTimeMs}ms)` : '';
             status.innerHTML = isError
-                ? '<i data-lucide="alert-circle"></i> Error'
-                : '<i data-lucide="check-circle"></i> Complete';
-            lucide.createIcons();
+                ? `<i data-lucide="alert-circle"></i> Error${timeStr}`
+                : `<i data-lucide="check-circle"></i> Complete${timeStr}`;
+            DOM.createIcons();
         }
 
         // Add result
@@ -394,7 +395,7 @@ const ChatWidget = {
                     });
                     notice.innerHTML = '<i data-lucide="info" style="width:14px;height:14px;"></i> Result truncated for display (showing first 2000 chars)';
                     resultSection.appendChild(notice);
-                    lucide.createIcons();
+                    DOM.createIcons();
                 }
             }
         }
@@ -491,9 +492,10 @@ const ChatWidget = {
                 this.addUserMessage(msg.content, msg.attachments || []);
             } else if (msg.role === 'assistant') {
                 const msgEl = DOM.el('div', { className: 'chat-message assistant' });
+                const renderedContent = typeof marked !== 'undefined' ? marked.parse(msg.content) : msg.content.replace(/\n/g, '<br>');
                 msgEl.innerHTML = `
                     <div class="chat-avatar">AI</div>
-                    <div class="chat-bubble">${marked.parse(msg.content)}</div>
+                    <div class="chat-bubble">${renderedContent}</div>
                 `;
                 container.appendChild(msgEl);
                 this._highlightCode(msgEl.querySelector('.chat-bubble'));
