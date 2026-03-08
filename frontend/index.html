@@ -10,14 +10,19 @@
     <link rel="alternate icon" href="/assets/favicon.ico">
 
     <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/lib/fonts/inter/300.css">
+    <link rel="stylesheet" href="/lib/fonts/inter/400.css">
+    <link rel="stylesheet" href="/lib/fonts/inter/500.css">
+    <link rel="stylesheet" href="/lib/fonts/inter/600.css">
+    <link rel="stylesheet" href="/lib/fonts/inter/700.css">
+    <link rel="stylesheet" href="/lib/fonts/jetbrains-mono/400.css">
+    <link rel="stylesheet" href="/lib/fonts/jetbrains-mono/500.css">
 
     <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="/lib/chart.js/dist/chart.umd.js"></script>
 
     <!-- Monaco Editor -->
-    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
+    <script src="/lib/monaco-editor/min/vs/loader.js"></script>
 
     <!-- Disable AMD for UMD libraries to prevent conflicts with Monaco's loader -->
     <script>
@@ -25,35 +30,24 @@
         window.define = undefined;
     </script>
 
-    <!-- CodeMirror 6 -->
-    <script src="https://cdn.jsdelivr.net/npm/@codemirror/lang-sql@6.5.4/dist/index.cjs"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/material-darker.css">
-    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/sql/sql.min.js"></script>
+    <!-- CodeMirror -->
+    <link rel="stylesheet" href="/lib/codemirror/lib/codemirror.css">
+    <link rel="stylesheet" href="/lib/codemirror/theme/material-darker.css">
+    <script src="/lib/codemirror/lib/codemirror.js"></script>
+    <script src="/lib/codemirror/mode/sql/sql.js"></script>
 
     <!-- Marked + Highlight.js -->
-    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/core.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/sql.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/json.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/bash.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/python.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/javascript.min.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css">
-    <script>
-        // Register highlight.js languages
-        if (typeof hljs !== 'undefined') {
-            hljs.registerLanguage('sql', window.hljsDefineSql);
-            hljs.registerLanguage('json', window.hljsDefineJson);
-            hljs.registerLanguage('bash', window.hljsDefineBash);
-            hljs.registerLanguage('python', window.hljsDefinePython);
-            hljs.registerLanguage('javascript', window.hljsDefineJavascript);
-        }
-    </script>
+    <script src="/lib/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/sql.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/json.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
 
     <!-- Lucide Icons -->
-    <script src="https://cdn.jsdelivr.net/npm/lucide@0.302.0/dist/umd/lucide.min.js"></script>
+    <script src="/lib/lucide/dist/umd/lucide.js"></script>
 
     <!-- Restore AMD define after all UMD libraries are loaded -->
     <script>
@@ -71,6 +65,7 @@
     <link rel="stylesheet" href="/css/skills.css">
     <link rel="stylesheet" href="/css/auth.css">
     <link rel="stylesheet" href="/css/guardian.css">
+    <link rel="stylesheet" href="/css/reports.css">
 </head>
 <body>
     <div id="app">

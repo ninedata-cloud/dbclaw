@@ -1,0 +1,492 @@
+/* === Reports Page Styles === */
+
+/* Report view modal content */
+.report-view-container {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+/* Report content display */
+.report-content-html {
+    padding: 20px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    margin-bottom: 16px;
+    color: var(--text-primary);
+    line-height: 1.8;
+}
+
+.report-content-html h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.report-content-html h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-top: 24px;
+    margin-bottom: 12px;
+}
+
+.report-content-html h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-top: 20px;
+    margin-bottom: 10px;
+}
+
+.report-content-html h4 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-top: 16px;
+    margin-bottom: 8px;
+}
+
+.report-content-html p {
+    margin-bottom: 12px;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.report-content-html ul,
+.report-content-html ol {
+    margin-left: 24px;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+}
+
+.report-content-html li {
+    margin-bottom: 6px;
+    color: var(--text-primary);
+}
+
+.report-content-html code {
+    background: var(--bg-tertiary);
+    color: var(--accent-cyan);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+}
+
+.report-content-html pre {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    overflow-x: auto;
+    margin-bottom: 12px;
+}
+
+.report-content-html pre code {
+    background: transparent;
+    padding: 0;
+    color: var(--text-primary);
+}
+
+.report-content-html table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 16px;
+    font-size: 13px;
+}
+
+.report-content-html table th {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 600;
+    border: 1px solid var(--border-color);
+}
+
+.report-content-html table td {
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+.report-content-html table tr:hover {
+    background: var(--bg-hover);
+}
+
+.report-content-html blockquote {
+    border-left: 3px solid var(--accent-blue);
+    padding-left: 16px;
+    margin: 12px 0;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.report-content-html strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.report-content-html em {
+    color: var(--text-secondary);
+}
+
+.report-content-html a {
+    color: var(--accent-blue);
+    text-decoration: none;
+}
+
+.report-content-html a:hover {
+    color: var(--accent-blue-hover);
+    text-decoration: underline;
+}
+
+/* Markdown content display (rendered by marked.js) */
+.report-content-markdown {
+    padding: 20px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    margin-bottom: 16px;
+    color: var(--text-primary);
+    line-height: 1.8;
+}
+
+.report-content-markdown h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.report-content-markdown h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-top: 24px;
+    margin-bottom: 12px;
+}
+
+.report-content-markdown h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-top: 20px;
+    margin-bottom: 10px;
+}
+
+.report-content-markdown h4 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-top: 16px;
+    margin-bottom: 8px;
+}
+
+.report-content-markdown p {
+    margin-bottom: 12px;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.report-content-markdown ul,
+.report-content-markdown ol {
+    margin-left: 24px;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+}
+
+.report-content-markdown li {
+    margin-bottom: 6px;
+    color: var(--text-primary);
+}
+
+.report-content-markdown code {
+    background: var(--bg-tertiary);
+    color: var(--accent-cyan);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+}
+
+.report-content-markdown pre {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    overflow-x: auto;
+    margin-bottom: 12px;
+}
+
+.report-content-markdown pre code {
+    background: transparent;
+    padding: 0;
+    color: var(--text-primary);
+}
+
+.report-content-markdown table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 16px;
+    font-size: 13px;
+}
+
+.report-content-markdown table th {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 600;
+    border: 1px solid var(--border-color);
+}
+
+.report-content-markdown table td {
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+.report-content-markdown table tr:hover {
+    background: var(--bg-hover);
+}
+
+.report-content-markdown blockquote {
+    border-left: 3px solid var(--accent-blue);
+    padding-left: 16px;
+    margin: 12px 0;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.report-content-markdown strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.report-content-markdown em {
+    color: var(--text-secondary);
+}
+
+.report-content-markdown a {
+    color: var(--accent-blue);
+    text-decoration: none;
+}
+
+.report-content-markdown a:hover {
+    color: var(--accent-blue-hover);
+    text-decoration: underline;
+}
+
+/* Findings section */
+.report-findings-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+}
+
+.report-finding-item {
+    padding: 16px;
+    margin: 12px 0;
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+    border-left: 3px solid var(--border-color);
+}
+
+.report-finding-item.critical {
+    border-left-color: var(--accent-red);
+}
+
+.report-finding-item.warning {
+    border-left-color: var(--accent-yellow);
+}
+
+.report-finding-item.info {
+    border-left-color: var(--accent-blue);
+}
+
+.report-finding-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.report-finding-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.report-finding-detail {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    line-height: 1.6;
+}
+
+.report-finding-recommendation {
+    font-size: 13px;
+    color: var(--accent-green);
+    line-height: 1.6;
+}
+
+.report-finding-recommendation strong {
+    font-weight: 600;
+}
+
+/* Report generation streaming modal */
+.report-generation-status {
+    padding: 12px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.report-generation-section {
+    margin-bottom: 20px;
+}
+
+.report-generation-section h4 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+}
+
+.report-ai-content {
+    max-height: 250px;
+    overflow-y: auto;
+    padding: 16px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.report-tool-log {
+    max-height: 180px;
+    overflow-y: auto;
+    padding: 12px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    font-size: 12px;
+    border: 1px solid var(--border-color);
+}
+
+.report-tool-item {
+    padding: 8px;
+    margin-bottom: 6px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    border-left: 3px solid var(--accent-blue);
+}
+
+.report-tool-item.success {
+    border-left-color: var(--accent-green);
+}
+
+.report-tool-item.error {
+    border-left-color: var(--accent-red);
+}
+
+.report-tool-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.report-tool-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.report-tool-time {
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+.report-findings-container {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+/* Empty state for reports */
+.report-empty-content {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-muted);
+}
+
+.report-empty-content p {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+/* Badge styles for reports */
+.badge-primary {
+    background: rgba(47,129,247,0.15);
+    color: var(--accent-blue);
+}
+
+/* Report card improvements */
+.datasource-card .badge {
+    font-size: 10px;
+    padding: 3px 8px;
+}
+
+/* Ensure proper text contrast */
+.report-content-html *,
+.report-content-markdown * {
+    color: inherit;
+}
+
+/* Fix for nested elements */
+.report-content-html div,
+.report-content-html span {
+    color: var(--text-primary);
+}
+
+/* Status messages */
+.report-status-success {
+    color: var(--accent-green);
+}
+
+.report-status-error {
+    color: var(--accent-red);
+}
+
+/* Scrollbar for report content */
+.report-view-container::-webkit-scrollbar,
+.report-ai-content::-webkit-scrollbar,
+.report-tool-log::-webkit-scrollbar,
+.report-findings-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.report-view-container::-webkit-scrollbar-thumb,
+.report-ai-content::-webkit-scrollbar-thumb,
+.report-tool-log::-webkit-scrollbar-thumb,
+.report-findings-container::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+.report-view-container::-webkit-scrollbar-thumb:hover,
+.report-ai-content::-webkit-scrollbar-thumb:hover,
+.report-tool-log::-webkit-scrollbar-thumb:hover,
+.report-findings-container::-webkit-scrollbar-thumb:hover {
+    background: var(--border-light);
+}
