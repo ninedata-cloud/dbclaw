@@ -225,5 +225,75 @@ class MySQLConnector(DBConnector):
         finally:
             conn.close()
 
+    async def get_schemas(self) -> List[str]:
+        conn = await self._connect()
+        try:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA "
+                    "WHERE SCHEMA_NAME NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys') "
+                    "ORDER BY SCHEMA_NAME"
+                )
+                rows = await cur.fetchall()
+                return [row[0] for row in rows]
+        finally:
+            conn.close()
+
+    async def get_tables(self, schema: Optional[str] = None) -> List[Dict[str, Any]]:
+        conn = await self._connect()
+        try:
+            async with conn.cursor() as cur:
+                target_schema = schema or self.database
+                await cur.execute(
+                    "SELECT TABLE_NAME, TABLE_TYPE, ENGINE, TABLE_COMMENT "
+                    "FROM information_schema.TABLES "
+                    "WHERE TABLE_SCHEMA = %s "
+                    "ORDER BY TABLE_NAME",
+                    (target_schema,)
+                )
+                rows = await cur.fetchall()
+                return [
+                    {
+                        "name": row[0],
+                        "schema": target_schema,
+                        "type": row[1],
+                        "engine": row[2],
+                        "comment": row[3],
+                    }
+                    for row in rows
+                ]
+        finally:
+            conn.close()
+
+    async def get_columns(self, table: str, schema: Optional[str] = None) -> List[Dict[str, Any]]:
+        conn = await self._connect()
+        try:
+            async with conn.cursor() as cur:
+                target_schema = schema or self.database
+                await cur.execute(
+                    "SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, "
+                    "COLUMN_TYPE, COLUMN_KEY, EXTRA, COLUMN_COMMENT "
+                    "FROM information_schema.COLUMNS "
+                    "WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s "
+                    "ORDER BY ORDINAL_POSITION",
+                    (target_schema, table)
+                )
+                rows = await cur.fetchall()
+                return [
+                    {
+                        "name": row[0],
+                        "type": row[1],
+                        "nullable": row[2] == "YES",
+                        "default": row[3],
+                        "full_type": row[4],
+                        "key": row[5],
+                        "extra": row[6],
+                        "comment": row[7],
+                    }
+                    for row in rows
+                ]
+        finally:
+            conn.close()
+
 
 import aiomysql

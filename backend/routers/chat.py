@@ -37,7 +37,7 @@ async def list_sessions(db: AsyncSession = Depends(get_db), user=Depends(get_cur
 @router.post("/api/chat/sessions", response_model=ChatSessionResponse)
 async def create_session(data: ChatSessionCreate, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     session = DiagnosticSession(
-        connection_id=data.connection_id,
+        datasource_id=data.datasource_id,
         title=data.title or "New Session",
         ai_model_id=data.ai_model_id,
         kb_ids=data.kb_ids,
@@ -148,7 +148,7 @@ async def chat_websocket(websocket: WebSocket, session_id: int, token: str = Que
         while True:
             data = await websocket.receive_json()
             user_message = data.get("message", "")
-            connection_id = data.get("connection_id")
+            datasource_id = data.get("datasource_id")
             model_id = data.get("model_id")
             attachments = data.get("attachments", [])  # List of attachment IDs
 
@@ -241,7 +241,7 @@ async def chat_websocket(websocket: WebSocket, session_id: int, token: str = Que
 
                 async for event in run_conversation_with_skills(
                     messages,
-                    connection_id,
+                    datasource_id,
                     model_id,
                     kb_ids,
                     db,
@@ -268,6 +268,7 @@ async def chat_websocket(websocket: WebSocket, session_id: int, token: str = Que
                             "type": "tool_result",
                             "tool_name": event["tool_name"],
                             "result": event["result"],
+                            "execution_time_ms": event.get("execution_time_ms"),
                         })
                     elif event_type == "done":
                         full_response = event.get("content", full_response)

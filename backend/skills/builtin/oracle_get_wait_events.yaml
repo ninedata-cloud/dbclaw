@@ -7,7 +7,7 @@ description: Get Oracle database wait events and statistics
 tags: [oracle, wait-events, performance, monitoring]
 
 parameters:
-  - name: connection_id
+  - name: datasource_id
     type: integer
     required: true
     description: The database connection ID
@@ -21,7 +21,7 @@ permissions:
 
 code: |
   async def execute(context, params):
-      connection_id = params['connection_id']
+      datasource_id = params['datasource_id']
       limit = params.get('limit', 20)
 
       query = f"""
@@ -39,7 +39,7 @@ code: |
       FETCH FIRST {limit} ROWS ONLY
       """
 
-      result = await context.execute_query(query, connection_id)
+      result = await context.execute_query(query, datasource_id)
 
       if not result.get("success"):
           return {"success": False, "error": result.get("error", "Failed to get wait events")}

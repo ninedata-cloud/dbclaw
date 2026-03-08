@@ -4,7 +4,7 @@ from datetime import datetime
 
 
 class ChatSessionCreate(BaseModel):
-    connection_id: Optional[int] = None
+    datasource_id: Optional[int] = None
     title: Optional[str] = "New Session"
     ai_model_id: Optional[int] = None
     kb_ids: Optional[List[int]] = None
@@ -13,7 +13,7 @@ class ChatSessionCreate(BaseModel):
 
 class ChatSessionResponse(BaseModel):
     id: int
-    connection_id: Optional[int] = None
+    datasource_id: Optional[int] = None
     ai_model_id: Optional[int] = None
     title: str
     kb_ids: Optional[List[int]] = None
@@ -40,4 +40,4 @@ class ChatMessageResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
-    connection_id: Optional[int] = None
+    datasource_id: Optional[int] = None

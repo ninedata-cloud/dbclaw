@@ -21,10 +21,10 @@ const DiagnosisPage = {
         connSelect.appendChild(DOM.el('option', { value: '', textContent: 'Select connection...' }));
 
         try {
-            const connections = await API.getConnections();
-            Store.set('connections', connections);
-            const current = Store.get('currentConnection');
-            for (const c of connections) {
+            const datasources = await API.getDatasources();
+            Store.set('datasources', datasources);
+            const current = Store.get('currentDatasource');
+            for (const c of datasources) {
                 const opt = DOM.el('option', { value: c.id, textContent: `${c.name} (${c.db_type})` });
                 if (current && c.id === current.id) opt.selected = true;
                 connSelect.appendChild(opt);
@@ -34,8 +34,8 @@ const DiagnosisPage = {
         connSelect.addEventListener('change', () => {
             const id = parseInt(connSelect.value);
             if (id) {
-                const conns = Store.get('connections') || [];
-                Store.set('currentConnection', conns.find(c => c.id === id));
+                const conns = Store.get('datasources') || [];
+                Store.set('currentDatasource', conns.find(c => c.id === id));
             }
         });
 
@@ -123,11 +123,6 @@ const DiagnosisPage = {
             style: { flex: '1' },
             onClick: () => this._createSession()
         }));
-        sidebarHeader.appendChild(DOM.el('button', {
-            className: 'btn btn-danger btn-sm',
-            innerHTML: '<i data-lucide="trash-2"></i>',
-            onClick: () => this._deleteSession()
-        }));
 
         const sessionList = DOM.el('div', {
             id: 'session-list',
@@ -203,7 +198,7 @@ const DiagnosisPage = {
                         panel.style.width = '0px';
                         btn.innerHTML = '<i data-lucide="panel-right-open"></i>';
                     }
-                    lucide.createIcons();
+                    DOM.createIcons();
                 }
             }
         });
@@ -217,7 +212,7 @@ const DiagnosisPage = {
                 const toolPanelContent = DOM.$('#tool-panel-content');
                 if (toolPanelContent) {
                     toolPanelContent.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">No tool executions yet</div>';
-                    lucide.createIcons();
+                    DOM.createIcons();
                 }
             }
         });
@@ -248,7 +243,7 @@ const DiagnosisPage = {
         layout.appendChild(sidebar);
         layout.appendChild(chatContainer);
         content.appendChild(layout);
-        lucide.createIcons();
+        DOM.createIcons();
 
         await this._loadSessions();
 
@@ -344,23 +339,61 @@ const DiagnosisPage = {
                         background: this.currentSessionId === s.id ? 'var(--accent-blue)' : 'transparent',
                         color: this.currentSessionId === s.id ? '#fff' : 'var(--text-primary)',
                         fontSize: '14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        position: 'relative'
+                    }
+                });
+                item._sessionId = s.id;
+
+                const titleSpan = DOM.el('span', {
+                    style: {
+                        flex: '1',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap'
                     },
-                    textContent: s.title.substring(0, 40) || 'Session ' + s.id,
-                    onClick: () => this._switchSession(s.id)
+                    textContent: s.title.substring(0, 40) || 'Session ' + s.id
                 });
-                item._sessionId = s.id;
+
+                const deleteBtn = DOM.el('button', {
+                    className: 'session-delete-btn',
+                    innerHTML: '<i data-lucide="trash-2" style="width:14px;height:14px;"></i>',
+                    style: {
+                        opacity: '0',
+                        padding: '4px',
+                        background: 'rgba(248,81,73,0.2)',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'opacity 0.2s ease',
+                        color: 'var(--accent-red)'
+                    },
+                    onClick: (e) => {
+                        e.stopPropagation();
+                        this._deleteSessionById(s.id);
+                    }
+                });
+
+                item.appendChild(titleSpan);
+                item.appendChild(deleteBtn);
+
+                item.addEventListener('click', () => this._switchSession(s.id));
                 item.addEventListener('mouseenter', () => {
                     if (this.currentSessionId !== s.id) {
                         item.style.background = 'var(--bg-hover)';
                     }
+                    deleteBtn.style.opacity = '1';
                 });
                 item.addEventListener('mouseleave', () => {
                     if (this.currentSessionId !== s.id) {
                         item.style.background = 'transparent';
                     }
+                    deleteBtn.style.opacity = '0';
                 });
                 list.appendChild(item);
             }
@@ -374,10 +407,10 @@ const DiagnosisPage = {
     },
 
     async _createSession() {
-        const conn = Store.get('currentConnection');
+        const conn = Store.get('currentDatasource');
         try {
             const session = await API.createChatSession({
-                connection_id: conn?.id || null,
+                datasource_id: conn?.id || null,
                 title: 'New Session',
                 ai_model_id: this.selectedModelId,
                 kb_ids: this.selectedKBIds.length > 0 ? this.selectedKBIds : null,
@@ -423,7 +456,7 @@ const DiagnosisPage = {
                             <p>Ask me anything about your database. I can analyze performance, diagnose issues, review configurations, and suggest optimizations.</p>
                         </div>
                     `;
-                    lucide.createIcons();
+                    DOM.createIcons();
                 }
             }
         } catch (e) {
@@ -439,7 +472,7 @@ const DiagnosisPage = {
                         <p>${e.message}</p>
                     </div>
                 `;
-                lucide.createIcons();
+                DOM.createIcons();
             }
         }
     },
@@ -497,7 +530,7 @@ const DiagnosisPage = {
             return;
         }
 
-        const conn = Store.get('currentConnection');
+        const conn = Store.get('currentDatasource');
         const attachments = ChatWidget.attachments || [];
 
         ChatWidget.addUserMessage(text, attachments);
@@ -506,7 +539,7 @@ const DiagnosisPage = {
 
         this.ws.send({
             message: text,
-            connection_id: conn?.id || null,
+            datasource_id: conn?.id || null,
             model_id: this.selectedModelId,
             attachments: attachments
         });
@@ -521,7 +554,7 @@ const DiagnosisPage = {
                 ChatWidget.addToolCall(data.tool_name, data.tool_args);
                 break;
             case 'tool_result':
-                ChatWidget.addToolResult(data.tool_name, data.result);
+                ChatWidget.addToolResult(data.tool_name, data.result, data.execution_time_ms);
                 break;
             case 'done':
                 ChatWidget.finishAssistantMessage();
@@ -549,7 +582,7 @@ const DiagnosisPage = {
                         <p>Ask me anything about your database. I can analyze performance, diagnose issues, review configurations, and suggest optimizations.</p>
                     </div>
                 `;
-                lucide.createIcons();
+                DOM.createIcons();
             }
             // Update session tab title
             await this._loadSessions();
@@ -579,6 +612,22 @@ const DiagnosisPage = {
         try {
             await API.deleteChatSession(this.currentSessionId);
             this.currentSessionId = null;
+            await this._loadSessions();
+            Toast.success('Session deleted');
+        } catch (e) {
+            Toast.error('Failed to delete session: ' + e.message);
+        }
+    },
+
+    async _deleteSessionById(sessionId) {
+        const sessions = Store.get('chatSessions') || [];
+        const session = sessions.find(s => s.id === sessionId);
+        if (!confirm(`Delete session "${session?.title || 'Session ' + sessionId}"?`)) return;
+        try {
+            await API.deleteChatSession(sessionId);
+            if (this.currentSessionId === sessionId) {
+                this.currentSessionId = null;
+            }
             await this._loadSessions();
             Toast.success('Session deleted');
         } catch (e) {

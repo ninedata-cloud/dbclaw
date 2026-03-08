@@ -4,14 +4,17 @@ from datetime import datetime
 
 
 class ReportGenerateRequest(BaseModel):
-    connection_id: int
+    datasource_id: int
     report_type: str = "comprehensive"  # comprehensive, performance, security
     title: Optional[str] = None
+    ai_enabled: bool = True  # Use AI analysis
+    model_id: Optional[int] = None  # AI model to use
+    kb_ids: Optional[List[int]] = None  # Knowledge bases to use
 
 
 class ReportResponse(BaseModel):
     id: int
-    connection_id: int
+    datasource_id: int
     title: str
     report_type: str
     status: str
@@ -19,6 +22,12 @@ class ReportResponse(BaseModel):
     findings: Optional[Any] = None
     created_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    ai_analysis: Optional[str] = None
+    ai_model_id: Optional[int] = None
+    kb_ids: Optional[List[int]] = None
+    generation_method: Optional[str] = None
+    error_message: Optional[str] = None
 
     class Config:
         from_attributes = True
+

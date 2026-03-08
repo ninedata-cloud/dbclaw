@@ -126,7 +126,7 @@ class DiagnosticEngine:
                     f"{slow_count} slow queries recorded.",
                     "Enable slow query log, review and optimize slow queries. Add appropriate indexes."
                 ))
-        if slow_queries and len(slow_queries) > 0:
+        if slow_queries and isinstance(slow_queries, list) and len(slow_queries) > 0:
             first = slow_queries[0]
             if not isinstance(first, dict) or "message" not in first:
                 self.findings.append(Finding(
@@ -184,8 +184,10 @@ class DiagnosticEngine:
                 pass
 
     def _check_table_health(self, db_type: str, table_stats: List):
-        if db_type == "postgresql":
+        if db_type == "postgresql" and isinstance(table_stats, list):
             for t in table_stats:
+                if not isinstance(t, dict):
+                    continue
                 dead = t.get("n_dead_tup", 0)
                 live = t.get("n_live_tup", 0)
                 if live > 0 and dead > 0:

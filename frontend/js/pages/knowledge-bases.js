@@ -18,7 +18,7 @@ const KnowledgeBasesPage = {
         // Set up content
         content.innerHTML = '<div id="kb-list" class="kb-grid"></div>';
 
-        lucide.createIcons();
+        DOM.createIcons();
 
         await this.loadKnowledgeBases();
 
@@ -46,7 +46,7 @@ const KnowledgeBasesPage = {
                         </button>
                     </div>
                 `;
-                lucide.createIcons();
+                DOM.createIcons();
                 return;
             }
 
@@ -77,7 +77,7 @@ const KnowledgeBasesPage = {
                 </div>
             `).join('');
 
-            lucide.createIcons();
+            DOM.createIcons();
         } catch (error) {
             Utils.showToast('Failed to load knowledge bases: ' + error.message, 'error');
         }
@@ -199,7 +199,7 @@ const KnowledgeBasesPage = {
             ]
         });
 
-        lucide.createIcons();
+        DOM.createIcons();
 
         const uploadArea = DOM.$('#upload-area');
         const fileInput = DOM.$('#file-input');
@@ -282,7 +282,7 @@ const KnowledgeBasesPage = {
                 `;
             }).join('');
 
-            lucide.createIcons();
+            DOM.createIcons();
         } catch (error) {
             console.error('Failed to load documents:', error);
         }

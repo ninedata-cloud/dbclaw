@@ -40,6 +40,7 @@ class SkillDefinition(BaseModel):
             "read_logs",
             "modify_config",
             "access_kb",
+            "read_datasource",
         }
         for perm in v:
             if perm not in valid_permissions:
@@ -72,6 +73,7 @@ class SkillResponse(BaseModel):
     dependencies: List[str]
     permissions: List[str]
     timeout: Optional[int]
+    code: str
     is_builtin: bool
     is_enabled: bool
     created_at: datetime

@@ -17,21 +17,26 @@ MAX_TOOL_ROUNDS = 10
 
 async def execute_skill_call(
     skill_id: str, arguments: Dict[str, Any], db, user_id: int, session_id: Optional[int] = None
-) -> str:
-    """Execute a skill and return the result as JSON string"""
+) -> tuple[str, int]:
+    """Execute a skill and return the result as JSON string and execution time in ms"""
     from backend.skills.registry import SkillRegistry
     from backend.skills.executor import SkillExecutor
     from backend.skills.context import SkillContext
+    import time
+
+    start_time = time.time()
 
     try:
         registry = SkillRegistry(db)
         skill = await registry.get_skill(skill_id)
 
         if not skill:
-            return json.dumps({"error": f"Skill '{skill_id}' not found"})
+            execution_time = int((time.time() - start_time) * 1000)
+            return json.dumps({"error": f"Skill '{skill_id}' not found"}), execution_time
 
         if not skill.is_enabled:
-            return json.dumps({"error": f"Skill '{skill_id}' is disabled"})
+            execution_time = int((time.time() - start_time) * 1000)
+            return json.dumps({"error": f"Skill '{skill_id}' is disabled"}), execution_time
 
         # Create execution context with skill's required permissions
         context = SkillContext(
@@ -45,16 +50,18 @@ async def execute_skill_call(
         executor = SkillExecutor()
         result = await executor.execute(skill, arguments, context)
 
-        return json.dumps(result, default=str)
+        execution_time = int((time.time() - start_time) * 1000)
+        return json.dumps(result, default=str), execution_time
 
     except Exception as e:
+        execution_time = int((time.time() - start_time) * 1000)
         logger.error(f"Error executing skill {skill_id}: {e}")
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": str(e)}), execution_time
 
 
 async def run_conversation_with_skills(
     messages: List[Dict[str, Any]],
-    connection_id: Optional[int] = None,
+    datasource_id: Optional[int] = None,
     model_id: Optional[int] = None,
     kb_ids: Optional[List[int]] = None,
     db: Optional[Any] = None,
@@ -83,7 +90,7 @@ async def run_conversation_with_skills(
         client = get_ai_client()
 
     if not client:
-        yield {"type": "error", "content": "AI client not configured. Set OPENAI_API_KEY in .env"}
+        yield {"type": "error", "message": "AI client not configured. Set OPENAI_API_KEY in .env"}
         return
 
     # Detect intent from first user message
@@ -98,13 +105,13 @@ async def run_conversation_with_skills(
     else:  # informational
         system_msg = INFORMATIONAL_PROMPT
 
-    if connection_id and db:
-        # Get connection info to determine database type
-        from backend.models.connection import Connection
+    if datasource_id and db:
+        # Get datasource info to determine database type
+        from backend.models.datasource import Datasource
         from sqlalchemy import select
-        result = await db.execute(select(Connection).filter(Connection.id == connection_id))
-        conn = result.scalar_one_or_none()
-        if conn:
+        result = await db.execute(select(Datasource).filter(Datasource.id == datasource_id))
+        datasource = result.scalar_one_or_none()
+        if datasource:
             # Map db_type to skill prefix
             skill_prefix_map = {
                 'mysql': 'mysql',
@@ -112,14 +119,14 @@ async def run_conversation_with_skills(
                 'sqlserver': 'mssql',
                 'oracle': 'oracle'
             }
-            skill_prefix = skill_prefix_map.get(conn.db_type, conn.db_type)
+            skill_prefix = skill_prefix_map.get(datasource.db_type, datasource.db_type)
 
-            system_msg += f"\n\nThe user is currently working with database connection ID: {connection_id} (Type: {conn.db_type.upper()}, Name: {conn.name}). Use this ID when calling tools unless they specify otherwise."
-            system_msg += f"\n\nIMPORTANT: This is a {conn.db_type.upper()} database. You MUST use {skill_prefix}_* skills (e.g., {skill_prefix}_get_db_status, {skill_prefix}_get_slow_queries, {skill_prefix}_get_table_stats, etc.). Do NOT use skills for other database types like mysql_*, pg_*, mssql_*, or oracle_* unless they match this database type."
+            system_msg += f"\n\nThe user is currently working with datasource ID: {datasource_id} (Type: {datasource.db_type.upper()}, Name: {datasource.name}). Use this ID when calling tools unless they specify otherwise."
+            system_msg += f"\n\nIMPORTANT: This is a {datasource.db_type.upper()} database. You MUST use {skill_prefix}_* skills (e.g., {skill_prefix}_get_db_status, {skill_prefix}_get_slow_queries, {skill_prefix}_get_table_stats, etc.). Do NOT use skills for other database types like mysql_*, pg_*, mssql_*, or oracle_* unless they match this database type."
         else:
-            system_msg += f"\n\nThe user is currently working with database connection ID: {connection_id}. Use this ID when calling tools unless they specify otherwise."
-    elif connection_id:
-        system_msg += f"\n\nThe user is currently working with database connection ID: {connection_id}. Use this ID when calling tools unless they specify otherwise."
+            system_msg += f"\n\nThe user is currently working with datasource ID: {datasource_id}. Use this ID when calling tools unless they specify otherwise."
+    elif datasource_id:
+        system_msg += f"\n\nThe user is currently working with datasource ID: {datasource_id}. Use this ID when calling tools unless they specify otherwise."
 
     if kb_ids:
         system_msg += f"\n\nKnowledge bases are enabled for this session (IDs: {kb_ids}). Use search_knowledge_base tool to find relevant documentation when needed."
@@ -221,6 +228,7 @@ async def run_conversation_with_skills(
                         "tool_name": tool_name,
                         "tool_call_id": tc["id"],
                         "result": tool_result,
+                        "execution_time_ms": 0,
                     }
                     full_messages.append({
                         "role": "tool",
@@ -237,7 +245,7 @@ async def run_conversation_with_skills(
                 }
 
                 # Execute the skill
-                tool_result = await execute_skill_call(
+                tool_result, execution_time_ms = await execute_skill_call(
                     tool_name, tool_args, db, user_id, session_id
                 )
 
@@ -246,6 +254,7 @@ async def run_conversation_with_skills(
                     "tool_name": tool_name,
                     "tool_call_id": tc["id"],
                     "result": tool_result[:2000],  # Truncate for display
+                    "execution_time_ms": execution_time_ms,
                 }
 
                 full_messages.append({
@@ -258,7 +267,7 @@ async def run_conversation_with_skills(
 
         except Exception as e:
             logger.error(f"Conversation error at round {round_num}: {e}")
-            yield {"type": "error", "content": f"Error: {str(e)}"}
+            yield {"type": "error", "message": f"Error: {str(e)}"}
             return
 
-    yield {"type": "error", "content": "Maximum tool call rounds reached. Please try a more specific question."}
+    yield {"type": "error", "message": "Maximum tool call rounds reached. Please try a more specific question."}

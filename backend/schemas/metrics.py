@@ -4,7 +4,7 @@ from datetime import datetime
 
 
 class MetricData(BaseModel):
-    connection_id: int
+    datasource_id: int
     metric_type: str
     data: dict
     collected_at: Optional[datetime] = None
@@ -19,7 +19,7 @@ class MetricQuery(BaseModel):
 
 class MetricResponse(BaseModel):
     id: int
-    connection_id: int
+    datasource_id: int
     metric_type: str
     data: Any
     collected_at: Optional[datetime] = None

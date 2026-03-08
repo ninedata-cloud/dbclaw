@@ -1,5 +1,5 @@
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from backend.services.db_connector import DBConnector
 
 
@@ -253,5 +253,77 @@ class OracleConnector(DBConnector):
                 "log_size_bytes": log_size,
                 "total_size_bytes": data_size + log_size,
             }
+        finally:
+            await conn.close()
+
+    async def get_schemas(self) -> List[str]:
+        conn = await self._connect()
+        try:
+            cursor = conn.cursor()
+            await cursor.execute(
+                "SELECT username FROM all_users "
+                "WHERE username NOT IN ('SYS', 'SYSTEM', 'OUTLN', 'DBSNMP', 'APPQOSSYS', "
+                "'WMSYS', 'EXFSYS', 'CTXSYS', 'XDB', 'ANONYMOUS', 'ORDSYS', 'MDSYS', 'OLAPSYS') "
+                "ORDER BY username"
+            )
+            rows = await cursor.fetchall()
+            await cursor.close()
+            return [row[0] for row in rows]
+        finally:
+            await conn.close()
+
+    async def get_tables(self, schema: Optional[str] = None) -> List[Dict[str, Any]]:
+        conn = await self._connect()
+        try:
+            cursor = conn.cursor()
+            target_schema = schema or self.username.upper()
+            await cursor.execute(
+                "SELECT table_name, owner, tablespace_name "
+                "FROM all_tables "
+                "WHERE owner = :schema "
+                "ORDER BY table_name",
+                {"schema": target_schema}
+            )
+            rows = await cursor.fetchall()
+            await cursor.close()
+            return [
+                {
+                    "name": row[0],
+                    "schema": row[1],
+                    "tablespace": row[2],
+                    "type": "TABLE",
+                }
+                for row in rows
+            ]
+        finally:
+            await conn.close()
+
+    async def get_columns(self, table: str, schema: Optional[str] = None) -> List[Dict[str, Any]]:
+        conn = await self._connect()
+        try:
+            cursor = conn.cursor()
+            target_schema = schema or self.username.upper()
+            await cursor.execute(
+                "SELECT column_name, data_type, nullable, data_length, "
+                "data_precision, data_scale, data_default "
+                "FROM all_tab_columns "
+                "WHERE owner = :schema AND table_name = :table "
+                "ORDER BY column_id",
+                {"schema": target_schema, "table": table.upper()}
+            )
+            rows = await cursor.fetchall()
+            await cursor.close()
+            return [
+                {
+                    "name": row[0],
+                    "type": row[1],
+                    "nullable": row[2] == "Y",
+                    "length": row[3],
+                    "precision": row[4],
+                    "scale": row[5],
+                    "default": row[6],
+                }
+                for row in rows
+            ]
         finally:
             await conn.close()

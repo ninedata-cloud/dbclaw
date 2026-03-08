@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 
 from sqlalchemy import select, desc
 from backend.database import async_session
-from backend.models.connection import Connection
+from backend.models.datasource import Datasource
 from backend.models.metric_snapshot import MetricSnapshot
 from backend.models.ssh_host import SSHHost
 from backend.services.db_connector import get_connector
@@ -15,21 +15,21 @@ from backend.utils.encryption import decrypt_value
 logger = logging.getLogger(__name__)
 
 
-async def _get_connection(conn_id: int):
+async def _get_connection(datasource_id: int):
     async with async_session() as db:
-        result = await db.execute(select(Connection).where(Connection.id == conn_id))
+        result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
         return result.scalar_one_or_none()
 
 
-async def _get_connector_for(conn_id: int):
-    conn = await _get_connection(conn_id)
-    if not conn:
-        raise ValueError(f"Connection {conn_id} not found")
-    password = decrypt_value(conn.password_encrypted) if conn.password_encrypted else None
+async def _get_connector_for(datasource_id: int):
+    datasource = await _get_connection(datasource_id)
+    if not datasource:
+        raise ValueError(f"Datasource {datasource_id} not found")
+    password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
     return get_connector(
-        db_type=conn.db_type, host=conn.host, port=conn.port,
-        username=conn.username, password=password, database=conn.database,
-    ), conn
+        db_type=datasource.db_type, host=datasource.host, port=datasource.port,
+        username=datasource.username, password=password, database=datasource.database,
+    ), datasource
 
 
 async def execute_tool(tool_name: str, arguments: Dict[str, Any]) -> str:
@@ -67,7 +67,7 @@ async def _dispatch_tool(tool_name: str, args: Dict[str, Any]) -> Any:
 
 
 async def _tool_get_db_status(args):
-    connector, _ = await _get_connector_for(args["connection_id"])
+    connector, _ = await _get_connector_for(args["datasource_id"])
     try:
         return await connector.get_status()
     finally:
@@ -75,7 +75,7 @@ async def _tool_get_db_status(args):
 
 
 async def _tool_get_db_variables(args):
-    connector, _ = await _get_connector_for(args["connection_id"])
+    connector, _ = await _get_connector_for(args["datasource_id"])
     try:
         variables = await connector.get_variables()
         # Return subset of important variables to avoid token overflow
@@ -98,7 +98,7 @@ async def _tool_get_db_variables(args):
 
 
 async def _tool_get_process_list(args):
-    connector, _ = await _get_connector_for(args["connection_id"])
+    connector, _ = await _get_connector_for(args["datasource_id"])
     try:
         return await connector.get_process_list()
     finally:
@@ -106,7 +106,7 @@ async def _tool_get_process_list(args):
 
 
 async def _tool_get_slow_queries(args):
-    connector, _ = await _get_connector_for(args["connection_id"])
+    connector, _ = await _get_connector_for(args["datasource_id"])
     try:
         return await connector.get_slow_queries()
     finally:
@@ -114,7 +114,7 @@ async def _tool_get_slow_queries(args):
 
 
 async def _tool_get_table_stats(args):
-    connector, _ = await _get_connector_for(args["connection_id"])
+    connector, _ = await _get_connector_for(args["datasource_id"])
     try:
         return await connector.get_table_stats()
     finally:
@@ -122,7 +122,7 @@ async def _tool_get_table_stats(args):
 
 
 async def _tool_get_replication_status(args):
-    connector, _ = await _get_connector_for(args["connection_id"])
+    connector, _ = await _get_connector_for(args["datasource_id"])
     try:
         return await connector.get_replication_status()
     finally:
@@ -130,7 +130,7 @@ async def _tool_get_replication_status(args):
 
 
 async def _tool_get_db_size(args):
-    connector, _ = await _get_connector_for(args["connection_id"])
+    connector, _ = await _get_connector_for(args["datasource_id"])
     try:
         return await connector.get_db_size()
     finally:
@@ -142,7 +142,7 @@ async def _tool_execute_query(args):
     upper = sql.upper()
     if not upper.startswith("SELECT") and not upper.startswith("SHOW") and not upper.startswith("EXPLAIN"):
         return {"error": "Only SELECT/SHOW/EXPLAIN queries are allowed for diagnostics"}
-    connector, _ = await _get_connector_for(args["connection_id"])
+    connector, _ = await _get_connector_for(args["datasource_id"])
     try:
         return await connector.execute_query(sql, max_rows=100)
     finally:
@@ -150,7 +150,7 @@ async def _tool_execute_query(args):
 
 
 async def _tool_explain_query(args):
-    connector, _ = await _get_connector_for(args["connection_id"])
+    connector, _ = await _get_connector_for(args["datasource_id"])
     try:
         return await connector.explain_query(args["sql"])
     finally:
@@ -158,9 +158,9 @@ async def _tool_explain_query(args):
 
 
 async def _tool_get_os_metrics(args):
-    conn = await _get_connection(args["connection_id"])
-    if not conn or not conn.ssh_host_id:
-        return {"error": "No SSH host configured for this connection"}
+    datasource = await _get_connection(args["datasource_id"])
+    if not datasource or not datasource.ssh_host_id:
+        return {"error": "No SSH host configured for this datasource"}
 
     async with async_session() as db:
         result = await db.execute(select(SSHHost).where(SSHHost.id == conn.ssh_host_id))
@@ -180,9 +180,9 @@ async def _tool_get_os_metrics(args):
 
 async def _tool_execute_os_command(args):
     """Execute a shell command on the DB host via SSH with safety checks."""
-    conn = await _get_connection(args["connection_id"])
-    if not conn or not conn.ssh_host_id:
-        return {"error": "No SSH host configured for this connection"}
+    datasource = await _get_connection(args["datasource_id"])
+    if not datasource or not datasource.ssh_host_id:
+        return {"error": "No SSH host configured for this datasource"}
 
     command = args.get("command", "").strip()
     if not command:
@@ -200,7 +200,7 @@ async def _tool_execute_os_command(args):
             return {"error": f"Command blocked for safety: contains '{b.strip()}'. Only read-only diagnostic commands are allowed."}
 
     async with async_session() as db:
-        result = await db.execute(select(SSHHost).where(SSHHost.id == conn.ssh_host_id))
+        result = await db.execute(select(SSHHost).where(SSHHost.id == datasource.ssh_host_id))
         ssh_host = result.scalar_one_or_none()
         if not ssh_host:
             return {"error": "SSH host not found"}
@@ -223,7 +223,7 @@ async def _tool_execute_os_command(args):
 
 
 async def _tool_get_metric_history(args):
-    conn_id = args["connection_id"]
+    datasource_id = args["datasource_id"]
     metric_type = args.get("metric_type", "db_status")
     limit = args.get("limit", 20)
 
@@ -231,7 +231,7 @@ async def _tool_get_metric_history(args):
         result = await db.execute(
             select(MetricSnapshot)
             .where(
-                MetricSnapshot.connection_id == conn_id,
+                MetricSnapshot.datasource_id == conn_id,
                 MetricSnapshot.metric_type == metric_type,
             )
             .order_by(desc(MetricSnapshot.collected_at))

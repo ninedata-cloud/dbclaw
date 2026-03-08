@@ -1,0 +1,801 @@
+/* Guardian Dashboard Styles */
+
+.guardian-dashboard {
+    padding: 20px;
+    max-width: 1600px;
+    margin: 0 auto;
+}
+
+.dashboard-header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.dashboard-header h1 {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+}
+
+.dashboard-header .subtitle {
+    color: #666;
+    font-size: 1.1rem;
+}
+
+/* Health Overview */
+.health-overview {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 12px;
+    padding: 30px;
+    margin-bottom: 30px;
+    color: white;
+    display: flex;
+    gap: 30px;
+    align-items: center;
+}
+
+.health-score-card {
+    text-align: center;
+}
+
+.health-score {
+    font-size: 4rem;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.health-score.excellent { color: #4ade80; }
+.health-score.good { color: #fbbf24; }
+.health-score.fair { color: #fb923c; }
+.health-score.poor { color: #ef4444; }
+
+.health-label {
+    font-size: 1.2rem;
+    opacity: 0.9;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    flex: 1;
+}
+
+.stat-card {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    backdrop-filter: blur(10px);
+}
+
+.stat-card.critical { border-left: 4px solid #ef4444; }
+.stat-card.important { border-left: 4px solid #f59e0b; }
+.stat-card.normal { border-left: 4px solid #10b981; }
+
+.stat-value {
+    font-size: 2.5rem;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.stat-label {
+    font-size: 0.9rem;
+    opacity: 0.9;
+}
+
+.anomaly-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.anomaly-stat {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 15px;
+    border-radius: 8px;
+}
+
+.anomaly-stat .icon {
+    font-size: 1.5rem;
+}
+
+.anomaly-stat .count {
+    font-size: 2rem;
+    font-weight: bold;
+    min-width: 40px;
+}
+
+.anomaly-stat .label {
+    font-size: 0.9rem;
+}
+
+/* Database Grid */
+.database-grid {
+    margin-bottom: 30px;
+}
+
+.tier-section {
+    margin-bottom: 30px;
+}
+
+.tier-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+    font-size: 1.3rem;
+}
+
+.tier-badge {
+    padding: 5px 15px;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: bold;
+}
+
+.tier-badge.critical {
+    background: #ef4444;
+    color: white;
+}
+
+.tier-badge.important {
+    background: #f59e0b;
+    color: white;
+}
+
+.tier-badge.normal {
+    background: #10b981;
+    color: white;
+}
+
+.tier-count {
+    background: #f3f4f6;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.database-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+.database-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.database-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.database-card.critical {
+    border-left: 4px solid #ef4444;
+}
+
+.database-card.important {
+    border-left: 4px solid #f59e0b;
+}
+
+.database-card.normal {
+    border-left: 4px solid #10b981;
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.card-header h4 {
+    margin: 0;
+    font-size: 1.2rem;
+    color: #111;
+    font-weight: 600;
+}
+
+.db-type {
+    background: #667eea;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.card-body {
+    margin-bottom: 15px;
+}
+
+.importance-score {
+    text-align: center;
+    margin-bottom: 15px;
+    padding: 15px;
+    background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+    border-radius: 8px;
+}
+
+.score-value {
+    display: block;
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: #667eea;
+    text-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
+}
+
+.score-label {
+    display: block;
+    font-size: 0.85rem;
+    color: #374151;
+    font-weight: 500;
+    margin-top: 5px;
+}
+
+.strategy-info {
+    background: #f9fafb;
+    padding: 12px;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+}
+
+.strategy-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    font-size: 0.9rem;
+}
+
+.strategy-item .label {
+    color: #374151;
+    font-weight: 500;
+}
+
+.strategy-item .value {
+    font-weight: 600;
+    color: #111;
+}
+
+.card-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-small {
+    flex: 1;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    border: 1px solid #e5e7eb;
+    background: white;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-small:hover {
+    background: #f9fafb;
+    border-color: #667eea;
+    color: #667eea;
+}
+
+/* Anomaly Stream */
+.anomaly-stream {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.anomaly-stream h2 {
+    margin-bottom: 20px;
+}
+
+.anomaly-stream-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.anomaly-stream-item {
+    display: flex;
+    gap: 15px;
+    padding: 12px;
+    background: #f9fafb;
+    border-radius: 6px;
+    border-left: 4px solid #e5e7eb;
+    transition: all 0.2s;
+}
+
+.anomaly-stream-item:hover {
+    background: #f3f4f6;
+    transform: translateX(2px);
+}
+
+.anomaly-stream-item.critical {
+    border-left-color: #ef4444;
+    background: #fef2f2;
+}
+
+.anomaly-stream-item.critical:hover {
+    background: #fee2e2;
+}
+
+.anomaly-stream-item.warning {
+    border-left-color: #f59e0b;
+    background: #fffbeb;
+}
+
+.anomaly-stream-item.warning:hover {
+    background: #fef3c7;
+}
+
+.anomaly-stream-item.info {
+    border-left-color: #3b82f6;
+    background: #eff6ff;
+}
+
+.anomaly-stream-item.info:hover {
+    background: #dbeafe;
+}
+
+.anomaly-time {
+    min-width: 70px;
+    font-size: 0.8rem;
+    color: #666;
+    font-weight: 500;
+    padding-top: 2px;
+}
+
+.anomaly-content {
+    flex: 1;
+}
+
+.anomaly-source {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.datasource-name {
+    font-weight: 600;
+    color: #111;
+    font-size: 0.9rem;
+}
+
+.anomaly-message {
+    font-size: 0.85rem;
+    color: #444;
+    margin-bottom: 6px;
+    line-height: 1.4;
+}
+
+.anomaly-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.status-badge {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.status-badge.detected {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.status-badge.diagnosing {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.status-badge.resolved {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.status-badge.false_positive {
+    background: #f3f4f6;
+    color: #6b7280;
+}
+
+.auto-fixed-tag {
+    background: #10b981;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 500;
+}
+
+.error-state {
+    text-align: center;
+    padding: 40px;
+    color: #ef4444;
+}
+
+.anomaly-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.anomaly-item {
+    border-left: 4px solid #e5e7eb;
+    padding: 15px;
+    background: #f9fafb;
+    border-radius: 6px;
+}
+
+.anomaly-item.critical {
+    border-left-color: #ef4444;
+    background: #fef2f2;
+}
+
+.anomaly-item.warning {
+    border-left-color: #f59e0b;
+    background: #fffbeb;
+}
+
+.anomaly-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.severity-badge {
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: bold;
+}
+
+.severity-badge.critical {
+    background: #ef4444;
+    color: white;
+}
+
+.severity-badge.warning {
+    background: #f59e0b;
+    color: white;
+}
+
+.severity-badge.info {
+    background: #3b82f6;
+    color: white;
+}
+
+.timestamp {
+    font-size: 0.85rem;
+    color: #666;
+}
+
+.anomaly-details {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.detail-row {
+    display: flex;
+    gap: 10px;
+    font-size: 0.9rem;
+}
+
+.detail-row .label {
+    color: #666;
+    font-weight: 500;
+}
+
+.detail-row .value {
+    color: #111;
+}
+
+.status-detected { color: #f59e0b; }
+.status-diagnosing { color: #3b82f6; }
+.status-resolved { color: #10b981; }
+.status-false_positive { color: #6b7280; }
+
+.auto-fixed-badge {
+    grid-column: 1 / -1;
+    background: #10b981;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    text-align: center;
+    font-weight: 500;
+}
+
+/* Loading State */
+.loading {
+    text-align: center;
+    padding: 40px;
+    color: #666;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px;
+    color: #999;
+}
+
+/* Modal Styles */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 12px;
+    padding: 30px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    max-width: 600px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.modal-content.large {
+    max-width: 900px;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: #111;
+}
+
+.modal-body {
+    overflow-y: auto;
+    max-height: calc(80vh - 120px);
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 2rem;
+    cursor: pointer;
+    color: #666;
+    line-height: 1;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.close-btn:hover {
+    background: #f3f4f6;
+    color: #111;
+}
+
+/* Anomaly Detail Modal */
+.anomaly-detail-modal .detail-section {
+    margin-bottom: 25px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.anomaly-detail-modal .detail-section:last-child {
+    border-bottom: none;
+}
+
+.anomaly-detail-modal h3 {
+    font-size: 1.2rem;
+    margin-bottom: 15px;
+    color: #111;
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+}
+
+.info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.info-label {
+    font-size: 0.85rem;
+    color: #666;
+    font-weight: 500;
+}
+
+.info-value {
+    font-size: 1rem;
+    color: #111;
+    font-weight: 600;
+}
+
+.metric-comparison {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 20px;
+    background: #f9fafb;
+    border-radius: 8px;
+}
+
+.metric-box {
+    text-align: center;
+    padding: 15px 25px;
+    background: white;
+    border-radius: 8px;
+    border: 2px solid #e5e7eb;
+}
+
+.metric-box.current {
+    border-color: #3b82f6;
+}
+
+.metric-box.deviation {
+    border-color: #ef4444;
+}
+
+.metric-label {
+    font-size: 0.8rem;
+    color: #666;
+    margin-bottom: 5px;
+}
+
+.metric-value {
+    font-size: 1.8rem;
+    font-weight: bold;
+    color: #111;
+}
+
+.metric-arrow {
+    font-size: 2rem;
+    color: #666;
+}
+
+.diagnosis-content {
+    background: #eff6ff;
+    padding: 20px;
+    border-radius: 8px;
+    border-left: 4px solid #3b82f6;
+    line-height: 1.6;
+}
+
+.diagnosis-content h4 {
+    margin-top: 15px;
+    margin-bottom: 10px;
+    color: #1e40af;
+}
+
+.diagnosis-content p {
+    margin-bottom: 10px;
+}
+
+.root-cause-content {
+    background: #fef3c7;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #f59e0b;
+    line-height: 1.6;
+    color: #78350f;
+}
+
+.actions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.action-item {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 12px;
+    background: #f0fdf4;
+    border-radius: 6px;
+    border-left: 3px solid #10b981;
+}
+
+.action-number {
+    background: #10b981;
+    color: white;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    font-weight: bold;
+    flex-shrink: 0;
+}
+
+.action-text {
+    flex: 1;
+    color: #065f46;
+    line-height: 1.5;
+}
+
+.context-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+.context-item {
+    background: #f9fafb;
+    padding: 10px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+
+.context-label {
+    color: #666;
+    font-weight: 500;
+    display: block;
+    margin-bottom: 3px;
+}
+
+.context-value {
+    color: #111;
+    font-weight: 600;
+}
+
+.ai-diagnosis-badge {
+    grid-column: 1 / -1;
+    background: #3b82f6;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    text-align: center;
+    font-weight: 500;
+}
+
+.anomaly-item {
+    cursor: pointer;
+}
+
+.anomaly-item:hover {
+    transform: translateX(2px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}

@@ -11,6 +11,6 @@ const Header = {
             else if (Array.isArray(actions)) actions.forEach(a => actionsContainer.appendChild(a));
             header.appendChild(actionsContainer);
         }
-        lucide.createIcons();
+        DOM.createIcons();
     }
 };

@@ -1,0 +1,86 @@
+/**
+ * Schema Cache Manager
+ * Caches database schema metadata for autocomplete with 5-minute TTL
+ */
+
+const SchemaCache = {
+    cache: new Map(),
+    TTL: 5 * 60 * 1000, // 5 minutes
+
+    _getCacheKey(datasourceId, type, params = {}) {
+        return `${datasourceId}:${type}:${JSON.stringify(params)}`;
+    },
+
+    _isExpired(entry) {
+        return Date.now() - entry.timestamp > this.TTL;
+    },
+
+    async getSchemas(datasourceId) {
+        const key = this._getCacheKey(datasourceId, 'schemas');
+        const cached = this.cache.get(key);
+
+        if (cached && !this._isExpired(cached)) {
+            return cached.data;
+        }
+
+        try {
+            const data = await window.api.getSchemas(datasourceId);
+            this.cache.set(key, { data, timestamp: Date.now() });
+            return data;
+        } catch (error) {
+            console.error('Error fetching schemas:', error);
+            return [];
+        }
+    },
+
+    async getTables(datasourceId, schema = null) {
+        const key = this._getCacheKey(datasourceId, 'tables', { schema });
+        const cached = this.cache.get(key);
+
+        if (cached && !this._isExpired(cached)) {
+            return cached.data;
+        }
+
+        try {
+            const data = await window.api.getTables(datasourceId, schema);
+            this.cache.set(key, { data, timestamp: Date.now() });
+            return data;
+        } catch (error) {
+            console.error('Error fetching tables:', error);
+            return [];
+        }
+    },
+
+    async getColumns(datasourceId, table, schema = null) {
+        const key = this._getCacheKey(datasourceId, 'columns', { table, schema });
+        const cached = this.cache.get(key);
+
+        if (cached && !this._isExpired(cached)) {
+            return cached.data;
+        }
+
+        try {
+            const data = await window.api.getColumns(datasourceId, table, schema);
+            this.cache.set(key, { data, timestamp: Date.now() });
+            return data;
+        } catch (error) {
+            console.error('Error fetching columns:', error);
+            return [];
+        }
+    },
+
+    invalidate(datasourceId) {
+        // Remove all cache entries for this datasource
+        for (const key of this.cache.keys()) {
+            if (key.startsWith(`${datasourceId}:`)) {
+                this.cache.delete(key);
+            }
+        }
+    },
+
+    clear() {
+        this.cache.clear();
+    }
+};
+
+window.SchemaCache = SchemaCache;

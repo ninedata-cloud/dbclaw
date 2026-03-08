@@ -7,7 +7,7 @@ description: Get MySQL database replication/cluster status
 tags: [mysql, replication, cluster, high-availability]
 
 parameters:
-  - name: connection_id
+  - name: datasource_id
     type: integer
     required: true
     description: The database connection ID
@@ -17,13 +17,13 @@ permissions:
 
 code: |
   async def execute(context, params):
-      connection_id = params['connection_id']
+      datasource_id = params['datasource_id']
 
       # Try to get slave status
-      slave_result = await context.execute_query("SHOW SLAVE STATUS", connection_id)
+      slave_result = await context.execute_query("SHOW SLAVE STATUS", datasource_id)
 
       # Try to get master status
-      master_result = await context.execute_query("SHOW MASTER STATUS", connection_id)
+      master_result = await context.execute_query("SHOW MASTER STATUS", datasource_id)
 
       return {
           "success": True,

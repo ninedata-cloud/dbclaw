@@ -7,7 +7,7 @@ description: Get current PostgreSQL database status including connections, activ
 tags: [postgresql, status, performance, monitoring]
 
 parameters:
-  - name: connection_id
+  - name: datasource_id
     type: integer
     required: true
     description: The database connection ID
@@ -17,7 +17,7 @@ permissions:
 
 code: |
   async def execute(context, params):
-      connection_id = params['connection_id']
+      datasource_id = params['datasource_id']
 
       # Get database statistics
       query = """
@@ -42,10 +42,17 @@ code: |
       WHERE datname = current_database()
       """
 
-      result = await context.execute_query(query, connection_id)
+      result = await context.execute_query(query, datasource_id)
 
       if not result.get("success"):
           return {"success": False, "error": result.get("error", "Failed to get database status")}
+
+      # Get max_connections setting
+      max_conn_query = "SHOW max_connections"
+      max_conn_result = await context.execute_query(max_conn_query, datasource_id)
+      max_connections = 100  # default
+      if max_conn_result.get("success") and max_conn_result.get("data"):
+          max_connections = int(max_conn_result["data"][0][0])
 
       # Calculate cache hit ratio
       metrics = {}
@@ -60,6 +67,7 @@ code: |
               metrics["cache_hit_ratio"] = f"{cache_hit_ratio:.2f}%"
 
           metrics["active_connections"] = data[0]
+          metrics["total_connections"] = max_connections
           metrics["transactions_committed"] = data[1]
           metrics["transactions_rolled_back"] = data[2]
           metrics["deadlocks"] = data[13]

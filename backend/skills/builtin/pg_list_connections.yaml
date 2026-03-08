@@ -7,7 +7,7 @@ description: List all active database connections with their current state and q
 tags: [postgresql, connections, monitoring]
 
 parameters:
-  - name: connection_id
+  - name: datasource_id
     type: integer
     required: true
     description: The database connection ID
@@ -17,7 +17,7 @@ permissions:
 
 code: |
   async def execute(context, params):
-      connection_id = params['connection_id']
+      datasource_id = params['datasource_id']
 
       query = """
       SELECT
@@ -38,7 +38,7 @@ code: |
       ORDER BY backend_start DESC
       """
 
-      result = await context.execute_query(query, connection_id)
+      result = await context.execute_query(query, datasource_id)
 
       if not result.get("success"):
           return {"success": False, "error": result.get("error", "Failed to list connections")}

@@ -7,7 +7,7 @@ description: Get Oracle execution plan for a SQL query
 tags: [oracle, explain, execution-plan, performance]
 
 parameters:
-  - name: connection_id
+  - name: datasource_id
     type: integer
     required: true
     description: The database connection ID
@@ -21,7 +21,7 @@ permissions:
 
 code: |
   async def execute(context, params):
-      connection_id = params['connection_id']
+      datasource_id = params['datasource_id']
       sql = params['sql'].strip()
 
       # Generate a unique statement ID
@@ -31,7 +31,7 @@ code: |
       # First, explain the query
       explain_sql = f"EXPLAIN PLAN SET STATEMENT_ID = '{statement_id}' FOR {sql}"
 
-      explain_result = await context.execute_query(explain_sql, connection_id)
+      explain_result = await context.execute_query(explain_sql, datasource_id)
 
       if not explain_result.get("success"):
           return {"success": False, "error": explain_result.get("error", "Failed to explain query")}
@@ -55,11 +55,11 @@ code: |
       ORDER SIBLINGS BY position
       """
 
-      plan_result = await context.execute_query(plan_query, connection_id)
+      plan_result = await context.execute_query(plan_query, datasource_id)
 
       # Clean up
       cleanup_sql = f"DELETE FROM plan_table WHERE statement_id = '{statement_id}'"
-      await context.execute_query(cleanup_sql, connection_id)
+      await context.execute_query(cleanup_sql, datasource_id)
 
       if not plan_result.get("success"):
           return {"success": False, "error": plan_result.get("error", "Failed to get execution plan")}

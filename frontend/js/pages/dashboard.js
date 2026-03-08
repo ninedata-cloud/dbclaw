@@ -6,31 +6,31 @@ const DashboardPage = {
         content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
         try {
-            const connections = await API.getConnections();
-            Store.set('connections', connections);
+            const datasources = await API.getDatasources();
+            Store.set('datasources', datasources);
             content.innerHTML = '';
 
-            if (connections.length === 0) {
+            if (datasources.length === 0) {
                 content.innerHTML = `
                     <div class="empty-state">
                         <i data-lucide="database"></i>
                         <h3>No Connections</h3>
                         <p>Add a database connection to get started with monitoring and diagnostics.</p>
-                        <button class="btn btn-primary mt-16" onclick="Router.navigate('connections')">
+                        <button class="btn btn-primary mt-16" onclick="Router.navigate('datasources')">
                             <i data-lucide="plus"></i> Add Connection
                         </button>
                     </div>
                 `;
-                lucide.createIcons();
+                DOM.createIcons();
                 return;
             }
 
             // Summary cards
             const summary = DOM.el('div', { className: 'grid-4 mb-24' });
-            summary.appendChild(MetricCard.create('Total Connections', connections.length));
-            summary.appendChild(MetricCard.create('MySQL', connections.filter(c => c.db_type === 'mysql').length));
-            summary.appendChild(MetricCard.create('PostgreSQL', connections.filter(c => c.db_type === 'postgresql').length));
-            summary.appendChild(MetricCard.create('Other', connections.filter(c => !['mysql', 'postgresql'].includes(c.db_type)).length));
+            summary.appendChild(MetricCard.create('Total Connections', datasources.length));
+            summary.appendChild(MetricCard.create('MySQL', datasources.filter(c => c.db_type === 'mysql').length));
+            summary.appendChild(MetricCard.create('PostgreSQL', datasources.filter(c => c.db_type === 'postgresql').length));
+            summary.appendChild(MetricCard.create('Other', datasources.filter(c => !['mysql', 'postgresql'].includes(c.db_type)).length));
             content.appendChild(summary);
 
             // Connection cards grid
@@ -38,7 +38,7 @@ const DashboardPage = {
             content.appendChild(heading);
 
             const grid = DOM.el('div', { className: 'dashboard-grid' });
-            for (const conn of connections) {
+            for (const conn of datasources) {
                 const card = DOM.el('div', { className: 'dashboard-conn-card', onClick: () => {
                     Store.set('currentConnection', conn);
                     Router.navigate('monitor');
@@ -46,7 +46,7 @@ const DashboardPage = {
                 card.innerHTML = `
                     <div class="flex-between">
                         <h3>${conn.name}</h3>
-                        <span class="connection-card-type type-${conn.db_type}">${conn.db_type}</span>
+                        <span class="datasource-card-type type-${conn.db_type}">${conn.db_type}</span>
                     </div>
                     <div class="type">${conn.host}:${conn.port}${conn.database ? ' / ' + conn.database : ''}</div>
                     <div class="metrics" id="dash-metrics-${conn.id}">
@@ -60,7 +60,7 @@ const DashboardPage = {
                 this._loadConnMetrics(conn.id);
             }
             content.appendChild(grid);
-            lucide.createIcons();
+            DOM.createIcons();
 
         } catch (err) {
             content.innerHTML = `<div class="empty-state"><h3>Error</h3><p>${err.message}</p></div>`;

@@ -88,9 +88,9 @@ const LoginPage = {
             // Render sidebar and navigate
             Sidebar.render();
 
-            // Load connections
-            API.getConnections().then(connections => {
-                Store.set('connections', connections);
+            // Load datasources
+            API.getDatasources().then(datasources => {
+                Store.set('datasources', datasources);
             }).catch(() => {});
 
             Router.navigate('dashboard');

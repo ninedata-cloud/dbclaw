@@ -1,0 +1,53 @@
+id: oceanbase_get_partition_info
+version: 1.0.0
+category: oceanbase
+name: oceanbase_get_partition_info
+description: Get OceanBase partition distribution information
+tags:
+  - oceanbase
+  - partitions
+  - monitoring
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: ID of the OceanBase datasource
+timeout: 30
+permissions:
+  - read_datasource
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      from backend.models.datasource import Datasource
+      from backend.services.oceanbase_service import OceanBaseConnector
+      from backend.utils.encryption import decrypt_value
+
+      # Get datasource
+      datasource = await context.db.get(Datasource, datasource_id)
+      if not datasource:
+          return {"success": False, "error": "Datasource not found"}
+
+      if datasource.db_type != "oceanbase":
+          return {"success": False, "error": "Not an OceanBase datasource"}
+
+      # Decrypt password
+      password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
+
+      # Connect and get partition info
+      connector = OceanBaseConnector(
+          host=datasource.host,
+          port=datasource.port,
+          username=datasource.username,
+          password=password,
+          database=datasource.database
+      )
+
+      result = await connector.execute_query(
+          "SELECT table_name, partition_name, partition_ordinal_position, "
+          "partition_method, partition_expression "
+          "FROM information_schema.partitions "
+          "WHERE table_schema = DATABASE() AND partition_name IS NOT NULL "
+          "ORDER BY table_name, partition_ordinal_position LIMIT 100"
+      )
+      return {"success": True, "data": result}

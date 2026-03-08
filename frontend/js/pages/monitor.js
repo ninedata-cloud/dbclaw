@@ -2,6 +2,7 @@
 const MonitorPage = {
     ws: null,
     chartIds: ['connections', 'qps', 'cache_hit', 'threads', 'network', 'latency'],
+    osChartIds: ['cpu_usage', 'memory_usage', 'disk_usage', 'load_avg', 'disk_io', 'network_io'],
 
     render() {
         const conn = Store.get('currentConnection');
@@ -10,7 +11,7 @@ const MonitorPage = {
         const headerActions = DOM.el('div', { className: 'flex gap-8' });
         const connSelect = DOM.el('select', { className: 'form-select', style: { minWidth: '200px' } });
         connSelect.appendChild(DOM.el('option', { value: '', textContent: 'Select a connection...' }));
-        const connections = Store.get('connections') || [];
+        const connections = Store.get('datasources') || [];
         for (const c of connections) {
             const opt = DOM.el('option', { value: c.id, textContent: `${c.name} (${c.db_type})` });
             if (conn && c.id === conn.id) opt.selected = true;
@@ -19,7 +20,7 @@ const MonitorPage = {
         connSelect.addEventListener('change', async () => {
             const id = parseInt(connSelect.value);
             if (id) {
-                const conns = Store.get('connections') || [];
+                const conns = Store.get('datasources') || [];
                 const selected = conns.find(c => c.id === id);
                 Store.set('currentConnection', selected);
                 this._startMonitoring(id);
@@ -40,19 +41,30 @@ const MonitorPage = {
                     <button class="btn btn-primary mt-16" onclick="Router.navigate('connections')">Add Connection</button>
                 </div>
             `;
-            lucide.createIcons();
+            DOM.createIcons();
             return;
         }
 
-        // Metric cards row
-        const metricsRow = DOM.el('div', { className: 'grid-4 mb-24', id: 'monitor-metrics' });
-        metricsRow.appendChild(MetricCard.create('Active Connections', '--'));
-        metricsRow.appendChild(MetricCard.create('QPS', '--'));
-        metricsRow.appendChild(MetricCard.create('Cache Hit Rate', '--'));
-        metricsRow.appendChild(MetricCard.create('Uptime', '--'));
-        content.appendChild(metricsRow);
+        // Database Metric cards row
+        const dbMetricsRow = DOM.el('div', { className: 'grid-4 mb-24', id: 'monitor-metrics' });
+        dbMetricsRow.appendChild(MetricCard.create('Active Connections', '--'));
+        dbMetricsRow.appendChild(MetricCard.create('QPS', '--'));
+        dbMetricsRow.appendChild(MetricCard.create('Cache Hit Rate', '--'));
+        dbMetricsRow.appendChild(MetricCard.create('Uptime', '--'));
+        content.appendChild(dbMetricsRow);
 
-        // Charts grid
+        // OS Metric cards row
+        const osMetricsRow = DOM.el('div', { className: 'grid-4 mb-24', id: 'os-metrics' });
+        osMetricsRow.appendChild(MetricCard.create('CPU Usage', '--'));
+        osMetricsRow.appendChild(MetricCard.create('Memory Usage', '--'));
+        osMetricsRow.appendChild(MetricCard.create('Disk Usage', '--'));
+        osMetricsRow.appendChild(MetricCard.create('Load Average', '--'));
+        content.appendChild(osMetricsRow);
+
+        // Database Charts section
+        const dbSection = DOM.el('h3', { textContent: 'Database Metrics', className: 'mb-16' });
+        content.appendChild(dbSection);
+
         const chartsGrid = DOM.el('div', { className: 'chart-grid', id: 'monitor-charts' });
         chartsGrid.appendChild(ChartPanel.create('connections', 'Active Connections'));
         chartsGrid.appendChild(ChartPanel.create('qps', 'Queries Per Second'));
@@ -64,6 +76,27 @@ const MonitorPage = {
         chartsGrid.appendChild(ChartPanel.create('latency', 'Slow Queries'));
         content.appendChild(chartsGrid);
 
+        // OS Charts section
+        const osSection = DOM.el('h3', { textContent: 'Operating System Metrics', className: 'mb-16 mt-24' });
+        content.appendChild(osSection);
+
+        const osChartsGrid = DOM.el('div', { className: 'chart-grid', id: 'os-charts' });
+        osChartsGrid.appendChild(ChartPanel.create('cpu_usage', 'CPU Usage (%)', 'line', {
+            data: { datasets: [{ borderColor: '#f85149', backgroundColor: 'rgba(248,81,73,0.1)' }] }
+        }));
+        osChartsGrid.appendChild(ChartPanel.create('memory_usage', 'Memory Usage (%)', 'line', {
+            data: { datasets: [{ borderColor: '#d29922', backgroundColor: 'rgba(210,153,34,0.1)' }] }
+        }));
+        osChartsGrid.appendChild(ChartPanel.create('disk_usage', 'Disk Usage (%)', 'line', {
+            data: { datasets: [{ borderColor: '#a371f7', backgroundColor: 'rgba(163,113,247,0.1)' }] }
+        }));
+        osChartsGrid.appendChild(ChartPanel.create('load_avg', 'Load Average (1min)', 'line', {
+            data: { datasets: [{ borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)' }] }
+        }));
+        osChartsGrid.appendChild(ChartPanel.create('disk_io', 'Disk I/O (ops/sec)'));
+        osChartsGrid.appendChild(ChartPanel.create('network_io', 'Network I/O (KB/s)'));
+        content.appendChild(osChartsGrid);
+
         // Init charts
         requestAnimationFrame(() => {
             for (const id of this.chartIds) {
@@ -71,6 +104,23 @@ const MonitorPage = {
                     data: { datasets: [{ borderColor: '#3fb950', backgroundColor: 'rgba(63,185,80,0.1)' }] },
                     options: { scales: { y: { max: 100 } } }
                 } : {});
+            }
+            // Init OS charts
+            for (const id of this.osChartIds) {
+                const config = {};
+                if (id === 'cpu_usage' || id === 'memory_usage' || id === 'disk_usage') {
+                    config.options = { scales: { y: { max: 100, min: 0 } } };
+                }
+                if (id === 'cpu_usage') {
+                    config.data = { datasets: [{ borderColor: '#f85149', backgroundColor: 'rgba(248,81,73,0.1)' }] };
+                } else if (id === 'memory_usage') {
+                    config.data = { datasets: [{ borderColor: '#d29922', backgroundColor: 'rgba(210,153,34,0.1)' }] };
+                } else if (id === 'disk_usage') {
+                    config.data = { datasets: [{ borderColor: '#a371f7', backgroundColor: 'rgba(163,113,247,0.1)' }] };
+                } else if (id === 'load_avg') {
+                    config.data = { datasets: [{ borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)' }] };
+                }
+                ChartPanel.init(id, 'line', config);
             }
         });
 
@@ -80,8 +130,8 @@ const MonitorPage = {
             this._startMonitoring(conn.id);
         } else {
             // Auto-select first connection
-            API.getConnections().then(conns => {
-                Store.set('connections', conns);
+            API.getDatasources().then(conns => {
+                Store.set('datasources', conns);
                 if (conns.length > 0) {
                     Store.set('currentConnection', conns[0]);
                     connSelect.value = conns[0].id;
@@ -134,6 +184,20 @@ const MonitorPage = {
         MetricCard.update(cards[1], typeof qps === 'number' ? qps.toFixed(1) : qps);
         MetricCard.update(cards[2], Format.percent(hitRate));
         MetricCard.update(cards[3], Format.uptime(uptime));
+
+        // Update OS metric cards
+        const osCards = DOM.$$('#os-metrics .metric-card');
+        if (osCards.length >= 4) {
+            const cpuUsage = data.cpu_usage;
+            const memUsage = data.memory_usage;
+            const diskUsage = data.disk_usage;
+            const loadAvg = data.load_avg_1min;
+
+            MetricCard.update(osCards[0], cpuUsage !== undefined ? Format.percent(cpuUsage) : '--');
+            MetricCard.update(osCards[1], memUsage !== undefined ? Format.percent(memUsage) : '--');
+            MetricCard.update(osCards[2], diskUsage !== undefined ? Format.percent(diskUsage) : '--');
+            MetricCard.update(osCards[3], loadAvg !== undefined ? loadAvg.toFixed(2) : '--');
+        }
     },
 
     _updateCharts(data, time) {
@@ -150,6 +214,29 @@ const MonitorPage = {
         ChartPanel.update('threads', time, threads);
         ChartPanel.update('network', time, netIn);
         ChartPanel.update('latency', time, slow);
+
+        // Update OS charts
+        if (data.cpu_usage !== undefined) {
+            ChartPanel.update('cpu_usage', time, parseFloat(data.cpu_usage) || 0);
+        }
+        if (data.memory_usage !== undefined) {
+            ChartPanel.update('memory_usage', time, parseFloat(data.memory_usage) || 0);
+        }
+        if (data.disk_usage !== undefined) {
+            ChartPanel.update('disk_usage', time, parseFloat(data.disk_usage) || 0);
+        }
+        if (data.load_avg_1min !== undefined) {
+            ChartPanel.update('load_avg', time, parseFloat(data.load_avg_1min) || 0);
+        }
+        if (data.disk_reads_per_sec !== undefined || data.disk_writes_per_sec !== undefined) {
+            const diskIO = (parseFloat(data.disk_reads_per_sec) || 0) + (parseFloat(data.disk_writes_per_sec) || 0);
+            ChartPanel.update('disk_io', time, diskIO);
+        }
+        if (data.network_rx_bytes !== undefined || data.network_tx_bytes !== undefined) {
+            // Convert bytes to KB/s (approximate rate)
+            const networkIO = ((parseFloat(data.network_rx_bytes) || 0) + (parseFloat(data.network_tx_bytes) || 0)) / 1024;
+            ChartPanel.update('network_io', time, networkIO);
+        }
     },
 
     _cleanup() {

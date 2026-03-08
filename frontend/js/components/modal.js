@@ -41,7 +41,7 @@ const Modal = {
         }
 
         DOM.show(overlay);
-        lucide.createIcons();
+        DOM.createIcons();
 
         overlay.onclick = (e) => {
             if (e.target === overlay) this.hide();

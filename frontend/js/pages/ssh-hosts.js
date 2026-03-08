@@ -23,7 +23,7 @@ const SSHHostsPage = {
                         <p>Add your first SSH host to enable SSH tunnel connections to databases.</p>
                     </div>
                 `;
-                lucide.createIcons();
+                DOM.createIcons();
                 return;
             }
 
@@ -31,12 +31,12 @@ const SSHHostsPage = {
             bar.appendChild(DOM.el('span', { className: 'text-muted text-sm', textContent: `${hosts.length} host(s) configured` }));
             content.appendChild(bar);
 
-            const grid = DOM.el('div', { className: 'connection-grid' });
+            const grid = DOM.el('div', { className: 'datasource-grid' });
             for (const host of hosts) {
                 grid.appendChild(this._createCard(host));
             }
             content.appendChild(grid);
-            lucide.createIcons();
+            DOM.createIcons();
 
         } catch (err) {
             Toast.error('Failed to load SSH hosts: ' + err.message);
@@ -44,17 +44,17 @@ const SSHHostsPage = {
     },
 
     _createCard(host) {
-        const card = DOM.el('div', { className: 'connection-card' });
+        const card = DOM.el('div', { className: 'datasource-card' });
         card.innerHTML = `
-            <div class="connection-card-header">
-                <span class="connection-card-name">${host.name}</span>
+            <div class="datasource-card-header">
+                <span class="datasource-card-name">${host.name}</span>
                 <span class="badge badge-purple">${host.auth_type}</span>
             </div>
-            <div class="connection-card-info">
+            <div class="datasource-card-info">
                 <span><i data-lucide="server"></i> ${host.host}:${host.port}</span>
                 <span><i data-lucide="user"></i> ${host.username}</span>
             </div>
-            <div class="connection-card-actions">
+            <div class="datasource-card-actions">
                 <button class="btn btn-sm btn-secondary test-btn">
                     <i data-lucide="plug"></i> Test
                 </button>
@@ -99,7 +99,7 @@ const SSHHostsPage = {
         } finally {
             btn.innerHTML = '<i data-lucide="plug"></i> Test';
             btn.disabled = false;
-            lucide.createIcons();
+            DOM.createIcons();
         }
     },
 
@@ -180,7 +180,7 @@ const SSHHostsPage = {
                     } finally {
                         btn.innerHTML = '<i data-lucide="plug"></i> Test';
                         btn.disabled = false;
-                        lucide.createIcons();
+                        DOM.createIcons();
                     }
                 }
             }));

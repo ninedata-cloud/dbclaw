@@ -83,12 +83,12 @@ const API = {
     toggleUserStatus(id) { return this.post(`/api/users/${id}/toggle-status`); },
     getUserLoginLogs(id) { return this.get(`/api/users/${id}/login-logs`); },
 
-    // Connection endpoints
-    getConnections() { return this.get('/api/connections'); },
-    createConnection(data) { return this.post('/api/connections', data); },
-    updateConnection(id, data) { return this.put(`/api/connections/${id}`, data); },
-    deleteConnection(id) { return this.delete(`/api/connections/${id}`); },
-    testConnection(id) { return this.post(`/api/connections/${id}/test`); },
+    // Datasource endpoints
+    getDatasources() { return this.get('/api/datasources'); },
+    createDatasource(data) { return this.post('/api/datasources', data); },
+    updateDatasource(id, data) { return this.put(`/api/datasources/${id}`, data); },
+    deleteDatasource(id) { return this.delete(`/api/datasources/${id}`); },
+    testDatasource(id) { return this.post(`/api/datasources/${id}/test`); },
 
     // SSH Host endpoints
     getSSHHosts() { return this.get('/api/ssh-hosts'); },
@@ -113,6 +113,17 @@ const API = {
     executeQuery(data) { return this.post('/api/query/execute', data); },
     explainQuery(data) { return this.post('/api/query/explain', data); },
     getQueryHistory() { return this.get('/api/query/history'); },
+    getSchemas(datasourceId) { return this.get(`/api/query/schema/databases?datasource_id=${datasourceId}`); },
+    getTables(datasourceId, schema = null) {
+        let url = `/api/query/schema/tables?datasource_id=${datasourceId}`;
+        if (schema) url += `&schema=${encodeURIComponent(schema)}`;
+        return this.get(url);
+    },
+    getColumns(datasourceId, table, schema = null) {
+        let url = `/api/query/schema/columns?datasource_id=${datasourceId}&table=${encodeURIComponent(table)}`;
+        if (schema) url += `&schema=${encodeURIComponent(schema)}`;
+        return this.get(url);
+    },
 
     // Report endpoints
     getReports() { return this.get('/api/reports'); },
@@ -166,5 +177,25 @@ const API = {
             return { type: 'pdf', url: `/api/knowledge-bases/${kbId}/documents/${docId}/content` };
         }
         return await response.json();
+    },
+
+    // Scheduled Reports
+    getScheduledReportConfigs() { return this.get('/api/scheduled-reports/configs'); },
+    getScheduledReportConfig(datasourceId) { return this.get(`/api/scheduled-reports/configs/${datasourceId}`); },
+    createScheduledReportConfig(data) { return this.post('/api/scheduled-reports/configs', data); },
+    updateScheduledReportConfig(configId, data) { return this.put(`/api/scheduled-reports/configs/${configId}`, data); },
+    deleteScheduledReportConfig(configId) { return this.delete(`/api/scheduled-reports/configs/${configId}`); },
+    enableScheduledReport(configId) { return this.post(`/api/scheduled-reports/configs/${configId}/enable`); },
+    disableScheduledReport(configId) { return this.post(`/api/scheduled-reports/configs/${configId}/disable`); },
+    getScheduledReportHistory(datasourceId, page = 1, limit = 50) {
+        return this.get(`/api/scheduled-reports/history/${datasourceId}?page=${page}&limit=${limit}`);
+    },
+    triggerScheduledReport(datasourceId) { return this.post(`/api/scheduled-reports/trigger/${datasourceId}`); },
+    getScheduledReportStats() { return this.get('/api/scheduled-reports/stats'); },
+    getDatasourceScheduledReportStats(datasourceId) { return this.get(`/api/scheduled-reports/stats/${datasourceId}`); },
+    getScheduledReports(datasourceId, page = 1, limit = 50) {
+        const params = new URLSearchParams({ page, limit });
+        if (datasourceId) params.append('datasource_id', datasourceId);
+        return this.get(`/api/scheduled-reports/reports?${params}`);
     },
 };

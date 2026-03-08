@@ -3,9 +3,10 @@ const Sidebar = {
     navItems: [
         { section: 'Overview', items: [
             { id: 'dashboard', icon: 'layout-dashboard', label: 'Dashboard' },
+            { id: 'guardian', icon: 'shield', label: 'AI Guardian' },
         ]},
         { section: 'Management', items: [
-            { id: 'connections', icon: 'database', label: 'Connections' },
+            { id: 'datasources', icon: 'database', label: 'Datasources' },
             { id: 'ssh-hosts', icon: 'terminal', label: 'SSH Hosts' },
             { id: 'monitor', icon: 'activity', label: 'Monitor' },
         ]},
@@ -13,6 +14,7 @@ const Sidebar = {
             { id: 'diagnosis', icon: 'bot', label: 'AI Diagnosis' },
             { id: 'query', icon: 'terminal-square', label: 'Query' },
             { id: 'reports', icon: 'file-text', label: 'Reports' },
+            { id: 'scheduled-reports', icon: 'calendar-clock', label: 'Scheduled Reports' },
         ]},
         { section: 'Settings', items: [
             { id: 'ai-models', icon: 'brain', label: 'AI Models' },
@@ -57,7 +59,7 @@ const Sidebar = {
             nav.appendChild(systemSection);
         }
 
-        lucide.createIcons();
+        DOM.createIcons();
 
         // Add user info and logout
         const footer = DOM.$('.sidebar-footer');
@@ -77,7 +79,7 @@ const Sidebar = {
             userInfo.appendChild(info);
             userInfo.appendChild(logoutBtn);
             footer.parentNode.insertBefore(userInfo, footer);
-            lucide.createIcons();
+            DOM.createIcons();
         }
     },
 

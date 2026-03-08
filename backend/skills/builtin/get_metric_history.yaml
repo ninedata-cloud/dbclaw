@@ -7,7 +7,7 @@ description: Get historical metric data for trend analysis
 tags: [monitoring, history, trends, metrics]
 
 parameters:
-  - name: connection_id
+  - name: datasource_id
     type: integer
     required: true
     description: The database connection ID
@@ -26,11 +26,11 @@ permissions: []
 
 code: |
   async def execute(context, params):
-      connection_id = params['connection_id']
+      datasource_id = params['datasource_id']
       minutes = params.get('limit', 20) * 5  # Assume 5 min intervals
 
       # Get historical metrics
-      metrics = await context.get_metrics(connection_id, minutes)
+      metrics = await context.get_metrics(datasource_id, minutes)
 
       return {
           "success": True,

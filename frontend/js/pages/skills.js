@@ -49,7 +49,7 @@ const SkillsPage = {
             </div>
         `;
 
-            lucide.createIcons();
+            DOM.createIcons();
         } catch (error) {
             console.error('Error loading skills:', error);
             content.innerHTML = `
@@ -124,7 +124,7 @@ const SkillsPage = {
             const skills = await API.get(url);
             document.getElementById('skills-grid').innerHTML =
                 skills.map(skill => SkillsPage.renderSkillCard(skill)).join('');
-            lucide.createIcons();
+            DOM.createIcons();
         } catch (error) {
             Toast.error('Failed to filter skills');
         }
@@ -170,18 +170,87 @@ const SkillsPage = {
         try {
             const skill = await API.get(`/api/skills/${skillId}`);
 
-            const paramInputs = skill.parameters.map(p => `
-                <div class="form-group">
-                    <label>${p.name} ${p.required ? '*' : ''}</label>
-                    <input type="text" id="param-${p.name}" placeholder="${p.description}" value="${p.default || ''}">
-                </div>
-            `).join('');
+            // Load datasources and knowledge bases for dropdowns
+            let datasources = [];
+            let knowledgeBases = [];
+            try {
+                datasources = await API.get('/api/datasources');
+                knowledgeBases = await API.get('/api/knowledge-bases');
+            } catch (e) {
+                console.error('Failed to load datasources/KBs:', e);
+            }
+
+            // Generate input fields based on parameter type
+            const paramInputs = await Promise.all(skill.parameters.map(async p => {
+                let inputHtml = '';
+
+                // Special handling for datasource_id
+                if (p.name === 'datasource_id' && p.type === 'integer') {
+                    const options = datasources.map(ds =>
+                        `<option value="${ds.id}">${ds.name} (${ds.db_type})</option>`
+                    ).join('');
+                    inputHtml = `
+                        <div class="form-group">
+                            <label>${p.name} ${p.required ? '*' : ''}</label>
+                            <select id="param-${p.name}" class="form-control">
+                                <option value="">-- Select Datasource --</option>
+                                ${options}
+                            </select>
+                            <small class="form-text">${p.description}</small>
+                        </div>
+                    `;
+                }
+                // Special handling for kb_ids (array of integers)
+                else if (p.name === 'kb_ids' && p.type === 'array') {
+                    const options = knowledgeBases.map(kb =>
+                        `<option value="${kb.id}">${kb.name}</option>`
+                    ).join('');
+                    inputHtml = `
+                        <div class="form-group">
+                            <label>${p.name} ${p.required ? '*' : ''}</label>
+                            <select id="param-${p.name}" class="form-control" multiple style="height: 100px;">
+                                ${options}
+                            </select>
+                            <small class="form-text">${p.description} (Hold Ctrl/Cmd to select multiple)</small>
+                        </div>
+                    `;
+                }
+                // Boolean type
+                else if (p.type === 'boolean') {
+                    inputHtml = `
+                        <div class="form-group">
+                            <label>${p.name} ${p.required ? '*' : ''}</label>
+                            <select id="param-${p.name}" class="form-control">
+                                <option value="">-- Select --</option>
+                                <option value="true">true</option>
+                                <option value="false">false</option>
+                            </select>
+                            <small class="form-text">${p.description}</small>
+                        </div>
+                    `;
+                }
+                // Default text input for other types
+                else {
+                    const placeholder = p.type === 'array' || p.type === 'object'
+                        ? `${p.description} (JSON format)`
+                        : p.description;
+                    inputHtml = `
+                        <div class="form-group">
+                            <label>${p.name} ${p.required ? '*' : ''}</label>
+                            <input type="text" id="param-${p.name}" class="form-control" placeholder="${placeholder}" value="${p.default || ''}">
+                            <small class="form-text">${p.description}</small>
+                        </div>
+                    `;
+                }
+
+                return inputHtml;
+            }));
 
             Modal.show({
                 title: `Test ${skill.name}`,
                 content: `
                     <form id="test-skill-form">
-                        ${paramInputs}
+                        ${paramInputs.join('')}
                         <button type="submit" class="btn btn-primary">Execute</button>
                     </form>
                     <div id="test-result" style="margin-top: 20px;"></div>
@@ -193,14 +262,33 @@ const SkillsPage = {
                 e.preventDefault();
                 const params = {};
                 skill.parameters.forEach(p => {
-                    const value = document.getElementById(`param-${p.name}`).value;
-                    if (value) {
-                        if (p.type === 'integer') {
-                            params[p.name] = parseInt(value);
-                        } else if (p.type === 'boolean') {
-                            params[p.name] = value === 'true';
-                        } else {
+                    const element = document.getElementById(`param-${p.name}`);
+                    let value = null;
+
+                    // Handle multi-select for kb_ids
+                    if (p.name === 'kb_ids' && element.multiple) {
+                        const selectedOptions = Array.from(element.selectedOptions);
+                        if (selectedOptions.length > 0) {
+                            value = selectedOptions.map(opt => parseInt(opt.value));
                             params[p.name] = value;
+                        }
+                    } else {
+                        value = element.value;
+                        if (value) {
+                            if (p.type === 'integer') {
+                                params[p.name] = parseInt(value);
+                            } else if (p.type === 'boolean') {
+                                params[p.name] = value === 'true';
+                            } else if (p.type === 'array' || p.type === 'object') {
+                                try {
+                                    params[p.name] = JSON.parse(value);
+                                } catch (e) {
+                                    Toast.error(`Invalid JSON for parameter ${p.name}`);
+                                    throw e;
+                                }
+                            } else {
+                                params[p.name] = value;
+                            }
                         }
                     }
                 });

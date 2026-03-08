@@ -29,28 +29,28 @@ class SkillContext:
         if permission not in self.permissions:
             raise PermissionError(f"Skill does not have permission: {permission}")
 
-    async def get_connection(self, connection_id: int, check_permission: bool = True):
-        """Get a database connection object"""
+    async def get_connection(self, datasource_id: int, check_permission: bool = True):
+        """Get a database datasource object"""
         if check_permission:
             self._check_permission("execute_query")
-        from backend.models.connection import Connection
+        from backend.models.datasource import Datasource
         from sqlalchemy import select
 
         result = await self.db.execute(
-            select(Connection).where(Connection.id == connection_id)
+            select(Datasource).where(Datasource.id == datasource_id)
         )
-        conn = result.scalar_one_or_none()
-        if not conn:
-            raise ValueError(f"Connection {connection_id} not found")
-        return conn
+        datasource = result.scalar_one_or_none()
+        if not datasource:
+            raise ValueError(f"Datasource {datasource_id} not found")
+        return datasource
 
-    async def execute_query(self, query: str, connection_id: int) -> Dict[str, Any]:
-        """Execute a SQL query on a database connection"""
+    async def execute_query(self, query: str, datasource_id: int) -> Dict[str, Any]:
+        """Execute a SQL query on a database datasource"""
         self._check_permission("execute_query")
         from backend.utils.db_connector import execute_query as db_execute_query
 
-        conn = await self.get_connection(connection_id)
-        result = await db_execute_query(conn, query)
+        datasource = await self.get_connection(datasource_id)
+        result = await db_execute_query(datasource, query)
         return result
 
     async def search_kb(
@@ -70,9 +70,20 @@ class SkillContext:
             )
             session = result.scalar_one_or_none()
             if session and session.kb_ids:
-                import json
+                # kb_ids is already a list (JSON column auto-deserializes)
+                if isinstance(session.kb_ids, list):
+                    kb_ids = session.kb_ids
+                else:
+                    # Fallback: parse as JSON string if needed
+                    import json
+                    kb_ids = json.loads(session.kb_ids)
 
-                kb_ids = json.loads(session.kb_ids)
+        # If still no kb_ids, search all active knowledge bases
+        if not kb_ids:
+            result = await self.db.execute(
+                select(KnowledgeBase.id).where(KnowledgeBase.is_active == True)
+            )
+            kb_ids = [row[0] for row in result.all()]
 
         if not kb_ids:
             return []
@@ -107,9 +118,9 @@ class SkillContext:
         return results[:top_k]
 
     async def get_metrics(
-        self, connection_id: int, minutes: int = 60
+        self, datasource_id: int, minutes: int = 60
     ) -> List[Dict[str, Any]]:
-        """Get historical metrics for a connection"""
+        """Get historical metrics for a datasource"""
         from backend.models.metric_snapshot import MetricSnapshot
         from sqlalchemy import select
         from datetime import datetime, timedelta
@@ -118,10 +129,10 @@ class SkillContext:
         result = await self.db.execute(
             select(MetricSnapshot)
             .where(
-                MetricSnapshot.connection_id == connection_id,
-                MetricSnapshot.created_at >= cutoff,
+                MetricSnapshot.datasource_id == datasource_id,
+                MetricSnapshot.collected_at >= cutoff,
             )
-            .order_by(MetricSnapshot.created_at.desc())
+            .order_by(MetricSnapshot.collected_at.desc())
         )
         snapshots = result.scalars().all()
 
@@ -129,21 +140,21 @@ class SkillContext:
             {
                 "metric_type": s.metric_type,
                 "data": s.data,
-                "created_at": s.created_at.isoformat(),
+                "collected_at": s.collected_at.isoformat(),
             }
             for s in snapshots
         ]
 
-    async def execute_command(self, command: str, connection_id: int) -> Dict[str, Any]:
+    async def execute_command(self, command: str, datasource_id: int) -> Dict[str, Any]:
         """Execute an OS command via SSH"""
         self._check_permission("execute_command")
         from backend.utils.ssh_executor import execute_ssh_command
 
-        conn = await self.get_connection(connection_id, check_permission=False)
-        if not conn.ssh_host_id:
-            raise ValueError(f"Connection {connection_id} has no SSH host configured")
+        datasource = await self.get_connection(datasource_id, check_permission=False)
+        if not datasource.ssh_host_id:
+            raise ValueError(f"Datasource {datasource_id} has no SSH host configured")
 
-        result = await execute_ssh_command(self.db, conn.ssh_host_id, command)
+        result = await execute_ssh_command(self.db, datasource.ssh_host_id, command)
         return result
 
     async def call_skill(self, skill_id: str, params: Dict[str, Any]) -> Dict[str, Any]:

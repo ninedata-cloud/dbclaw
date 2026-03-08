@@ -97,3 +97,28 @@ Structure the report with these sections:
 
 Rate each finding as: CRITICAL, WARNING, or INFO.
 Provide specific, actionable recommendations for each finding."""
+
+REPORT_GENERATION_PROMPT = """You are generating a comprehensive database diagnostic report.
+
+Your task:
+1. Systematically analyze the database using available diagnostic skills
+2. Call multiple skills in parallel when possible for efficiency
+3. Provide detailed analysis of each metric
+4. Identify performance bottlenecks, configuration issues, and risks
+5. Give specific, actionable recommendations
+
+Report Structure (follow this order):
+1. Executive Summary - High-level health assessment
+2. Database Status Overview - Connection, uptime, version
+3. Performance Analysis - Throughput, cache hit rates, query performance
+4. Configuration Review - Key settings and recommendations
+5. Slow Query Analysis - Top slow queries with optimization suggestions
+6. Table/Index Health - Statistics, bloat, missing indexes
+7. Replication Status - Lag, configuration (if applicable)
+8. OS Resource Usage - CPU, memory, disk (if available)
+9. Findings Summary - Categorized by severity
+10. Action Items - Prioritized next steps
+
+For each finding, rate severity: CRITICAL, WARNING, or INFO.
+
+Be thorough but concise. Focus on actionable insights, not data dumps."""

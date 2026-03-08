@@ -62,6 +62,21 @@ class DBConnector(ABC):
         """Get database size information."""
         return {}
 
+    @abstractmethod
+    async def get_schemas(self) -> List[str]:
+        """Get list of schema/database names."""
+        pass
+
+    @abstractmethod
+    async def get_tables(self, schema: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get list of tables with metadata."""
+        pass
+
+    @abstractmethod
+    async def get_columns(self, table: str, schema: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get list of columns for a table with types and constraints."""
+        pass
+
     async def close(self):
         """Clean up connections."""
         pass
@@ -76,6 +91,11 @@ def get_connector(db_type: str, host: str, port: int, username: str = None,
         "mongodb": "backend.services.mongo_service.MongoDBConnector",
         "redis": "backend.services.redis_service.RedisConnector",
         "sqlserver": "backend.services.sqlserver_service.SQLServerConnector",
+        "oracle": "backend.services.oracle_service.OracleConnector",
+        "tidb": "backend.services.tidb_service.TiDBConnector",
+        "oceanbase": "backend.services.oceanbase_service.OceanBaseConnector",
+        "opengauss": "backend.services.opengauss_service.OpenGaussConnector",
+        "dm": "backend.services.dm_service.DMConnector",
     }
 
     if db_type not in connectors:

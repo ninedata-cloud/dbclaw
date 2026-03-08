@@ -7,7 +7,7 @@ description: Get vacuum and analyze statistics to identify tables needing mainte
 tags: [postgresql, vacuum, maintenance, bloat]
 
 parameters:
-  - name: connection_id
+  - name: datasource_id
     type: integer
     required: true
     description: The database connection ID
@@ -17,12 +17,12 @@ permissions:
 
 code: |
   async def execute(context, params):
-      connection_id = params['connection_id']
+      datasource_id = params['datasource_id']
 
       query = """
       SELECT
           schemaname,
-          tablename,
+          relname as tablename,
           n_live_tup as live_tuples,
           n_dead_tup as dead_tuples,
           CASE
@@ -48,7 +48,7 @@ code: |
       LIMIT 100
       """
 
-      result = await context.execute_query(query, connection_id)
+      result = await context.execute_query(query, datasource_id)
 
       if not result.get("success"):
           return {"success": False, "error": result.get("error", "Failed to get vacuum stats")}

@@ -14,7 +14,7 @@ MAX_TOOL_ROUNDS = 10
 
 async def run_conversation(
     messages: List[Dict[str, Any]],
-    connection_id: Optional[int] = None,
+    datasource_id: Optional[int] = None,
     model_id: Optional[int] = None,
     kb_ids: Optional[List[int]] = None,
     db: Optional[Any] = None,
@@ -43,8 +43,8 @@ async def run_conversation(
         return
 
     system_msg = SYSTEM_PROMPT
-    if connection_id:
-        system_msg += f"\n\nThe user is currently working with database connection ID: {connection_id}. Use this ID when calling tools unless they specify otherwise."
+    if datasource_id:
+        system_msg += f"\n\nThe user is currently working with database datasource ID: {datasource_id}. Use this ID when calling tools unless they specify otherwise."
 
     if kb_ids:
         system_msg += f"\n\nKnowledge bases are enabled for this session (IDs: {kb_ids}). Use search_knowledge_base tool to find relevant documentation when needed."

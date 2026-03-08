@@ -7,10 +7,10 @@ description: Execute a read-only SQL query for diagnostic purposes. Supports SEL
 tags: [query, diagnostic, select, show, explain, exec, describe, general]
 
 parameters:
-  - name: connection_id
+  - name: datasource_id
     type: integer
     required: true
-    description: The database connection ID
+    description: The datasource ID
   - name: sql
     type: string
     required: true
@@ -21,7 +21,7 @@ permissions:
 
 code: |
   async def execute(context, params):
-      connection_id = params['connection_id']
+      datasource_id = params['datasource_id']
       sql = params['sql'].strip()
 
       # Basic validation - allow SELECT, SHOW, EXPLAIN, and EXEC (for SQL Server stored procedures)
@@ -35,6 +35,6 @@ code: |
           }
 
       # Execute the query
-      result = await context.execute_query(sql, connection_id)
+      result = await context.execute_query(sql, datasource_id)
 
       return result

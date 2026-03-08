@@ -8,10 +8,10 @@ const QueryPage = {
         const connSelect = DOM.el('select', { className: 'form-select', id: 'query-conn-select', style: { minWidth: '200px' } });
         connSelect.appendChild(DOM.el('option', { value: '', textContent: 'Select connection...' }));
 
-        API.getConnections().then(connections => {
-            Store.set('connections', connections);
+        API.getDatasources().then(datasources => {
+            Store.set('datasources', datasources);
             const current = Store.get('currentConnection');
-            for (const c of connections) {
+            for (const c of datasources) {
                 const opt = DOM.el('option', { value: c.id, textContent: `${c.name} (${c.db_type})` });
                 if (current && c.id === current.id) opt.selected = true;
                 connSelect.appendChild(opt);
@@ -21,8 +21,10 @@ const QueryPage = {
         connSelect.addEventListener('change', () => {
             const id = parseInt(connSelect.value);
             if (id) {
-                const conns = Store.get('connections') || [];
+                const conns = Store.get('datasources') || [];
                 Store.set('currentConnection', conns.find(c => c.id === id));
+                // Load schema for autocomplete
+                this._loadSchemaForDatasource(id);
             }
         });
 
@@ -49,9 +51,15 @@ const QueryPage = {
             innerHTML: '<i data-lucide="history"></i> History',
             onClick: () => this._showHistory()
         });
+        const refreshSchemaBtn = DOM.el('button', {
+            className: 'btn btn-secondary',
+            innerHTML: '<i data-lucide="refresh-cw"></i> Refresh Schema',
+            onClick: () => this._refreshSchema()
+        });
         toolbar.appendChild(executeBtn);
         toolbar.appendChild(explainBtn);
         toolbar.appendChild(historyBtn);
+        toolbar.appendChild(refreshSchemaBtn);
         toolbar.appendChild(DOM.el('span', { className: 'text-muted text-sm', textContent: 'Ctrl+Enter to execute' }));
         container.appendChild(toolbar);
 
@@ -76,11 +84,40 @@ const QueryPage = {
         container.appendChild(results);
 
         content.appendChild(container);
-        lucide.createIcons();
+        DOM.createIcons();
+
+        // Load schema for current connection if available
+        const currentConn = Store.get('currentConnection');
+        if (currentConn?.id) {
+            this._loadSchemaForDatasource(currentConn.id);
+        }
 
         return () => {
             QueryEditor.destroy();
         };
+    },
+
+    async _loadSchemaForDatasource(datasourceId) {
+        try {
+            await QueryEditor.setSchema(datasourceId);
+        } catch (error) {
+            console.error('Error loading schema:', error);
+        }
+    },
+
+    async _refreshSchema() {
+        const conn = Store.get('currentConnection');
+        const connSelect = DOM.$('#query-conn-select');
+        const connId = conn?.id || parseInt(connSelect?.value);
+        if (!connId) {
+            Toast.warning('Select a connection first');
+            return;
+        }
+
+        // Invalidate cache and reload
+        window.SchemaCache.invalidate(connId);
+        await this._loadSchemaForDatasource(connId);
+        Toast.success('Schema refreshed');
     },
 
     async _executeQuery() {
@@ -98,7 +135,7 @@ const QueryPage = {
         results.innerHTML = '';
 
         try {
-            const result = await API.executeQuery({ connection_id: connId, sql, max_rows: 1000 });
+            const result = await API.executeQuery({ datasource_id: connId, sql, max_rows: 1000 });
 
             if (result.columns && result.columns.length > 0) {
                 results.innerHTML = '';
@@ -128,7 +165,7 @@ const QueryPage = {
         results.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
         try {
-            const result = await API.explainQuery({ connection_id: connId, sql });
+            const result = await API.explainQuery({ datasource_id: connId, sql });
             results.innerHTML = '';
 
             if (result.columns && result.rows) {

@@ -7,7 +7,7 @@ description: Get OS-level metrics (CPU, memory, disk, network, load) from the ho
 tags: [linux, system, monitoring, ssh, cpu, memory, disk]
 
 parameters:
-  - name: connection_id
+  - name: datasource_id
     type: integer
     required: true
     description: The database connection ID (must have SSH host configured)
@@ -17,7 +17,7 @@ permissions:
 
 code: |
   async def execute(context, params):
-      connection_id = params['connection_id']
+      datasource_id = params['datasource_id']
 
       # Get various OS metrics
       metrics = {}
@@ -25,23 +25,23 @@ code: |
       # CPU usage
       cpu_result = await context.execute_command(
           "top -bn1 | grep 'Cpu(s)' | awk '{print $2}' | cut -d'%' -f1",
-          connection_id
+          datasource_id
       )
       if cpu_result.get("success"):
           metrics["cpu_usage"] = cpu_result.get("output", "").strip()
 
       # Memory usage
-      mem_result = await context.execute_command("free -m", connection_id)
+      mem_result = await context.execute_command("free -m", datasource_id)
       if mem_result.get("success"):
           metrics["memory"] = mem_result.get("output", "")
 
       # Disk usage
-      disk_result = await context.execute_command("df -h", connection_id)
+      disk_result = await context.execute_command("df -h", datasource_id)
       if disk_result.get("success"):
           metrics["disk"] = disk_result.get("output", "")
 
       # Load average
-      load_result = await context.execute_command("uptime", connection_id)
+      load_result = await context.execute_command("uptime", datasource_id)
       if load_result.get("success"):
           metrics["load_average"] = load_result.get("output", "")
 

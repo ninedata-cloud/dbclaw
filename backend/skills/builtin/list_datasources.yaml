@@ -1,0 +1,36 @@
+id: list_datasources
+name: List Datasources
+version: 1.0.0
+author: SmartDBA
+category: system
+description: List all configured database datasources
+tags: [datasources, configuration]
+
+permissions: []
+
+code: |
+  async def execute(context, params):
+      from backend.models.datasource import Datasource
+      from sqlalchemy import select
+
+      # Get all datasources
+      result = await context.db.execute(select(Datasource))
+      datasources = result.scalars().all()
+
+      # Format datasource info
+      datasource_list = []
+      for datasource in datasources:
+          datasource_list.append({
+              "id": datasource.id,
+              "name": datasource.name,
+              "db_type": datasource.db_type,
+              "host": datasource.host,
+              "port": datasource.port,
+              "database": datasource.database,
+              "has_ssh": datasource.ssh_host_id is not None
+          })
+
+      return {
+          "success": True,
+          "datasources": datasource_list
+      }

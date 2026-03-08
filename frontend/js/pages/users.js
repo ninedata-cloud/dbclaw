@@ -95,7 +95,7 @@ const UsersPage = {
             const container = DOM.el('div', { className: 'data-table-container' });
             container.appendChild(table);
             content.appendChild(container);
-            lucide.createIcons();
+            DOM.createIcons();
         } catch (err) {
             Toast.error('Failed to load users: ' + err.message);
         }

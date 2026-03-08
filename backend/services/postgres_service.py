@@ -1,5 +1,5 @@
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from backend.services.db_connector import DBConnector
 
 
@@ -174,5 +174,66 @@ class PostgreSQLConnector(DBConnector):
                 "database": row["database"],
                 "total_size_bytes": row["total_size"],
             }
+        finally:
+            await conn.close()
+
+    async def get_schemas(self) -> List[str]:
+        conn = await self._connect()
+        try:
+            rows = await conn.fetch(
+                "SELECT schema_name FROM information_schema.schemata "
+                "WHERE schema_name NOT IN ('information_schema', 'pg_catalog', 'pg_toast') "
+                "AND schema_name NOT LIKE 'pg_temp_%' AND schema_name NOT LIKE 'pg_toast_temp_%' "
+                "ORDER BY schema_name"
+            )
+            return [row["schema_name"] for row in rows]
+        finally:
+            await conn.close()
+
+    async def get_tables(self, schema: Optional[str] = None) -> List[Dict[str, Any]]:
+        conn = await self._connect()
+        try:
+            target_schema = schema or "public"
+            rows = await conn.fetch(
+                "SELECT table_name, table_type "
+                "FROM information_schema.tables "
+                "WHERE table_schema = $1 "
+                "ORDER BY table_name",
+                target_schema
+            )
+            return [
+                {
+                    "name": row["table_name"],
+                    "schema": target_schema,
+                    "type": row["table_type"],
+                }
+                for row in rows
+            ]
+        finally:
+            await conn.close()
+
+    async def get_columns(self, table: str, schema: Optional[str] = None) -> List[Dict[str, Any]]:
+        conn = await self._connect()
+        try:
+            target_schema = schema or "public"
+            rows = await conn.fetch(
+                "SELECT column_name, data_type, is_nullable, column_default, "
+                "udt_name, character_maximum_length "
+                "FROM information_schema.columns "
+                "WHERE table_schema = $1 AND table_name = $2 "
+                "ORDER BY ordinal_position",
+                target_schema, table
+            )
+            return [
+                {
+                    "name": row["column_name"],
+                    "type": row["data_type"],
+                    "nullable": row["is_nullable"] == "YES",
+                    "default": row["column_default"],
+                    "udt_name": row["udt_name"],
+                    "max_length": row["character_maximum_length"],
+                }
+                for row in rows
+            ]
         finally:
             await conn.close()

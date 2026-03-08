@@ -22,7 +22,7 @@ async def get_db() -> AsyncSession:
 
 async def init_db():
     # Import all models so Base.metadata knows about them
-    import backend.models.connection  # noqa: F401
+    import backend.models.datasource  # noqa: F401
     import backend.models.ssh_host  # noqa: F401
     import backend.models.metric_snapshot  # noqa: F401
     import backend.models.diagnostic_session  # noqa: F401
@@ -31,14 +31,35 @@ async def init_db():
     import backend.models.user  # noqa: F401
     import backend.models.login_log  # noqa: F401
     import backend.skills.models  # noqa: F401
+    # AI Guardian models
+    import backend.models.baseline  # noqa: F401
+    import backend.models.importance  # noqa: F401
+    import backend.models.anomaly  # noqa: F401
+    import backend.models.guardian_rule  # noqa: F401
+    import backend.models.diagnostic_case  # noqa: F401
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-        # Migrate: add ai_model_id to diagnostic_sessions if missing
+        # Run migrations
         def _migrate(connection):
             from sqlalchemy import text, inspect
+            from backend.migrations.rename_connection_to_datasource import migrate as rename_migration
+            from backend.migrations.rename_reports_connection_to_datasource import migrate as rename_reports_migration
+            from backend.migrations.rename_metrics_connection_to_datasource import migrate as rename_metrics_migration
+
+            # Migration 1: Rename connections to datasources
+            rename_migration(connection)
+
+            # Migration 2: Rename connection_id to datasource_id in reports table
+            rename_reports_migration(connection)
+
+            # Migration 3: Rename connection_id to datasource_id in metric_snapshots table
+            rename_metrics_migration(connection)
+
             insp = inspect(connection)
+
+            # Migration 2: Add columns to diagnostic_sessions if missing
             if "diagnostic_sessions" in insp.get_table_names():
                 columns = [c["name"] for c in insp.get_columns("diagnostic_sessions")]
                 if "ai_model_id" not in columns:

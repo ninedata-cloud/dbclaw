@@ -40,5 +40,12 @@ const DOM = {
 
     toggle(element, show) {
         element.classList.toggle('hidden', !show);
+    },
+
+    createIcons() {
+        // Safe wrapper for lucide.createIcons()
+        if (typeof lucide !== 'undefined' && lucide.createIcons) {
+            lucide.createIcons();
+        }
     }
 };

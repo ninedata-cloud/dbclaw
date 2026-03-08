@@ -1,5 +1,5 @@
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from backend.services.db_connector import DBConnector
 
 
@@ -213,3 +213,82 @@ class SQLServerConnector(DBConnector):
             finally:
                 conn.close()
         return await asyncio.get_event_loop().run_in_executor(None, _size)
+
+    async def get_schemas(self) -> List[str]:
+        import asyncio
+        def _schemas():
+            conn = self._connect()
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT name FROM sys.schemas "
+                    "WHERE name NOT IN ('guest', 'INFORMATION_SCHEMA', 'sys', 'db_owner', "
+                    "'db_accessadmin', 'db_securityadmin', 'db_ddladmin', 'db_backupoperator', "
+                    "'db_datareader', 'db_datawriter', 'db_denydatareader', 'db_denydatawriter') "
+                    "ORDER BY name"
+                )
+                return [row[0] for row in cursor.fetchall()]
+            finally:
+                conn.close()
+        return await asyncio.get_event_loop().run_in_executor(None, _schemas)
+
+    async def get_tables(self, schema: Optional[str] = None) -> List[Dict[str, Any]]:
+        import asyncio
+        def _tables():
+            conn = self._connect()
+            try:
+                cursor = conn.cursor()
+                target_schema = schema or "dbo"
+                cursor.execute(
+                    "SELECT t.name, s.name as schema_name, t.type_desc "
+                    "FROM sys.tables t "
+                    "INNER JOIN sys.schemas s ON t.schema_id = s.schema_id "
+                    "WHERE s.name = ? "
+                    "ORDER BY t.name",
+                    (target_schema,)
+                )
+                columns = [col[0] for col in cursor.description]
+                return [
+                    {
+                        "name": row[0],
+                        "schema": row[1],
+                        "type": row[2],
+                    }
+                    for row in cursor.fetchall()
+                ]
+            finally:
+                conn.close()
+        return await asyncio.get_event_loop().run_in_executor(None, _tables)
+
+    async def get_columns(self, table: str, schema: Optional[str] = None) -> List[Dict[str, Any]]:
+        import asyncio
+        def _columns():
+            conn = self._connect()
+            try:
+                cursor = conn.cursor()
+                target_schema = schema or "dbo"
+                cursor.execute(
+                    "SELECT c.name, t.name as type_name, c.is_nullable, "
+                    "c.max_length, c.precision, c.scale "
+                    "FROM sys.columns c "
+                    "INNER JOIN sys.types t ON c.user_type_id = t.user_type_id "
+                    "INNER JOIN sys.tables tb ON c.object_id = tb.object_id "
+                    "INNER JOIN sys.schemas s ON tb.schema_id = s.schema_id "
+                    "WHERE s.name = ? AND tb.name = ? "
+                    "ORDER BY c.column_id",
+                    (target_schema, table)
+                )
+                return [
+                    {
+                        "name": row[0],
+                        "type": row[1],
+                        "nullable": bool(row[2]),
+                        "max_length": row[3],
+                        "precision": row[4],
+                        "scale": row[5],
+                    }
+                    for row in cursor.fetchall()
+                ]
+            finally:
+                conn.close()
+        return await asyncio.get_event_loop().run_in_executor(None, _columns)

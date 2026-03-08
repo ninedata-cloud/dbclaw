@@ -7,7 +7,7 @@ description: Analyze index usage patterns to identify unused or inefficient inde
 tags: [sqlserver, indexes, performance, optimization]
 
 parameters:
-  - name: connection_id
+  - name: datasource_id
     type: integer
     required: true
     description: The database connection ID
@@ -17,7 +17,7 @@ permissions:
 
 code: |
   async def execute(context, params):
-      connection_id = params['connection_id']
+      datasource_id = params['datasource_id']
 
       query = """
       SELECT
@@ -49,7 +49,7 @@ code: |
       ORDER BY s.user_seeks + s.user_scans + s.user_lookups ASC, index_size_mb DESC
       """
 
-      result = await context.execute_query(query, connection_id)
+      result = await context.execute_query(query, datasource_id)
 
       if not result.get("success"):
           return {"success": False, "error": result.get("error", "Failed to get index usage")}

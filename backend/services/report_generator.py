@@ -7,7 +7,7 @@ from jinja2 import Template
 from sqlalchemy import select
 
 from backend.database import async_session
-from backend.models.connection import Connection
+from backend.models.datasource import Datasource
 from backend.models.report import Report
 from backend.models.ssh_host import SSHHost
 from backend.services.db_connector import get_connector
@@ -19,20 +19,20 @@ from backend.utils.encryption import decrypt_value
 logger = logging.getLogger(__name__)
 
 
-async def generate_report(report_id: int, connection_id: int, report_type: str = "comprehensive"):
-    """Generate a comprehensive diagnostic report for a database connection."""
+async def generate_report(report_id: int, datasource_id: int, report_type: str = "comprehensive"):
+    """Generate a comprehensive diagnostic report for a database datasource."""
     try:
         async with async_session() as db:
-            conn_result = await db.execute(select(Connection).where(Connection.id == connection_id))
-            conn = conn_result.scalar_one_or_none()
-            if not conn:
-                await _update_report_status(report_id, "failed", summary="Connection not found")
+            datasource_result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
+            datasource = datasource_result.scalar_one_or_none()
+            if not datasource:
+                await _update_report_status(report_id, "failed", summary="Datasource not found")
                 return
 
-            password = decrypt_value(conn.password_encrypted) if conn.password_encrypted else None
+            password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
             connector = get_connector(
-                db_type=conn.db_type, host=conn.host, port=conn.port,
-                username=conn.username, password=password, database=conn.database,
+                db_type=datasource.db_type, host=datasource.host, port=datasource.port,
+                username=datasource.username, password=password, database=datasource.database,
             )
 
             # Collect data
@@ -74,9 +74,9 @@ async def generate_report(report_id: int, connection_id: int, report_type: str =
 
             # OS metrics if SSH is configured
             os_metrics = None
-            if conn.ssh_host_id:
+            if datasource.ssh_host_id:
                 try:
-                    ssh_result = await db.execute(select(SSHHost).where(SSHHost.id == conn.ssh_host_id))
+                    ssh_result = await db.execute(select(SSHHost).where(SSHHost.id == datasource.ssh_host_id))
                     ssh_host = ssh_result.scalar_one_or_none()
                     if ssh_host:
                         ssh_pwd = decrypt_value(ssh_host.password_encrypted) if ssh_host.password_encrypted else None
@@ -92,7 +92,7 @@ async def generate_report(report_id: int, connection_id: int, report_type: str =
             # Run diagnostic engine
             engine = DiagnosticEngine()
             findings = engine.analyze(
-                db_type=conn.db_type,
+                db_type=datasource.db_type,
                 status=data.get("status", {}),
                 variables=data.get("variables"),
                 slow_queries=data.get("slow_queries"),
@@ -102,10 +102,10 @@ async def generate_report(report_id: int, connection_id: int, report_type: str =
             )
 
             # Generate markdown report
-            md_content = _build_markdown_report(conn, data, findings)
+            md_content = _build_markdown_report(datasource, data, findings)
 
             # Generate HTML report
-            html_content = _build_html_report(conn, data, findings)
+            html_content = _build_html_report(datasource, data, findings)
 
             # Count severities
             critical_count = sum(1 for f in findings if f["severity"] == "CRITICAL")
@@ -152,7 +152,7 @@ def _format_bytes(b):
     return f"{b:.1f} PB"
 
 
-def _build_markdown_report(conn, data: dict, findings: list) -> str:
+def _build_markdown_report(datasource, data: dict, findings: list) -> str:
     status = data.get("status", {})
     db_size = data.get("db_size", {})
     os_metrics = data.get("os_metrics", {})
@@ -161,9 +161,9 @@ def _build_markdown_report(conn, data: dict, findings: list) -> str:
     md = f"""# Database Diagnostic Report
 
 **Generated:** {now}
-**Connection:** {conn.name} ({conn.db_type})
-**Host:** {conn.host}:{conn.port}
-**Database:** {conn.database or 'N/A'}
+**Datasource:** {datasource.name} ({datasource.db_type})
+**Host:** {datasource.host}:{datasource.port}
+**Database:** {datasource.database or 'N/A'}
 
 ---
 
@@ -213,13 +213,13 @@ def _build_markdown_report(conn, data: dict, findings: list) -> str:
     return md
 
 
-def _build_html_report(conn, data: dict, findings: list) -> str:
+def _build_html_report(datasource, data: dict, findings: list) -> str:
     try:
         with open("templates/report_template.html", "r") as f:
             template_str = f.read()
         template = Template(template_str)
         return template.render(
-            conn=conn,
+            conn=datasource,
             data=data,
             findings=findings,
             generated_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
@@ -228,5 +228,6 @@ def _build_html_report(conn, data: dict, findings: list) -> str:
     except Exception as e:
         logger.warning(f"Failed to render HTML template: {e}")
         # Fallback: simple HTML
-        md = _build_markdown_report(conn, data, findings)
+        md = _build_markdown_report(datasource, data, findings)
         return f"<html><body><pre>{md}</pre></body></html>"
+

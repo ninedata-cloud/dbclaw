@@ -2,29 +2,22 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from typing import List
-from cryptography.fernet import Fernet
-import os
 
 from backend.database import get_db
 from backend.models.ai_model import AIModel
 from backend.schemas.ai_model import AIModelCreate, AIModelUpdate, AIModelResponse
 from backend.dependencies import get_current_user
+from backend.utils.encryption import encrypt_value, decrypt_value
 
 router = APIRouter(prefix="/api/ai-models", tags=["ai-models"], dependencies=[Depends(get_current_user)])
 
-# Get or create encryption key
-ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
-if not ENCRYPTION_KEY:
-    ENCRYPTION_KEY = Fernet.generate_key().decode()
-cipher = Fernet(ENCRYPTION_KEY.encode())
-
 
 def encrypt_api_key(api_key: str) -> str:
-    return cipher.encrypt(api_key.encode()).decode()
+    return encrypt_value(api_key)
 
 
 def decrypt_api_key(encrypted: str) -> str:
-    return cipher.decrypt(encrypted.encode()).decode()
+    return decrypt_value(encrypted)
 
 
 def mask_api_key(api_key: str) -> str:
@@ -41,12 +34,13 @@ async def list_models(db: AsyncSession = Depends(get_db)):
     for model in models:
         try:
             api_key_masked = mask_api_key(decrypt_api_key(model.api_key_encrypted))
-            response.append(AIModelResponse(
-                **{**model.__dict__, "api_key_masked": api_key_masked}
-            ))
         except Exception:
-            # Skip models with invalid encryption (key mismatch)
-            continue
+            # If decryption fails (key mismatch), show placeholder
+            api_key_masked = "****[invalid]"
+
+        response.append(AIModelResponse(
+            **{**model.__dict__, "api_key_masked": api_key_masked}
+        ))
     return response
 
 

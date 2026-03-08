@@ -19,7 +19,7 @@ async def get_metrics(
     limit: int = Query(100, le=1000),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(MetricSnapshot).where(MetricSnapshot.connection_id == conn_id)
+    query = select(MetricSnapshot).where(MetricSnapshot.datasource_id == conn_id)
     if metric_type:
         query = query.where(MetricSnapshot.metric_type == metric_type)
     query = query.order_by(desc(MetricSnapshot.collected_at)).limit(limit)
@@ -36,7 +36,7 @@ async def get_latest_metric(
     result = await db.execute(
         select(MetricSnapshot)
         .where(
-            MetricSnapshot.connection_id == conn_id,
+            MetricSnapshot.datasource_id == conn_id,
             MetricSnapshot.metric_type == metric_type,
         )
         .order_by(desc(MetricSnapshot.collected_at))

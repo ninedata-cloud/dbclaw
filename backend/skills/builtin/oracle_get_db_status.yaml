@@ -7,7 +7,7 @@ description: Get current Oracle database status metrics including sessions, SGA 
 tags: [oracle, status, performance, monitoring]
 
 parameters:
-  - name: connection_id
+  - name: datasource_id
     type: integer
     required: true
     description: The database connection ID
@@ -17,7 +17,7 @@ permissions:
 
 code: |
   async def execute(context, params):
-      connection_id = params['connection_id']
+      datasource_id = params['datasource_id']
 
       # Get session count
       session_query = """
@@ -29,7 +29,7 @@ code: |
       WHERE type = 'USER'
       """
 
-      session_result = await context.execute_query(session_query, connection_id)
+      session_result = await context.execute_query(session_query, datasource_id)
 
       if not session_result.get("success"):
           return {"success": False, "error": session_result.get("error", "Failed to get session info")}
@@ -42,7 +42,7 @@ code: |
       FROM v$sga
       """
 
-      sga_result = await context.execute_query(sga_query, connection_id)
+      sga_result = await context.execute_query(sga_query, datasource_id)
 
       # Get database info
       db_query = """
@@ -55,7 +55,7 @@ code: |
       FROM v$database
       """
 
-      db_result = await context.execute_query(db_query, connection_id)
+      db_result = await context.execute_query(db_query, datasource_id)
 
       # Get instance info
       instance_query = """
@@ -69,7 +69,7 @@ code: |
       FROM v$instance
       """
 
-      instance_result = await context.execute_query(instance_query, connection_id)
+      instance_result = await context.execute_query(instance_query, datasource_id)
 
       metrics = {}
       if session_result.get("data"):

@@ -7,7 +7,7 @@ description: Get current MySQL database status metrics including connections, th
 tags: [mysql, status, performance, monitoring]
 
 parameters:
-  - name: connection_id
+  - name: datasource_id
     type: integer
     required: true
     description: The database connection ID
@@ -17,11 +17,11 @@ permissions:
 
 code: |
   async def execute(context, params):
-      connection_id = params['connection_id']
-      conn = await context.get_connection(connection_id)
+      datasource_id = params['datasource_id']
+      conn = await context.get_connection(datasource_id)
 
       # Get status variables
-      result = await context.execute_query("SHOW GLOBAL STATUS", connection_id)
+      result = await context.execute_query("SHOW GLOBAL STATUS", datasource_id)
 
       if not result.get("success"):
           return {"success": False, "error": result.get("error", "Failed to get status")}

@@ -24,7 +24,7 @@ const AIModelsPage = {
                         <p>Add your first AI model configuration to enable model switching during diagnosis.</p>
                     </div>
                 `;
-                lucide.createIcons();
+                DOM.createIcons();
                 return;
             }
 
@@ -32,12 +32,12 @@ const AIModelsPage = {
             bar.appendChild(DOM.el('span', { className: 'text-muted text-sm', textContent: `${this.models.length} model(s) configured` }));
             content.appendChild(bar);
 
-            const grid = DOM.el('div', { className: 'connection-grid' });
+            const grid = DOM.el('div', { className: 'datasource-grid' });
             for (const model of this.models) {
                 grid.appendChild(this._createCard(model));
             }
             content.appendChild(grid);
-            lucide.createIcons();
+            DOM.createIcons();
 
         } catch (err) {
             Toast.error('Failed to load models: ' + err.message);
@@ -45,18 +45,18 @@ const AIModelsPage = {
     },
 
     _createCard(model) {
-        const card = DOM.el('div', { className: 'connection-card' });
+        const card = DOM.el('div', { className: 'datasource-card' });
         card.innerHTML = `
-            <div class="connection-card-header">
-                <span class="connection-card-name">${model.name}</span>
+            <div class="datasource-card-header">
+                <span class="datasource-card-name">${model.name}</span>
                 <span class="badge ${model.is_default ? 'badge-success' : 'badge-info'}">${model.is_default ? 'Default' : model.provider}</span>
             </div>
-            <div class="connection-card-info">
+            <div class="datasource-card-info">
                 <span><i data-lucide="cpu"></i> ${model.model_name}</span>
                 <span><i data-lucide="link"></i> ${model.base_url}</span>
                 <span><i data-lucide="key-round"></i> ${model.api_key_masked}</span>
             </div>
-            <div class="connection-card-actions">
+            <div class="datasource-card-actions">
                 ${!model.is_default ? '<button class="btn btn-sm btn-secondary default-btn"><i data-lucide="star"></i> Set Default</button>' : '<button class="btn btn-sm btn-success" disabled><i data-lucide="check"></i> Default</button>'}
                 <button class="btn btn-sm btn-secondary edit-btn"><i data-lucide="pencil"></i> Edit</button>
                 <button class="btn btn-sm btn-danger delete-btn"><i data-lucide="trash-2"></i></button>

@@ -3,7 +3,7 @@
     // Register routes
     Router.register('login', () => LoginPage.render());
     Router.register('dashboard', () => { DashboardPage.render(); });
-    Router.register('connections', () => { ConnectionsPage.render(); });
+    Router.register('datasources', () => { DatasourcesPage.render(); });
     Router.register('ssh-hosts', () => { SSHHostsPage.render(); });
     Router.register('monitor', () => MonitorPage.render());
     Router.register('diagnosis', () => DiagnosisPage.render());
@@ -13,6 +13,8 @@
     Router.register('knowledge-bases', () => KnowledgeBasesPage.render());
     Router.register('skills', () => SkillsPage.render());
     Router.register('users', () => UsersPage.render());
+    Router.register('guardian', () => GuardianDashboardPage.render());
+    Router.register('scheduled-reports', () => ScheduledReportsPage.render());
 
     // Check auth
     const token = localStorage.getItem('auth_token');
@@ -21,8 +23,8 @@
         try {
             Store.set('currentUser', JSON.parse(userJson));
             Sidebar.render();
-            API.getConnections().then(connections => {
-                Store.set('connections', connections);
+            API.getDatasources().then(datasources => {
+                Store.set('datasources', datasources);
             }).catch(() => {});
         } catch (e) {
             localStorage.removeItem('auth_token');

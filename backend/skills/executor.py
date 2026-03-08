@@ -20,8 +20,15 @@ class SkillExecutor:
     @staticmethod
     def _serialize_result(obj):
         """Convert non-serializable objects to serializable format"""
-        if isinstance(obj, Decimal):
+        from datetime import datetime, date
+        from ipaddress import IPv4Address, IPv6Address, IPv4Network, IPv6Network
+
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        elif isinstance(obj, Decimal):
             return float(obj)
+        elif isinstance(obj, (IPv4Address, IPv6Address, IPv4Network, IPv6Network)):
+            return str(obj)
         elif isinstance(obj, dict):
             return {k: SkillExecutor._serialize_result(v) for k, v in obj.items()}
         elif isinstance(obj, (list, tuple)):

@@ -28,6 +28,14 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("Database initialized")
 
+    # Run AI Guardian migrations
+    try:
+        from backend.migrations.add_guardian_tables import upgrade
+        await upgrade()
+        logger.info("AI Guardian tables initialized")
+    except Exception as e:
+        logger.warning(f"Guardian migration skipped (may already exist): {e}")
+
     # Start metric collector
     from backend.services.metric_collector import start_scheduler
     start_scheduler(settings.metric_interval)
@@ -47,6 +55,42 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(kb_processor.start_background_processing())
     logger.info("KB processor initialized")
 
+    # Start AI Guardian System
+    from backend.services.baseline_learner import BaselineLearner
+    from backend.services.importance_classifier import ImportanceClassifier
+
+    baseline_learner = BaselineLearner()
+    importance_classifier = ImportanceClassifier()
+
+    # Start baseline learning (background task)
+    asyncio.create_task(baseline_learner.start_learning())
+    logger.info("AI Guardian: Baseline learner started")
+
+    # Start importance classification (background task)
+    asyncio.create_task(importance_classifier.start_classification())
+    logger.info("AI Guardian: Importance classifier started")
+
+    logger.info("🤖 AI Guardian System activated")
+
+    # Start scheduled report service
+    from backend.services.scheduled_report_service import ScheduledReportService
+    from backend.services.metric_collector import scheduler
+
+    scheduled_report_service = ScheduledReportService(scheduler)
+    await scheduled_report_service.initialize_all_schedules()
+    logger.info("Scheduled report service initialized")
+
+    # Add cleanup job (runs daily at 2 AM)
+    scheduler.add_job(
+        scheduled_report_service.cleanup_old_reports,
+        'cron',
+        hour=2,
+        minute=0,
+        id='report_cleanup',
+        replace_existing=True
+    )
+    logger.info("Report cleanup job scheduled")
+
     yield
 
     # Shutdown
@@ -65,11 +109,11 @@ def create_app() -> FastAPI:
     )
 
     # Register routers
-    from backend.routers import connections, ssh_hosts, metrics, monitor_ws, chat, query, reports, ai_models, knowledge_bases, auth, users
+    from backend.routers import datasources, ssh_hosts, metrics, monitor_ws, chat, query, reports, ai_models, knowledge_bases, auth, users, guardian, scheduled_reports
     from backend.api import skills
     app.include_router(auth.router)
     app.include_router(users.router)
-    app.include_router(connections.router)
+    app.include_router(datasources.router)
     app.include_router(ssh_hosts.router)
     app.include_router(metrics.router)
     app.include_router(monitor_ws.router)
@@ -79,6 +123,8 @@ def create_app() -> FastAPI:
     app.include_router(ai_models.router)
     app.include_router(knowledge_bases.router)
     app.include_router(skills.router)
+    app.include_router(guardian.router)
+    app.include_router(scheduled_reports.router)
 
     # Serve frontend static files
     app.mount("/css", StaticFiles(directory="frontend/css"), name="css")
@@ -90,3 +136,7 @@ def create_app() -> FastAPI:
         return FileResponse("frontend/index.html")
 
     return app
+
+
+# Create app instance
+app = create_app()
