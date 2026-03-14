@@ -24,7 +24,7 @@ const SchemaCache = {
         }
 
         try {
-            const data = await window.api.getSchemas(datasourceId);
+            const data = await API.getSchemas(datasourceId);
             this.cache.set(key, { data, timestamp: Date.now() });
             return data;
         } catch (error) {
@@ -42,7 +42,7 @@ const SchemaCache = {
         }
 
         try {
-            const data = await window.api.getTables(datasourceId, schema);
+            const data = await API.getTables(datasourceId, schema);
             this.cache.set(key, { data, timestamp: Date.now() });
             return data;
         } catch (error) {
@@ -60,7 +60,7 @@ const SchemaCache = {
         }
 
         try {
-            const data = await window.api.getColumns(datasourceId, table, schema);
+            const data = await API.getColumns(datasourceId, table, schema);
             this.cache.set(key, { data, timestamp: Date.now() });
             return data;
         } catch (error) {

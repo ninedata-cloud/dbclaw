@@ -62,18 +62,18 @@ async def upload_attachment(
     # Check file size
     file_content = await file.read()
     if len(file_content) > AttachmentHandler.MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail="File too large (max 10MB)")
+        raise HTTPException(status_code=400, detail="文件过大（最大 10MB）")
 
     # Check file type
     if not AttachmentHandler.is_allowed_file(file.filename):
-        raise HTTPException(status_code=400, detail="File type not allowed")
+        raise HTTPException(status_code=400, detail="不支持的文件类型")
 
     # Save attachment
     try:
         metadata = await AttachmentHandler.save_attachment(file_content, file.filename, session_id)
         return metadata
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save attachment: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"保存附件失败: {str(e)}")
 
 
 @router.get("/api/chat/sessions/{session_id}/messages", response_model=List[ChatMessageResponse])

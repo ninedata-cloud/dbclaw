@@ -23,7 +23,7 @@ const ChatWidget = {
         const input = DOM.el('textarea', {
             className: 'chat-input',
             id: 'chat-input',
-            placeholder: 'Ask about your database...',
+            placeholder: '询问数据库相关问题...',
             rows: '1',
         });
 
@@ -65,7 +65,7 @@ const ChatWidget = {
         const attachBtn = DOM.el('button', {
             className: 'chat-attach-btn',
             innerHTML: '<i data-lucide="paperclip"></i>',
-            title: 'Attach file',
+            title: '附加文件',
             onClick: () => fileInput.click()
         });
 
@@ -107,9 +107,9 @@ const ChatWidget = {
         bar.appendChild(fileInput);
         bar.appendChild(input);
         bar.appendChild(attachBtn);
+        bar.appendChild(sendBtn);
         bar.appendChild(clearBtn);
         bar.appendChild(stopBtn);
-        bar.appendChild(sendBtn);
         return bar;
     },
 

@@ -6,12 +6,12 @@ const DatasourceForm = {
 
         form.innerHTML = `
             <div class="form-group">
-                <label>Datasource Name</label>
-                <input type="text" class="form-input" name="name" value="${datasource?.name || ''}" required placeholder="My Database">
+                <label>数据源名称</label>
+                <input type="text" class="form-input" name="name" value="${datasource?.name || ''}" required placeholder="我的数据库">
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label>Database Type</label>
+                    <label>数据库类型</label>
                     <select class="form-select" name="db_type" required>
                         <option value="mysql" ${datasource?.db_type === 'mysql' ? 'selected' : ''}>MySQL</option>
                         <option value="postgresql" ${datasource?.db_type === 'postgresql' ? 'selected' : ''}>PostgreSQL</option>
@@ -41,7 +41,7 @@ const DatasourceForm = {
                 </div>
                 <div class="form-group">
                     <label>Password</label>
-                    <input type="password" class="form-input" name="password" value="" placeholder="${isEdit ? '(unchanged)' : ''}">
+                    <input type="password" class="form-input" name="password" value="" placeholder="${isEdit ? '(保持不变)' : ''}">
                 </div>
             </div>
             <div class="form-group">
@@ -49,14 +49,14 @@ const DatasourceForm = {
                 <input type="text" class="form-input" name="database" value="${datasource?.database || ''}" placeholder="mydb">
             </div>
             <div class="form-group">
-                <label>Host (Optional)</label>
+                <label>Host (可选)</label>
                 <select class="form-select" name="host_id">
-                    <option value="">None</option>
+                    <option value="">无</option>
                 </select>
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label>Importance Level</label>
+                    <label>重要性级别</label>
                     <select class="form-select" name="importance_level" required>
                         <option value="core" ${datasource?.importance_level === 'core' ? 'selected' : ''}>核心系统 (Core)</option>
                         <option value="production" ${datasource?.importance_level === 'production' || !datasource ? 'selected' : ''}>生产系统 (Production)</option>
@@ -65,7 +65,7 @@ const DatasourceForm = {
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Monitoring Interval (seconds)</label>
+                    <label>监控间隔（秒）</label>
                     <input type="number" class="form-input" name="monitoring_interval" value="${datasource?.monitoring_interval || 60}" min="5" max="3600" required>
                 </div>
             </div>
@@ -95,10 +95,10 @@ const DatasourceForm = {
             try {
                 if (isEdit) {
                     await API.updateDatasource(datasource.id, data);
-                    Toast.success('Datasource updated');
+                    Toast.success('数据源已更新');
                 } else {
                     await API.createDatasource(data);
-                    Toast.success('Datasource created');
+                    Toast.success('数据源已创建');
                 }
                 Modal.hide();
                 if (onSave) onSave();

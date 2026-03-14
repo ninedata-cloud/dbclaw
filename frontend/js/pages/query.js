@@ -6,7 +6,7 @@ const QueryPage = {
         // Header
         const headerActions = DOM.el('div', { className: 'flex gap-8' });
         const connSelect = DOM.el('select', { className: 'form-select', id: 'query-conn-select', style: { minWidth: '200px' } });
-        connSelect.appendChild(DOM.el('option', { value: '', textContent: 'Select connection...' }));
+        connSelect.appendChild(DOM.el('option', { value: '', textContent: '选择数据源...' }));
 
         API.getDatasources().then(datasources => {
             Store.set('datasources', datasources);
@@ -29,7 +29,7 @@ const QueryPage = {
         });
 
         headerActions.appendChild(connSelect);
-        Header.render('Query', headerActions);
+        Header.render('SQL 查询', headerActions);
 
         content.innerHTML = '';
         const container = DOM.el('div', { className: 'query-container' });
@@ -38,12 +38,12 @@ const QueryPage = {
         const toolbar = DOM.el('div', { className: 'query-toolbar' });
         const executeBtn = DOM.el('button', {
             className: 'btn btn-success',
-            innerHTML: '<i data-lucide="play"></i> Execute',
+            innerHTML: '<i data-lucide="play"></i> 执行',
             onClick: () => this._executeQuery()
         });
         const explainBtn = DOM.el('button', {
             className: 'btn btn-secondary',
-            innerHTML: '<i data-lucide="search"></i> Explain',
+            innerHTML: '<i data-lucide="search"></i> 执行计划',
             onClick: () => this._explainQuery()
         });
         const historyBtn = DOM.el('button', {
@@ -60,12 +60,20 @@ const QueryPage = {
         toolbar.appendChild(explainBtn);
         toolbar.appendChild(historyBtn);
         toolbar.appendChild(refreshSchemaBtn);
-        toolbar.appendChild(DOM.el('span', { className: 'text-muted text-sm', textContent: 'Ctrl+Enter to execute' }));
+        toolbar.appendChild(DOM.el('span', { className: 'text-muted text-sm', textContent: 'Ctrl+Enter 执行' }));
         container.appendChild(toolbar);
 
         // Editor
         QueryEditor.create(container, 'SELECT 1;');
-        QueryEditor.onExecute = () => this._executeQuery();
+        QueryEditor.on执行 = () => this._executeQuery();
+
+        // Load schema for current connection if available (wait for editor to be ready)
+        setTimeout(() => {
+            const currentConn = Store.get('currentConnection');
+            if (currentConn?.id) {
+                this._loadSchemaForDatasource(currentConn.id);
+            }
+        }, 500);
 
         // Status bar
         const statusBar = DOM.el('div', { className: 'query-status-bar', id: 'query-status' });
@@ -77,20 +85,14 @@ const QueryPage = {
         results.innerHTML = `
             <div class="empty-state" style="padding:40px">
                 <i data-lucide="table"></i>
-                <h3>No Results</h3>
-                <p>Execute a query to see results here.</p>
+                <h3>暂无结果</h3>
+                <p>执行 a query to see results here.</p>
             </div>
         `;
         container.appendChild(results);
 
         content.appendChild(container);
         DOM.createIcons();
-
-        // Load schema for current connection if available
-        const currentConn = Store.get('currentConnection');
-        if (currentConn?.id) {
-            this._loadSchemaForDatasource(currentConn.id);
-        }
 
         return () => {
             QueryEditor.destroy();
@@ -110,7 +112,7 @@ const QueryPage = {
         const connSelect = DOM.$('#query-conn-select');
         const connId = conn?.id || parseInt(connSelect?.value);
         if (!connId) {
-            Toast.warning('Select a connection first');
+            Toast.warning('请先选择数据源');
             return;
         }
 
@@ -122,12 +124,12 @@ const QueryPage = {
 
     async _executeQuery() {
         const sql = QueryEditor.getValue().trim();
-        if (!sql) { Toast.warning('Enter a SQL query'); return; }
+        if (!sql) { Toast.warning('请输入 SQL 查询'); return; }
 
         const conn = Store.get('currentConnection');
         const connSelect = DOM.$('#query-conn-select');
         const connId = conn?.id || parseInt(connSelect?.value);
-        if (!connId) { Toast.warning('Select a connection first'); return; }
+        if (!connId) { Toast.warning('请先选择数据源'); return; }
 
         const status = DOM.$('#query-status');
         const results = DOM.$('#query-results');
@@ -154,12 +156,12 @@ const QueryPage = {
 
     async _explainQuery() {
         const sql = QueryEditor.getValue().trim();
-        if (!sql) { Toast.warning('Enter a SQL query'); return; }
+        if (!sql) { Toast.warning('请输入 SQL 查询'); return; }
 
         const conn = Store.get('currentConnection');
         const connSelect = DOM.$('#query-conn-select');
         const connId = conn?.id || parseInt(connSelect?.value);
-        if (!connId) { Toast.warning('Select a connection first'); return; }
+        if (!connId) { Toast.warning('请先选择数据源'); return; }
 
         const results = DOM.$('#query-results');
         results.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
@@ -210,7 +212,7 @@ const QueryPage = {
                 width: '640px'
             });
         } catch (err) {
-            Toast.error('Failed to load history');
+            Toast.error('加载失败 history');
         }
     }
 };

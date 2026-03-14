@@ -18,7 +18,7 @@ const DiagnosisPage = {
         // Header with connection, model, KB selectors, and tool safety toggle
         const headerActions = DOM.el('div', { className: 'flex gap-8' });
         const connSelect = DOM.el('select', { className: 'form-select', style: { minWidth: '200px' } });
-        connSelect.appendChild(DOM.el('option', { value: '', textContent: 'Select connection...' }));
+        connSelect.appendChild(DOM.el('option', { value: '', textContent: '选择数据源...' }));
 
         try {
             const datasources = await API.getDatasources();
@@ -41,7 +41,7 @@ const DiagnosisPage = {
 
         // Model selector
         const modelSelect = DOM.el('select', { className: 'form-select', style: { minWidth: '200px' } });
-        modelSelect.appendChild(DOM.el('option', { value: '', textContent: 'Default model' }));
+        modelSelect.appendChild(DOM.el('option', { value: '', textContent: '默认模型' }));
 
         try {
             const models = await API.getAIModels();
@@ -63,7 +63,7 @@ const DiagnosisPage = {
             multiple: true,
             size: 1
         });
-        kbSelect.appendChild(DOM.el('option', { value: '', textContent: 'No knowledge bases', disabled: true }));
+        kbSelect.appendChild(DOM.el('option', { value: '', textContent: '无知识库', disabled: true }));
 
         try {
             const kbs = await API.getKnowledgeBases();
@@ -83,7 +83,7 @@ const DiagnosisPage = {
         // Tool safety settings button
         const toolSafetyBtn = DOM.el('button', {
             className: 'btn btn-sm btn-secondary',
-            innerHTML: '<i data-lucide="shield"></i> Tool Safety',
+            innerHTML: '<i data-lucide="shield"></i> 工具安全',
             title: 'Configure high-risk tool permissions',
             onClick: () => this._showToolSafetyModal()
         });
@@ -92,7 +92,7 @@ const DiagnosisPage = {
         headerActions.appendChild(modelSelect);
         headerActions.appendChild(kbSelect);
         headerActions.appendChild(toolSafetyBtn);
-        Header.render('AI Diagnosis', headerActions);
+        Header.render('AI 诊断', headerActions);
 
         // Two-column layout: sessions sidebar + chat area
         content.innerHTML = '';
@@ -178,7 +178,7 @@ const DiagnosisPage = {
         const toolHeaderLeft = DOM.el('div', {
             style: { flex: '1', display: 'flex', alignItems: 'center', gap: '8px' }
         });
-        toolHeaderLeft.innerHTML = '<i data-lucide="activity"></i> Tool Execution';
+        toolHeaderLeft.innerHTML = '<i data-lucide="activity"></i> skill调用';
 
         const togglePanelBtn = DOM.el('button', {
             className: 'btn btn-sm btn-secondary',
@@ -211,7 +211,7 @@ const DiagnosisPage = {
             onClick: () => {
                 const toolPanelContent = DOM.$('#tool-panel-content');
                 if (toolPanelContent) {
-                    toolPanelContent.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">No tool executions yet</div>';
+                    toolPanelContent.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">暂无skill调用记录</div>';
                     DOM.createIcons();
                 }
             }
@@ -229,7 +229,7 @@ const DiagnosisPage = {
                 padding: '12px'
             }
         });
-        toolPanelContent.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">No tool executions yet</div>';
+        toolPanelContent.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">暂无skill调用记录</div>';
 
         toolPanel.appendChild(toolPanelHeader);
         toolPanel.appendChild(toolPanelContent);
@@ -264,13 +264,13 @@ const DiagnosisPage = {
             if (tools.length === 0) return '';
 
             const toolItems = tools.map(tool => {
-                const isDisabled = this.disabledTools.includes(tool.name);
+                const is已禁用 = this.disabledTools.includes(tool.name);
                 const isDangerous = tool.description.includes('⚠️ DANGEROUS');
                 const cleanDesc = tool.description.replace('⚠️ DANGEROUS: ', '');
 
                 return `
                     <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:6px;cursor:pointer;background:var(--bg-secondary);margin-bottom:6px;border-left:3px solid ${isDangerous ? 'var(--accent-red)' : 'var(--accent-blue)'};">
-                        <input type="checkbox" class="tool-toggle" data-tool="${tool.name}" ${isDisabled ? '' : 'checked'}>
+                        <input type="checkbox" class="tool-toggle" data-tool="${tool.name}" ${is已禁用 ? '' : 'checked'}>
                         <div style="flex:1;">
                             <div style="font-weight:500;font-size:14px;display:flex;align-items:center;gap:6px;">
                                 ${isDangerous ? '<span style="color:var(--accent-red);">⚠️</span>' : ''}
@@ -278,8 +278,8 @@ const DiagnosisPage = {
                             </div>
                             <div style="font-size:12px;opacity:0.7;">${cleanDesc}</div>
                         </div>
-                        <span class="badge ${isDisabled ? 'badge-danger' : 'badge-success'}" id="badge-${tool.name}">
-                            ${isDisabled ? 'Disabled' : 'Enabled'}
+                        <span class="badge ${is已禁用 ? 'badge-danger' : 'badge-success'}" id="badge-${tool.name}">
+                            ${is已禁用 ? '已禁用' : '已启用'}
                         </span>
                     </label>
                 `;
@@ -295,11 +295,11 @@ const DiagnosisPage = {
         };
 
         Modal.show({
-            title: '🛡️ Tool Safety Settings',
+            title: '🛡️ 工具安全 Settings',
             content: `
                 <p style="margin-bottom:16px;font-size:13px;opacity:0.8;">
                     Control which tools the AI is allowed to use during diagnosis.
-                    Disabled tools will be blocked for new sessions. Changes apply when creating a new session.
+                    已禁用 tools will be blocked for new sessions. Changes apply when creating a new session.
                 </p>
                 <div id="tool-safety-list">
                     ${renderToolSection(normalTools, '📊 Standard Diagnostic Tools', null)}
@@ -319,7 +319,7 @@ const DiagnosisPage = {
                 const badge = document.getElementById(`badge-${cb.dataset.tool}`);
                 if (badge) {
                     badge.className = `badge ${cb.checked ? 'badge-success' : 'badge-danger'}`;
-                    badge.textContent = cb.checked ? 'Enabled' : 'Disabled';
+                    badge.textContent = cb.checked ? '已启用' : '已禁用';
                 }
             });
         });
@@ -380,7 +380,7 @@ const DiagnosisPage = {
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap'
                     },
-                    textContent: s.title.substring(0, 40) || 'Session ' + s.id
+                    textContent: s.title.substring(0, 40) || '会话 ' + s.id
                 });
 
                 const deleteBtn = DOM.el('button', {
@@ -428,7 +428,7 @@ const DiagnosisPage = {
                 this._switchSession(sessions[0].id);
             }
         } catch (e) {
-            Toast.error('Failed to load sessions');
+            Toast.error('加载失败 sessions');
         }
     },
 
@@ -437,7 +437,7 @@ const DiagnosisPage = {
         try {
             const session = await API.createChatSession({
                 datasource_id: conn?.id || null,
-                title: 'New Session',
+                title: '新建会话',
                 ai_model_id: this.selectedModelId,
                 kb_ids: this.selectedKBIds.length > 0 ? this.selectedKBIds : null,
                 disabled_tools: this.disabledTools.length > 0 ? this.disabledTools : null
@@ -486,8 +486,8 @@ const DiagnosisPage = {
                 }
             }
         } catch (e) {
-            console.error('Failed to load messages:', e);
-            Toast.error('Failed to load session messages: ' + e.message);
+            console.error('加载失败 messages:', e);
+            Toast.error('加载失败 session messages: ' + e.message);
             // Show empty state on error
             const container = DOM.$('#chat-messages');
             if (container) {
@@ -642,7 +642,7 @@ const DiagnosisPage = {
         }
         const sessions = Store.get('chatSessions') || [];
         const session = sessions.find(s => s.id === this.currentSessionId);
-        if (!confirm(`Delete session "${session?.title || 'Session ' + this.currentSessionId}"?`)) return;
+        if (!confirm(`Delete session "${session?.title || '会话 ' + this.currentSessionId}"?`)) return;
         try {
             await API.deleteChatSession(this.currentSessionId);
             this.currentSessionId = null;
@@ -656,7 +656,7 @@ const DiagnosisPage = {
     async _deleteSessionById(sessionId) {
         const sessions = Store.get('chatSessions') || [];
         const session = sessions.find(s => s.id === sessionId);
-        if (!confirm(`Delete session "${session?.title || 'Session ' + sessionId}"?`)) return;
+        if (!confirm(`Delete session "${session?.title || '会话 ' + sessionId}"?`)) return;
         try {
             await API.deleteChatSession(sessionId);
             if (this.currentSessionId === sessionId) {

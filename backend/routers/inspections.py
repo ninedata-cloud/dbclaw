@@ -277,7 +277,7 @@ async def get_report_detail(report_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Report).where(Report.id == report_id))
     report = result.scalar_one_or_none()
     if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
+        raise HTTPException(status_code=404, detail="报告不存在")
 
     return {
         "id": report.id,
@@ -297,7 +297,7 @@ async def export_report_markdown(report_id: int, db: AsyncSession = Depends(get_
     result = await db.execute(select(Report).where(Report.id == report_id))
     report = result.scalar_one_or_none()
     if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
+        raise HTTPException(status_code=404, detail="报告不存在")
 
     if not report.content_md:
         raise HTTPException(status_code=400, detail="Report content not available")
@@ -322,7 +322,7 @@ async def export_report_pdf(report_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Report).where(Report.id == report_id))
     report = result.scalar_one_or_none()
     if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
+        raise HTTPException(status_code=404, detail="报告不存在")
 
     if not report.content_md:
         raise HTTPException(status_code=400, detail="Report content not available")
@@ -352,3 +352,74 @@ async def export_report_pdf(report_id: int, db: AsyncSession = Depends(get_db)):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
+
+
+@router.delete("/reports/{report_id}")
+async def delete_report(report_id: int, db: AsyncSession = Depends(get_db)):
+    """Delete an inspection report and clean up related triggers"""
+    result = await db.execute(select(Report).where(Report.id == report_id))
+    report = result.scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=404, detail="报告不存在")
+
+    # Clean up related inspection triggers (set report_id to NULL)
+    from sqlalchemy import update
+    await db.execute(
+        update(InspectionTrigger)
+        .where(InspectionTrigger.report_id == report_id)
+        .values(report_id=None)
+    )
+
+    # Delete the report
+    await db.delete(report)
+    await db.commit()
+
+    return {"message": "报告已删除", "report_id": report_id}
+
+
+class BatchDeleteRequest(BaseModel):
+    report_ids: List[int]
+
+
+@router.post("/reports/batch-delete")
+async def batch_delete_reports(
+    request: BatchDeleteRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Batch delete inspection reports"""
+    if not request.report_ids:
+        raise HTTPException(status_code=400, detail="报告ID列表不能为空")
+
+    # Verify all reports exist
+    result = await db.execute(
+        select(Report).where(Report.id.in_(request.report_ids))
+    )
+    reports = result.scalars().all()
+    found_ids = {r.id for r in reports}
+    missing_ids = set(request.report_ids) - found_ids
+
+    if missing_ids:
+        raise HTTPException(
+            status_code=404,
+            detail=f"以下报告不存在: {', '.join(map(str, missing_ids))}"
+        )
+
+    # Clean up related inspection triggers
+    from sqlalchemy import update, delete as sql_delete
+    await db.execute(
+        update(InspectionTrigger)
+        .where(InspectionTrigger.report_id.in_(request.report_ids))
+        .values(report_id=None)
+    )
+
+    # Delete all reports
+    await db.execute(
+        sql_delete(Report).where(Report.id.in_(request.report_ids))
+    )
+    await db.commit()
+
+    return {
+        "message": f"成功删除 {len(request.report_ids)} 个报告",
+        "deleted_count": len(request.report_ids),
+        "report_ids": request.report_ids
+    }

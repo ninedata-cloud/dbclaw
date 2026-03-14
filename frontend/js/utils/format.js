@@ -45,13 +45,16 @@ const Format = {
     },
 
     uptime(seconds) {
-        if (!seconds) return 'N/A';
+        if (seconds === null || seconds === undefined) return 'N/A';
+        seconds = Math.floor(seconds);
+        if (seconds < 0) return 'N/A';
         const days = Math.floor(seconds / 86400);
         const hours = Math.floor((seconds % 86400) / 3600);
         const mins = Math.floor((seconds % 3600) / 60);
         if (days > 0) return `${days}d ${hours}h`;
         if (hours > 0) return `${hours}h ${mins}m`;
-        return `${mins}m`;
+        if (mins > 0) return `${mins}m`;
+        return `${seconds}s`;
     }
 };
 

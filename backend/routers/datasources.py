@@ -46,7 +46,7 @@ async def get_datasource(datasource_id: int, db: AsyncSession = Depends(get_db))
     result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
     datasource = result.scalar_one_or_none()
     if not datasource:
-        raise HTTPException(status_code=404, detail="Datasource not found")
+        raise HTTPException(status_code=404, detail="数据源不存在")
     return datasource
 
 
@@ -55,7 +55,7 @@ async def update_datasource(datasource_id: int, data: DatasourceUpdate, db: Asyn
     result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
     datasource = result.scalar_one_or_none()
     if not datasource:
-        raise HTTPException(status_code=404, detail="Datasource not found")
+        raise HTTPException(status_code=404, detail="数据源不存在")
 
     update_data = data.model_dump(exclude_unset=True)
     if "password" in update_data:
@@ -76,7 +76,7 @@ async def delete_datasource(datasource_id: int, db: AsyncSession = Depends(get_d
     result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
     datasource = result.scalar_one_or_none()
     if not datasource:
-        raise HTTPException(status_code=404, detail="Datasource not found")
+        raise HTTPException(status_code=404, detail="数据源不存在")
     await db.delete(datasource)
     await db.commit()
     return {"message": "Datasource deleted"}
@@ -87,7 +87,7 @@ async def test_datasource(datasource_id: int, db: AsyncSession = Depends(get_db)
     result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
     datasource = result.scalar_one_or_none()
     if not datasource:
-        raise HTTPException(status_code=404, detail="Datasource not found")
+        raise HTTPException(status_code=404, detail="数据源不存在")
 
     try:
         from backend.services.db_connector import get_connector

@@ -14,45 +14,45 @@ const InspectionPage = {
 
     async render() {
         const content = DOM.$('#page-content');
-        Header.render('Database Intelligent Inspection');
+        Header.render('数据库智能巡检');
 
         content.innerHTML = `
             <div class="page-container">
                 <div class="filters" style="margin: 20px 0; display: flex; gap: 10px; flex-wrap: wrap; align-items: end;">
                     <div>
-                        <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">Datasource</label>
+                        <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">数据源</label>
                         <select id="filterDatasource" class="form-select" style="padding: 8px; border-radius: 4px; min-width: 180px;">
-                            <option value="">All Datasources</option>
+                            <option value="">所有数据源</option>
                         </select>
                     </div>
                     <div>
-                        <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">Status</label>
+                        <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">状态</label>
                         <select id="filterStatus" class="form-select" style="padding: 8px; border-radius: 4px;">
-                            <option value="">All Status</option>
-                            <option value="completed">Completed</option>
-                            <option value="generating">Generating</option>
-                            <option value="failed">Failed</option>
+                            <option value="">所有状态</option>
+                            <option value="completed">已完成</option>
+                            <option value="generating">生成中</option>
+                            <option value="failed">失败</option>
                         </select>
                     </div>
                     <div>
-                        <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">Trigger Type</label>
+                        <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">触发类型</label>
                         <select id="filterTriggerType" class="form-select" style="padding: 8px; border-radius: 4px;">
-                            <option value="">All Types</option>
-                            <option value="manual">Manual</option>
-                            <option value="scheduled">Scheduled</option>
-                            <option value="anomaly">Anomaly</option>
+                            <option value="">所有类型</option>
+                            <option value="manual">手动</option>
+                            <option value="scheduled">定时</option>
+                            <option value="anomaly">异常</option>
                         </select>
                     </div>
                     <div>
-                        <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">Start Date</label>
+                        <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">开始日期</label>
                         <input type="date" id="filterStartDate" class="form-input" style="padding: 8px; border-radius: 4px;">
                     </div>
                     <div>
-                        <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">End Date</label>
+                        <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">结束日期</label>
                         <input type="date" id="filterEndDate" class="form-input" style="padding: 8px; border-radius: 4px;">
                     </div>
-                    <button id="applyFilters" class="btn btn-primary" style="padding: 8px 16px;">Apply Filters</button>
-                    <button id="resetFilters" class="btn btn-secondary" style="padding: 8px 16px;">Reset</button>
+                    <button id="applyFilters" class="btn btn-primary" style="padding: 8px 16px;">应用筛选</button>
+                    <button id="resetFilters" class="btn btn-secondary" style="padding: 8px 16px;">重置</button>
                 </div>
                 <div id="reportList" style="margin-top: 20px;">
                     <div id="reports"></div>
@@ -124,7 +124,7 @@ const InspectionPage = {
 
         const container = DOM.$('#reports');
         if (reports.length === 0) {
-            container.innerHTML = '<p style="text-align:center;color:#666;padding:20px;">No reports found</p>';
+            container.innerHTML = '<p style="text-align:center;color:#666;padding:20px;">未找到报告</p>';
             DOM.$('#pagination').innerHTML = '';
             return;
         }
@@ -133,42 +133,47 @@ const InspectionPage = {
             <table class="data-table">
                 <thead>
                     <tr>
-                        <th>Datasource</th>
-                        <th>Trigger Type</th>
-                        <th>Status</th>
-                        <th>Title</th>
-                        <th>Created At</th>
-                        <th>Reason</th>
+                        <th>数据源</th>
+                        <th>触发类型</th>
+                        <th>状态</th>
+                        <th>标题</th>
+                        <th>创建时间</th>
+                        <th>原因</th>
+                        <th style="width:150px;">操作</th>
                     </tr>
                 </thead>
                 <tbody>
                     ${reports.map(r => `
-                        <tr style="cursor:pointer;" onclick="InspectionPage.viewReport(${r.report_id})">
+                        <tr>
                             <td>${r.datasource_name || 'N/A'}</td>
                             <td>
                                 <span class="badge badge-${r.trigger_type === 'anomaly' ? 'danger' : r.trigger_type === 'scheduled' ? 'success' : 'info'}">
-                                    ${r.trigger_type === 'anomaly' ? '🔴 Anomaly' : r.trigger_type === 'scheduled' ? '📅 Scheduled' : '👤 Manual'}
+                                    ${r.trigger_type === 'anomaly' ? '🔴 异常' : r.trigger_type === 'scheduled' ? '📅 定时' : '👤 手动'}
                                 </span>
                             </td>
                             <td>
                                 <span class="badge badge-${r.status === 'completed' ? 'success' : r.status === 'failed' ? 'danger' : 'warning'}">
-                                    ${r.status === 'completed' ? '✓ Completed' : r.status === 'failed' ? '✗ Failed' : '⏳ Generating'}
+                                    ${r.status === 'completed' ? '✓ 已完成' : r.status === 'failed' ? '✗ 失败' : '⏳ 生成中'}
                                 </span>
+                                ${r.status === 'failed' && r.error_message ? `
+                                    <span class="error-icon" data-error="${r.error_message.replace(/"/g, '&quot;')}" style="margin-left:6px;color:#dc3545;cursor:help;font-size:16px;">⚠️</span>
+                                ` : ''}
                             </td>
                             <td><strong>${r.title}</strong></td>
                             <td>${r.created_at}</td>
                             <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.trigger_reason || '-'}</td>
-                        </tr>
-                        ${r.status === 'failed' && r.error_message ? `
-                        <tr>
-                            <td colspan="6" style="background:#f8d7da;color:#721c24;font-size:12px;padding:8px;">
-                                <strong>Error:</strong> ${r.error_message}
+                            <td>
+                                <button onclick="InspectionPage.viewReport(${r.report_id})" class="btn btn-sm btn-primary" style="padding:4px 8px;margin-right:5px;">查看报告</button>
+                                <button onclick="InspectionPage.confirmDelete(${r.report_id})" class="btn btn-sm btn-danger" style="padding:4px 8px;">删除</button>
                             </td>
-                        </tr>` : ''}
+                        </tr>
                     `).join('')}
                 </tbody>
             </table>
         `;
+
+        // Setup error icon tooltips
+        this.setupErrorTooltips();
 
         this.renderPagination();
 
@@ -194,7 +199,7 @@ const InspectionPage = {
         const buttons = [];
 
         // Previous button
-        buttons.push(`<button class="btn btn-sm btn-secondary" ${this.currentPage === 1 ? 'disabled' : ''} onclick="InspectionPage.goToPage(${this.currentPage - 1})">Previous</button>`);
+        buttons.push(`<button class="btn btn-sm btn-secondary" ${this.currentPage === 1 ? 'disabled' : ''} onclick="InspectionPage.goToPage(${this.currentPage - 1})">上一页</button>`);
 
         // Page numbers
         for (let i = 1; i <= totalPages; i++) {
@@ -206,7 +211,7 @@ const InspectionPage = {
         }
 
         // Next button
-        buttons.push(`<button class="btn btn-sm btn-secondary" ${this.currentPage === totalPages ? 'disabled' : ''} onclick="InspectionPage.goToPage(${this.currentPage + 1})">Next</button>`);
+        buttons.push(`<button class="btn btn-sm btn-secondary" ${this.currentPage === totalPages ? 'disabled' : ''} onclick="InspectionPage.goToPage(${this.currentPage + 1})">下一页</button>`);
 
         pagination.innerHTML = buttons.join('');
     },
@@ -226,7 +231,7 @@ const InspectionPage = {
             if (report.trigger_reason) {
                 triggerDetailsHtml = `
                     <div style="background:#e3f2fd;padding:12px;border-radius:4px;margin-bottom:15px;border-left:4px solid #2196f3;">
-                        <strong style="color:#1976d2;">Trigger Reason:</strong>
+                        <strong style="color:#1976d2;">触发原因:</strong>
                         <span style="margin-left:8px;">${report.trigger_reason}</span>
                     </div>
                 `;
@@ -235,7 +240,7 @@ const InspectionPage = {
             content.innerHTML = `
                 <div style="max-width: 1200px; margin: 0 auto; padding: 20px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                        <button onclick="InspectionPage.render()" style="padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">← Back to Reports</button>
+                        <button onclick="InspectionPage.render()" style="padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">← 返回报告列表</button>
                         <div style="display: flex; gap: 10px;">
                             <button onclick="InspectionPage.exportMarkdown(${reportId})" class="btn btn-secondary" style="padding: 8px 16px;">
                                 📄 Export Markdown
@@ -253,9 +258,9 @@ const InspectionPage = {
             `;
             const reportContent = DOM.$('#reportContent');
             reportContent.className = 'report-content-markdown';
-            reportContent.innerHTML = MarkdownRenderer.render(report.content_md || 'No content available');
+            reportContent.innerHTML = MarkdownRenderer.render(report.content_md || '暂无内容');
         } catch (error) {
-            Toast.show('Failed to load report', 'error');
+            Toast.show('加载失败 report', 'error');
         }
     },
 
@@ -264,7 +269,7 @@ const InspectionPage = {
             const response = await fetch(`/api/inspections/reports/export/${reportId}/markdown`);
             if (!response.ok) {
                 const error = await response.json();
-                throw new Error(error.detail || 'Export failed');
+                throw new Error(error.detail || '导出失败');
             }
 
             const blob = await response.blob();
@@ -277,7 +282,7 @@ const InspectionPage = {
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
 
-            Toast.show('Markdown exported successfully', 'success');
+            Toast.show('Markdown 导出成功', 'success');
         } catch (error) {
             Toast.show(`Export failed: ${error.message}`, 'error');
         }
@@ -285,11 +290,11 @@ const InspectionPage = {
 
     async exportPDF(reportId) {
         try {
-            Toast.show('Generating PDF...', 'info');
+            Toast.show('正在生成 PDF...', 'info');
             const response = await fetch(`/api/inspections/reports/export/${reportId}/pdf`);
             if (!response.ok) {
                 const error = await response.json();
-                throw new Error(error.detail || 'Export failed');
+                throw new Error(error.detail || '导出失败');
             }
 
             const blob = await response.blob();
@@ -302,7 +307,7 @@ const InspectionPage = {
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
 
-            Toast.show('PDF exported successfully', 'success');
+            Toast.show('PDF 导出成功', 'success');
         } catch (error) {
             Toast.show(`Export failed: ${error.message}`, 'error');
         }
@@ -316,6 +321,69 @@ const InspectionPage = {
 
         // Poll every 3 seconds
         this.pollInterval = setInterval(() => this.loadReports(), 3000);
+    },
+
+    setupErrorTooltips() {
+        const errorIcons = document.querySelectorAll('.error-icon');
+        let tooltip = null;
+
+        errorIcons.forEach(icon => {
+            icon.addEventListener('mouseenter', (e) => {
+                const errorMessage = icon.getAttribute('data-error');
+
+                // Create tooltip
+                tooltip = document.createElement('div');
+                tooltip.className = 'error-tooltip';
+                tooltip.textContent = errorMessage;
+                document.body.appendChild(tooltip);
+
+                // Position tooltip
+                const rect = icon.getBoundingClientRect();
+                const tooltipRect = tooltip.getBoundingClientRect();
+
+                // Position above the icon
+                let top = rect.top - tooltipRect.height - 10;
+                let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+
+                // Adjust if tooltip goes off screen
+                if (top < 10) {
+                    top = rect.bottom + 10; // Show below if not enough space above
+                }
+                if (left < 10) {
+                    left = 10;
+                }
+                if (left + tooltipRect.width > window.innerWidth - 10) {
+                    left = window.innerWidth - tooltipRect.width - 10;
+                }
+
+                tooltip.style.top = top + 'px';
+                tooltip.style.left = left + 'px';
+                tooltip.style.opacity = '1';
+            });
+
+            icon.addEventListener('mouseleave', () => {
+                if (tooltip) {
+                    tooltip.remove();
+                    tooltip = null;
+                }
+            });
+        });
+    },
+
+    confirmDelete(reportId) {
+        if (confirm('确定要删除这个报告吗？此操作无法撤销。')) {
+            this.deleteReport(reportId);
+        }
+    },
+
+    async deleteReport(reportId) {
+        try {
+            await API.delete(`/api/inspections/reports/${reportId}`);
+            Toast.show('报告已删除', 'success');
+            await this.loadReports();
+        } catch (error) {
+            Toast.show(`删除失败: ${error.message}`, 'error');
+        }
     },
 
     cleanup() {

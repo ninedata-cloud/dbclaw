@@ -5,6 +5,14 @@ from sqlalchemy import select
 
 from backend.models.datasource import Datasource
 from backend.models.report import Report
+from backend.models.host import Host
+from backend.agent.prompts import REPORT_GENERATION_PROMPT
+from backend.database import async_session
+from backend.utils.encryption import decrypt_value
+from backend.services.db_connector import get_connector
+from backend.services.ssh_service import SSHService
+from backend.services.os_metrics_service import OSMetricsService
+from backend.agent.conversation_skills import generate_report_with_skills
 
 logger = logging.getLogger(__name__)
 

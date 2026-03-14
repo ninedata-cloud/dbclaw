@@ -106,7 +106,7 @@ async def get_knowledge_base(kb_id: int, db: AsyncSession = Depends(get_db)):
     kb = result.scalar_one_or_none()
 
     if not kb:
-        raise HTTPException(status_code=404, detail="Knowledge base not found")
+        raise HTTPException(status_code=404, detail="知识库不存在")
 
     # Get document count
     count_result = await db.execute(
@@ -135,7 +135,7 @@ async def update_knowledge_base(
     kb = result.scalar_one_or_none()
 
     if not kb:
-        raise HTTPException(status_code=404, detail="Knowledge base not found")
+        raise HTTPException(status_code=404, detail="知识库不存在")
 
     if kb_data.name is not None:
         kb.name = kb_data.name
@@ -172,7 +172,7 @@ async def delete_knowledge_base(kb_id: int, db: AsyncSession = Depends(get_db)):
     kb = result.scalar_one_or_none()
 
     if not kb:
-        raise HTTPException(status_code=404, detail="Knowledge base not found")
+        raise HTTPException(status_code=404, detail="知识库不存在")
 
     # Delete ChromaDB collection
     from backend.services.vector_store import VectorStore
@@ -214,7 +214,7 @@ async def list_documents(kb_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(KnowledgeBase).where(KnowledgeBase.id == kb_id))
     kb = result.scalar_one_or_none()
     if not kb:
-        raise HTTPException(status_code=404, detail="Knowledge base not found")
+        raise HTTPException(status_code=404, detail="知识库不存在")
 
     # Get documents
     result = await db.execute(
@@ -234,7 +234,7 @@ async def upload_document(
     result = await db.execute(select(KnowledgeBase).where(KnowledgeBase.id == kb_id))
     kb = result.scalar_one_or_none()
     if not kb:
-        raise HTTPException(status_code=404, detail="Knowledge base not found")
+        raise HTTPException(status_code=404, detail="知识库不存在")
 
     # Validate file extension
     file_ext = Path(file.filename).suffix.lower()
@@ -305,7 +305,7 @@ async def delete_document(
     doc = result.scalar_one_or_none()
 
     if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise HTTPException(status_code=404, detail="文档不存在")
 
     # Get KB for collection name
     result = await db.execute(select(KnowledgeBase).where(KnowledgeBase.id == kb_id))
@@ -347,7 +347,7 @@ async def get_document_content(kb_id: int, doc_id: int, db: AsyncSession = Depen
     )
     doc = result.scalar_one_or_none()
     if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise HTTPException(status_code=404, detail="文档不存在")
 
     file_path = Path(doc.file_path)
     if not file_path.exists():

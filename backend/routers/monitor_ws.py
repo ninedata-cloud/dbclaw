@@ -28,6 +28,32 @@ async def monitor_websocket(websocket: WebSocket, conn_id: int, token: str = Que
     queue = subscribe(conn_id)
     logger.info(f"WebSocket client connected for connection {conn_id}")
 
+    # Immediately send the latest metric snapshot to avoid waiting for next collection cycle
+    try:
+        from backend.database import async_session
+        from backend.models.metric_snapshot import MetricSnapshot
+        from sqlalchemy import select
+
+        async with async_session() as db:
+            result = await db.execute(
+                select(MetricSnapshot)
+                .where(MetricSnapshot.datasource_id == conn_id, MetricSnapshot.metric_type == "db_status")
+                .order_by(MetricSnapshot.collected_at.desc())
+                .limit(1)
+            )
+            latest_snapshot = result.scalar_one_or_none()
+
+            if latest_snapshot:
+                await websocket.send_json({
+                    "type": "db_status",
+                    "datasource_id": conn_id,
+                    "data": latest_snapshot.data,
+                    "collected_at": latest_snapshot.collected_at.isoformat(),
+                })
+                logger.info(f"Sent latest snapshot to WebSocket client for connection {conn_id}")
+    except Exception as e:
+        logger.warning(f"Failed to send initial snapshot: {e}")
+
     try:
         while True:
             try:

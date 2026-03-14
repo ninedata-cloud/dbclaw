@@ -13,7 +13,7 @@ const KnowledgeBasesPage = {
             innerHTML: '<i data-lucide="plus"></i> New Knowledge Base',
             onClick: () => this.showKBModal()
         });
-        Header.render('Knowledge Bases', headerActions);
+        Header.render('知识库', headerActions);
 
         // Set up content
         content.innerHTML = '<div id="kb-list" class="kb-grid"></div>';
@@ -64,8 +64,8 @@ const KnowledgeBasesPage = {
                         <span><i data-lucide="calendar"></i> ${Utils.formatDate(kb.created_at)}</span>
                     </div>
                     <div class="kb-actions">
-                        <button class="btn btn-sm btn-primary" onclick="KnowledgeBasesPage.showDocuments(${kb.id})">
-                            <i data-lucide="folder-open"></i> Documents
+                        <button class="btn btn-sm btn-primary" onclick="KnowledgeBasesPage.show文档(${kb.id})">
+                            <i data-lucide="folder-open"></i> 文档
                         </button>
                         <button class="btn btn-sm btn-secondary" onclick="KnowledgeBasesPage.showKBModal(${kb.id})">
                             <i data-lucide="edit"></i> Edit
@@ -79,14 +79,14 @@ const KnowledgeBasesPage = {
 
             DOM.createIcons();
         } catch (error) {
-            Utils.showToast('Failed to load knowledge bases: ' + error.message, 'error');
+            Utils.showToast('加载失败 knowledge bases: ' + error.message, 'error');
         }
     },
 
     showKBModal(kbId = null) {
         const isEdit = kbId !== null;
         Modal.show({
-            title: isEdit ? 'Edit Knowledge Base' : 'New Knowledge Base',
+            title: isEdit ? 'Edit Knowledge Base' : '新建知识库',
             content: `
                 <form id="kb-form">
                     <div class="form-group">
@@ -94,7 +94,7 @@ const KnowledgeBasesPage = {
                         <input type="text" id="kb-name" class="form-input" required maxlength="200">
                     </div>
                     <div class="form-group">
-                        <label>Description</label>
+                        <label>描述</label>
                         <textarea id="kb-description" class="form-textarea" rows="3"></textarea>
                     </div>
                     <div class="form-group">
@@ -123,7 +123,7 @@ const KnowledgeBasesPage = {
             DOM.$('#kb-description').value = kb.description || '';
             DOM.$('#kb-active').checked = kb.is_active;
         } catch (error) {
-            Utils.showToast('Failed to load knowledge base: ' + error.message, 'error');
+            Utils.showToast('加载失败 knowledge base: ' + error.message, 'error');
             Modal.hide();
         }
     },
@@ -170,12 +170,12 @@ const KnowledgeBasesPage = {
         }
     },
 
-    async showDocuments(kbId) {
+    async show文档(kbId) {
         this.currentKB = kbId;
         const kb = await API.getKnowledgeBase(kbId);
 
         Modal.show({
-            title: `Documents - ${kb.name}`,
+            title: `文档 - ${kb.name}`,
             size: 'large',
             content: `
                 <div class="document-manager">
@@ -222,17 +222,17 @@ const KnowledgeBasesPage = {
             this.handleFileUpload(e.dataTransfer.files);
         });
 
-        await this.loadDocuments();
+        await this.load文档();
 
         // Poll for document status updates
-        this.pollInterval = setInterval(() => this.loadDocuments(), 3000);
+        this.pollInterval = setInterval(() => this.load文档(), 3000);
     },
 
-    async loadDocuments() {
+    async load文档() {
         if (!this.currentKB) return;
 
         try {
-            this.documents = await API.getDocuments(this.currentKB);
+            this.documents = await API.get文档(this.currentKB);
             const container = DOM.$('#document-list');
 
             if (this.documents.length === 0) {
@@ -284,7 +284,7 @@ const KnowledgeBasesPage = {
 
             DOM.createIcons();
         } catch (error) {
-            console.error('Failed to load documents:', error);
+            console.error('加载失败 documents:', error);
         }
     },
 
@@ -312,7 +312,7 @@ const KnowledgeBasesPage = {
             }
         }
 
-        await this.loadDocuments();
+        await this.load文档();
     },
 
     async deleteDocument(docId) {
@@ -321,7 +321,7 @@ const KnowledgeBasesPage = {
         try {
             await API.deleteDocument(this.currentKB, docId);
             Utils.showToast('Document deleted', 'success');
-            await this.loadDocuments();
+            await this.load文档();
         } catch (error) {
             Utils.showToast('Failed to delete: ' + error.message, 'error');
         }
@@ -365,7 +365,7 @@ const KnowledgeBasesPage = {
                     { text: 'Close', variant: 'secondary', onClick: () => {
                         Modal.hide();
                         // Re-open documents view to restore polling
-                        this.showDocuments(kbId);
+                        this.show文档(kbId);
                     }}
                 ]
             });

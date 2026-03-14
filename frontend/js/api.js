@@ -24,10 +24,10 @@ const API = {
                     localStorage.removeItem('auth_user');
                     Store.set('currentUser', null);
                     window.location.hash = 'login';
-                    throw new Error('Session expired. Please login again.');
+                    throw new Error('会话已过期，请重新登录');
                 }
                 const err = await response.json().catch(() => ({ detail: response.statusText }));
-                throw new Error(err.detail || err.message || 'Request failed');
+                throw new Error(err.detail || err.message || '请求失败');
             }
             const contentType = response.headers.get('content-type');
             if (contentType && contentType.includes('application/json')) {
@@ -61,10 +61,10 @@ const API = {
                 localStorage.removeItem('auth_user');
                 Store.set('currentUser', null);
                 window.location.hash = 'login';
-                throw new Error('Session expired. Please login again.');
+                throw new Error('会话已过期，请重新登录');
             }
             const err = await response.json().catch(() => ({ detail: response.statusText }));
-            throw new Error(err.detail || err.message || 'Request failed');
+            throw new Error(err.detail || err.message || '请求失败');
         }
         return await response.json();
     },
@@ -142,7 +142,7 @@ const API = {
 
         if (!response.ok) {
             const err = await response.json().catch(() => ({ detail: response.statusText }));
-            throw new Error(err.detail || 'Download failed');
+            throw new Error(err.detail || '下载失败');
         }
 
         // Get the blob and create download link
@@ -184,7 +184,7 @@ const API = {
         });
         if (!response.ok) {
             const err = await response.json().catch(() => ({ detail: response.statusText }));
-            throw new Error(err.detail || 'Upload failed');
+            throw new Error(err.detail || '上传失败');
         }
         return await response.json();
     },
@@ -196,7 +196,7 @@ const API = {
         const response = await fetch(`/api/knowledge-bases/${kbId}/documents/${docId}/content`, { headers });
         if (!response.ok) {
             const err = await response.json().catch(() => ({ detail: response.statusText }));
-            throw new Error(err.detail || 'Failed to fetch document content');
+            throw new Error(err.detail || '获取文档内容失败');
         }
         const contentType = response.headers.get('content-type');
         if (contentType && contentType.includes('application/pdf')) {

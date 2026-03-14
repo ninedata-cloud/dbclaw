@@ -4,7 +4,7 @@ const HostsPage = {
     filteredHosts: [],
 
     async render() {
-        Header.render('Hosts', DOM.el('button', {
+        Header.render('主机管理', DOM.el('button', {
             className: 'btn btn-primary',
             innerHTML: '<i data-lucide="plus"></i> New Host',
             onClick: () => this._showForm(null)
@@ -36,11 +36,11 @@ const HostsPage = {
             filterBar.innerHTML = `
                 <div>
                     <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">Name</label>
-                    <input type="text" id="filterName" class="form-input" placeholder="Search by name..." style="padding:8px;border-radius:4px;min-width:200px;">
+                    <input type="text" id="filterName" class="form-input" placeholder="按名称搜索..." style="padding:8px;border-radius:4px;min-width:200px;">
                 </div>
                 <div>
                     <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">Host IP</label>
-                    <input type="text" id="filterHost" class="form-input" placeholder="Search by host IP..." style="padding:8px;border-radius:4px;min-width:200px;">
+                    <input type="text" id="filterHost" class="form-input" placeholder="按主机 IP 搜索..." style="padding:8px;border-radius:4px;min-width:200px;">
                 </div>
             `;
             content.appendChild(filterBar);
@@ -54,7 +54,7 @@ const HostsPage = {
             DOM.createIcons();
 
         } catch (err) {
-            Toast.error('Failed to load hosts: ' + err.message);
+            Toast.error('加载失败 hosts: ' + err.message);
         }
     },
 
@@ -84,13 +84,13 @@ const HostsPage = {
             <table class="data-table">
                 <thead>
                     <tr>
-                        <th>Name</th>
-                        <th>Host</th>
-                        <th>Port</th>
-                        <th>Username</th>
-                        <th>Auth Type</th>
-                        <th>CPU Usage</th>
-                        <th>Actions</th>
+                        <th>名称</th>
+                        <th>主机</th>
+                        <th>端口</th>
+                        <th>用户名</th>
+                        <th>认证方式</th>
+                        <th>CPU 使用率</th>
+                        <th>操作</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -130,7 +130,7 @@ const HostsPage = {
         try {
             const result = await API.testHost(id);
             if (result.success) {
-                Toast.success('Connection successful!');
+                Toast.success('连接成功!');
             } else {
                 Toast.error(`Connection test failed: ${result.message}`);
             }
@@ -164,22 +164,22 @@ const HostsPage = {
         const isEdit = !!host;
         const form = DOM.el('form');
         form.innerHTML = `
-            <div class="form-group"><label>Name</label><input type="text" class="form-input" name="name" required placeholder="Production Server" value="${host?.name || ''}"></div>
+            <div class="form-group"><label>名称</label><input type="text" class="form-input" name="name" required placeholder="生产服务器" value="${host?.name || ''}"></div>
             <div class="form-row">
-                <div class="form-group"><label>Host</label><input type="text" class="form-input" name="host" required placeholder="10.0.0.1" value="${host?.host || ''}"></div>
+                <div class="form-group"><label>主机</label><input type="text" class="form-input" name="host" required placeholder="10.0.0.1" value="${host?.host || ''}"></div>
                 <div class="form-group"><label>Port</label><input type="number" class="form-input" name="port" value="${host?.port || 22}"></div>
             </div>
             <div class="form-row">
-                <div class="form-group"><label>Username</label><input type="text" class="form-input" name="username" required placeholder="root" value="${host?.username || ''}"></div>
+                <div class="form-group"><label>用户名</label><input type="text" class="form-input" name="username" required placeholder="root" value="${host?.username || ''}"></div>
                 <div class="form-group"><label>Auth Type</label>
                     <select class="form-select" name="auth_type">
-                        <option value="password" ${host?.auth_type === 'password' || !host ? 'selected' : ''}>Password</option>
+                        <option value="password" ${host?.auth_type === 'password' || !host ? 'selected' : ''}>密码</option>
                         <option value="key" ${host?.auth_type === 'key' ? 'selected' : ''}>Private Key</option>
                     </select>
                 </div>
             </div>
-            <div class="form-group auth-password"><label>Password</label><input type="password" class="form-input" name="password" placeholder="${isEdit ? '(unchanged)' : ''}"></div>
-            <div class="form-group auth-key" style="display:none"><label>Private Key</label><textarea class="form-textarea" name="private_key" rows="4" placeholder="-----BEGIN RSA PRIVATE KEY-----"></textarea></div>
+            <div class="form-group auth-password"><label>密码</label><input type="password" class="form-input" name="password" placeholder="${isEdit ? '(保持不变)' : ''}"></div>
+            <div class="form-group auth-key" style="display:none"><label>私钥</label><textarea class="form-textarea" name="private_key" rows="4" placeholder="-----BEGIN RSA PRIVATE KEY-----"></textarea></div>
         `;
 
         const authSelect = form.querySelector('[name="auth_type"]');
@@ -215,7 +215,7 @@ const HostsPage = {
         });
 
         const footer = DOM.el('div', { style: { display: 'flex', gap: '8px', justifyContent: 'flex-end' } });
-        footer.appendChild(DOM.el('button', { className: 'btn btn-secondary', textContent: 'Cancel', type: 'button', onClick: () => Modal.hide() }));
+        footer.appendChild(DOM.el('button', { className: 'btn btn-secondary', textContent: '取消', type: 'button', onClick: () => Modal.hide() }));
         if (isEdit) {
             footer.appendChild(DOM.el('button', {
                 className: 'btn btn-secondary',
@@ -228,7 +228,7 @@ const HostsPage = {
                     try {
                         const result = await API.testHost(host.id);
                         if (result.success) {
-                            Toast.success('Connection successful!');
+                            Toast.success('连接成功!');
                         } else {
                             Toast.error(`Connection test failed: ${result.message}`);
                         }
@@ -242,12 +242,12 @@ const HostsPage = {
                 }
             }));
         }
+        
         footer.appendChild(DOM.el('button', {
-            className: 'btn btn-primary', textContent: isEdit ? 'Update' : 'Create', type: 'button',
+            className: 'btn btn-primary', textContent: isEdit ? '更新' : '创建', type: 'button',
             onClick: () => form.requestSubmit()
         }));
-
-        Modal.show({ title: isEdit ? 'Edit Host' : 'New Host', content: form, footer });
+        Modal.show({ title: isEdit ? '编辑主机' : '新建主机', content: form, footer });
     },
 
     async _deleteHost(host) {

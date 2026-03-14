@@ -39,7 +39,7 @@ const SkillsPage = {
                     </label>
                     <label>
                         <input type="checkbox" id="enabled-filter" checked onchange="SkillsPage.filterSkills()">
-                        Enabled Only
+                        已启用 Only
                     </label>
                 </div>
 
@@ -139,8 +139,8 @@ const SkillsPage = {
                 content: `
                     <div class="skill-details">
                         <p><strong>ID:</strong> ${skill.id}</p>
-                        <p><strong>Version:</strong> ${skill.version}</p>
-                        <p><strong>Category:</strong> ${skill.category || 'N/A'}</p>
+                        <p><strong>版本:</strong> ${skill.version}</p>
+                        <p><strong>分类:</strong> ${skill.category || 'N/A'}</p>
                         <p><strong>Description:</strong> ${skill.description}</p>
 
                         <h4>Parameters:</h4>
@@ -162,7 +162,7 @@ const SkillsPage = {
                 size: 'large'
             });
         } catch (error) {
-            Toast.error('Failed to load skill details');
+            Toast.error('加载失败 skill details');
         }
     },
 
@@ -177,7 +177,7 @@ const SkillsPage = {
                 datasources = await API.get('/api/datasources');
                 knowledgeBases = await API.get('/api/knowledge-bases');
             } catch (e) {
-                console.error('Failed to load datasources/KBs:', e);
+                console.error('加载数据源失败/KBs:', e);
             }
 
             // Generate input fields based on parameter type
@@ -311,7 +311,7 @@ const SkillsPage = {
                 }
             };
         } catch (error) {
-            Toast.error('Failed to load skill');
+            Toast.error('加载失败 skill');
         }
     },
 
@@ -329,7 +329,7 @@ const SkillsPage = {
     },
 
     async deleteSkill(skillId) {
-        if (!confirm('Are you sure you want to delete this skill?')) return;
+        if (!confirm('确认操作 you want to delete this skill?')) return;
 
         try {
             await API.delete(`/api/skills/${skillId}`);

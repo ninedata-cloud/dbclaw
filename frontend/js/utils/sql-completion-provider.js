@@ -25,14 +25,18 @@ class SQLCompletionProvider {
 
     async loadSchema() {
         try {
+            console.log('[SQLCompletionProvider] Loading schema for datasource:', this.datasourceId);
             this.schemas = await this.schemaCache.getSchemas(this.datasourceId);
+            console.log('[SQLCompletionProvider] Loaded schemas:', this.schemas);
             this.tables = await this.schemaCache.getTables(this.datasourceId);
+            console.log('[SQLCompletionProvider] Loaded tables:', this.tables);
         } catch (error) {
             console.error('Error loading schema:', error);
         }
     }
 
     async provideCompletionItems(model, position) {
+        console.log('[SQLCompletionProvider] provideCompletionItems called');
         const textUntilPosition = model.getValueInRange({
             startLineNumber: 1,
             startColumn: 1,
@@ -41,6 +45,8 @@ class SQLCompletionProvider {
         });
 
         const context = this._parseContext(textUntilPosition);
+        console.log('[SQLCompletionProvider] Context:', context);
+
         const word = model.getWordUntilPosition(position);
         const range = {
             startLineNumber: position.lineNumber,
@@ -54,21 +60,29 @@ class SQLCompletionProvider {
         // Context-aware suggestions
         if (context.afterFrom || context.afterJoin) {
             // Suggest tables
+            console.log('[SQLCompletionProvider] Suggesting tables');
             suggestions = this._getTableSuggestions(range);
         } else if (context.afterSelect || context.afterWhere) {
             // Suggest columns from tables in FROM clause
+            console.log('[SQLCompletionProvider] Suggesting columns');
             suggestions = await this._getColumnSuggestions(range, context.tables);
         } else if (context.afterDot) {
             // Suggest columns for specific table
             const tableName = context.tableBeforeDot;
+            console.log('[SQLCompletionProvider] Suggesting columns for table:', tableName);
             if (tableName) {
                 suggestions = await this._getColumnsForTable(range, tableName);
             }
         } else {
-            // Default: suggest keywords
-            suggestions = this._getKeywordSuggestions(range);
+            // Default: suggest keywords and tables
+            console.log('[SQLCompletionProvider] Suggesting keywords and tables');
+            suggestions = [
+                ...this._getKeywordSuggestions(range),
+                ...this._getTableSuggestions(range)
+            ];
         }
 
+        console.log('[SQLCompletionProvider] Returning', suggestions.length, 'suggestions');
         return { suggestions };
     }
 
@@ -108,6 +122,7 @@ class SQLCompletionProvider {
     }
 
     _getTableSuggestions(range) {
+        console.log('[SQLCompletionProvider] Getting table suggestions, tables:', this.tables);
         return this.tables.map(table => ({
             label: table.name,
             kind: monaco.languages.CompletionItemKind.Class,

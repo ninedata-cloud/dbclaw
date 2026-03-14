@@ -49,7 +49,7 @@ async def create_model(data: AIModelCreate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(AIModel).filter(AIModel.name == data.name))
     existing = result.scalar_one_or_none()
     if existing:
-        raise HTTPException(status_code=400, detail="Model name already exists")
+        raise HTTPException(status_code=400, detail="模型名称已存在")
 
     model = AIModel(
         name=data.name,
@@ -72,7 +72,7 @@ async def update_model(model_id: int, data: AIModelUpdate, db: AsyncSession = De
     result = await db.execute(select(AIModel).filter(AIModel.id == model_id))
     model = result.scalar_one_or_none()
     if not model:
-        raise HTTPException(status_code=404, detail="Model not found")
+        raise HTTPException(status_code=404, detail="模型不存在")
 
     if data.name:
         model.name = data.name
@@ -98,7 +98,7 @@ async def delete_model(model_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(AIModel).filter(AIModel.id == model_id))
     model = result.scalar_one_or_none()
     if not model:
-        raise HTTPException(status_code=404, detail="Model not found")
+        raise HTTPException(status_code=404, detail="模型不存在")
 
     model.is_active = False
     await db.commit()
@@ -110,7 +110,7 @@ async def set_default_model(model_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(AIModel).filter(AIModel.id == model_id))
     model = result.scalar_one_or_none()
     if not model:
-        raise HTTPException(status_code=404, detail="Model not found")
+        raise HTTPException(status_code=404, detail="模型不存在")
 
     await db.execute(update(AIModel).values(is_default=False))
     model.is_default = True

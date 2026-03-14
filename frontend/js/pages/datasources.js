@@ -5,7 +5,7 @@ const DatasourcesPage = {
 
     async render() {
         console.log('DatasourcesPage: Using NEW table layout');
-        Header.render('Datasources', DOM.el('button', {
+        Header.render('数据源', DOM.el('button', {
             className: 'btn btn-primary',
             innerHTML: '<i data-lucide="plus"></i> New Datasource',
             onClick: () => DatasourceForm.show(null, () => this.render())
@@ -24,8 +24,8 @@ const DatasourcesPage = {
                 content.innerHTML = `
                     <div class="empty-state">
                         <i data-lucide="database"></i>
-                        <h3>No Datasources Yet</h3>
-                        <p>Add your first database datasource to start monitoring and diagnosing.</p>
+                        <h3>暂无数据源</h3>
+                        <p>添加第一个数据库连接以开始监控和诊断</p>
                     </div>
                 `;
                 DOM.createIcons();
@@ -37,15 +37,15 @@ const DatasourcesPage = {
 
             const nameFilter = DOM.el('div');
             nameFilter.innerHTML = `
-                <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">Name</label>
-                <input type="text" id="filterName" class="form-input" placeholder="Search by name..." style="padding:8px;border-radius:4px;min-width:200px;">
+                <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">名称</label>
+                <input type="text" id="filterName" class="form-input" placeholder="按名称搜索..." style="padding:8px;border-radius:4px;min-width:200px;">
             `;
 
             const typeFilter = DOM.el('div');
             typeFilter.innerHTML = `
-                <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">Database Type</label>
+                <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">数据库类型</label>
                 <select id="filterType" class="form-select" style="padding:8px;border-radius:4px;">
-                    <option value="">All Types</option>
+                    <option value="">所有类型</option>
                     <option value="mysql">MySQL</option>
                     <option value="postgresql">PostgreSQL</option>
                     <option value="oracle">Oracle</option>
@@ -58,9 +58,9 @@ const DatasourcesPage = {
 
             const importanceFilter = DOM.el('div');
             importanceFilter.innerHTML = `
-                <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">Importance</label>
-                <select id="filterImportance" class="form-select" style="padding:8px;border-radius:4px;">
-                    <option value="">All Levels</option>
+                <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">重要性</label>
+                <select id="filter重要性" class="form-select" style="padding:8px;border-radius:4px;">
+                    <option value="">所有级别</option>
                     <option value="core">核心系统</option>
                     <option value="production">生产系统</option>
                     <option value="development">开发测试</option>
@@ -82,26 +82,26 @@ const DatasourcesPage = {
             DOM.createIcons();
 
         } catch (err) {
-            Toast.error('Failed to load datasources: ' + err.message);
+            Toast.error('加载数据源失败: ' + err.message);
         }
     },
 
     _setupFilterListeners() {
         DOM.$('#filterName')?.addEventListener('input', () => this._applyFilters());
         DOM.$('#filterType')?.addEventListener('change', () => this._applyFilters());
-        DOM.$('#filterImportance')?.addEventListener('change', () => this._applyFilters());
+        DOM.$('#filter重要性')?.addEventListener('change', () => this._applyFilters());
     },
 
     _applyFilters() {
         const nameFilter = DOM.$('#filterName')?.value.toLowerCase() || '';
         const typeFilter = DOM.$('#filterType')?.value || '';
-        const importanceFilter = DOM.$('#filterImportance')?.value || '';
+        const importanceFilter = DOM.$('#filter重要性')?.value || '';
 
         this.filteredDatasources = this.allDatasources.filter(ds => {
             const matchName = !nameFilter || ds.name.toLowerCase().includes(nameFilter);
             const matchType = !typeFilter || ds.db_type === typeFilter;
-            const matchImportance = !importanceFilter || ds.importance_level === importanceFilter;
-            return matchName && matchType && matchImportance;
+            const match重要性 = !importanceFilter || ds.importance_level === importanceFilter;
+            return matchName && matchType && match重要性;
         });
 
         this._renderTable();
@@ -122,13 +122,13 @@ const DatasourcesPage = {
             <table class="data-table">
                 <thead>
                     <tr>
-                        <th>Name</th>
-                        <th>Type</th>
-                        <th>Host</th>
-                        <th>Database</th>
-                        <th>Importance</th>
-                        <th>Interval</th>
-                        <th>Actions</th>
+                        <th>名称</th>
+                        <th>类型</th>
+                        <th>主机</th>
+                        <th>数据库</th>
+                        <th>重要性</th>
+                        <th>监控间隔</th>
+                        <th>操作</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -144,22 +144,22 @@ const DatasourcesPage = {
                                 <td>${conn.monitoring_interval || 60}s</td>
                                 <td>
                                     <div style="display:flex;gap:4px;flex-wrap:wrap;">
-                                        <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._testDatasource(${conn.id})" title="Test">
+                                        <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._testDatasource(${conn.id})" title="测试连接">
                                             <i data-lucide="plug"></i>
                                         </button>
-                                        <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._editDatasource(${conn.id})" title="Edit">
+                                        <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._editDatasource(${conn.id})" title="编辑">
                                             <i data-lucide="pencil"></i>
                                         </button>
-                                        <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._showInspectionConfig(${conn.id})" title="Inspection Config">
+                                        <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._showInspectionConfig(${conn.id})" title="巡检配置">
                                             <i data-lucide="settings"></i>
                                         </button>
-                                        <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._triggerInspection(${conn.id})" title="Diagnose">
+                                        <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._triggerInspection(${conn.id})" title="诊断">
                                             <i data-lucide="zap"></i>
                                         </button>
-                                        <button class="btn btn-sm btn-danger" onclick="DatasourcesPage._deleteDatasource(${conn.id})" title="Delete">
+                                        <button class="btn btn-sm btn-danger" onclick="DatasourcesPage._deleteDatasource(${conn.id})" title="删除">
                                             <i data-lucide="trash-2"></i>
                                         </button>
-                                        <button class="btn btn-sm btn-primary" onclick="DatasourcesPage._monitorDatasource(${conn.id})" title="Monitor">
+                                        <button class="btn btn-sm btn-primary" onclick="DatasourcesPage._monitorDatasource(${conn.id})" title="监控">
                                             <i data-lucide="activity"></i>
                                         </button>
                                     </div>
@@ -180,12 +180,12 @@ const DatasourcesPage = {
         try {
             const result = await API.testDatasource(id);
             if (result.success) {
-                Toast.success(`Connection successful! ${result.version || ''}`);
+                Toast.success(`连接成功! ${result.version || ''}`);
             } else {
-                Toast.error(`Connection failed: ${result.message}`);
+                Toast.error(`连接失败: ${result.message}`);
             }
         } catch (err) {
-            Toast.error('Test failed: ' + err.message);
+            Toast.error('测试失败: ' + err.message);
         } finally {
             btn.innerHTML = '<i data-lucide="plug"></i>';
             btn.disabled = false;
@@ -200,13 +200,13 @@ const DatasourcesPage = {
 
     async _deleteDatasource(id) {
         const conn = this.allDatasources.find(c => c.id === id);
-        if (!conn || !confirm(`Delete datasource "${conn.name}"? This cannot be undone.`)) return;
+        if (!conn || !confirm(`删除数据源 "${conn.name}"? 此操作无法撤销`)) return;
         try {
             await API.deleteDatasource(id);
-            Toast.success('Datasource deleted');
+            Toast.success('数据源已删除');
             this.render();
         } catch (err) {
-            Toast.error('Failed to delete: ' + err.message);
+            Toast.error('删除失败: ' + err.message);
         }
     },
 
@@ -219,7 +219,7 @@ const DatasourcesPage = {
     },
 
     async _triggerInspection(datasourceId) {
-        if (!confirm('Trigger manual inspection? This will generate a comprehensive diagnostic report.')) {
+        if (!confirm('触发手动巡检? 这将生成一份全面的诊断报告')) {
             return;
         }
         const btn = event.target.closest('button');
@@ -227,9 +227,9 @@ const DatasourcesPage = {
         btn.disabled = true;
         try {
             await API.post(`/api/inspections/trigger/${datasourceId}`);
-            Toast.success('Inspection triggered successfully!');
+            Toast.success('巡检已成功触发!');
         } catch (err) {
-            Toast.error('Failed to trigger inspection: ' + err.message);
+            Toast.error('触发巡检失败: ' + err.message);
         } finally {
             btn.innerHTML = '<i data-lucide="zap"></i>';
             btn.disabled = false;
@@ -261,64 +261,64 @@ const DatasourcesPage = {
             const connectionsDuration = thresholdRules.connections?.duration || 120;
 
             Modal.show({
-                title: 'Inspection Configuration',
+                title: '巡检配置',
                 content: `
                     <div style="padding:10px;">
                         <label style="display:block;margin-bottom:15px;">
                             <input type="checkbox" id="enableAuto" ${config?.enabled ? 'checked' : ''}>
-                            Enable Automatic Inspection
+                            启用自动巡检
                         </label>
                         <label style="display:block;margin-bottom:10px;">
-                            Schedule Interval (seconds):
+                            定时间隔（秒）:
                             <input type="number" id="scheduleInterval" value="${config?.schedule_interval || 86400}"
                                    style="width:100%;padding:8px;margin-top:5px;"
                                    placeholder="86400 (daily)">
                         </label>
                         <p style="font-size:12px;color:#666;margin-top:5px;">
-                            Examples: 86400 (daily), 21600 (every 6 hours), 3600 (hourly)
+                            示例: 86400（每天）, 21600（每 6 小时）, 3600（每小时）
                         </p>
                         <label style="display:block;margin-bottom:15px;margin-top:15px;">
                             <input type="checkbox" id="useAI" ${config?.use_ai_analysis !== false ? 'checked' : ''}>
-                            Use AI Analysis
+                            使用 AI 分析
                         </label>
 
                         <div style="border-top:1px solid #ddd;margin-top:20px;padding-top:20px;">
-                            <h4 style="margin-bottom:15px;font-size:14px;font-weight:600;">Threshold Configuration</h4>
+                            <h4 style="margin-bottom:15px;font-size:14px;font-weight:600;">异常阈值配置</h4>
 
                             <div id="presetThresholds" style="margin-bottom:20px;">
-                                <p style="font-size:13px;color:#666;margin-bottom:10px;">Preset Thresholds:</p>
+                                <p style="font-size:13px;color:#666;margin-bottom:10px;">预设阈值:</p>
 
                                 <label style="display:flex;align-items:center;margin-bottom:10px;">
                                     <input type="checkbox" id="cpuEnabled" ${cpuEnabled ? 'checked' : ''} style="margin-right:8px;">
-                                    <span style="flex:1;">CPU Usage &gt;</span>
+                                    <span style="flex:1;">CPU 使用率 大于</span>
                                     <input type="number" id="cpuThreshold" value="${cpuThreshold}"
                                            style="width:60px;padding:4px;margin:0 5px;" min="0" max="100">
-                                    <span>% for</span>
+                                    <span>% 持续</span>
                                     <input type="number" id="cpuDuration" value="${cpuDuration}"
                                            style="width:60px;padding:4px;margin:0 5px;" min="1">
-                                    <span>seconds</span>
+                                    <span>秒</span>
                                 </label>
 
                                 <label style="display:flex;align-items:center;margin-bottom:10px;">
                                     <input type="checkbox" id="diskEnabled" ${diskEnabled ? 'checked' : ''} style="margin-right:8px;">
-                                    <span style="flex:1;">Disk Usage &gt;</span>
+                                    <span style="flex:1;">磁盘使用率 大于</span>
                                     <input type="number" id="diskThreshold" value="${diskThreshold}"
                                            style="width:60px;padding:4px;margin:0 5px;" min="0" max="100">
-                                    <span>% for</span>
+                                    <span>% 持续</span>
                                     <input type="number" id="diskDuration" value="${diskDuration}"
                                            style="width:60px;padding:4px;margin:0 5px;" min="1">
-                                    <span>seconds</span>
+                                    <span>秒</span>
                                 </label>
 
                                 <label style="display:flex;align-items:center;margin-bottom:10px;">
                                     <input type="checkbox" id="connectionsEnabled" ${connectionsEnabled ? 'checked' : ''} style="margin-right:8px;">
-                                    <span style="flex:1;">Active Connections &gt;</span>
+                                    <span style="flex:1;">活跃连接数 大于</span>
                                     <input type="number" id="connectionsThreshold" value="${connectionsThreshold}"
                                            style="width:60px;padding:4px;margin:0 5px;" min="0">
-                                    <span>for</span>
+                                    <span>持续</span>
                                     <input type="number" id="connectionsDuration" value="${connectionsDuration}"
                                            style="width:60px;padding:4px;margin:0 5px;" min="1">
-                                    <span>seconds</span>
+                                    <span>秒</span>
                                 </label>
                             </div>
 
@@ -327,22 +327,22 @@ const DatasourcesPage = {
                             <div id="customExpression">
                                 <label style="display:block;margin-bottom:10px;">
                                     <input type="checkbox" id="useCustomExpression" ${hasCustomExpression ? 'checked' : ''}>
-                                    Use Custom Expression
+                                    使用自定义表达式
                                 </label>
 
                                 <div id="customExpressionFields" style="display:${hasCustomExpression ? 'block' : 'none'};">
                                     <label style="display:block;margin-bottom:5px;font-size:12px;">
-                                        Expression:
+                                        表达式:
                                     </label>
                                     <textarea id="customExpressionText"
                                               style="width:100%;padding:8px;font-family:monospace;font-size:12px;min-height:60px;margin-bottom:10px;"
                                               placeholder="cpu_usage > 50 and connections > 20">${customExpression}</textarea>
 
                                     <label style="display:flex;align-items:center;margin-bottom:10px;">
-                                        <span style="margin-right:10px;">Duration:</span>
+                                        <span style="margin-right:10px;">持续时间:</span>
                                         <input type="number" id="customExpressionDuration" value="${customDuration}"
                                                style="width:80px;padding:4px;" min="1">
-                                        <span style="margin-left:5px;">seconds</span>
+                                        <span style="margin-left:5px;">秒</span>
                                     </label>
 
                                     <button id="testExpressionBtn" class="btn btn-secondary" style="margin-bottom:10px;">
@@ -351,7 +351,7 @@ const DatasourcesPage = {
                                     <div id="expressionValidation" style="font-size:12px;margin-top:5px;"></div>
 
                                     <p style="font-size:11px;color:#666;margin-top:10px;">
-                                        Available metrics: cpu_usage, memory_usage, disk_usage, connections, qps, tps
+                                        可用指标: cpu_usage, memory_usage, disk_usage, connections, qps, tps
                                     </p>
                                 </div>
                             </div>
@@ -359,8 +359,8 @@ const DatasourcesPage = {
                     </div>
                 `,
                 buttons: [
-                    { text: 'Cancel', variant: 'secondary', onClick: () => Modal.hide() },
-                    { text: 'Save', variant: 'primary', onClick: () => this._saveInspectionConfig(datasourceId) }
+                    { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
+                    { text: '保存', variant: 'primary', onClick: () => this._saveInspectionConfig(datasourceId) }
                 ]
             });
 
@@ -368,7 +368,7 @@ const DatasourcesPage = {
             this._setupThresholdListeners();
 
         } catch (error) {
-            Toast.error('Failed to load configuration');
+            Toast.error('加载失败 configuration');
         }
     },
 

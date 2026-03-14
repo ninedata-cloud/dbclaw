@@ -19,7 +19,24 @@ const ChartPanel = {
 
     init(id, type = 'line', config = {}) {
         const canvas = document.getElementById(`chart-${id}`);
-        if (!canvas) return;
+        if (!canvas) {
+            console.error(`[ChartPanel] Canvas not found for chart: ${id}`);
+            return null;
+        }
+
+        // Check if Chart is available
+        if (typeof Chart === 'undefined') {
+            console.error('[ChartPanel] Chart.js is not loaded!');
+            return null;
+        }
+
+        // If chart already exists, destroy it first
+        if (this.charts[id]) {
+            console.log(`[ChartPanel] Destroying existing chart: ${id}`);
+            this.charts[id].destroy();
+        }
+
+        console.log(`[ChartPanel] Initializing chart: ${id}`);
 
         const defaultConfig = {
             type,
@@ -29,7 +46,7 @@ const ChartPanel = {
                     data: [],
                     borderColor: '#2f81f7',
                     backgroundColor: 'rgba(47, 129, 247, 0.1)',
-                    borderWidth: 2,
+                    borderWidth: 1,
                     tension: 0.4,
                     fill: true,
                     pointRadius: 0,
@@ -71,20 +88,44 @@ const ChartPanel = {
 
         // Deep merge config
         const merged = this._deepMerge(defaultConfig, config);
-        this.charts[id] = new Chart(canvas, merged);
-        return this.charts[id];
+
+        try {
+            this.charts[id] = new Chart(canvas, merged);
+            console.log(`[ChartPanel] Chart ${id} initialized successfully`);
+            return this.charts[id];
+        } catch (error) {
+            console.error(`[ChartPanel] Failed to initialize chart ${id}:`, error);
+            return null;
+        }
     },
 
     update(id, label, value, maxPoints = 30) {
         const chart = this.charts[id];
-        if (!chart) return;
+        if (!chart) {
+            console.error(`[ChartPanel] Chart not found: ${id}. Available charts:`, Object.keys(this.charts));
+            return;
+        }
 
         chart.data.labels.push(label);
-        chart.data.datasets[0].data.push(value);
+
+        // Support both single value and multiple values (for multi-line charts)
+        if (Array.isArray(value)) {
+            // Multiple datasets
+            value.forEach((val, idx) => {
+                if (chart.data.datasets[idx]) {
+                    chart.data.datasets[idx].data.push(val);
+                }
+            });
+        } else {
+            // Single dataset
+            chart.data.datasets[0].data.push(value);
+        }
 
         if (chart.data.labels.length > maxPoints) {
             chart.data.labels.shift();
-            chart.data.datasets[0].data.shift();
+            chart.data.datasets.forEach(dataset => {
+                dataset.data.shift();
+            });
         }
 
         chart.update('none');
@@ -92,7 +133,64 @@ const ChartPanel = {
         // Update value display
         const valueEl = document.getElementById(`chart-value-${id}`);
         if (valueEl) {
-            valueEl.textContent = typeof value === 'number' ? value.toLocaleString() : value;
+            if (Array.isArray(value)) {
+                // For multi-line charts, show all values
+                valueEl.textContent = value.map(v =>
+                    typeof v === 'number' ? v.toLocaleString() : v
+                ).join(' / ');
+            } else {
+                valueEl.textContent = typeof value === 'number' ? value.toLocaleString() : value;
+            }
+        }
+    },
+
+    batchUpdate(id, labels, values, maxPoints = 30) {
+        const chart = this.charts[id];
+        if (!chart) {
+            console.error(`[ChartPanel] Chart not found: ${id}. Available charts:`, Object.keys(this.charts));
+            return;
+        }
+
+        // Replace all data at once
+        chart.data.labels = labels.slice(-maxPoints);
+        chart.data.datasets[0].data = values.slice(-maxPoints);
+
+        // Update chart without animation for better performance
+        chart.update('none');
+
+        // Update value display with latest value
+        const valueEl = document.getElementById(`chart-value-${id}`);
+        if (valueEl && values.length > 0) {
+            const latestValue = values[values.length - 1];
+            valueEl.textContent = typeof latestValue === 'number' ? latestValue.toLocaleString() : latestValue;
+        }
+    },
+
+    batchUpdateMulti(id, labels, valuesArray, maxPoints = 30) {
+        const chart = this.charts[id];
+        if (!chart) {
+            console.error(`[ChartPanel] Chart not found: ${id}. Available charts:`, Object.keys(this.charts));
+            return;
+        }
+
+        // Replace all data at once for multiple datasets
+        chart.data.labels = labels.slice(-maxPoints);
+        valuesArray.forEach((values, idx) => {
+            if (chart.data.datasets[idx]) {
+                chart.data.datasets[idx].data = values.slice(-maxPoints);
+            }
+        });
+
+        // Update chart without animation for better performance
+        chart.update('none');
+
+        // Update value display with latest values
+        const valueEl = document.getElementById(`chart-value-${id}`);
+        if (valueEl && valuesArray.length > 0) {
+            const latestValues = valuesArray.map(arr => arr[arr.length - 1] || 0);
+            valueEl.textContent = latestValues.map(v =>
+                typeof v === 'number' ? v.toLocaleString() : v
+            ).join(' / ');
         }
     },
 

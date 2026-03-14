@@ -244,3 +244,39 @@
 .report-content-markdown em {
     font-style: italic;
 }
+
+/* Error icon tooltip styles */
+.error-icon {
+    position: relative;
+    display: inline-block;
+    margin-left: 6px;
+    color: #dc3545;
+    cursor: help;
+    font-size: 16px;
+}
+
+.error-tooltip {
+    position: fixed;
+    padding: 10px 14px;
+    background: #2d2d2d;
+    color: #fff;
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    max-width: 400px;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    z-index: 10000;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+}
+
+/* Make sure table rows don't create stacking context issues */
+.data-table {
+    position: relative;
+}
+
+.data-table tbody tr {
+    position: relative;
+}

@@ -80,25 +80,38 @@ const QueryEditor = {
     },
 
     async setSchema(datasourceId) {
-        if (!this.editor || typeof monaco === 'undefined') return;
+        console.log('[QueryEditor] setSchema called with datasourceId:', datasourceId);
+        console.log('[QueryEditor] editor exists:', !!this.editor);
+        console.log('[QueryEditor] monaco exists:', typeof monaco !== 'undefined');
+
+        if (!this.editor || typeof monaco === 'undefined') {
+            console.warn('[QueryEditor] Editor or Monaco not ready, skipping schema setup');
+            return;
+        }
 
         // Dispose old completion provider
         if (this.completionProvider) {
+            console.log('[QueryEditor] Disposing old completion provider');
             this.completionProvider.dispose();
         }
 
         // Create new completion provider
+        console.log('[QueryEditor] Creating new SQLCompletionProvider');
         const provider = new window.SQLCompletionProvider(datasourceId, window.SchemaCache);
         await provider.loadSchema();
 
         // Register completion provider
+        console.log('[QueryEditor] Registering completion provider');
         this.completionProvider = monaco.languages.registerCompletionItemProvider('sql', {
+            triggerCharacters: ['.', ' '],
             provideCompletionItems: async (model, position) => {
+                console.log('[QueryEditor] provideCompletionItems called at position:', position);
                 return await provider.provideCompletionItems(model, position);
             }
         });
 
         this.disposables.push(this.completionProvider);
+        console.log('[QueryEditor] Schema setup complete');
     },
 
     getValue() {

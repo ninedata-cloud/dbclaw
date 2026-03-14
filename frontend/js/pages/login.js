@@ -17,20 +17,20 @@ const LoginPage = {
 
         card.innerHTML = `
             <div class="login-logo">
-                <img src="/assets/logo.svg" alt="DBMaster">
-                <span>DBMaster</span>
+                <img src="/assets/logo.svg" alt="智能数据库管家">
+                <span>智能数据库管家</span>
             </div>
             <div class="login-error" id="login-error"></div>
             <form class="login-form" id="login-form">
                 <div class="form-group">
-                    <label for="login-username">Username</label>
-                    <input type="text" id="login-username" placeholder="Enter username" autocomplete="username" required>
+                    <label for="login-username">用户名</label>
+                    <input type="text" id="login-username" placeholder="请输入用户名" autocomplete="username" required>
                 </div>
                 <div class="form-group">
-                    <label for="login-password">Password</label>
-                    <input type="password" id="login-password" placeholder="Enter password" autocomplete="current-password" required>
+                    <label for="login-password">密码</label>
+                    <input type="password" id="login-password" placeholder="请输入密码" autocomplete="current-password" required>
                 </div>
-                <button type="submit" class="btn-login" id="login-btn">Sign In</button>
+                <button type="submit" class="btn-login" id="login-btn">登录</button>
             </form>
         `;
 
@@ -62,13 +62,13 @@ const LoginPage = {
         const btn = DOM.$('#login-btn');
 
         if (!username || !password) {
-            errorEl.textContent = 'Please enter username and password';
+            errorEl.textContent = '请输入用户名和密码';
             errorEl.classList.add('visible');
             return;
         }
 
         btn.disabled = true;
-        btn.textContent = 'Signing in...';
+        btn.textContent = '登录中...';
         errorEl.classList.remove('visible');
 
         try {
@@ -95,10 +95,10 @@ const LoginPage = {
 
             Router.navigate('dashboard');
         } catch (err) {
-            errorEl.textContent = err.message || 'Login failed';
+            errorEl.textContent = err.message || '登录失败';
             errorEl.classList.add('visible');
             btn.disabled = false;
-            btn.textContent = 'Sign In';
+            btn.textContent = '登录';
         }
     }
 };

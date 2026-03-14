@@ -30,7 +30,7 @@ async def login(data: LoginRequest, request: Request, db: AsyncSession = Depends
         )
         db.add(log)
         await db.commit()
-        raise HTTPException(status_code=401, detail="Invalid username or password")
+        raise HTTPException(status_code=401, detail="用户名或密码错误")
 
     if not user.is_active:
         log = LoginLog(
@@ -41,7 +41,7 @@ async def login(data: LoginRequest, request: Request, db: AsyncSession = Depends
         )
         db.add(log)
         await db.commit()
-        raise HTTPException(status_code=403, detail="Account is disabled")
+        raise HTTPException(status_code=403, detail="账户已被禁用")
 
     # Log successful login
     log = LoginLog(
@@ -72,7 +72,7 @@ async def change_password(
     db: AsyncSession = Depends(get_db),
 ):
     if not verify_password(data.old_password, current_user.password_hash):
-        raise HTTPException(status_code=400, detail="Current password is incorrect")
+        raise HTTPException(status_code=400, detail="当前密码不正确")
 
     current_user.password_hash = hash_password(data.new_password)
     await db.commit()

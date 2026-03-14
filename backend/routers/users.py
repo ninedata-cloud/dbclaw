@@ -25,7 +25,7 @@ async def list_users(db: AsyncSession = Depends(get_db)):
 async def create_user(data: UserCreate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.username == data.username))
     if result.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Username already exists")
+        raise HTTPException(status_code=400, detail="用户名已存在")
 
     user = User(
         username=data.username,
@@ -44,7 +44,7 @@ async def update_user(user_id: int, data: UserUpdate, db: AsyncSession = Depends
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="用户不存在")
 
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
@@ -62,12 +62,12 @@ async def delete_user(
     current_admin: User = Depends(get_current_admin),
 ):
     if current_admin.id == user_id:
-        raise HTTPException(status_code=400, detail="Cannot delete yourself")
+        raise HTTPException(status_code=400, detail="不能删除自己")
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="用户不存在")
 
     await db.delete(user)
     await db.commit()
@@ -79,7 +79,7 @@ async def reset_password(user_id: int, data: ResetPasswordRequest, db: AsyncSess
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="用户不存在")
 
     user.password_hash = hash_password(data.new_password)
     await db.commit()
@@ -98,7 +98,7 @@ async def toggle_status(
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="用户不存在")
 
     user.is_active = not user.is_active
     await db.commit()

@@ -2,7 +2,7 @@
 const DashboardPage = {
     async render() {
         const content = DOM.$('#page-content');
-        Header.render('Dashboard');
+        Header.render('资源大盘');
         content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
         try {
@@ -14,10 +14,10 @@ const DashboardPage = {
                 content.innerHTML = `
                     <div class="empty-state">
                         <i data-lucide="database"></i>
-                        <h3>No Connections</h3>
-                        <p>Add a database connection to get started with monitoring and diagnostics.</p>
+                        <h3>暂无数据源</h3>
+                        <p>添加数据库连接以开始监控和诊断</p>
                         <button class="btn btn-primary mt-16" onclick="Router.navigate('datasources')">
-                            <i data-lucide="plus"></i> Add Connection
+                            <i data-lucide="plus"></i> 添加数据源
                         </button>
                     </div>
                 `;
@@ -27,14 +27,14 @@ const DashboardPage = {
 
             // Summary cards
             const summary = DOM.el('div', { className: 'grid-4 mb-24' });
-            summary.appendChild(MetricCard.create('Total Connections', datasources.length));
+            summary.appendChild(MetricCard.create('总数据源', datasources.length));
             summary.appendChild(MetricCard.create('MySQL', datasources.filter(c => c.db_type === 'mysql').length));
             summary.appendChild(MetricCard.create('PostgreSQL', datasources.filter(c => c.db_type === 'postgresql').length));
-            summary.appendChild(MetricCard.create('Other', datasources.filter(c => !['mysql', 'postgresql'].includes(c.db_type)).length));
+            summary.appendChild(MetricCard.create('其他', datasources.filter(c => !['mysql', 'postgresql'].includes(c.db_type)).length));
             content.appendChild(summary);
 
             // Connection cards grid
-            const heading = DOM.el('h2', { textContent: 'Connections', style: { fontSize: '16px', marginBottom: '16px', color: 'var(--text-secondary)' } });
+            const heading = DOM.el('h2', { textContent: '数据源列表', style: { fontSize: '16px', marginBottom: '16px', color: 'var(--text-secondary)' } });
             content.appendChild(heading);
 
             const grid = DOM.el('div', { className: 'dashboard-grid' });
@@ -50,8 +50,8 @@ const DashboardPage = {
                     </div>
                     <div class="type">${conn.host}:${conn.port}${conn.database ? ' / ' + conn.database : ''}</div>
                     <div class="metrics" id="dash-metrics-${conn.id}">
-                        <div class="metric-item"><span class="metric-label">Status</span><span class="metric-val">--</span></div>
-                        <div class="metric-item"><span class="metric-label">Connections</span><span class="metric-val">--</span></div>
+                        <div class="metric-item"><span class="metric-label">状态</span><span class="metric-val">--</span></div>
+                        <div class="metric-item"><span class="metric-label">连接数</span><span class="metric-val">--</span></div>
                     </div>
                 `;
                 grid.appendChild(card);
@@ -63,7 +63,7 @@ const DashboardPage = {
             DOM.createIcons();
 
         } catch (err) {
-            content.innerHTML = `<div class="empty-state"><h3>Error</h3><p>${err.message}</p></div>`;
+            content.innerHTML = `<div class="empty-state"><h3>错误</h3><p>${err.message}</p></div>`;
         }
     },
 
@@ -75,8 +75,8 @@ const DashboardPage = {
             const data = metric.data || {};
             const active = data.connections_active || data.connected_clients || data.user_sessions || data.connections_current || 0;
             el.innerHTML = `
-                <div class="metric-item"><span class="metric-label">Status</span><span class="metric-val" style="color:var(--accent-green)">Online</span></div>
-                <div class="metric-item"><span class="metric-label">Active</span><span class="metric-val">${active}</span></div>
+                <div class="metric-item"><span class="metric-label">状态</span><span class="metric-val" style="color:var(--accent-green)">在线</span></div>
+                <div class="metric-item"><span class="metric-label">活跃连接</span><span class="metric-val">${active}</span></div>
             `;
         } catch (e) {
             // Leave as --

@@ -7,9 +7,8 @@ print("=" * 80)
 
 # 1. Check Chinese prompt
 print("\n1. Checking INSPECTION_REPORT_PROMPT...")
-from backend.agent.prompts import INSPECTION_REPORT_PROMPT
 chinese_keywords = ["数据库", "配置", "负载", "中文"]
-found = sum(1 for kw in chinese_keywords if kw in INSPECTION_REPORT_PROMPT)
+found = sum(1 for kw in chinese_keywords if kw in REPORT_GENERATION_PROMPT)
 print(f"   Found {found}/{len(chinese_keywords)} Chinese keywords: {'✅ PASS' if found >= 3 else '❌ FAIL'}")
 
 # 2. Check export endpoints

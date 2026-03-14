@@ -3,7 +3,7 @@ const AIModelsPage = {
     models: [],
 
     async render() {
-        Header.render('AI Models', DOM.el('button', {
+        Header.render('AI 模型', DOM.el('button', {
             className: 'btn btn-primary',
             innerHTML: '<i data-lucide="plus"></i> Add Model',
             onClick: () => this._showForm(null)
@@ -29,7 +29,7 @@ const AIModelsPage = {
             }
 
             const bar = DOM.el('div', { className: 'flex-between mb-16' });
-            bar.appendChild(DOM.el('span', { className: 'text-muted text-sm', textContent: `${this.models.length} model(s) configured` }));
+            bar.appendChild(DOM.el('span', { className: 'text-muted text-sm', textContent: `${this.models.length} 个模型已配置` }));
             content.appendChild(bar);
 
             const grid = DOM.el('div', { className: 'datasource-grid' });
@@ -40,7 +40,7 @@ const AIModelsPage = {
             DOM.createIcons();
 
         } catch (err) {
-            Toast.error('Failed to load models: ' + err.message);
+            Toast.error('加载失败 models: ' + err.message);
         }
     },
 
@@ -49,7 +49,7 @@ const AIModelsPage = {
         card.innerHTML = `
             <div class="datasource-card-header">
                 <span class="datasource-card-name">${model.name}</span>
-                <span class="badge ${model.is_default ? 'badge-success' : 'badge-info'}">${model.is_default ? 'Default' : model.provider}</span>
+                <span class="badge ${model.is_default ? 'badge-success' : 'badge-info'}">${model.is_default ? '默认' : model.provider}</span>
             </div>
             <div class="datasource-card-info">
                 <span><i data-lucide="cpu"></i> ${model.model_name}</span>
@@ -57,7 +57,7 @@ const AIModelsPage = {
                 <span><i data-lucide="key-round"></i> ${model.api_key_masked}</span>
             </div>
             <div class="datasource-card-actions">
-                ${!model.is_default ? '<button class="btn btn-sm btn-secondary default-btn"><i data-lucide="star"></i> Set Default</button>' : '<button class="btn btn-sm btn-success" disabled><i data-lucide="check"></i> Default</button>'}
+                ${!model.is_default ? '<button class="btn btn-sm btn-secondary default-btn"><i data-lucide="star"></i> Set 默认</button>' : '<button class="btn btn-sm btn-success" disabled><i data-lucide="check"></i> 默认</button>'}
                 <button class="btn btn-sm btn-secondary edit-btn"><i data-lucide="pencil"></i> Edit</button>
                 <button class="btn btn-sm btn-danger delete-btn"><i data-lucide="trash-2"></i></button>
             </div>
@@ -66,7 +66,7 @@ const AIModelsPage = {
         if (!model.is_default) {
             card.querySelector('.default-btn').addEventListener('click', (e) => {
                 e.stopPropagation();
-                this._setDefault(model.id);
+                this._set默认(model.id);
             });
         }
         card.querySelector('.edit-btn').addEventListener('click', (e) => {
@@ -85,23 +85,23 @@ const AIModelsPage = {
         const isEdit = !!model;
         const form = DOM.el('form');
         form.innerHTML = `
-            <div class="form-group"><label>Name</label><input type="text" class="form-input" name="name" required placeholder="GPT-4o" value="${model?.name || ''}"></div>
+            <div class="form-group"><label>名称</label><input type="text" class="form-input" name="name" required placeholder="GPT-4o" value="${model?.name || ''}"></div>
             <div class="form-row">
-                <div class="form-group"><label>Provider</label>
+                <div class="form-group"><label>提供商</label>
                     <select class="form-select" name="provider">
                         <option value="openai" ${model?.provider === 'openai' ? 'selected' : ''}>OpenAI</option>
                         <option value="dashscope" ${model?.provider === 'dashscope' ? 'selected' : ''}>DashScope</option>
                         <option value="other" ${model?.provider === 'other' ? 'selected' : ''}>Other</option>
                     </select>
                 </div>
-                <div class="form-group"><label>Model Name</label><input type="text" class="form-input" name="model_name" required placeholder="gpt-4o" value="${model?.model_name || ''}"></div>
+                <div class="form-group"><label>模型名称</label><input type="text" class="form-input" name="model_name" required placeholder="gpt-4o" value="${model?.model_name || ''}"></div>
             </div>
-            <div class="form-group"><label>Base URL</label><input type="text" class="form-input" name="base_url" required placeholder="https://api.openai.com/v1" value="${model?.base_url || ''}"></div>
-            <div class="form-group"><label>API Key</label><input type="password" class="form-input" name="api_key" ${isEdit ? '' : 'required'} placeholder="${isEdit ? 'Leave blank to keep current' : 'sk-...'}"></div>
+            <div class="form-group"><label>基础 URL</label><input type="text" class="form-input" name="base_url" required placeholder="https://api.openai.com/v1" value="${model?.base_url || ''}"></div>
+            <div class="form-group"><label>API 密钥</label><input type="password" class="form-input" name="api_key" ${isEdit ? '' : 'required'} placeholder="${isEdit ? '留空保持不变' : 'sk-...'}"></div>
         `;
 
         form.addEventListener('submit', async (e) => {
-            e.preventDefault();
+            e.prevent默认();
             const data = Object.fromEntries(new FormData(form).entries());
             try {
                 if (isEdit) {
@@ -120,13 +120,13 @@ const AIModelsPage = {
         });
 
         const footer = DOM.el('div', { style: { display: 'flex', gap: '8px', justifyContent: 'flex-end' } });
-        footer.appendChild(DOM.el('button', { className: 'btn btn-secondary', textContent: 'Cancel', type: 'button', onClick: () => Modal.hide() }));
+        footer.appendChild(DOM.el('button', { className: 'btn btn-secondary', textContent: '取消', type: 'button', onClick: () => Modal.hide() }));
         footer.appendChild(DOM.el('button', {
-            className: 'btn btn-primary', textContent: isEdit ? 'Save' : 'Create', type: 'button',
+            className: 'btn btn-primary', textContent: isEdit ? '保存' : '创建', type: 'button',
             onClick: () => form.requestSubmit()
         }));
 
-        Modal.show({ title: isEdit ? 'Edit Model' : 'New AI Model', content: form, footer, width: '520px' });
+        Modal.show({ title: isEdit ? 'Edit Model' : '新建 AI 模型', content: form, footer, width: '520px' });
     },
 
     async _deleteModel(model) {
@@ -140,10 +140,10 @@ const AIModelsPage = {
         }
     },
 
-    async _setDefault(id) {
+    async _set默认(id) {
         try {
-            await API.setDefaultAIModel(id);
-            Toast.success('Default model updated');
+            await API.set默认AIModel(id);
+            Toast.success('默认 model updated');
             this.render();
         } catch (err) {
             Toast.error('Failed to set default: ' + err.message);
