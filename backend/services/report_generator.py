@@ -320,7 +320,6 @@ class ReportGenerator:
         from backend.models.inspection_trigger import InspectionTrigger
         from backend.models.inspection_config import InspectionConfig
         from backend.agent.conversation_skills import generate_report_with_skills
-        from backend.agent.prompts import INSPECTION_REPORT_PROMPT
 
         result = await self.db.execute(select(InspectionTrigger).where(InspectionTrigger.id == trigger_id))
         trigger = result.scalar_one()
@@ -352,7 +351,7 @@ class ReportGenerator:
                 datasource_name=datasource.name,
                 datasource_type=datasource.db_type,
                 trigger_reason=trigger.trigger_reason or "Inspection requested",
-                system_prompt=INSPECTION_REPORT_PROMPT,
+                system_prompt=REPORT_GENERATION_PROMPT,
                 db=self.db,
                 model_id=config.ai_model_id if config else None,
                 timeout_seconds=300
@@ -500,7 +499,7 @@ class ReportGenerator:
             report.content_md = content_md
             report.content_html = content_html
             report.skill_executions = skill_executions
-            report.status = "completed" if "⚠️" not in content_md else "completed_with_errors"
+            report.status = "completed"
             report.completed_at = datetime.utcnow()
 
         except Exception as e:

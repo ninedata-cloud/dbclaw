@@ -37,9 +37,15 @@ class ThresholdChecker:
             datasource_id: Database datasource ID
             metrics: Current metric values (normalized)
             threshold_rules: Threshold configuration from InspectionConfig
-                Example: {
+                Example (simple rules): {
                     "cpu_usage": {"threshold": 80, "duration": 60},
                     "memory_usage": {"threshold": 85, "duration": 60}
+                }
+                Example (custom expression): {
+                    "custom_expression": {
+                        "expression": "cpu_usage > 50 and connections > 20",
+                        "duration": 60
+                    }
                 }
 
         Returns:
@@ -60,6 +66,11 @@ class ThresholdChecker:
         if not threshold_rules:
             return violations_to_trigger
 
+        # Check if custom expression is used
+        if "custom_expression" in threshold_rules:
+            return self._check_custom_expression(datasource_id, metrics, threshold_rules["custom_expression"], now)
+
+        # Otherwise use simple threshold rules
         for metric_name, rule in threshold_rules.items():
             threshold = rule.get("threshold")
             required_duration = rule.get("duration", 60)  # Default 60 seconds
@@ -134,6 +145,139 @@ class ThresholdChecker:
                     del self._violation_start_times[datasource_id][metric_name]
 
         return violations_to_trigger
+
+    def _check_custom_expression(
+        self,
+        datasource_id: int,
+        metrics: Dict[str, Any],
+        custom_rule: Dict[str, Any],
+        now: datetime
+    ) -> List[Dict[str, Any]]:
+        """
+        Check custom expression threshold.
+
+        Args:
+            datasource_id: Database datasource ID
+            metrics: Current metric values (normalized)
+            custom_rule: Custom expression rule with "expression" and "duration"
+            now: Current timestamp
+
+        Returns:
+            List with single violation if expression evaluates to True and duration exceeded
+        """
+        expression = custom_rule.get("expression")
+        required_duration = custom_rule.get("duration", 60)
+
+        if not expression:
+            return []
+
+        # Prepare metrics context for eval
+        eval_context = self._prepare_eval_context(metrics)
+
+        # Evaluate expression
+        is_violated = self._evaluate_custom_expression(expression, eval_context)
+
+        metric_name = "custom_expression"
+
+        if is_violated:
+            # Track violation start time
+            if metric_name not in self._violation_start_times[datasource_id]:
+                self._violation_start_times[datasource_id][metric_name] = now
+                logger.info(
+                    f"Custom expression violation started for datasource {datasource_id}: {expression}"
+                )
+
+            # Calculate violation duration
+            violation_start = self._violation_start_times[datasource_id][metric_name]
+            violation_duration = (now - violation_start).total_seconds()
+
+            # Check if violation duration exceeds required duration
+            if violation_duration >= required_duration:
+                # Check cooldown period
+                last_trigger = self._last_trigger_times[datasource_id].get(metric_name)
+                if last_trigger:
+                    time_since_last_trigger = (now - last_trigger).total_seconds()
+                    if time_since_last_trigger < self._trigger_cooldown:
+                        logger.debug(
+                            f"Skipping trigger for custom expression on datasource {datasource_id}: "
+                            f"in cooldown period ({time_since_last_trigger:.0f}s < {self._trigger_cooldown}s)"
+                        )
+                        return []
+
+                # Trigger inspection
+                violation = {
+                    "metric_name": metric_name,
+                    "expression": expression,
+                    "duration": required_duration,
+                    "violation_duration": violation_duration,
+                    "metrics": eval_context
+                }
+
+                # Update last trigger time
+                self._last_trigger_times[datasource_id][metric_name] = now
+
+                logger.warning(
+                    f"Custom expression violation trigger for datasource {datasource_id}: "
+                    f"{expression} for {violation_duration:.0f}s"
+                )
+
+                return [violation]
+
+        else:
+            # Expression not violated, clear violation tracking
+            if metric_name in self._violation_start_times[datasource_id]:
+                violation_start = self._violation_start_times[datasource_id][metric_name]
+                violation_duration = (now - violation_start).total_seconds()
+                logger.info(
+                    f"Custom expression violation ended for datasource {datasource_id}: "
+                    f"{expression} (was violated for {violation_duration:.0f}s)"
+                )
+                del self._violation_start_times[datasource_id][metric_name]
+
+        return []
+
+    def _prepare_eval_context(self, metrics: Dict[str, Any]) -> Dict[str, float]:
+        """
+        Prepare metrics context for expression evaluation.
+        Extracts common metric names and converts to float values.
+
+        Args:
+            metrics: Raw metrics dictionary
+
+        Returns:
+            Dictionary with metric names as keys and float values
+        """
+        context = {}
+
+        # Extract common metrics
+        metric_names = ["cpu_usage", "memory_usage", "disk_usage", "connections", "qps", "tps"]
+
+        for metric_name in metric_names:
+            value = self._extract_metric_value(metrics, metric_name)
+            if value is not None:
+                context[metric_name] = value
+
+        return context
+
+    def _evaluate_custom_expression(self, expression: str, metrics: Dict[str, float]) -> bool:
+        """
+        Evaluate custom expression using Python's eval().
+
+        Args:
+            expression: Python expression string (e.g., "cpu_usage > 50 and connections > 20")
+            metrics: Dictionary with metric names as keys and float values
+
+        Returns:
+            True if expression evaluates to True, False otherwise
+        """
+        try:
+            # Evaluate expression with restricted builtins and metrics as local variables
+            result = eval(expression, {"__builtins__": {}}, metrics)
+            # Only True triggers, everything else is False
+            return result is True
+        except Exception as e:
+            logger.error(f"Expression evaluation failed: {e} | Expression: {expression}")
+            return False
 
     def _extract_metric_value(self, metrics: Dict[str, Any], metric_name: str) -> Optional[float]:
         """

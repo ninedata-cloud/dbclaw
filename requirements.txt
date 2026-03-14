@@ -1,3 +1,7 @@
 # Add PyYAML for skill loading
 pyyaml>=6.0
 pillow
+
+# PDF export support (reportlab is pure Python, no system dependencies)
+reportlab>=4.0.0
+markdown-it-py>=3.0.0

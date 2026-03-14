@@ -240,6 +240,25 @@ const DatasourcesPage = {
     async _showInspectionConfig(datasourceId) {
         try {
             const config = await API.get(`/api/inspections/config/${datasourceId}`);
+            const thresholdRules = config?.threshold_rules || {};
+
+            // Check if custom expression is used
+            const hasCustomExpression = !!thresholdRules.custom_expression;
+            const customExpression = thresholdRules.custom_expression?.expression || '';
+            const customDuration = thresholdRules.custom_expression?.duration || 60;
+
+            // Preset threshold values
+            const cpuEnabled = !hasCustomExpression && !!thresholdRules.cpu_usage;
+            const cpuThreshold = thresholdRules.cpu_usage?.threshold || 50;
+            const cpuDuration = thresholdRules.cpu_usage?.duration || 60;
+
+            const diskEnabled = !hasCustomExpression && !!thresholdRules.disk_usage;
+            const diskThreshold = thresholdRules.disk_usage?.threshold || 80;
+            const diskDuration = thresholdRules.disk_usage?.duration || 300;
+
+            const connectionsEnabled = !hasCustomExpression && !!thresholdRules.connections;
+            const connectionsThreshold = thresholdRules.connections?.threshold || 20;
+            const connectionsDuration = thresholdRules.connections?.duration || 120;
 
             Modal.show({
                 title: 'Inspection Configuration',
@@ -262,6 +281,81 @@ const DatasourcesPage = {
                             <input type="checkbox" id="useAI" ${config?.use_ai_analysis !== false ? 'checked' : ''}>
                             Use AI Analysis
                         </label>
+
+                        <div style="border-top:1px solid #ddd;margin-top:20px;padding-top:20px;">
+                            <h4 style="margin-bottom:15px;font-size:14px;font-weight:600;">Threshold Configuration</h4>
+
+                            <div id="presetThresholds" style="margin-bottom:20px;">
+                                <p style="font-size:13px;color:#666;margin-bottom:10px;">Preset Thresholds:</p>
+
+                                <label style="display:flex;align-items:center;margin-bottom:10px;">
+                                    <input type="checkbox" id="cpuEnabled" ${cpuEnabled ? 'checked' : ''} style="margin-right:8px;">
+                                    <span style="flex:1;">CPU Usage &gt;</span>
+                                    <input type="number" id="cpuThreshold" value="${cpuThreshold}"
+                                           style="width:60px;padding:4px;margin:0 5px;" min="0" max="100">
+                                    <span>% for</span>
+                                    <input type="number" id="cpuDuration" value="${cpuDuration}"
+                                           style="width:60px;padding:4px;margin:0 5px;" min="1">
+                                    <span>seconds</span>
+                                </label>
+
+                                <label style="display:flex;align-items:center;margin-bottom:10px;">
+                                    <input type="checkbox" id="diskEnabled" ${diskEnabled ? 'checked' : ''} style="margin-right:8px;">
+                                    <span style="flex:1;">Disk Usage &gt;</span>
+                                    <input type="number" id="diskThreshold" value="${diskThreshold}"
+                                           style="width:60px;padding:4px;margin:0 5px;" min="0" max="100">
+                                    <span>% for</span>
+                                    <input type="number" id="diskDuration" value="${diskDuration}"
+                                           style="width:60px;padding:4px;margin:0 5px;" min="1">
+                                    <span>seconds</span>
+                                </label>
+
+                                <label style="display:flex;align-items:center;margin-bottom:10px;">
+                                    <input type="checkbox" id="connectionsEnabled" ${connectionsEnabled ? 'checked' : ''} style="margin-right:8px;">
+                                    <span style="flex:1;">Active Connections &gt;</span>
+                                    <input type="number" id="connectionsThreshold" value="${connectionsThreshold}"
+                                           style="width:60px;padding:4px;margin:0 5px;" min="0">
+                                    <span>for</span>
+                                    <input type="number" id="connectionsDuration" value="${connectionsDuration}"
+                                           style="width:60px;padding:4px;margin:0 5px;" min="1">
+                                    <span>seconds</span>
+                                </label>
+                            </div>
+
+                            <div style="text-align:center;margin:15px 0;color:#999;">OR</div>
+
+                            <div id="customExpression">
+                                <label style="display:block;margin-bottom:10px;">
+                                    <input type="checkbox" id="useCustomExpression" ${hasCustomExpression ? 'checked' : ''}>
+                                    Use Custom Expression
+                                </label>
+
+                                <div id="customExpressionFields" style="display:${hasCustomExpression ? 'block' : 'none'};">
+                                    <label style="display:block;margin-bottom:5px;font-size:12px;">
+                                        Expression:
+                                    </label>
+                                    <textarea id="customExpressionText"
+                                              style="width:100%;padding:8px;font-family:monospace;font-size:12px;min-height:60px;margin-bottom:10px;"
+                                              placeholder="cpu_usage > 50 and connections > 20">${customExpression}</textarea>
+
+                                    <label style="display:flex;align-items:center;margin-bottom:10px;">
+                                        <span style="margin-right:10px;">Duration:</span>
+                                        <input type="number" id="customExpressionDuration" value="${customDuration}"
+                                               style="width:80px;padding:4px;" min="1">
+                                        <span style="margin-left:5px;">seconds</span>
+                                    </label>
+
+                                    <button id="testExpressionBtn" class="btn btn-secondary" style="margin-bottom:10px;">
+                                        Test Expression
+                                    </button>
+                                    <div id="expressionValidation" style="font-size:12px;margin-top:5px;"></div>
+
+                                    <p style="font-size:11px;color:#666;margin-top:10px;">
+                                        Available metrics: cpu_usage, memory_usage, disk_usage, connections, qps, tps
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 `,
                 buttons: [
@@ -269,9 +363,64 @@ const DatasourcesPage = {
                     { text: 'Save', variant: 'primary', onClick: () => this._saveInspectionConfig(datasourceId) }
                 ]
             });
+
+            // Setup event listeners for threshold UI
+            this._setupThresholdListeners();
+
         } catch (error) {
             Toast.error('Failed to load configuration');
         }
+    },
+
+    _setupThresholdListeners() {
+        // Toggle custom expression fields
+        const useCustomCheckbox = DOM.$('#useCustomExpression');
+        const customFields = DOM.$('#customExpressionFields');
+        const presetThresholds = DOM.$('#presetThresholds');
+
+        useCustomCheckbox?.addEventListener('change', (e) => {
+            const isCustom = e.target.checked;
+            customFields.style.display = isCustom ? 'block' : 'none';
+
+            // Disable preset checkboxes when custom is enabled
+            ['cpuEnabled', 'diskEnabled', 'connectionsEnabled'].forEach(id => {
+                const checkbox = DOM.$(`#${id}`);
+                if (checkbox) {
+                    checkbox.disabled = isCustom;
+                    if (isCustom) checkbox.checked = false;
+                }
+            });
+        });
+
+        // Test expression button
+        const testBtn = DOM.$('#testExpressionBtn');
+        testBtn?.addEventListener('click', async () => {
+            const expression = DOM.$('#customExpressionText')?.value.trim();
+            const validationDiv = DOM.$('#expressionValidation');
+
+            if (!expression) {
+                validationDiv.innerHTML = '<span style="color:#f44336;">Please enter an expression</span>';
+                return;
+            }
+
+            testBtn.disabled = true;
+            testBtn.textContent = 'Testing...';
+
+            try {
+                const result = await API.post('/api/inspections/validate-expression', { expression });
+
+                if (result.valid) {
+                    validationDiv.innerHTML = '<span style="color:#4caf50;">✓ Valid expression</span>';
+                } else {
+                    validationDiv.innerHTML = `<span style="color:#f44336;">✗ Invalid: ${result.error}</span>`;
+                }
+            } catch (err) {
+                validationDiv.innerHTML = `<span style="color:#f44336;">✗ Validation failed: ${err.message}</span>`;
+            } finally {
+                testBtn.disabled = false;
+                testBtn.textContent = 'Test Expression';
+            }
+        });
     },
 
     async _saveInspectionConfig(datasourceId) {
@@ -279,12 +428,53 @@ const DatasourcesPage = {
         const schedule_interval = parseInt(DOM.$('#scheduleInterval')?.value) || 86400;
         const use_ai_analysis = DOM.$('#useAI')?.checked;
 
+        // Build threshold_rules
+        const threshold_rules = {};
+        const useCustomExpression = DOM.$('#useCustomExpression')?.checked;
+
+        if (useCustomExpression) {
+            const expression = DOM.$('#customExpressionText')?.value.trim();
+            const duration = parseInt(DOM.$('#customExpressionDuration')?.value) || 60;
+
+            if (!expression) {
+                Toast.error('Please enter a custom expression');
+                return;
+            }
+
+            threshold_rules.custom_expression = {
+                expression,
+                duration
+            };
+        } else {
+            // Preset thresholds
+            if (DOM.$('#cpuEnabled')?.checked) {
+                threshold_rules.cpu_usage = {
+                    threshold: parseInt(DOM.$('#cpuThreshold')?.value) || 50,
+                    duration: parseInt(DOM.$('#cpuDuration')?.value) || 60
+                };
+            }
+
+            if (DOM.$('#diskEnabled')?.checked) {
+                threshold_rules.disk_usage = {
+                    threshold: parseInt(DOM.$('#diskThreshold')?.value) || 80,
+                    duration: parseInt(DOM.$('#diskDuration')?.value) || 300
+                };
+            }
+
+            if (DOM.$('#connectionsEnabled')?.checked) {
+                threshold_rules.connections = {
+                    threshold: parseInt(DOM.$('#connectionsThreshold')?.value) || 20,
+                    duration: parseInt(DOM.$('#connectionsDuration')?.value) || 120
+                };
+            }
+        }
+
         try {
             await API.post(`/api/inspections/config/${datasourceId}`, {
                 enabled,
                 schedule_interval,
                 use_ai_analysis,
-                threshold_rules: {}
+                threshold_rules
             });
             Modal.hide();
             Toast.success('Configuration saved');

@@ -220,10 +220,33 @@ const InspectionPage = {
         try {
             const report = await API.get(`/api/inspections/reports/detail/${reportId}`);
             const content = DOM.$('#page-content');
+
+            // Parse trigger reason to show threshold details
+            let triggerDetailsHtml = '';
+            if (report.trigger_reason) {
+                triggerDetailsHtml = `
+                    <div style="background:#e3f2fd;padding:12px;border-radius:4px;margin-bottom:15px;border-left:4px solid #2196f3;">
+                        <strong style="color:#1976d2;">Trigger Reason:</strong>
+                        <span style="margin-left:8px;">${report.trigger_reason}</span>
+                    </div>
+                `;
+            }
+
             content.innerHTML = `
                 <div style="max-width: 1200px; margin: 0 auto; padding: 20px;">
-                    <button onclick="InspectionPage.render()" style="margin-bottom: 20px; padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">← Back to Reports</button>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <button onclick="InspectionPage.render()" style="padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">← Back to Reports</button>
+                        <div style="display: flex; gap: 10px;">
+                            <button onclick="InspectionPage.exportMarkdown(${reportId})" class="btn btn-secondary" style="padding: 8px 16px;">
+                                📄 Export Markdown
+                            </button>
+                            <button onclick="InspectionPage.exportPDF(${reportId})" class="btn btn-primary" style="padding: 8px 16px;">
+                                📑 Export PDF
+                            </button>
+                        </div>
+                    </div>
                     <div style="background:var(--background-secondary);padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        ${triggerDetailsHtml}
                         <div id="reportContent"></div>
                     </div>
                 </div>
@@ -233,6 +256,55 @@ const InspectionPage = {
             reportContent.innerHTML = MarkdownRenderer.render(report.content_md || 'No content available');
         } catch (error) {
             Toast.show('Failed to load report', 'error');
+        }
+    },
+
+    async exportMarkdown(reportId) {
+        try {
+            const response = await fetch(`/api/inspections/reports/export/${reportId}/markdown`);
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail || 'Export failed');
+            }
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `inspection_report_${reportId}_${new Date().toISOString().slice(0,10)}.md`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            Toast.show('Markdown exported successfully', 'success');
+        } catch (error) {
+            Toast.show(`Export failed: ${error.message}`, 'error');
+        }
+    },
+
+    async exportPDF(reportId) {
+        try {
+            Toast.show('Generating PDF...', 'info');
+            const response = await fetch(`/api/inspections/reports/export/${reportId}/pdf`);
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail || 'Export failed');
+            }
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `inspection_report_${reportId}_${new Date().toISOString().slice(0,10)}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            Toast.show('PDF exported successfully', 'success');
+        } catch (error) {
+            Toast.show(`Export failed: ${error.message}`, 'error');
         }
     },
 

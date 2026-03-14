@@ -6,12 +6,14 @@ const Sidebar = {
         { id: 'diagnosis', icon: 'bot', label: 'AI Diagnosis' },
         { id: 'monitor', icon: 'activity', label: 'Monitor' },
         { id: 'query', icon: 'terminal-square', label: 'Query' },
-        { section: 'Configuration', items: [
-            { id: 'datasources', icon: 'database', label: 'Datasources' },
-            { id: 'hosts', icon: 'terminal', label: 'Hosts' },
+        { section: 'AI Agent Configuration', items: [
             { id: 'ai-models', icon: 'brain', label: 'AI Models' },
             { id: 'skills', icon: 'wrench', label: 'Skills' },
             { id: 'knowledge-bases', icon: 'book-open', label: 'Knowledge Bases' },
+        ]},
+        { section: 'System Configuration', items: [
+            { id: 'datasources', icon: 'database', label: 'Datasources' },
+            { id: 'hosts', icon: 'terminal', label: 'Hosts' },
         ]},
     ],
 

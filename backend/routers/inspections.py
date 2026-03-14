@@ -58,6 +58,28 @@ class ReportListItem(BaseModel):
     error_message: Optional[str] = None
 
 
+class ExpressionValidationRequest(BaseModel):
+    expression: str
+
+
+class ExpressionValidationResponse(BaseModel):
+    valid: bool
+    error: Optional[str] = None
+
+
+@router.post("/validate-expression", response_model=ExpressionValidationResponse)
+async def validate_threshold_expression(request: ExpressionValidationRequest):
+    """Test if expression is valid Python syntax"""
+    try:
+        # Try to compile the expression
+        compile(request.expression, '<string>', 'eval')
+        return ExpressionValidationResponse(valid=True, error=None)
+    except SyntaxError as e:
+        return ExpressionValidationResponse(valid=False, error=str(e))
+    except Exception as e:
+        return ExpressionValidationResponse(valid=False, error=f"Validation error: {str(e)}")
+
+
 @router.get("/config/{datasource_id}", response_model=InspectionConfigResponse)
 async def get_config(datasource_id: int, db: AsyncSession = Depends(get_db)):
     """Get inspection configuration for a datasource"""
@@ -302,17 +324,14 @@ async def export_report_pdf(report_id: int, db: AsyncSession = Depends(get_db)):
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
 
-    if not report.content_html:
-        raise HTTPException(status_code=400, detail="Report HTML content not available")
+    if not report.content_md:
+        raise HTTPException(status_code=400, detail="Report content not available")
 
     try:
-        from weasyprint import HTML
-        from io import BytesIO
+        from backend.utils.pdf_generator import markdown_to_pdf
 
-        # Generate PDF from HTML
-        pdf_buffer = BytesIO()
-        HTML(string=report.content_html).write_pdf(pdf_buffer)
-        pdf_buffer.seek(0)
+        # Generate PDF from markdown
+        pdf_bytes = markdown_to_pdf(report.content_md, report.title)
 
         # Generate filename
         from datetime import datetime
@@ -320,16 +339,16 @@ async def export_report_pdf(report_id: int, db: AsyncSession = Depends(get_db)):
         filename = f"inspection_report_{report_id}_{timestamp}.pdf"
 
         return Response(
-            content=pdf_buffer.getvalue(),
+            content=pdf_bytes,
             media_type="application/pdf",
             headers={
                 "Content-Disposition": f"attachment; filename={filename}"
             }
         )
-    except ImportError:
+    except ImportError as e:
         raise HTTPException(
             status_code=500,
-            detail="PDF export not available. Please install weasyprint: pip install weasyprint"
+            detail=f"PDF export not available. Please install: pip install reportlab. Error: {str(e)}"
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")

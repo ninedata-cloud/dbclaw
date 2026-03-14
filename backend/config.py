@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite+aiosqlite:///./data/smartdba.db"
 
-    metric_interval: int = 15
+    metric_interval: int = 60
 
     # JWT settings
     jwt_secret_key: str = "change-me-to-a-random-secret-key"
