@@ -44,13 +44,33 @@ class SkillContext:
             raise ValueError(f"Datasource {datasource_id} not found")
         return datasource
 
-    async def execute_query(self, query: str, datasource_id: int) -> Dict[str, Any]:
+    async def execute_query(self, query: str, datasource_id: int, allow_write: bool = False) -> Dict[str, Any]:
         """Execute a SQL query on a database datasource"""
-        self._check_permission("execute_query")
+        if allow_write:
+            self._check_permission("execute_any_sql")
+        else:
+            self._check_permission("execute_query")
+
         from backend.utils.db_connector import execute_query as db_execute_query
 
-        datasource = await self.get_connection(datasource_id)
-        result = await db_execute_query(datasource, query)
+        datasource = await self.get_connection(datasource_id, check_permission=False)
+        result = await db_execute_query(datasource, query, allow_write=allow_write)
+        return result
+
+    async def execute_ssh_command(self, command: str, datasource_id: int, allow_write: bool = False) -> Dict[str, Any]:
+        """Execute an OS command via SSH"""
+        if allow_write:
+            self._check_permission("execute_any_os_command")
+        else:
+            self._check_permission("execute_command")
+
+        from backend.utils.ssh_executor import execute_ssh_command
+
+        datasource = await self.get_connection(datasource_id, check_permission=False)
+        if not datasource.ssh_host_id:
+            raise ValueError(f"Datasource {datasource_id} has no SSH host configured")
+
+        result = await execute_ssh_command(self.db, datasource.ssh_host_id, command, allow_write=allow_write)
         return result
 
     async def search_kb(
@@ -146,16 +166,8 @@ class SkillContext:
         ]
 
     async def execute_command(self, command: str, datasource_id: int) -> Dict[str, Any]:
-        """Execute an OS command via SSH"""
-        self._check_permission("execute_command")
-        from backend.utils.ssh_executor import execute_ssh_command
-
-        datasource = await self.get_connection(datasource_id, check_permission=False)
-        if not datasource.ssh_host_id:
-            raise ValueError(f"Datasource {datasource_id} has no SSH host configured")
-
-        result = await execute_ssh_command(self.db, datasource.ssh_host_id, command)
-        return result
+        """Execute an OS command via SSH (backward compatibility wrapper)"""
+        return await self.execute_ssh_command(command, datasource_id, allow_write=False)
 
     async def call_skill(self, skill_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Call another skill (for skill composition)"""

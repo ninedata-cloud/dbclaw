@@ -16,9 +16,27 @@ from backend.services.dm_service import DMConnector
 from backend.utils.encryption import decrypt_value
 
 
-async def execute_query(datasource: Datasource, query: str) -> Dict[str, Any]:
-    """Execute a query on a database datasource"""
+async def execute_query(datasource: Datasource, query: str, allow_write: bool = False) -> Dict[str, Any]:
+    """Execute a query on a database datasource
+
+    Args:
+        datasource: The datasource to execute against
+        query: The SQL query to execute
+        allow_write: If False (default), only SELECT/SHOW/EXPLAIN queries are allowed.
+                     If True, all queries including DDL/DML are allowed.
+    """
     try:
+        # Validate query if write operations are not allowed
+        if not allow_write:
+            query_upper = query.strip().upper()
+            allowed_keywords = ['SELECT', 'SHOW', 'EXPLAIN', 'EXEC', 'EXECUTE', 'DESCRIBE', 'DESC', 'WITH']
+
+            if not any(query_upper.startswith(keyword) for keyword in allowed_keywords):
+                return {
+                    "success": False,
+                    "error": "Only read-only queries (SELECT, SHOW, EXPLAIN, DESCRIBE) are allowed. Enable 'Execute Any SQL' permission for write operations."
+                }
+
         # Decrypt password
         password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
 

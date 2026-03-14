@@ -1,0 +1,36 @@
+id: execute_any_os_command
+name: Execute Any OS Command
+version: 1.0.0
+author: SmartDBA
+category: admin
+description: Execute ANY shell command on the database host server via SSH. WARNING - This can modify system configuration, delete files, and execute destructive operations. Use with extreme caution.
+tags: [os, admin, shell, ssh, system, dangerous]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The datasource ID (must have SSH host configured)
+  - name: command
+    type: string
+    required: true
+    description: The shell command to execute (any valid shell command)
+
+permissions:
+  - execute_any_os_command
+  - admin
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+      command = params['command'].strip()
+
+      # Log the dangerous operation
+      import logging
+      logger = logging.getLogger(__name__)
+      logger.warning(f"DANGEROUS OPERATION: Executing unrestricted OS command on datasource {datasource_id}: {command[:100]}")
+
+      # Execute without restrictions
+      result = await context.execute_ssh_command(command, datasource_id, allow_write=True)
+
+      return result

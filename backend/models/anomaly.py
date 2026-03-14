@@ -44,6 +44,15 @@ class Anomaly(Base):
     created_case = Column(Boolean, default=False)
     case_id = Column(Integer, ForeignKey("diagnostic_cases.id"))
 
+    # 诊断历史追踪
+    last_diagnosis_snapshot = Column(Text)  # 上次诊断时的数据快照（JSON）
+    diagnosis_count = Column(Integer, default=0)  # 诊断次数
+
+    # 诊断决策记录
+    diagnosis_decision = Column(String(20))  # diagnosed, skipped
+    diagnosis_decision_reason = Column(Text)  # 决策原因
+    diagnosis_decision_at = Column(DateTime)  # 决策时间
+
     # Relationships
     datasource = relationship("Datasource", back_populates="anomalies")
     case = relationship("DiagnosticCase", back_populates="anomalies")

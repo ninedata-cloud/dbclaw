@@ -96,12 +96,24 @@ const ReportsPage = {
             actions.appendChild(DOM.el('button', {
                 className: 'btn btn-sm btn-secondary',
                 innerHTML: '<i data-lucide="file-text"></i> Markdown',
-                onClick: () => window.open(API.getReportDownloadUrl(report.id, 'md'), '_blank')
+                onClick: async () => {
+                    try {
+                        await API.downloadReport(report.id, 'md');
+                    } catch (err) {
+                        Toast.error('Download failed: ' + err.message);
+                    }
+                }
             }));
             actions.appendChild(DOM.el('button', {
                 className: 'btn btn-sm btn-primary',
                 innerHTML: '<i data-lucide="file-down"></i> PDF',
-                onClick: () => window.open(API.getReportDownloadUrl(report.id, 'pdf'), '_blank')
+                onClick: async () => {
+                    try {
+                        await API.downloadReport(report.id, 'pdf');
+                    } catch (err) {
+                        Toast.error('Download failed: ' + err.message);
+                    }
+                }
             }));
             actions.appendChild(DOM.el('button', {
                 className: 'btn btn-sm btn-secondary',
@@ -248,38 +260,139 @@ const ReportsPage = {
     async _viewReport(report) {
         try {
             const full = await API.getReport(report.id);
-            const container = DOM.el('div');
+            const container = DOM.el('div', { className: 'report-view-container' });
 
-            if (full.findings && full.findings.length > 0) {
-                for (const f of full.findings) {
-                    const colors = { CRITICAL: 'var(--accent-red)', WARNING: 'var(--accent-yellow)', INFO: 'var(--accent-blue)' };
-                    const item = DOM.el('div', {
-                        style: {
-                            padding: '12px', margin: '8px 0', borderRadius: '6px',
-                            borderLeft: `3px solid ${colors[f.severity] || 'var(--border-color)'}`,
-                            background: 'var(--bg-tertiary)'
+            // Show full report content if available
+            if (full.content_html) {
+                // Display HTML content - extract body content only, strip inline styles
+                const htmlContainer = DOM.el('div', { className: 'report-content-html' });
+
+                // Parse HTML and extract body content
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(full.content_html, 'text/html');
+                const bodyContent = doc.querySelector('.container') || doc.body;
+
+                // Clone the content and remove all inline styles
+                const cleanContent = bodyContent.cloneNode(true);
+                cleanContent.querySelectorAll('[style]').forEach(el => el.removeAttribute('style'));
+                cleanContent.querySelectorAll('style').forEach(el => el.remove());
+
+                // Set the cleaned HTML
+                htmlContainer.innerHTML = cleanContent.innerHTML;
+
+                // Apply syntax highlighting to code blocks
+                if (typeof hljs !== 'undefined') {
+                    htmlContainer.querySelectorAll('pre code:not(.hljs)').forEach((block) => {
+                        hljs.highlightElement(block);
+                    });
+                }
+                container.appendChild(htmlContainer);
+            } else if (full.content_md) {
+                // Display markdown content
+                const mdContainer = DOM.el('div', { className: 'report-content-markdown' });
+                if (typeof marked !== 'undefined') {
+                    try {
+                        // Configure marked with proper options
+                        marked.setOptions({
+                            breaks: true,
+                            gfm: true,
+                            headerIds: false,
+                            mangle: false
+                        });
+
+                        // Configure highlight.js integration
+                        if (typeof hljs !== 'undefined') {
+                            marked.setOptions({
+                                highlight: function(code, lang) {
+                                    if (lang && hljs.getLanguage(lang)) {
+                                        try {
+                                            return hljs.highlight(code, { language: lang }).value;
+                                        } catch (err) {
+                                            console.error('Highlight error:', err);
+                                        }
+                                    }
+                                    return hljs.highlightAuto(code).value;
+                                }
+                            });
                         }
+
+                        // Parse markdown
+                        const html = marked.parse(full.content_md);
+                        mdContainer.innerHTML = html;
+
+                        // Additional highlighting pass for any missed code blocks
+                        if (typeof hljs !== 'undefined') {
+                            mdContainer.querySelectorAll('pre code:not(.hljs)').forEach((block) => {
+                                hljs.highlightElement(block);
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Markdown rendering error:', error);
+                        mdContainer.innerHTML = `<pre style="white-space: pre-wrap; color: var(--text-primary);">${full.content_md}</pre>`;
+                    }
+                } else {
+                    console.warn('marked.js not available, displaying raw markdown');
+                    mdContainer.innerHTML = `<pre style="white-space: pre-wrap; color: var(--text-primary);">${full.content_md}</pre>`;
+                }
+                container.appendChild(mdContainer);
+            } else if (full.findings && full.findings.length > 0) {
+                // Fallback: show only findings if no content available
+                const findingsTitle = DOM.el('h4', {
+                    textContent: 'Findings',
+                    className: 'report-findings-title'
+                });
+                container.appendChild(findingsTitle);
+
+                for (const f of full.findings) {
+                    const severityClass = f.severity.toLowerCase();
+                    const item = DOM.el('div', {
+                        className: `report-finding-item ${severityClass}`
                     });
                     item.innerHTML = `
-                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                        <div class="report-finding-header">
                             <span class="badge badge-${f.severity === 'CRITICAL' ? 'danger' : f.severity === 'WARNING' ? 'warning' : 'info'}">${f.severity}</span>
-                            <strong>${f.title}</strong>
+                            <strong class="report-finding-title">${f.title}</strong>
                         </div>
-                        <div class="text-sm" style="margin-bottom:6px">${f.detail}</div>
-                        <div class="text-sm" style="color:var(--accent-green)"><strong>Recommendation:</strong> ${f.recommendation}</div>
+                        <div class="report-finding-detail">${f.detail}</div>
+                        <div class="report-finding-recommendation"><strong>Recommendation:</strong> ${f.recommendation}</div>
                     `;
                     container.appendChild(item);
                 }
             } else {
-                container.innerHTML = '<p class="text-muted text-center">No findings</p>';
+                container.innerHTML = '<div class="report-empty-content"><p>No report content available</p></div>';
+            }
+
+            const footer = DOM.el('div', { style: { display: 'flex', gap: '8px' } });
+            footer.appendChild(DOM.el('button', {
+                className: 'btn btn-secondary',
+                textContent: 'Close',
+                onClick: () => Modal.hide()
+            }));
+
+            // Add download buttons
+            if (full.status === 'completed') {
+                footer.appendChild(DOM.el('button', {
+                    className: 'btn btn-primary',
+                    innerHTML: '<i data-lucide="download"></i> Download PDF',
+                    onClick: async () => {
+                        try {
+                            await API.downloadReport(report.id, 'pdf');
+                            DOM.createIcons();
+                        } catch (err) {
+                            Toast.error('Download failed: ' + err.message);
+                        }
+                    }
+                }));
             }
 
             Modal.show({
                 title: report.title,
                 content: container,
-                footer: DOM.el('button', { className: 'btn btn-secondary', textContent: 'Close', onClick: () => Modal.hide() }),
-                width: '640px'
+                footer: footer,
+                width: '900px'
             });
+
+            DOM.createIcons();
         } catch (err) {
             Toast.error('Failed to load report');
         }
@@ -290,54 +403,31 @@ const ReportsPage = {
         const container = DOM.el('div', { style: { minHeight: '400px' } });
 
         // Status section
-        const statusSection = DOM.el('div', {
-            style: {
-                padding: '12px',
-                background: 'var(--bg-tertiary)',
-                borderRadius: '6px',
-                marginBottom: '16px'
-            }
-        });
-        statusSection.innerHTML = '<div id="report-status" class="text-sm">Connecting...</div>';
+        const statusSection = DOM.el('div', { className: 'report-generation-status' });
+        statusSection.innerHTML = '<div id="report-status">Connecting...</div>';
         container.appendChild(statusSection);
 
         // AI Analysis section
-        const analysisSection = DOM.el('div', { style: { marginBottom: '16px' } });
+        const analysisSection = DOM.el('div', { className: 'report-generation-section' });
         analysisSection.innerHTML = `
-            <h4 style="margin-bottom:8px;">AI Analysis</h4>
-            <div id="report-ai-content" style="
-                max-height:200px;
-                overflow-y:auto;
-                padding:12px;
-                background:var(--bg-tertiary);
-                border-radius:6px;
-                font-size:13px;
-                line-height:1.6;
-                white-space:pre-wrap;
-            "></div>
+            <h4>AI Analysis</h4>
+            <div id="report-ai-content" class="report-ai-content"></div>
         `;
         container.appendChild(analysisSection);
 
         // Tool execution log
-        const toolSection = DOM.el('div', { style: { marginBottom: '16px' } });
+        const toolSection = DOM.el('div', { className: 'report-generation-section' });
         toolSection.innerHTML = `
-            <h4 style="margin-bottom:8px;">Diagnostic Tools</h4>
-            <div id="report-tool-log" style="
-                max-height:150px;
-                overflow-y:auto;
-                padding:12px;
-                background:var(--bg-tertiary);
-                border-radius:6px;
-                font-size:12px;
-            "></div>
+            <h4>Diagnostic Tools</h4>
+            <div id="report-tool-log" class="report-tool-log"></div>
         `;
         container.appendChild(toolSection);
 
         // Findings section
-        const findingsSection = DOM.el('div');
+        const findingsSection = DOM.el('div', { className: 'report-generation-section' });
         findingsSection.innerHTML = `
-            <h4 style="margin-bottom:8px;">Findings</h4>
-            <div id="report-findings" style="max-height:150px;overflow-y:auto;"></div>
+            <h4>Findings</h4>
+            <div id="report-findings" class="report-findings-container"></div>
         `;
         container.appendChild(findingsSection);
 
@@ -428,19 +518,13 @@ const ReportsPage = {
 
             case 'tool_call':
                 if (toolLogEl) {
-                    const toolItem = DOM.el('div', {
-                        style: {
-                            padding: '6px',
-                            marginBottom: '4px',
-                            background: 'var(--bg-secondary)',
-                            borderRadius: '4px',
-                            borderLeft: '3px solid var(--accent-blue)'
-                        }
-                    });
+                    const toolItem = DOM.el('div', { className: 'report-tool-item' });
                     toolItem.innerHTML = `
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span class="badge badge-info" style="font-size:10px;">${data.tool_name}</span>
-                            <span class="text-muted" style="font-size:11px;">Executing...</span>
+                        <div class="report-tool-header">
+                            <div class="report-tool-name">
+                                <span class="badge badge-info" style="font-size:10px;">${data.tool_name}</span>
+                                <span class="text-muted" style="font-size:11px;">Executing...</span>
+                            </div>
                         </div>
                     `;
                     toolItem.id = `tool-${data.tool_call_id}`;
@@ -454,14 +538,14 @@ const ReportsPage = {
                 if (toolItem) {
                     const resultData = typeof data.result === 'string' ? JSON.parse(data.result) : data.result;
                     const hasError = resultData.error;
-                    toolItem.style.borderLeftColor = hasError ? 'var(--accent-red)' : 'var(--accent-green)';
+                    toolItem.className = `report-tool-item ${hasError ? 'error' : 'success'}`;
                     toolItem.innerHTML = `
-                        <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;">
-                            <div style="display:flex;align-items:center;gap:8px;">
+                        <div class="report-tool-header">
+                            <div class="report-tool-name">
                                 <span class="badge badge-${hasError ? 'danger' : 'success'}" style="font-size:10px;">${data.tool_name}</span>
                                 <span class="text-muted" style="font-size:11px;">${hasError ? 'Failed' : 'Completed'}</span>
                             </div>
-                            <span class="text-muted" style="font-size:10px;">${data.execution_time_ms}ms</span>
+                            <span class="report-tool-time">${data.execution_time_ms}ms</span>
                         </div>
                     `;
                 }
@@ -469,27 +553,16 @@ const ReportsPage = {
 
             case 'finding':
                 if (findingsEl) {
-                    const colors = {
-                        CRITICAL: 'var(--accent-red)',
-                        WARNING: 'var(--accent-yellow)',
-                        INFO: 'var(--accent-blue)'
-                    };
+                    const severityClass = data.severity.toLowerCase();
                     const findingItem = DOM.el('div', {
-                        style: {
-                            padding: '8px',
-                            margin: '4px 0',
-                            borderRadius: '4px',
-                            borderLeft: `3px solid ${colors[data.severity] || 'var(--border-color)'}`,
-                            background: 'var(--bg-tertiary)',
-                            fontSize: '12px'
-                        }
+                        className: `report-finding-item ${severityClass}`
                     });
                     findingItem.innerHTML = `
-                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                        <div class="report-finding-header">
                             <span class="badge badge-${data.severity === 'CRITICAL' ? 'danger' : data.severity === 'WARNING' ? 'warning' : 'info'}" style="font-size:10px;">${data.severity}</span>
-                            <strong style="font-size:12px;">${data.title}</strong>
+                            <strong class="report-finding-title">${data.title}</strong>
                         </div>
-                        <div style="font-size:11px;color:var(--text-muted);">${data.detail}</div>
+                        <div class="report-finding-detail">${data.detail}</div>
                     `;
                     findingsEl.appendChild(findingItem);
                     findingsEl.scrollTop = findingsEl.scrollHeight;
@@ -498,7 +571,7 @@ const ReportsPage = {
 
             case 'report_complete':
                 if (statusEl) {
-                    statusEl.innerHTML = `<span style="color:var(--accent-green);">✓ ${data.summary}</span>`;
+                    statusEl.innerHTML = `<span class="report-status-success">✓ ${data.summary}</span>`;
                 }
                 Toast.success('Report generation completed');
                 setTimeout(() => {
@@ -517,7 +590,7 @@ const ReportsPage = {
             case 'error':
                 const errorMsg = data.message || data.content || 'Unknown error';
                 if (statusEl) {
-                    statusEl.innerHTML = `<span style="color:var(--accent-red);">✗ Error: ${errorMsg}</span>`;
+                    statusEl.innerHTML = `<span class="report-status-error">✗ Error: ${errorMsg}</span>`;
                 }
                 Toast.error(`Report generation failed: ${errorMsg}`);
                 // Auto-close modal after 3 seconds

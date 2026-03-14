@@ -130,6 +130,7 @@ def create_app() -> FastAPI:
     app.mount("/css", StaticFiles(directory="frontend/css"), name="css")
     app.mount("/js", StaticFiles(directory="frontend/js"), name="js")
     app.mount("/assets", StaticFiles(directory="frontend/assets"), name="assets")
+    app.mount("/lib", StaticFiles(directory="frontend/lib"), name="lib")
 
     @app.get("/")
     async def serve_index():

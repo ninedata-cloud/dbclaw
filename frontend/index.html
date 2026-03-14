@@ -21,37 +21,40 @@
     <!-- Chart.js -->
     <script src="/lib/chart.js/dist/chart.umd.js"></script>
 
-    <!-- Monaco Editor -->
-    <script src="/lib/monaco-editor/min/vs/loader.js"></script>
-
-    <!-- Disable AMD for UMD libraries to prevent conflicts with Monaco's loader -->
-    <script>
-        var oldDefine = window.define;
-        window.define = undefined;
-    </script>
-
-    <!-- CodeMirror -->
-    <link rel="stylesheet" href="/lib/codemirror/lib/codemirror.css">
-    <link rel="stylesheet" href="/lib/codemirror/theme/material-darker.css">
-    <script src="/lib/codemirror/lib/codemirror.js"></script>
-    <script src="/lib/codemirror/mode/sql/sql.js"></script>
-
-    <!-- Marked + Highlight.js -->
+    <!-- Marked + Highlight.js (load BEFORE Monaco to ensure global registration) -->
     <script src="/lib/marked/marked.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/sql.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/json.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="/lib/highlight.js/highlight.min.js"></script>
+    <script src="/lib/highlight.js/languages/sql.min.js"></script>
+    <script src="/lib/highlight.js/languages/json.min.js"></script>
+    <script src="/lib/highlight.js/languages/bash.min.js"></script>
+    <script src="/lib/highlight.js/languages/python.min.js"></script>
+    <script src="/lib/highlight.js/languages/javascript.min.js"></script>
+    <script src="/lib/highlight.js/languages/plaintext.min.js"></script>
+    <link rel="stylesheet" href="/lib/highlight.js/styles/atom-one-dark.min.css">
 
     <!-- Lucide Icons -->
     <script src="/lib/lucide/dist/umd/lucide.js"></script>
 
-    <!-- Restore AMD define after all UMD libraries are loaded -->
+    <!-- Monaco Editor -->
+    <script src="/lib/monaco-editor/min/vs/loader.js"></script>
+
+    <!-- CodeMirror (load after Monaco to avoid AMD conflicts) -->
     <script>
-        window.define = oldDefine;
+        // Temporarily disable AMD for CodeMirror
+        if (typeof define === 'function' && define.amd) {
+            var _define = define;
+            define = undefined;
+        }
+    </script>
+    <link rel="stylesheet" href="/lib/codemirror/lib/codemirror.css">
+    <link rel="stylesheet" href="/lib/codemirror/theme/material-darker.css">
+    <script src="/lib/codemirror/lib/codemirror.js"></script>
+    <script src="/lib/codemirror/mode/sql/sql.js"></script>
+    <script>
+        // Restore AMD define
+        if (typeof _define !== 'undefined') {
+            define = _define;
+        }
     </script>
 
     <!-- App CSS -->

@@ -123,7 +123,11 @@ async def get_anomalies(
                 "resolved_at": a.resolved_at.isoformat() if a.resolved_at else None,
                 "ai_diagnosis": a.ai_diagnosis,
                 "root_cause": a.root_cause,
-                "recommended_actions": a.recommended_actions
+                "recommended_actions": a.recommended_actions,
+                "diagnosis_decision": a.diagnosis_decision,
+                "diagnosis_decision_reason": a.diagnosis_decision_reason,
+                "diagnosis_decision_at": a.diagnosis_decision_at.isoformat() if a.diagnosis_decision_at else None,
+                "diagnosis_count": a.diagnosis_count
             }
             for a in anomalies
         ]
@@ -168,7 +172,12 @@ async def get_anomaly_detail(
         "status": anomaly.status,
         "resolved_at": anomaly.resolved_at.isoformat() if anomaly.resolved_at else None,
         "resolution_actions": anomaly.resolution_actions,
-        "was_auto_fixed": anomaly.was_auto_fixed
+        "was_auto_fixed": anomaly.was_auto_fixed,
+        "diagnosis_decision": anomaly.diagnosis_decision,
+        "diagnosis_decision_reason": anomaly.diagnosis_decision_reason,
+        "diagnosis_decision_at": anomaly.diagnosis_decision_at.isoformat() if anomaly.diagnosis_decision_at else None,
+        "diagnosis_count": anomaly.diagnosis_count,
+        "last_diagnosis_snapshot": anomaly.last_diagnosis_snapshot
     }
 
 
@@ -191,7 +200,7 @@ async def trigger_diagnosis(
     anomaly_id: int,
     db: AsyncSession = Depends(get_db)
 ):
-    """手动触发异常的 AI 诊断"""
+    """手动触发异常的 AI 诊断（强制执行，不进行智能判断）"""
     # 验证异常存在
     result = await db.execute(
         select(Anomaly).where(
@@ -206,11 +215,11 @@ async def trigger_diagnosis(
     if not anomaly:
         raise HTTPException(status_code=404, detail="Anomaly not found")
 
-    # 触发诊断
+    # 触发诊断（force=True 跳过智能判断）
     from backend.services.proactive_diagnosis import ProactiveDiagnosisService
     diagnosis_service = ProactiveDiagnosisService()
 
-    result = await diagnosis_service.diagnose_anomaly(db, anomaly_id, auto_fix=False)
+    result = await diagnosis_service.diagnose_anomaly(db, anomaly_id, auto_fix=False, force=True)
 
     if result.get("success"):
         return {
@@ -255,4 +264,42 @@ async def get_dashboard_overview(db: AsyncSession = Depends(get_db)):
             "active": len(active_anomalies),
             "by_severity": severity_counts
         }
+    }
+
+
+@router.get("/anomalies/{datasource_id}/diagnosis-stats")
+async def get_diagnosis_stats(
+    datasource_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """获取诊断决策统计信息"""
+    # 获取所有异常
+    result = await db.execute(
+        select(Anomaly).where(Anomaly.datasource_id == datasource_id)
+    )
+    anomalies = result.scalars().all()
+
+    # 统计诊断决策
+    decision_stats = {
+        "diagnosed": 0,
+        "skipped": 0,
+        "total": len(anomalies)
+    }
+
+    # 统计跳过原因
+    skip_reasons = {}
+
+    for anomaly in anomalies:
+        if anomaly.diagnosis_decision == 'diagnosed':
+            decision_stats["diagnosed"] += 1
+        elif anomaly.diagnosis_decision == 'skipped':
+            decision_stats["skipped"] += 1
+            reason = anomaly.diagnosis_decision_reason or "Unknown"
+            skip_reasons[reason] = skip_reasons.get(reason, 0) + 1
+
+    return {
+        "datasource_id": datasource_id,
+        "decision_stats": decision_stats,
+        "skip_reasons": skip_reasons,
+        "diagnosis_rate": round(decision_stats["diagnosed"] / decision_stats["total"] * 100, 2) if decision_stats["total"] > 0 else 0
     }

@@ -130,6 +130,32 @@ const API = {
     generateReport(data) { return this.post('/api/reports/generate', data); },
     getReport(id) { return this.get(`/api/reports/${id}`); },
     getReportDownloadUrl(id, format) { return `/api/reports/${id}/download?format=${format}`; },
+    async downloadReport(id, format) {
+        const token = localStorage.getItem('auth_token');
+        const headers = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const response = await fetch(`/api/reports/${id}/download?format=${format}`, {
+            method: 'GET',
+            headers
+        });
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({ detail: response.statusText }));
+            throw new Error(err.detail || 'Download failed');
+        }
+
+        // Get the blob and create download link
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `report_${id}.${format}`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    },
 
     // AI Model endpoints
     getAIModels() { return this.get('/api/ai-models'); },

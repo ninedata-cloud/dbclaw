@@ -8,7 +8,7 @@ const GuardianDashboardPage = {
         container.innerHTML = `
             <div class="guardian-dashboard">
                 <div class="dashboard-header">
-                    <h1>🤖 AI Guardian System</h1>
+                    <h1>AI Guardian System</h1>
                     <p class="subtitle">智能数据库守护系统</p>
                 </div>
 
@@ -279,7 +279,14 @@ const GuardianDashboardPage = {
                             <div class="anomaly-status">
                                 <span class="status-badge ${a.status}">${a.status}</span>
                                 ${a.was_auto_fixed ? '<span class="auto-fixed-tag">Auto-fixed</span>' : ''}
+                                ${a.diagnosis_decision ? `<span class="diagnosis-decision ${a.diagnosis_decision}">${a.diagnosis_decision === 'diagnosed' ? '✓ Diagnosed' : '⏭ Skipped'}</span>` : ''}
                             </div>
+                            ${a.diagnosis_decision_reason ? `
+                                <div class="diagnosis-reason">
+                                    <span class="reason-label">Decision:</span>
+                                    <span class="reason-text">${a.diagnosis_decision_reason}</span>
+                                </div>
+                            ` : ''}
                         </div>
                     </div>
                 `).join('')}
@@ -504,15 +511,15 @@ const GuardianDashboardPage = {
                     ${anomaly.ai_diagnosis ? `
                         <div class="detail-section">
                             <h3>🤖 AI Diagnosis</h3>
-                            <div class="diagnosis-content">
-                                ${this.formatDiagnosisText(anomaly.ai_diagnosis)}
+                            <div class="diagnosis-content markdown-content">
+                                ${this.renderMarkdown(anomaly.ai_diagnosis)}
                             </div>
                         </div>
                     ` : `
                         <div class="detail-section">
                             <h3>🤖 AI Diagnosis</h3>
                             <p class="empty-state">AI diagnosis pending...</p>
-                            <button class="btn-primary" onclick="GuardianDashboardPage.triggerDiagnosis(${anomaly.datasource_id}, ${anomaly.id})">
+                            <button class="btn btn-primary" onclick="GuardianDashboardPage.triggerDiagnosis(${anomaly.datasource_id}, ${anomaly.id})">
                                 Trigger AI Diagnosis
                             </button>
                         </div>
@@ -521,8 +528,8 @@ const GuardianDashboardPage = {
                     ${anomaly.root_cause ? `
                         <div class="detail-section">
                             <h3>🔍 Root Cause</h3>
-                            <div class="root-cause-content">
-                                ${anomaly.root_cause}
+                            <div class="root-cause-content markdown-content">
+                                ${this.renderMarkdown(anomaly.root_cause)}
                             </div>
                         </div>
                     ` : ''}
@@ -558,14 +565,53 @@ const GuardianDashboardPage = {
         document.body.appendChild(modal);
     },
 
-    formatDiagnosisText(text) {
-        // Simple markdown-like formatting
-        return text
-            .replace(/## (.*)/g, '<h4>$1</h4>')
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\n\n/g, '</p><p>')
-            .replace(/\n/g, '<br>')
-            .replace(/^(.*)$/, '<p>$1</p>');
+    renderMarkdown(text) {
+        if (!text) return '';
+
+        console.log('[renderMarkdown] Input text length:', text.length);
+        console.log('[renderMarkdown] typeof marked:', typeof marked);
+        console.log('[renderMarkdown] typeof window.marked:', typeof window.marked);
+
+        // Check if marked is available
+        if (typeof marked === 'undefined' && typeof window.marked === 'undefined') {
+            console.error('[renderMarkdown] marked library not loaded, using fallback');
+            return this.escapeHtml(text).replace(/\n/g, '<br>');
+        }
+
+        // Use window.marked if marked is not directly available
+        const markedLib = typeof marked !== 'undefined' ? marked : window.marked;
+        console.log('[renderMarkdown] Using marked library:', markedLib);
+
+        try {
+            // For marked v11+, use the new API
+            if (markedLib && markedLib.parse) {
+                console.log('[renderMarkdown] Using marked.parse()');
+                const result = markedLib.parse(text, {
+                    breaks: true,
+                    gfm: true
+                });
+                console.log('[renderMarkdown] Parse successful, result length:', result.length);
+                return result;
+            }
+
+            // Fallback for older versions
+            if (markedLib && typeof markedLib === 'function') {
+                console.log('[renderMarkdown] Using marked() function');
+                return markedLib(text);
+            }
+
+            console.error('[renderMarkdown] marked.parse not available');
+            return this.escapeHtml(text).replace(/\n/g, '<br>');
+        } catch (error) {
+            console.error('[renderMarkdown] Markdown rendering error:', error);
+            return this.escapeHtml(text).replace(/\n/g, '<br>');
+        }
+    },
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     },
 
     async triggerDiagnosis(datasourceId, anomalyId) {

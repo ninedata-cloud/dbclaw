@@ -368,8 +368,16 @@ class ScheduledReportService:
                         if event.get("type") == "error":
                             raise Exception(event.get("message", "AI report generation failed"))
                 else:
-                    # Rule-based report - run in background
+                    # Rule-based report - wait for completion
                     await generate_report(report.id, config.datasource_id, config.report_type)
+
+                # Refresh report to get updated status and content from generate_report
+                db.expire(report)
+                await db.refresh(report)
+
+                # Verify report was actually completed
+                if report.status != "completed":
+                    raise Exception(f"Report generation did not complete successfully. Status: {report.status}")
 
                 end_time = datetime.utcnow()
                 duration = (end_time - start_time).total_seconds()

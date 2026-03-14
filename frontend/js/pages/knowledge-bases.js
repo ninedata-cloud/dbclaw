@@ -335,7 +335,20 @@ const KnowledgeBasesPage = {
             if (data.type === 'pdf') {
                 previewHtml = `<iframe src="${data.url}" style="width:100%;height:70vh;border:none;border-radius:4px;"></iframe>`;
             } else if (data.file_type === 'md') {
-                const rendered = typeof marked !== 'undefined' ? marked.parse(data.content) : data.content.replace(/\n/g, '<br>');
+                let rendered;
+                if (typeof marked !== 'undefined') {
+                    try {
+                        rendered = marked.parse(data.content, {
+                            breaks: true,
+                            gfm: true
+                        });
+                    } catch (error) {
+                        console.error('Markdown rendering error:', error);
+                        rendered = data.content.replace(/\n/g, '<br>');
+                    }
+                } else {
+                    rendered = data.content.replace(/\n/g, '<br>');
+                }
                 previewHtml = `<div class="markdown-preview" style="max-height:70vh;overflow:auto;padding:16px;background:var(--bg-primary);border-radius:4px;">${rendered}</div>`;
             } else {
                 previewHtml = `<pre style="max-height:70vh;overflow:auto;padding:16px;background:var(--bg-primary);border-radius:4px;white-space:pre-wrap;word-wrap:break-word;">${Utils.escapeHtml(data.content)}</pre>`;

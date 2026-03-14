@@ -1,9 +1,11 @@
 # Tools that can modify state or execute arbitrary commands.
 # Users can disable these per-session from the diagnosis UI.
 HIGH_RISK_TOOLS = {
-    "execute_diagnostic_query": "Execute SQL queries on the database",
-    "execute_os_command": "Execute shell commands on the host via SSH",
+    "execute_diagnostic_query": "Execute read-only SQL queries (SELECT, SHOW, EXPLAIN)",
+    "execute_os_command": "Execute read-only shell commands on the host via SSH",
     "explain_query": "Run EXPLAIN on SQL queries",
+    "execute_any_sql": "⚠️ DANGEROUS: Execute ANY SQL command (INSERT, UPDATE, DELETE, DROP, etc.)",
+    "execute_any_os_command": "⚠️ DANGEROUS: Execute ANY OS command (can modify system)",
 }
 
 

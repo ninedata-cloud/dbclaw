@@ -240,7 +240,19 @@ const ChatWidget = {
         const streamingMsg = DOM.$('#streaming-message');
         if (streamingMsg) {
             const bubble = streamingMsg.querySelector('.chat-bubble');
-            bubble.innerHTML = typeof marked !== 'undefined' ? marked.parse(this.currentContent) : this.currentContent.replace(/\n/g, '<br>');
+            if (typeof marked !== 'undefined') {
+                try {
+                    bubble.innerHTML = marked.parse(this.currentContent, {
+                        breaks: true,
+                        gfm: true
+                    });
+                } catch (error) {
+                    console.error('Markdown rendering error:', error);
+                    bubble.innerHTML = this.currentContent.replace(/\n/g, '<br>');
+                }
+            } else {
+                bubble.innerHTML = this.currentContent.replace(/\n/g, '<br>');
+            }
             this._highlightCode(bubble);
             this._scrollToBottom();
         }
@@ -492,7 +504,20 @@ const ChatWidget = {
                 this.addUserMessage(msg.content, msg.attachments || []);
             } else if (msg.role === 'assistant') {
                 const msgEl = DOM.el('div', { className: 'chat-message assistant' });
-                const renderedContent = typeof marked !== 'undefined' ? marked.parse(msg.content) : msg.content.replace(/\n/g, '<br>');
+                let renderedContent;
+                if (typeof marked !== 'undefined') {
+                    try {
+                        renderedContent = marked.parse(msg.content, {
+                            breaks: true,
+                            gfm: true
+                        });
+                    } catch (error) {
+                        console.error('Markdown rendering error:', error);
+                        renderedContent = msg.content.replace(/\n/g, '<br>');
+                    }
+                } else {
+                    renderedContent = msg.content.replace(/\n/g, '<br>');
+                }
                 msgEl.innerHTML = `
                     <div class="chat-avatar">AI</div>
                     <div class="chat-bubble">${renderedContent}</div>

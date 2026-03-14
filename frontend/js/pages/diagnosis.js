@@ -256,34 +256,60 @@ const DiagnosisPage = {
             return;
         }
 
-        const toolItems = this.highRiskTools.map(tool => {
-            const isDisabled = this.disabledTools.includes(tool.name);
+        // Categorize tools by danger level
+        const dangerousTools = this.highRiskTools.filter(t => t.description.includes('⚠️ DANGEROUS'));
+        const normalTools = this.highRiskTools.filter(t => !t.description.includes('⚠️ DANGEROUS'));
+
+        const renderToolSection = (tools, title, warningText = null) => {
+            if (tools.length === 0) return '';
+
+            const toolItems = tools.map(tool => {
+                const isDisabled = this.disabledTools.includes(tool.name);
+                const isDangerous = tool.description.includes('⚠️ DANGEROUS');
+                const cleanDesc = tool.description.replace('⚠️ DANGEROUS: ', '');
+
+                return `
+                    <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:6px;cursor:pointer;background:var(--bg-secondary);margin-bottom:6px;border-left:3px solid ${isDangerous ? 'var(--accent-red)' : 'var(--accent-blue)'};">
+                        <input type="checkbox" class="tool-toggle" data-tool="${tool.name}" ${isDisabled ? '' : 'checked'}>
+                        <div style="flex:1;">
+                            <div style="font-weight:500;font-size:14px;display:flex;align-items:center;gap:6px;">
+                                ${isDangerous ? '<span style="color:var(--accent-red);">⚠️</span>' : ''}
+                                ${tool.name}
+                            </div>
+                            <div style="font-size:12px;opacity:0.7;">${cleanDesc}</div>
+                        </div>
+                        <span class="badge ${isDisabled ? 'badge-danger' : 'badge-success'}" id="badge-${tool.name}">
+                            ${isDisabled ? 'Disabled' : 'Enabled'}
+                        </span>
+                    </label>
+                `;
+            }).join('');
+
             return `
-                <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:6px;cursor:pointer;background:var(--bg-secondary);margin-bottom:6px;">
-                    <input type="checkbox" class="tool-toggle" data-tool="${tool.name}" ${isDisabled ? '' : 'checked'}>
-                    <div style="flex:1;">
-                        <div style="font-weight:500;font-size:14px;">${tool.name}</div>
-                        <div style="font-size:12px;opacity:0.7;">${tool.description}</div>
-                    </div>
-                    <span class="badge ${isDisabled ? 'badge-danger' : 'badge-success'}" id="badge-${tool.name}">
-                        ${isDisabled ? 'Disabled' : 'Enabled'}
-                    </span>
-                </label>
+                <div style="margin-bottom:20px;">
+                    <h4 style="font-size:14px;font-weight:600;margin-bottom:8px;color:var(--text-primary);">${title}</h4>
+                    ${warningText ? `<div style="background:rgba(248,81,73,0.1);border-left:3px solid var(--accent-red);padding:8px 12px;margin-bottom:10px;font-size:12px;border-radius:4px;">${warningText}</div>` : ''}
+                    ${toolItems}
+                </div>
             `;
-        }).join('');
+        };
 
         Modal.show({
-            title: 'Tool Safety Settings',
+            title: '🛡️ Tool Safety Settings',
             content: `
-                <p style="margin-bottom:12px;font-size:13px;opacity:0.8;">
-                    Control which high-risk tools the AI is allowed to use during diagnosis.
+                <p style="margin-bottom:16px;font-size:13px;opacity:0.8;">
+                    Control which tools the AI is allowed to use during diagnosis.
                     Disabled tools will be blocked for new sessions. Changes apply when creating a new session.
                 </p>
-                <div id="tool-safety-list">${toolItems}</div>
+                <div id="tool-safety-list">
+                    ${renderToolSection(normalTools, '📊 Standard Diagnostic Tools', null)}
+                    ${renderToolSection(dangerousTools, '⚠️ Dangerous Administrative Tools',
+                        '<strong>WARNING:</strong> These tools can modify database data, structure, and system configuration. Only enable if you fully understand the risks and trust the AI to make changes.')}
+                </div>
             `,
             buttons: [
                 { text: 'Cancel', variant: 'secondary', onClick: () => Modal.hide() },
-                { text: 'Apply', variant: 'primary', onClick: () => this._applyToolSafety() }
+                { text: 'Apply Settings', variant: 'primary', onClick: () => this._applyToolSafety() }
             ]
         });
 

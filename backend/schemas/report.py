@@ -19,6 +19,8 @@ class ReportResponse(BaseModel):
     report_type: str
     status: str
     summary: Optional[str] = None
+    content_md: Optional[str] = None
+    content_html: Optional[str] = None
     findings: Optional[Any] = None
     created_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
@@ -27,6 +29,8 @@ class ReportResponse(BaseModel):
     kb_ids: Optional[List[int]] = None
     generation_method: Optional[str] = None
     error_message: Optional[str] = None
+    is_scheduled: Optional[bool] = None
+    schedule_config_id: Optional[int] = None
 
     class Config:
         from_attributes = True

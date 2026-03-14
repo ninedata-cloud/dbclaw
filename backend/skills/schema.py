@@ -41,6 +41,9 @@ class SkillDefinition(BaseModel):
             "modify_config",
             "access_kb",
             "read_datasource",
+            "execute_any_sql",  # Dangerous: Execute any SQL including DDL/DML
+            "execute_any_os_command",  # Dangerous: Execute any OS command
+            "admin",  # Administrative privileges
         }
         for perm in v:
             if perm not in valid_permissions:

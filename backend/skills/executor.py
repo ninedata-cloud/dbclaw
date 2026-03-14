@@ -134,6 +134,7 @@ class SkillExecutor:
                 "AttributeError": AttributeError,
                 "__import__": __import__,
             },
+            "__name__": "skill_execution",
             "json": __import__("json"),
             "re": __import__("re"),
             "datetime": __import__("datetime"),
