@@ -24,6 +24,12 @@ def skill_to_openai_function(skill: Skill) -> Dict[str, Any]:
         if param.get("required", True):
             required.append(param["name"])
 
+    # Add timeout parameter for dynamic execution time control
+    properties["timeout"] = {
+        "type": "integer",
+        "description": "Execution timeout in seconds (30-3600). Estimate based on task complexity: simple queries 30-60s, complex analysis 300-600s, deep diagnostics 600-3600s.",
+    }
+
     return {
         "type": "function",
         "function": {

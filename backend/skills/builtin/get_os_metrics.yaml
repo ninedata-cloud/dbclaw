@@ -3,14 +3,15 @@ name: OS Metrics
 version: 1.0.0
 author: SmartDBA
 category: system
-description: Get OS-level metrics (CPU, memory, disk, network, load) from the host server via SSH
+description: Get OS-level metrics (CPU, memory, disk, network, load) from the host server via host connection
 tags: [linux, system, monitoring, ssh, cpu, memory, disk]
+timeout: 120
 
 parameters:
   - name: datasource_id
     type: integer
     required: true
-    description: The database connection ID (must have SSH host configured)
+    description: The database connection ID (must have host configured)
 
 permissions:
   - execute_command

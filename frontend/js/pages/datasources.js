@@ -1,6 +1,10 @@
 /* Datasources management page */
 const DatasourcesPage = {
+    allDatasources: [],
+    filteredDatasources: [],
+
     async render() {
+        console.log('DatasourcesPage: Using NEW table layout');
         Header.render('Datasources', DOM.el('button', {
             className: 'btn btn-primary',
             innerHTML: '<i data-lucide="plus"></i> New Datasource',
@@ -11,11 +15,12 @@ const DatasourcesPage = {
         content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
         try {
-            const datasources = await API.getDatasources();
-            Store.set('datasources', datasources);
+            this.allDatasources = await API.getDatasources();
+            this.filteredDatasources = [...this.allDatasources];
+            Store.set('datasources', this.allDatasources);
             content.innerHTML = '';
 
-            if (datasources.length === 0) {
+            if (this.allDatasources.length === 0) {
                 content.innerHTML = `
                     <div class="empty-state">
                         <i data-lucide="database"></i>
@@ -27,21 +32,53 @@ const DatasourcesPage = {
                 return;
             }
 
-            // SSH Hosts management link
-            const sshBar = DOM.el('div', { className: 'flex-between mb-16' });
-            sshBar.appendChild(DOM.el('span', { className: 'text-muted text-sm', textContent: `${datasources.length} datasource(s)` }));
-            sshBar.appendChild(DOM.el('button', {
-                className: 'btn btn-secondary btn-sm',
-                innerHTML: '<i data-lucide="terminal"></i> SSH Hosts',
-                onClick: () => this._showSSHHostsModal()
-            }));
-            content.appendChild(sshBar);
+            // Filters
+            const filterBar = DOM.el('div', { style: { marginBottom: '20px', display: 'flex', gap: '10px', alignItems: 'end', flexWrap: 'wrap' } });
 
-            const grid = DOM.el('div', { className: 'datasource-grid' });
-            for (const conn of datasources) {
-                grid.appendChild(this._createCard(conn));
-            }
-            content.appendChild(grid);
+            const nameFilter = DOM.el('div');
+            nameFilter.innerHTML = `
+                <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">Name</label>
+                <input type="text" id="filterName" class="form-input" placeholder="Search by name..." style="padding:8px;border-radius:4px;min-width:200px;">
+            `;
+
+            const typeFilter = DOM.el('div');
+            typeFilter.innerHTML = `
+                <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">Database Type</label>
+                <select id="filterType" class="form-select" style="padding:8px;border-radius:4px;">
+                    <option value="">All Types</option>
+                    <option value="mysql">MySQL</option>
+                    <option value="postgresql">PostgreSQL</option>
+                    <option value="oracle">Oracle</option>
+                    <option value="sqlserver">SQL Server</option>
+                    <option value="dm">DM</option>
+                    <option value="mongodb">MongoDB</option>
+                    <option value="redis">Redis</option>
+                </select>
+            `;
+
+            const importanceFilter = DOM.el('div');
+            importanceFilter.innerHTML = `
+                <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">Importance</label>
+                <select id="filterImportance" class="form-select" style="padding:8px;border-radius:4px;">
+                    <option value="">All Levels</option>
+                    <option value="core">核心系统</option>
+                    <option value="production">生产系统</option>
+                    <option value="development">开发测试</option>
+                    <option value="temporary">临时</option>
+                </select>
+            `;
+
+            filterBar.appendChild(nameFilter);
+            filterBar.appendChild(typeFilter);
+            filterBar.appendChild(importanceFilter);
+            content.appendChild(filterBar);
+
+            // Table container
+            const tableContainer = DOM.el('div', { id: 'datasource-table-container' });
+            content.appendChild(tableContainer);
+
+            this._renderTable();
+            this._setupFilterListeners();
             DOM.createIcons();
 
         } catch (err) {
@@ -49,8 +86,30 @@ const DatasourcesPage = {
         }
     },
 
-    _createCard(conn) {
-        const card = DOM.el('div', { className: 'datasource-card' });
+    _setupFilterListeners() {
+        DOM.$('#filterName')?.addEventListener('input', () => this._applyFilters());
+        DOM.$('#filterType')?.addEventListener('change', () => this._applyFilters());
+        DOM.$('#filterImportance')?.addEventListener('change', () => this._applyFilters());
+    },
+
+    _applyFilters() {
+        const nameFilter = DOM.$('#filterName')?.value.toLowerCase() || '';
+        const typeFilter = DOM.$('#filterType')?.value || '';
+        const importanceFilter = DOM.$('#filterImportance')?.value || '';
+
+        this.filteredDatasources = this.allDatasources.filter(ds => {
+            const matchName = !nameFilter || ds.name.toLowerCase().includes(nameFilter);
+            const matchType = !typeFilter || ds.db_type === typeFilter;
+            const matchImportance = !importanceFilter || ds.importance_level === importanceFilter;
+            return matchName && matchType && matchImportance;
+        });
+
+        this._renderTable();
+    },
+
+    _renderTable() {
+        const container = DOM.$('#datasource-table-container');
+        if (!container) return;
 
         const importanceLevels = {
             core: { label: '核心系统', color: '#ef4444' },
@@ -58,83 +117,92 @@ const DatasourcesPage = {
             development: { label: '开发测试', color: '#3b82f6' },
             temporary: { label: '临时', color: '#6b7280' }
         };
-        const importance = importanceLevels[conn.importance_level] || importanceLevels.production;
 
-        card.innerHTML = `
-            <div class="datasource-card-header">
-                <span class="datasource-card-name">${conn.name}</span>
-                <span class="datasource-card-type type-${conn.db_type}">${conn.db_type}</span>
-            </div>
-            <div class="datasource-card-info">
-                <span><i data-lucide="server"></i> ${conn.host}:${conn.port}</span>
-                ${conn.database ? `<span><i data-lucide="hard-drive"></i> ${conn.database}</span>` : ''}
-                ${conn.username ? `<span><i data-lucide="user"></i> ${conn.username}</span>` : ''}
-                <span><i data-lucide="shield"></i> <span style="color: ${importance.color}; font-weight: 500">${importance.label}</span></span>
-                <span><i data-lucide="clock"></i> ${conn.monitoring_interval || 60}s</span>
-            </div>
-            <div class="datasource-card-actions">
-                <button class="btn btn-sm btn-secondary test-btn" data-id="${conn.id}">
-                    <i data-lucide="plug"></i> Test
-                </button>
-                <button class="btn btn-sm btn-secondary edit-btn" data-id="${conn.id}">
-                    <i data-lucide="pencil"></i> Edit
-                </button>
-                <button class="btn btn-sm btn-danger delete-btn" data-id="${conn.id}">
-                    <i data-lucide="trash-2"></i>
-                </button>
-                <div style="flex:1"></div>
-                <button class="btn btn-sm btn-primary monitor-btn" data-id="${conn.id}">
-                    <i data-lucide="activity"></i> Monitor
-                </button>
-            </div>
+        container.innerHTML = `
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Host</th>
+                        <th>Database</th>
+                        <th>Importance</th>
+                        <th>Interval</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${this.filteredDatasources.map(conn => {
+                        const importance = importanceLevels[conn.importance_level] || importanceLevels.production;
+                        return `
+                            <tr>
+                                <td><strong>${conn.name}</strong></td>
+                                <td><span class="badge badge-info">${conn.db_type}</span></td>
+                                <td>${conn.host}:${conn.port}</td>
+                                <td>${conn.database || '-'}</td>
+                                <td><span style="color:${importance.color};font-weight:500;">${importance.label}</span></td>
+                                <td>${conn.monitoring_interval || 60}s</td>
+                                <td>
+                                    <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                                        <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._testDatasource(${conn.id})" title="Test">
+                                            <i data-lucide="plug"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._editDatasource(${conn.id})" title="Edit">
+                                            <i data-lucide="pencil"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._showInspectionConfig(${conn.id})" title="Inspection Config">
+                                            <i data-lucide="settings"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._triggerInspection(${conn.id})" title="Diagnose">
+                                            <i data-lucide="zap"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-danger" onclick="DatasourcesPage._deleteDatasource(${conn.id})" title="Delete">
+                                            <i data-lucide="trash-2"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-primary" onclick="DatasourcesPage._monitorDatasource(${conn.id})" title="Monitor">
+                                            <i data-lucide="activity"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
         `;
-
-        // Wire up buttons
-        card.querySelector('.test-btn').addEventListener('click', (e) => {
-            e.stopPropagation();
-            this._testDatasource(conn.id, card);
-        });
-        card.querySelector('.edit-btn').addEventListener('click', (e) => {
-            e.stopPropagation();
-            DatasourceForm.show(conn, () => this.render());
-        });
-        card.querySelector('.delete-btn').addEventListener('click', (e) => {
-            e.stopPropagation();
-            this._deleteDatasource(conn);
-        });
-        card.querySelector('.monitor-btn').addEventListener('click', (e) => {
-            e.stopPropagation();
-            Store.set('currentDatasource', conn);
-            Router.navigate('monitor');
-        });
-
-        return card;
+        DOM.createIcons();
     },
 
-    async _testDatasource(id, card) {
-        const btn = card.querySelector('.test-btn');
+    async _testDatasource(id) {
+        const btn = event.target.closest('button');
         btn.innerHTML = '<div class="spinner"></div>';
         btn.disabled = true;
         try {
             const result = await API.testDatasource(id);
             if (result.success) {
-                Toast.success(`Datasource successful! ${result.version || ''}`);
+                Toast.success(`Connection successful! ${result.version || ''}`);
             } else {
-                Toast.error(`Datasource failed: ${result.message}`);
+                Toast.error(`Connection failed: ${result.message}`);
             }
         } catch (err) {
             Toast.error('Test failed: ' + err.message);
         } finally {
-            btn.innerHTML = '<i data-lucide="plug"></i> Test';
+            btn.innerHTML = '<i data-lucide="plug"></i>';
             btn.disabled = false;
             DOM.createIcons();
         }
     },
 
-    async _deleteDatasource(conn) {
-        if (!confirm(`Delete datasource "${conn.name}"? This cannot be undone.`)) return;
+    _editDatasource(id) {
+        const conn = this.allDatasources.find(c => c.id === id);
+        if (conn) DatasourceForm.show(conn, () => this.render());
+    },
+
+    async _deleteDatasource(id) {
+        const conn = this.allDatasources.find(c => c.id === id);
+        if (!conn || !confirm(`Delete datasource "${conn.name}"? This cannot be undone.`)) return;
         try {
-            await API.deleteDatasource(conn.id);
+            await API.deleteDatasource(id);
             Toast.success('Datasource deleted');
             this.render();
         } catch (err) {
@@ -142,103 +210,86 @@ const DatasourcesPage = {
         }
     },
 
-    async _showSSHHostsModal() {
-        const container = DOM.el('div');
-        container.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
-
-        const footer = DOM.el('div', { style: { display: 'flex', gap: '8px', justifyContent: 'flex-end' } });
-        footer.appendChild(DOM.el('button', {
-            className: 'btn btn-secondary',
-            textContent: 'Close',
-            onClick: () => Modal.hide()
-        }));
-        footer.appendChild(DOM.el('button', {
-            className: 'btn btn-primary',
-            innerHTML: '<i data-lucide="plus"></i> Add SSH Host',
-            onClick: () => this._showSSHHostForm()
-        }));
-
-        Modal.show({ title: 'SSH Hosts', content: container, footer, width: '600px' });
-        DOM.createIcons();
-
-        try {
-            const hosts = await API.getSSHHosts();
-            container.innerHTML = '';
-            if (hosts.length === 0) {
-                container.innerHTML = '<p class="text-muted text-center">No SSH hosts configured</p>';
-                return;
-            }
-            for (const host of hosts) {
-                const item = DOM.el('div', {
-                    className: 'flex-between',
-                    style: { padding: '10px 0', borderBottom: '1px solid var(--border-color)' }
-                });
-                item.innerHTML = `
-                    <div>
-                        <strong>${host.name}</strong>
-                        <span class="text-muted text-sm" style="margin-left:8px">${host.username}@${host.host}:${host.port}</span>
-                    </div>
-                `;
-                const actions = DOM.el('div', { className: 'flex gap-8' });
-                actions.appendChild(DOM.el('button', {
-                    className: 'btn btn-sm btn-secondary',
-                    textContent: 'Test',
-                    onClick: async () => {
-                        try {
-                            const result = await API.testSSHHost(host.id);
-                            Toast[result.success ? 'success' : 'error'](result.message);
-                        } catch (e) { Toast.error(e.message); }
-                    }
-                }));
-                actions.appendChild(DOM.el('button', {
-                    className: 'btn btn-sm btn-danger',
-                    textContent: 'Delete',
-                    onClick: async () => {
-                        if (!confirm('Delete this SSH host?')) return;
-                        await API.deleteSSHHost(host.id);
-                        Toast.success('Deleted');
-                        this._showSSHHostsModal();
-                    }
-                }));
-                item.appendChild(actions);
-                container.appendChild(item);
-            }
-        } catch (err) {
-            container.innerHTML = `<p class="text-muted">Error: ${err.message}</p>`;
+    _monitorDatasource(id) {
+        const conn = this.allDatasources.find(c => c.id === id);
+        if (conn) {
+            Store.set('currentDatasource', conn);
+            Router.navigate('monitor');
         }
     },
 
-    _showSSHHostForm() {
-        const form = DOM.el('form');
-        form.innerHTML = `
-            <div class="form-group"><label>Name</label><input type="text" class="form-input" name="name" required placeholder="Production Server"></div>
-            <div class="form-row">
-                <div class="form-group"><label>Host</label><input type="text" class="form-input" name="host" required placeholder="10.0.0.1"></div>
-                <div class="form-group"><label>Port</label><input type="number" class="form-input" name="port" value="22"></div>
-            </div>
-            <div class="form-group"><label>Username</label><input type="text" class="form-input" name="username" required placeholder="root"></div>
-            <div class="form-group"><label>Auth Type</label><select class="form-select" name="auth_type"><option value="password">Password</option><option value="key">Private Key</option></select></div>
-            <div class="form-group"><label>Password</label><input type="password" class="form-input" name="password"></div>
-        `;
+    async _triggerInspection(datasourceId) {
+        if (!confirm('Trigger manual inspection? This will generate a comprehensive diagnostic report.')) {
+            return;
+        }
+        const btn = event.target.closest('button');
+        btn.innerHTML = '<div class="spinner"></div>';
+        btn.disabled = true;
+        try {
+            await API.post(`/api/inspections/trigger/${datasourceId}`);
+            Toast.success('Inspection triggered successfully!');
+        } catch (err) {
+            Toast.error('Failed to trigger inspection: ' + err.message);
+        } finally {
+            btn.innerHTML = '<i data-lucide="zap"></i>';
+            btn.disabled = false;
+            DOM.createIcons();
+        }
+    },
 
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const data = Object.fromEntries(new FormData(form).entries());
-            data.port = parseInt(data.port);
-            try {
-                await API.createSSHHost(data);
-                Toast.success('SSH host created');
-                Modal.hide();
-            } catch (err) { Toast.error(err.message); }
-        });
+    async _showInspectionConfig(datasourceId) {
+        try {
+            const config = await API.get(`/api/inspections/config/${datasourceId}`);
 
-        const footer = DOM.el('div', { style: { display: 'flex', gap: '8px', justifyContent: 'flex-end' } });
-        footer.appendChild(DOM.el('button', { className: 'btn btn-secondary', textContent: 'Cancel', type: 'button', onClick: () => Modal.hide() }));
-        footer.appendChild(DOM.el('button', {
-            className: 'btn btn-primary', textContent: 'Create', type: 'button',
-            onClick: () => form.requestSubmit()
-        }));
+            Modal.show({
+                title: 'Inspection Configuration',
+                content: `
+                    <div style="padding:10px;">
+                        <label style="display:block;margin-bottom:15px;">
+                            <input type="checkbox" id="enableAuto" ${config?.enabled ? 'checked' : ''}>
+                            Enable Automatic Inspection
+                        </label>
+                        <label style="display:block;margin-bottom:10px;">
+                            Schedule Interval (seconds):
+                            <input type="number" id="scheduleInterval" value="${config?.schedule_interval || 86400}"
+                                   style="width:100%;padding:8px;margin-top:5px;"
+                                   placeholder="86400 (daily)">
+                        </label>
+                        <p style="font-size:12px;color:#666;margin-top:5px;">
+                            Examples: 86400 (daily), 21600 (every 6 hours), 3600 (hourly)
+                        </p>
+                        <label style="display:block;margin-bottom:15px;margin-top:15px;">
+                            <input type="checkbox" id="useAI" ${config?.use_ai_analysis !== false ? 'checked' : ''}>
+                            Use AI Analysis
+                        </label>
+                    </div>
+                `,
+                buttons: [
+                    { text: 'Cancel', variant: 'secondary', onClick: () => Modal.hide() },
+                    { text: 'Save', variant: 'primary', onClick: () => this._saveInspectionConfig(datasourceId) }
+                ]
+            });
+        } catch (error) {
+            Toast.error('Failed to load configuration');
+        }
+    },
 
-        Modal.show({ title: 'New SSH Host', content: form, footer });
+    async _saveInspectionConfig(datasourceId) {
+        const enabled = DOM.$('#enableAuto')?.checked;
+        const schedule_interval = parseInt(DOM.$('#scheduleInterval')?.value) || 86400;
+        const use_ai_analysis = DOM.$('#useAI')?.checked;
+
+        try {
+            await API.post(`/api/inspections/config/${datasourceId}`, {
+                enabled,
+                schedule_interval,
+                use_ai_analysis,
+                threshold_rules: {}
+            });
+            Modal.hide();
+            Toast.success('Configuration saved');
+        } catch (error) {
+            Toast.error('Failed to save configuration');
+        }
     }
 };

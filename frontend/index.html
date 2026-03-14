@@ -21,8 +21,8 @@
     <!-- Chart.js -->
     <script src="/lib/chart.js/dist/chart.umd.js"></script>
 
-    <!-- Marked + Highlight.js (load BEFORE Monaco to ensure global registration) -->
-    <script src="/lib/marked/marked.min.js"></script>
+    <!-- Markdown-it + Highlight.js (load BEFORE Monaco to ensure global registration) -->
+    <script src="/lib/markdown-it/markdown-it.min.js"></script>
     <script src="/lib/highlight.js/highlight.min.js"></script>
     <script src="/lib/highlight.js/languages/sql.min.js"></script>
     <script src="/lib/highlight.js/languages/json.min.js"></script>
@@ -66,16 +66,15 @@
     <link rel="stylesheet" href="/css/chat-attachments.css">
     <link rel="stylesheet" href="/css/query.css">
     <link rel="stylesheet" href="/css/skills.css">
+    <link rel="stylesheet" href="/css/inspection.css">
     <link rel="stylesheet" href="/css/auth.css">
-    <link rel="stylesheet" href="/css/guardian.css">
-    <link rel="stylesheet" href="/css/reports.css">
 </head>
 <body>
     <div id="app">
         <aside id="sidebar" class="sidebar">
             <div class="sidebar-header">
                 <img src="/assets/logo.svg" alt="DBMaster" class="sidebar-logo">
-                <span class="sidebar-title">DBMaster</span>
+                <span class="sidebar-title">NineData DBMaster</span>
             </div>
             <nav id="sidebar-nav" class="sidebar-nav"></nav>
             <div class="sidebar-footer">
@@ -97,6 +96,7 @@
     </div>
 
     <!-- App JS -->
+    <script src="/js/markdown-renderer.js"></script>
     <script src="/js/utils/dom.js"></script>
     <script src="/js/utils/format.js"></script>
     <script src="/js/utils/websocket.js"></script>
@@ -117,18 +117,16 @@
     <script src="/js/components/query-editor.js"></script>
     <script src="/js/pages/dashboard.js"></script>
     <script src="/js/pages/datasources.js"></script>
-    <script src="/js/pages/ssh-hosts.js"></script>
+    <script src="/js/pages/hosts.js"></script>
     <script src="/js/pages/monitor.js"></script>
     <script src="/js/pages/diagnosis.js"></script>
     <script src="/js/pages/query.js"></script>
-    <script src="/js/pages/reports.js"></script>
-    <script src="/js/pages/scheduled-reports.js"></script>
     <script src="/js/pages/ai-models.js"></script>
     <script src="/js/pages/knowledge-bases.js"></script>
     <script src="/js/pages/skills.js"></script>
     <script src="/js/pages/login.js"></script>
     <script src="/js/pages/users.js"></script>
-    <script src="/js/pages/guardian-dashboard.js"></script>
+    <script src="/js/pages/inspection.js"></script>
     <script src="/js/app.js"></script>
 </body>
 </html>

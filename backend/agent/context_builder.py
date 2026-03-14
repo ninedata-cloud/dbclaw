@@ -6,7 +6,7 @@ from sqlalchemy import select, desc
 from backend.database import async_session
 from backend.models.datasource import Datasource
 from backend.models.metric_snapshot import MetricSnapshot
-from backend.models.ssh_host import SSHHost
+from backend.models.host import Host
 from backend.services.db_connector import get_connector
 from backend.services.ssh_service import SSHService
 from backend.services.os_metrics_service import OSMetricsService
@@ -159,19 +159,19 @@ async def _tool_explain_query(args):
 
 async def _tool_get_os_metrics(args):
     datasource = await _get_connection(args["datasource_id"])
-    if not datasource or not datasource.ssh_host_id:
+    if not datasource or not datasource.host_id:
         return {"error": "No SSH host configured for this datasource"}
 
     async with async_session() as db:
-        result = await db.execute(select(SSHHost).where(SSHHost.id == conn.ssh_host_id))
-        ssh_host = result.scalar_one_or_none()
-        if not ssh_host:
+        result = await db.execute(select(Host).where(Host.id == conn.host_id))
+        host = result.scalar_one_or_none()
+        if not host:
             return {"error": "SSH host not found"}
 
-    password = decrypt_value(ssh_host.password_encrypted) if ssh_host.password_encrypted else None
-    private_key = decrypt_value(ssh_host.private_key_encrypted) if ssh_host.private_key_encrypted else None
+    password = decrypt_value(host.password_encrypted) if host.password_encrypted else None
+    private_key = decrypt_value(host.private_key_encrypted) if host.private_key_encrypted else None
     ssh = SSHService(
-        host=ssh_host.host, port=ssh_host.port, username=ssh_host.username,
+        host=host.host, port=host.port, username=host.username,
         password=password, private_key=private_key,
     )
     os_svc = OSMetricsService(ssh)
@@ -181,7 +181,7 @@ async def _tool_get_os_metrics(args):
 async def _tool_execute_os_command(args):
     """Execute a shell command on the DB host via SSH with safety checks."""
     datasource = await _get_connection(args["datasource_id"])
-    if not datasource or not datasource.ssh_host_id:
+    if not datasource or not datasource.host_id:
         return {"error": "No SSH host configured for this datasource"}
 
     command = args.get("command", "").strip()
@@ -200,15 +200,15 @@ async def _tool_execute_os_command(args):
             return {"error": f"Command blocked for safety: contains '{b.strip()}'. Only read-only diagnostic commands are allowed."}
 
     async with async_session() as db:
-        result = await db.execute(select(SSHHost).where(SSHHost.id == datasource.ssh_host_id))
-        ssh_host = result.scalar_one_or_none()
-        if not ssh_host:
+        result = await db.execute(select(Host).where(Host.id == datasource.host_id))
+        host = result.scalar_one_or_none()
+        if not host:
             return {"error": "SSH host not found"}
 
-    password = decrypt_value(ssh_host.password_encrypted) if ssh_host.password_encrypted else None
-    private_key = decrypt_value(ssh_host.private_key_encrypted) if ssh_host.private_key_encrypted else None
+    password = decrypt_value(host.password_encrypted) if host.password_encrypted else None
+    private_key = decrypt_value(host.private_key_encrypted) if host.private_key_encrypted else None
     ssh = SSHService(
-        host=ssh_host.host, port=ssh_host.port, username=ssh_host.username,
+        host=host.host, port=host.port, username=host.username,
         password=password, private_key=private_key,
     )
 

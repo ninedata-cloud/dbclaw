@@ -4,17 +4,15 @@
     Router.register('login', () => LoginPage.render());
     Router.register('dashboard', () => { DashboardPage.render(); });
     Router.register('datasources', () => { DatasourcesPage.render(); });
-    Router.register('ssh-hosts', () => { SSHHostsPage.render(); });
+    Router.register('hosts', () => { HostsPage.render(); });
     Router.register('monitor', () => MonitorPage.render());
     Router.register('diagnosis', () => DiagnosisPage.render());
     Router.register('query', () => QueryPage.render());
-    Router.register('reports', () => ReportsPage.render());
     Router.register('ai-models', () => AIModelsPage.render());
     Router.register('knowledge-bases', () => KnowledgeBasesPage.render());
     Router.register('skills', () => SkillsPage.render());
     Router.register('users', () => UsersPage.render());
-    Router.register('guardian', () => GuardianDashboardPage.render());
-    Router.register('scheduled-reports', () => ScheduledReportsPage.render());
+    Router.register('inspection', () => InspectionPage.render());
 
     // Check auth
     const token = localStorage.getItem('auth_token');

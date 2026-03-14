@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, ForeignKey
+from sqlalchemy import Column, ForeignKey, Integer, String, DateTime, Text, JSON
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from backend.database import Base
@@ -15,10 +15,6 @@ class DiagnosticSession(Base):
     disabled_tools = Column(JSON, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-
-    # AI Guardian relationships
-    trained_rules = relationship("GuardianRule", back_populates="training_conversation")
-    cases = relationship("DiagnosticCase", back_populates="diagnostic_conversation")
 
 
 class ChatMessage(Base):

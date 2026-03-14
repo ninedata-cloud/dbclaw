@@ -49,8 +49,8 @@ const DatasourceForm = {
                 <input type="text" class="form-input" name="database" value="${datasource?.database || ''}" placeholder="mydb">
             </div>
             <div class="form-group">
-                <label>SSH Host (Optional)</label>
-                <select class="form-select" name="ssh_host_id">
+                <label>Host (Optional)</label>
+                <select class="form-select" name="host_id">
                     <option value="">None</option>
                 </select>
             </div>
@@ -78,8 +78,8 @@ const DatasourceForm = {
             if (!datasource) portInput.value = this._defaultPort(dbTypeSelect.value);
         });
 
-        // Load SSH hosts
-        this._loadSSHHosts(form.querySelector('[name="ssh_host_id"]'), datasource?.ssh_host_id);
+        // Load hosts
+        this._loadHosts(form.querySelector('[name="host_id"]'), datasource?.host_id);
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -88,8 +88,8 @@ const DatasourceForm = {
             data.port = parseInt(data.port);
             data.monitoring_interval = parseInt(data.monitoring_interval);
             if (!data.password) delete data.password;
-            if (!data.ssh_host_id) data.ssh_host_id = null;
-            else data.ssh_host_id = parseInt(data.ssh_host_id);
+            if (!data.host_id) data.host_id = null;
+            else data.host_id = parseInt(data.host_id);
             if (!data.database) data.database = null;
 
             try {
@@ -170,10 +170,10 @@ const DatasourceForm = {
         return ports[dbType] || 3306;
     },
 
-    async _loadSSHHosts(select, selectedId) {
+    async _loadHosts(select, selectedId) {
         try {
-            const hosts = await API.getSSHHosts();
-            Store.set('sshHosts', hosts);
+            const hosts = await API.getHosts();
+            Store.set('hosts', hosts);
             for (const host of hosts) {
                 const opt = DOM.el('option', { value: host.id, textContent: `${host.name} (${host.host})` });
                 if (selectedId && host.id === selectedId) opt.selected = true;

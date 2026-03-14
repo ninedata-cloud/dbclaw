@@ -27,7 +27,7 @@ code: |
               "host": datasource.host,
               "port": datasource.port,
               "database": datasource.database,
-              "has_ssh": datasource.ssh_host_id is not None
+              "has_ssh": datasource.host_id is not None
           })
 
       return {

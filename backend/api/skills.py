@@ -190,12 +190,17 @@ async def test_skill(
     if not skill:
         raise HTTPException(status_code=404, detail="Skill not found")
 
+    # Determine timeout for testing (use skill timeout or default)
+    from backend.skills.executor import SkillExecutor
+    timeout = skill.timeout if skill.timeout else SkillExecutor.DEFAULT_TIMEOUT
+
     # Create execution context with all permissions for testing
     context = SkillContext(
         db=db,
         user_id=current_user.id,
         session_id=execution_request.session_id,
         permissions=skill.permissions or [],
+        timeout=timeout,
     )
 
     # Execute skill

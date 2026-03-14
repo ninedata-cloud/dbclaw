@@ -62,6 +62,18 @@ class DBConnector(ABC):
         """Get database size information."""
         return {}
 
+    async def get_index_stats(self) -> List[Dict[str, Any]]:
+        """Get index usage statistics."""
+        return []
+
+    async def get_lock_waits(self) -> List[Dict[str, Any]]:
+        """Get current lock waits and deadlocks."""
+        return []
+
+    async def get_table_fragmentation(self) -> List[Dict[str, Any]]:
+        """Get table fragmentation information."""
+        return []
+
     @abstractmethod
     async def get_schemas(self) -> List[str]:
         """Get list of schema/database names."""

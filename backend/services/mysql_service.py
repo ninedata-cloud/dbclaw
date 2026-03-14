@@ -295,5 +295,58 @@ class MySQLConnector(DBConnector):
         finally:
             conn.close()
 
+    async def get_index_stats(self) -> List[Dict[str, Any]]:
+        """Get index usage statistics."""
+        conn = await self._connect()
+        try:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE, SEQ_IN_INDEX, COLUMN_NAME, CARDINALITY "
+                    "FROM information_schema.STATISTICS "
+                    f"WHERE TABLE_SCHEMA = %s ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX",
+                    (self.database,)
+                )
+                rows = await cur.fetchall()
+                return [{"table": r[0], "index": r[1], "non_unique": r[2], "seq": r[3], "column": r[4], "cardinality": r[5]} for r in rows]
+        finally:
+            conn.close()
+
+    async def get_lock_waits(self) -> List[Dict[str, Any]]:
+        """Get current lock waits."""
+        conn = await self._connect()
+        try:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "SELECT r.trx_id waiting_trx, r.trx_mysql_thread_id waiting_thread, "
+                    "r.trx_query waiting_query, b.trx_id blocking_trx, b.trx_mysql_thread_id blocking_thread "
+                    "FROM information_schema.INNODB_LOCK_WAITS w "
+                    "JOIN information_schema.INNODB_TRX b ON b.trx_id = w.blocking_trx_id "
+                    "JOIN information_schema.INNODB_TRX r ON r.trx_id = w.requesting_trx_id"
+                )
+                rows = await cur.fetchall()
+                return [{"waiting_trx": r[0], "waiting_thread": r[1], "waiting_query": r[2], "blocking_trx": r[3], "blocking_thread": r[4]} for r in rows]
+        except Exception:
+            return []
+        finally:
+            conn.close()
+
+    async def get_table_fragmentation(self) -> List[Dict[str, Any]]:
+        """Get table fragmentation info."""
+        conn = await self._connect()
+        try:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "SELECT TABLE_NAME, DATA_FREE, DATA_LENGTH, "
+                    "ROUND(DATA_FREE / (DATA_LENGTH + DATA_FREE) * 100, 2) as fragmentation_pct "
+                    "FROM information_schema.TABLES "
+                    f"WHERE TABLE_SCHEMA = %s AND DATA_FREE > 0 AND ENGINE = 'InnoDB' "
+                    "ORDER BY DATA_FREE DESC LIMIT 20",
+                    (self.database,)
+                )
+                rows = await cur.fetchall()
+                return [{"table": r[0], "data_free": r[1], "data_length": r[2], "fragmentation_pct": float(r[3] or 0)} for r in rows]
+        finally:
+            conn.close()
+
 
 import aiomysql

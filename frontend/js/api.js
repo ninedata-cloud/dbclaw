@@ -90,12 +90,12 @@ const API = {
     deleteDatasource(id) { return this.delete(`/api/datasources/${id}`); },
     testDatasource(id) { return this.post(`/api/datasources/${id}/test`); },
 
-    // SSH Host endpoints
-    getSSHHosts() { return this.get('/api/ssh-hosts'); },
-    createSSHHost(data) { return this.post('/api/ssh-hosts', data); },
-    updateSSHHost(id, data) { return this.put(`/api/ssh-hosts/${id}`, data); },
-    deleteSSHHost(id) { return this.delete(`/api/ssh-hosts/${id}`); },
-    testSSHHost(id) { return this.post(`/api/ssh-hosts/${id}/test`); },
+    // Host endpoints
+    getHosts() { return this.get('/api/hosts'); },
+    createHost(data) { return this.post('/api/hosts', data); },
+    updateHost(id, data) { return this.put(`/api/hosts/${id}`, data); },
+    deleteHost(id) { return this.delete(`/api/hosts/${id}`); },
+    testHost(id) { return this.post(`/api/hosts/${id}/test`); },
 
     // Metrics endpoints
     getMetrics(connId, params = '') { return this.get(`/api/metrics/${connId}${params ? '?' + params : ''}`); },
@@ -205,23 +205,7 @@ const API = {
         return await response.json();
     },
 
-    // Scheduled Reports
-    getScheduledReportConfigs() { return this.get('/api/scheduled-reports/configs'); },
-    getScheduledReportConfig(datasourceId) { return this.get(`/api/scheduled-reports/configs/${datasourceId}`); },
-    createScheduledReportConfig(data) { return this.post('/api/scheduled-reports/configs', data); },
-    updateScheduledReportConfig(configId, data) { return this.put(`/api/scheduled-reports/configs/${configId}`, data); },
-    deleteScheduledReportConfig(configId) { return this.delete(`/api/scheduled-reports/configs/${configId}`); },
-    enableScheduledReport(configId) { return this.post(`/api/scheduled-reports/configs/${configId}/enable`); },
-    disableScheduledReport(configId) { return this.post(`/api/scheduled-reports/configs/${configId}/disable`); },
-    getScheduledReportHistory(datasourceId, page = 1, limit = 50) {
-        return this.get(`/api/scheduled-reports/history/${datasourceId}?page=${page}&limit=${limit}`);
-    },
-    triggerScheduledReport(datasourceId) { return this.post(`/api/scheduled-reports/trigger/${datasourceId}`); },
-    getScheduledReportStats() { return this.get('/api/scheduled-reports/stats'); },
-    getDatasourceScheduledReportStats(datasourceId) { return this.get(`/api/scheduled-reports/stats/${datasourceId}`); },
-    getScheduledReports(datasourceId, page = 1, limit = 50) {
-        const params = new URLSearchParams({ page, limit });
-        if (datasourceId) params.append('datasource_id', datasourceId);
-        return this.get(`/api/scheduled-reports/reports?${params}`);
-    },
+    // Skills
+    getSkills() { return this.get('/api/skills'); }
+
 };

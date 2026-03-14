@@ -17,11 +17,13 @@ class SkillContext:
         user_id: int,
         session_id: Optional[int] = None,
         permissions: List[str] = None,
+        timeout: Optional[int] = None,
     ):
         self.db = db
         self.user_id = user_id
         self.session_id = session_id
         self.permissions = permissions or []
+        self.timeout = timeout  # Store timeout for use in execute_command
         self._skill_registry = None
 
     def _check_permission(self, permission: str):
@@ -57,20 +59,29 @@ class SkillContext:
         result = await db_execute_query(datasource, query, allow_write=allow_write)
         return result
 
-    async def execute_ssh_command(self, command: str, datasource_id: int, allow_write: bool = False) -> Dict[str, Any]:
-        """Execute an OS command via SSH"""
+    async def execute_host_command(self, command: str, datasource_id: int, allow_write: bool = False, timeout: int = None) -> Dict[str, Any]:
+        """Execute an OS command via host connection
+
+        Args:
+            command: Shell command to execute
+            datasource_id: Database connection ID (must have host configured)
+            allow_write: If False (default), only read-only commands are allowed
+            timeout: Command execution timeout in seconds (uses context timeout if not specified)
+        """
         if allow_write:
             self._check_permission("execute_any_os_command")
         else:
             self._check_permission("execute_command")
 
-        from backend.utils.ssh_executor import execute_ssh_command
+        from backend.utils.host_executor import execute_host_command
 
         datasource = await self.get_connection(datasource_id, check_permission=False)
-        if not datasource.ssh_host_id:
-            raise ValueError(f"Datasource {datasource_id} has no SSH host configured")
+        if not datasource.host_id:
+            raise ValueError(f"Datasource {datasource_id} has no host configured")
 
-        result = await execute_ssh_command(self.db, datasource.ssh_host_id, command, allow_write=allow_write)
+        # Use provided timeout, or fall back to context timeout
+        exec_timeout = timeout if timeout is not None else self.timeout
+        result = await execute_host_command(self.db, datasource.host_id, command, allow_write=allow_write, timeout=exec_timeout)
         return result
 
     async def search_kb(
@@ -165,9 +176,17 @@ class SkillContext:
             for s in snapshots
         ]
 
-    async def execute_command(self, command: str, datasource_id: int) -> Dict[str, Any]:
-        """Execute an OS command via SSH (backward compatibility wrapper)"""
-        return await self.execute_ssh_command(command, datasource_id, allow_write=False)
+    async def execute_command(self, command: str, datasource_id: int, timeout: int = None) -> Dict[str, Any]:
+        """Execute an OS command via host connection (backward compatibility wrapper)
+
+        Args:
+            command: Shell command to execute
+            datasource_id: Database connection ID (must have host configured)
+            timeout: Command execution timeout in seconds (uses context timeout if not specified)
+        """
+        # Use provided timeout, or fall back to context timeout
+        exec_timeout = timeout if timeout is not None else self.timeout
+        return await self.execute_host_command(command, datasource_id, allow_write=False, timeout=exec_timeout)
 
     async def call_skill(self, skill_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Call another skill (for skill composition)"""

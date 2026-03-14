@@ -1,25 +1,17 @@
 /* Sidebar component */
 const Sidebar = {
     navItems: [
-        { section: 'Overview', items: [
-            { id: 'dashboard', icon: 'layout-dashboard', label: 'Dashboard' },
-            { id: 'guardian', icon: 'shield', label: 'AI Guardian' },
-        ]},
-        { section: 'Management', items: [
+        { id: 'dashboard', icon: 'layout-dashboard', label: 'Dashboard' },
+        { id: 'inspection', icon: 'search-check', label: 'Inspection' },
+        { id: 'diagnosis', icon: 'bot', label: 'AI Diagnosis' },
+        { id: 'monitor', icon: 'activity', label: 'Monitor' },
+        { id: 'query', icon: 'terminal-square', label: 'Query' },
+        { section: 'Configuration', items: [
             { id: 'datasources', icon: 'database', label: 'Datasources' },
-            { id: 'ssh-hosts', icon: 'terminal', label: 'SSH Hosts' },
-            { id: 'monitor', icon: 'activity', label: 'Monitor' },
-        ]},
-        { section: 'Tools', items: [
-            { id: 'diagnosis', icon: 'bot', label: 'AI Diagnosis' },
-            { id: 'query', icon: 'terminal-square', label: 'Query' },
-            { id: 'reports', icon: 'file-text', label: 'Reports' },
-            { id: 'scheduled-reports', icon: 'calendar-clock', label: 'Scheduled Reports' },
-        ]},
-        { section: 'Settings', items: [
+            { id: 'hosts', icon: 'terminal', label: 'Hosts' },
             { id: 'ai-models', icon: 'brain', label: 'AI Models' },
-            { id: 'knowledge-bases', icon: 'book-open', label: 'Knowledge Bases' },
             { id: 'skills', icon: 'wrench', label: 'Skills' },
+            { id: 'knowledge-bases', icon: 'book-open', label: 'Knowledge Bases' },
         ]},
     ],
 
@@ -29,34 +21,48 @@ const Sidebar = {
 
         const currentUser = Store.get('currentUser');
 
-        for (const section of this.navItems) {
-            const sectionEl = DOM.el('div', { className: 'nav-section' });
-            sectionEl.appendChild(DOM.el('div', { className: 'nav-section-title', textContent: section.section }));
+        for (const item of this.navItems) {
+            // Check if this is a section with items or a flat item
+            if (item.section && item.items) {
+                // Render section with items
+                const sectionEl = DOM.el('div', { className: 'nav-section' });
+                sectionEl.appendChild(DOM.el('div', { className: 'nav-section-title', textContent: item.section }));
 
-            for (const item of section.items) {
+                for (const subItem of item.items) {
+                    const navItem = DOM.el('div', {
+                        className: 'nav-item',
+                        dataset: { page: subItem.id },
+                        innerHTML: `<i data-lucide="${subItem.icon}"></i><span>${subItem.label}</span>`,
+                        onClick: () => Router.navigate(subItem.id)
+                    });
+                    sectionEl.appendChild(navItem);
+                }
+                nav.appendChild(sectionEl);
+            } else {
+                // Render flat item
                 const navItem = DOM.el('div', {
                     className: 'nav-item',
                     dataset: { page: item.id },
                     innerHTML: `<i data-lucide="${item.icon}"></i><span>${item.label}</span>`,
                     onClick: () => Router.navigate(item.id)
                 });
-                sectionEl.appendChild(navItem);
+                nav.appendChild(navItem);
             }
-            nav.appendChild(sectionEl);
         }
 
-        // Add System section for admins
+        // Add User Management to Configuration section for admins
         if (currentUser && currentUser.is_admin) {
-            const systemSection = DOM.el('div', { className: 'nav-section' });
-            systemSection.appendChild(DOM.el('div', { className: 'nav-section-title', textContent: 'System' }));
-            const usersItem = DOM.el('div', {
-                className: 'nav-item',
-                dataset: { page: 'users' },
-                innerHTML: '<i data-lucide="users"></i><span>User Management</span>',
-                onClick: () => Router.navigate('users')
-            });
-            systemSection.appendChild(usersItem);
-            nav.appendChild(systemSection);
+            // Find the Configuration section
+            const configSection = nav.querySelector('.nav-section:last-child');
+            if (configSection) {
+                const usersItem = DOM.el('div', {
+                    className: 'nav-item',
+                    dataset: { page: 'users' },
+                    innerHTML: '<i data-lucide="users"></i><span>User Management</span>',
+                    onClick: () => Router.navigate('users')
+                });
+                configSection.appendChild(usersItem);
+            }
         }
 
         DOM.createIcons();

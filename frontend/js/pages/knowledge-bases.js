@@ -336,12 +336,9 @@ const KnowledgeBasesPage = {
                 previewHtml = `<iframe src="${data.url}" style="width:100%;height:70vh;border:none;border-radius:4px;"></iframe>`;
             } else if (data.file_type === 'md') {
                 let rendered;
-                if (typeof marked !== 'undefined') {
+                if (typeof MarkdownRenderer !== 'undefined') {
                     try {
-                        rendered = marked.parse(data.content, {
-                            breaks: true,
-                            gfm: true
-                        });
+                        rendered = MarkdownRenderer.render(data.content);
                     } catch (error) {
                         console.error('Markdown rendering error:', error);
                         rendered = data.content.replace(/\n/g, '<br>');

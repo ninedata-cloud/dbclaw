@@ -513,8 +513,10 @@ const DiagnosisPage = {
         this.ws = ws;
 
         ws.on('message', (data) => this._handleWSMessage(data));
-        ws.on('error', () => {
-            // Error will be handled by close event with more details
+        ws.on('error', (error) => {
+            // Log error for debugging
+            console.error('WebSocket error:', error);
+            // Error details will be provided in close event
         });
         ws.on('close', (event) => {
             // Log close event for debugging
@@ -541,8 +543,14 @@ const DiagnosisPage = {
             } else if (event && ws.shouldReconnect) {
                 // Abnormal closure and not manually disconnected
                 const reason = event.reason || 'Unknown error';
+                const errorMsg = `Chat connection lost (code ${event.code}): ${reason}. Please refresh the page.`;
                 console.error('WebSocket abnormal closure:', event.code, reason);
-                Toast.error(`Chat connection lost: ${reason}. Please refresh the page.`);
+
+                // Show error in chat widget
+                ChatWidget.showError(errorMsg);
+
+                // Also show toast
+                Toast.error(errorMsg);
             }
         });
         ws.connect();

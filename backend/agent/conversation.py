@@ -9,7 +9,7 @@ from backend.services.ai_agent import get_ai_client
 
 logger = logging.getLogger(__name__)
 
-MAX_TOOL_ROUNDS = 10
+MAX_TOOL_ROUNDS = 30
 
 
 async def run_conversation(

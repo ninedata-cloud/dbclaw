@@ -4,7 +4,7 @@ const Store = {
         connections: [],
         currentConnection: null,
         currentPage: 'dashboard',
-        sshHosts: [],
+        hosts: [],
         chatSessions: [],
         currentSession: null,
     },

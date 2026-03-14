@@ -12,6 +12,7 @@ from backend.models.datasource import Datasource
 from backend.models.metric_snapshot import MetricSnapshot
 from backend.services.db_connector import get_connector
 from backend.utils.encryption import decrypt_value
+from backend.services.threshold_checker import ThresholdChecker
 
 logger = logging.getLogger(__name__)
 
@@ -21,27 +22,17 @@ scheduler: Optional[AsyncIOScheduler] = None
 # Hub for pushing metrics to WebSocket clients
 _metric_subscribers: Dict[int, List[asyncio.Queue]] = {}
 
-# AI Guardian components (lazy loaded)
-_anomaly_detector = None
-_importance_classifier = None
+# Inspection service (set by app.py)
+_inspection_service = None
+
+# Threshold checker instance
+_threshold_checker = ThresholdChecker()
 
 
-def _get_anomaly_detector():
-    """Lazy load anomaly detector"""
-    global _anomaly_detector
-    if _anomaly_detector is None:
-        from backend.services.anomaly_detector import AnomalyDetector
-        _anomaly_detector = AnomalyDetector()
-    return _anomaly_detector
-
-
-def _get_importance_classifier():
-    """Lazy load importance classifier"""
-    global _importance_classifier
-    if _importance_classifier is None:
-        from backend.services.importance_classifier import ImportanceClassifier
-        _importance_classifier = ImportanceClassifier()
-    return _importance_classifier
+def set_inspection_service(service):
+    """Set the inspection service instance"""
+    global _inspection_service
+    _inspection_service = service
 
 
 def subscribe(datasource_id: int) -> asyncio.Queue:
@@ -113,8 +104,8 @@ async def collect_metrics_for_connection(datasource_id: int):
             )
 
             # 采集 OS 指标（如果配置了 SSH）
-            if datasource.ssh_host_id:
-                os_metrics = await _collect_os_metrics(db, datasource.ssh_host_id)
+            if datasource.host_id:
+                os_metrics = await _collect_os_metrics(db, datasource.host_id)
                 if os_metrics:
                     normalized_status.update(os_metrics)
 
@@ -126,6 +117,9 @@ async def collect_metrics_for_connection(datasource_id: int):
             db.add(snapshot)
             await db.commit()
 
+            # Check thresholds and trigger inspection if needed
+            await _check_thresholds_and_trigger(db, datasource_id, normalized_status)
+
             # Push to WebSocket subscribers
             await _push_to_subscribers(datasource_id, {
                 "type": "db_status",
@@ -134,13 +128,68 @@ async def collect_metrics_for_connection(datasource_id: int):
                 "collected_at": datetime.utcnow().isoformat(),
             })
 
-            # AI Guardian: 异常检测
-            await _detect_anomalies(db, datasource_id, normalized_status)
-
             await connector.close()
 
     except Exception as e:
         logger.error(f"Error collecting metrics for datasource {datasource_id}: {e}")
+
+
+async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[str, Any]):
+    """Check if metrics violate thresholds and trigger inspection if needed"""
+    global _inspection_service, _threshold_checker
+
+    if not _inspection_service:
+        return
+
+    try:
+        # Get inspection config for this datasource
+        from backend.models.inspection_config import InspectionConfig
+
+        result = await db.execute(
+            select(InspectionConfig).where(
+                InspectionConfig.datasource_id == datasource_id,
+                InspectionConfig.enabled == True
+            )
+        )
+        config = result.scalar_one_or_none()
+
+        if not config or not config.threshold_rules:
+            return
+
+        # Check thresholds
+        violations = _threshold_checker.check_thresholds(
+            datasource_id=datasource_id,
+            metrics=metrics,
+            threshold_rules=config.threshold_rules
+        )
+
+        # Trigger inspection for each violation
+        for violation in violations:
+            reason = (
+                f"{violation['metric_name']}={violation['current_value']:.2f} > "
+                f"{violation['threshold']} for {violation['violation_duration']:.0f}s"
+            )
+
+            logger.info(f"Triggering anomaly inspection for datasource {datasource_id}: {reason}")
+
+            # Create metric snapshot for the trigger
+            metric_snapshot = {
+                "violation": violation,
+                "full_metrics": metrics,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+
+            # Trigger inspection asynchronously
+            await _inspection_service.trigger_inspection(
+                db=db,
+                datasource_id=datasource_id,
+                trigger_type="anomaly",
+                reason=reason,
+                metric_snapshot=metric_snapshot
+            )
+
+    except Exception as e:
+        logger.error(f"Error checking thresholds for datasource {datasource_id}: {e}", exc_info=True)
 
 
 async def collect_all_metrics():
@@ -185,21 +234,21 @@ def stop_scheduler():
         logger.info("Metric collector stopped")
 
 
-async def _collect_os_metrics(db, ssh_host_id: int) -> Dict[str, Any]:
+async def _collect_os_metrics(db, host_id: int) -> Dict[str, Any]:
     """采集操作系统指标"""
     try:
         from sqlalchemy import select
-        from backend.models.ssh_host import SSHHost
+        from backend.models.host import Host
         from backend.utils.encryption import decrypt_value
         from backend.services.os_metrics_collector import OSMetricsCollector
         import paramiko
 
         # 获取 SSH 主机配置
         result = await db.execute(
-            select(SSHHost).where(SSHHost.id == ssh_host_id)
+            select(Host).where(Host.id == host_id)
         )
-        ssh_host = result.scalar_one_or_none()
-        if not ssh_host:
+        host = result.scalar_one_or_none()
+        if not host:
             return {}
 
         # 创建 SSH 连接
@@ -207,26 +256,26 @@ async def _collect_os_metrics(db, ssh_host_id: int) -> Dict[str, Any]:
         ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
         try:
-            if ssh_host.auth_type == 'password':
-                password = decrypt_value(ssh_host.password_encrypted) if ssh_host.password_encrypted else None
+            if host.auth_type == 'password':
+                password = decrypt_value(host.password_encrypted) if host.password_encrypted else None
                 ssh_client.connect(
-                    hostname=ssh_host.host,
-                    port=ssh_host.port,
-                    username=ssh_host.username,
+                    hostname=host.host,
+                    port=host.port,
+                    username=host.username,
                     password=password,
                     timeout=10
                 )
             else:
                 # 密钥认证
-                private_key_str = decrypt_value(ssh_host.private_key_encrypted) if ssh_host.private_key_encrypted else None
+                private_key_str = decrypt_value(host.private_key_encrypted) if host.private_key_encrypted else None
                 if private_key_str:
                     from io import StringIO
                     key_file = StringIO(private_key_str)
                     private_key = paramiko.RSAKey.from_private_key(key_file)
                     ssh_client.connect(
-                        hostname=ssh_host.host,
-                        port=ssh_host.port,
-                        username=ssh_host.username,
+                        hostname=host.host,
+                        port=host.port,
+                        username=host.username,
                         pkey=private_key,
                         timeout=10
                     )
@@ -238,69 +287,11 @@ async def _collect_os_metrics(db, ssh_host_id: int) -> Dict[str, Any]:
             return os_metrics
 
         except Exception as e:
-            logger.warning(f"Failed to collect OS metrics via SSH {ssh_host_id}: {e}")
+            logger.warning(f"Failed to collect OS metrics via SSH {host_id}: {e}")
             ssh_client.close()
             return {}
 
     except Exception as e:
         logger.error(f"Error in _collect_os_metrics: {e}")
         return {}
-
-
-async def _detect_anomalies(db, datasource_id: int, status: Dict[str, Any]):
-    """AI Guardian: 检测异常"""
-    try:
-        # 获取重要性评分
-        importance_classifier = _get_importance_classifier()
-        importance = await importance_classifier.get_importance(db, datasource_id)
-
-        # 对所有级别进行异常检测（调整后）
-        # CRITICAL/IMPORTANT: 实时检测所有指标
-        # NORMAL: 检测关键指标（connections, qps, tps）
-        anomaly_detector = _get_anomaly_detector()
-
-        # 根据重要性级别选择检测指标
-        if importance and importance.importance_tier in ['CRITICAL', 'IMPORTANT']:
-            # 检测所有关键指标（包括 OS 指标）
-            metrics_to_check = {
-                'cpu_usage': status.get('cpu_usage'),
-                'memory_usage': status.get('memory_usage'),
-                'disk_usage': status.get('disk_usage'),
-                'connections': status.get('connections'),
-                'qps': status.get('qps'),
-                'tps': status.get('tps'),
-                'load_avg_1min': status.get('load_avg_1min'),
-                'load_avg_5min': status.get('load_avg_5min'),
-                'disk_reads_per_sec': status.get('disk_reads_per_sec'),
-                'disk_writes_per_sec': status.get('disk_writes_per_sec'),
-            }
-        else:
-            # NORMAL 级别：检测数据库指标 + 关键 OS 指标
-            metrics_to_check = {
-                'connections': status.get('connections'),
-                'qps': status.get('qps'),
-                'tps': status.get('tps'),
-                'cpu_usage': status.get('cpu_usage'),
-                'memory_usage': status.get('memory_usage'),
-            }
-
-        for metric_name, value in metrics_to_check.items():
-            if value is not None:
-                try:
-                    anomaly = await anomaly_detector.detect_and_record(
-                        db, datasource_id, metric_name, value, status
-                    )
-
-                    if anomaly:
-                        # 如果是 CRITICAL 且启用自动修复，触发主动诊断
-                        if importance and importance.importance_tier == 'CRITICAL' and importance.auto_fix_enabled:
-                            # TODO: 触发主动诊断（Phase 3）
-                            logger.info(f"Anomaly detected for CRITICAL datasource {datasource_id}, "
-                                      f"proactive diagnosis will be triggered in Phase 3")
-                except Exception as e:
-                    logger.error(f"Error detecting anomaly for {metric_name}: {e}")
-
-    except Exception as e:
-        logger.error(f"Error in anomaly detection for datasource {datasource_id}: {e}")
-
 

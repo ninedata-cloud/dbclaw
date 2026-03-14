@@ -12,7 +12,7 @@ from backend.services.ai_agent import get_ai_client
 
 logger = logging.getLogger(__name__)
 
-MAX_TOOL_ROUNDS = 10
+MAX_TOOL_ROUNDS = 30
 
 
 async def execute_skill_call(
@@ -27,6 +27,11 @@ async def execute_skill_call(
     start_time = time.time()
 
     try:
+        # Extract timeout from arguments if provided
+        timeout = arguments.pop('timeout', None)
+        if timeout:
+            timeout = max(30, min(int(timeout), 3600))  # Clamp between 30s and 1h
+
         registry = SkillRegistry(db)
         skill = await registry.get_skill(skill_id)
 
@@ -38,17 +43,26 @@ async def execute_skill_call(
             execution_time = int((time.time() - start_time) * 1000)
             return json.dumps({"error": f"Skill '{skill_id}' is disabled"}), execution_time
 
-        # Create execution context with skill's required permissions
+        # Determine final timeout (same logic as SkillExecutor)
+        # Priority: dynamic timeout > skill timeout > default timeout
+        from backend.skills.executor import SkillExecutor
+        if timeout is None:
+            timeout = skill.timeout if skill.timeout else SkillExecutor.DEFAULT_TIMEOUT
+        # Cap at MAX_TIMEOUT for safety
+        timeout = min(timeout, SkillExecutor.MAX_TIMEOUT)
+
+        # Create execution context with skill's required permissions and timeout
         context = SkillContext(
             db=db,
             user_id=user_id,
             session_id=session_id,
             permissions=skill.permissions or [],
+            timeout=timeout,
         )
 
         # Execute skill
         executor = SkillExecutor()
-        result = await executor.execute(skill, arguments, context)
+        result = await executor.execute(skill, arguments, context, timeout=timeout)
 
         execution_time = int((time.time() - start_time) * 1000)
         return json.dumps(result, default=str), execution_time
@@ -270,4 +284,62 @@ async def run_conversation_with_skills(
             yield {"type": "error", "message": f"Error: {str(e)}"}
             return
 
-    yield {"type": "error", "message": "Maximum tool call rounds reached. Please try a more specific question."}
+    yield {
+        "type": "error",
+        "content": f"Maximum tool execution rounds ({MAX_TOOL_ROUNDS}) reached. The diagnosis may be too complex or requires manual intervention. Please try breaking down your question into smaller parts."
+    }
+
+
+async def generate_report_with_skills(
+    datasource_id: int,
+    datasource_name: str,
+    datasource_type: str,
+    trigger_reason: str,
+    system_prompt: str,
+    db: Any,
+    user_id: int = 1,
+    model_id: Optional[int] = None,
+    timeout_seconds: int = 300
+) -> tuple[str, list]:
+    """Generate inspection report using AI with skill calls. Returns (markdown, skill_executions)."""
+    import asyncio
+    from datetime import datetime
+
+    skill_executions = []
+    collected_content = ""
+
+    initial_message = f"""Generate a comprehensive inspection report for:
+- Database: {datasource_name} ({datasource_type})
+- Datasource ID: {datasource_id}
+- Trigger: {trigger_reason}
+
+Follow the required sections and use skills to gather data."""
+
+    messages = [{"role": "user", "content": initial_message}]
+
+    try:
+        async with asyncio.timeout(timeout_seconds):
+            async for event in run_conversation_with_skills(
+                messages=messages,
+                datasource_id=datasource_id,
+                model_id=model_id,
+                db=db,
+                user_id=user_id
+            ):
+                if event["type"] == "content":
+                    collected_content += event["content"]
+                elif event["type"] == "tool_call":
+                    skill_executions.append({
+                        "skill_id": event["tool_name"],
+                        "arguments": event["tool_args"],
+                        "timestamp": datetime.utcnow().isoformat()
+                    })
+                elif event["type"] == "done":
+                    break
+
+    except asyncio.TimeoutError:
+        collected_content += "\n\n⚠️ Report generation timed out - showing partial results"
+    except Exception as e:
+        collected_content += f"\n\n⚠️ Error during generation: {str(e)}"
+
+    return collected_content or "⚠️ No content generated", skill_executions

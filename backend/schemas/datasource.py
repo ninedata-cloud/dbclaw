@@ -11,7 +11,7 @@ class DatasourceCreate(BaseModel):
     username: Optional[str] = None
     password: Optional[str] = None
     database: Optional[str] = None
-    ssh_host_id: Optional[int] = None
+    host_id: Optional[int] = None
     extra_params: Optional[str] = None
     importance_level: Optional[str] = Field(default='production', pattern="^(core|production|development|temporary)$")
     monitoring_interval: Optional[int] = Field(default=60, ge=5, le=3600)
@@ -25,7 +25,7 @@ class DatasourceUpdate(BaseModel):
     username: Optional[str] = None
     password: Optional[str] = None
     database: Optional[str] = None
-    ssh_host_id: Optional[int] = None
+    host_id: Optional[int] = None
     extra_params: Optional[str] = None
     importance_level: Optional[str] = Field(None, pattern="^(core|production|development|temporary)$")
     monitoring_interval: Optional[int] = Field(None, ge=5, le=3600)
@@ -39,7 +39,7 @@ class DatasourceResponse(BaseModel):
     port: int
     username: Optional[str] = None
     database: Optional[str] = None
-    ssh_host_id: Optional[int] = None
+    host_id: Optional[int] = None
     extra_params: Optional[str] = None
     is_active: bool = True
     importance_level: str = 'production'

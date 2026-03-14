@@ -3,14 +3,42 @@ name: Execute Any OS Command
 version: 1.0.0
 author: SmartDBA
 category: admin
-description: Execute ANY shell command on the database host server via SSH. WARNING - This can modify system configuration, delete files, and execute destructive operations. Use with extreme caution.
-tags: [os, admin, shell, ssh, system, dangerous]
+description: |
+  Execute ANY shell command on the database host server via host connection, including write operations and system modifications.
+
+  ⚠️ DANGER: This skill has NO restrictions and can execute destructive operations:
+  - Delete files and directories (rm, rmdir)
+  - Modify file permissions (chmod, chown)
+  - Kill processes (kill, pkill, killall)
+  - Restart services (systemctl restart, service restart)
+  - Modify system configuration
+  - Install/remove packages
+  - Shutdown/reboot system
+  - Modify network settings
+  - Create/delete users
+
+  USE CASES:
+  - Database maintenance: restart database services, clear logs, backup operations
+  - System administration: install monitoring tools, configure services
+  - Emergency operations: kill runaway processes, free up disk space
+  - Configuration changes: modify database config files, update system settings
+
+  SAFETY GUIDELINES:
+  - Always verify the command before execution
+  - Prefer 'execute_os_command' for read-only diagnostics
+  - Use this skill only when write operations are explicitly required
+  - Be cautious with destructive operations (rm, kill, shutdown)
+  - Consider the impact on production systems
+
+  Requires 'execute_any_os_command' or 'admin' permission.
+tags: [os, admin, shell, ssh, system, dangerous, write]
+timeout: 120
 
 parameters:
   - name: datasource_id
     type: integer
     required: true
-    description: The datasource ID (must have SSH host configured)
+    description: The datasource ID (must have host configured)
   - name: command
     type: string
     required: true
@@ -31,6 +59,6 @@ code: |
       logger.warning(f"DANGEROUS OPERATION: Executing unrestricted OS command on datasource {datasource_id}: {command[:100]}")
 
       # Execute without restrictions
-      result = await context.execute_ssh_command(command, datasource_id, allow_write=True)
+      result = await context.execute_host_command(command, datasource_id, allow_write=True)
 
       return result

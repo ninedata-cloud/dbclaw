@@ -34,6 +34,7 @@ class SkillLoader:
             parameters=parameters,
             dependencies=data.get("dependencies", []),
             permissions=data.get("permissions", []),
+            timeout=data.get("timeout"),
             code=data["code"],
         )
 
@@ -62,6 +63,7 @@ class SkillLoader:
             ],
             "dependencies": skill_def.dependencies,
             "permissions": skill_def.permissions,
+            "timeout": skill_def.timeout,
             "code": skill_def.code,
         }
 

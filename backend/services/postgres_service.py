@@ -237,3 +237,44 @@ class PostgreSQLConnector(DBConnector):
             ]
         finally:
             await conn.close()
+
+    async def get_index_stats(self) -> List[Dict[str, Any]]:
+        """Get index usage statistics."""
+        conn = await self._connect()
+        try:
+            rows = await conn.fetch(
+                "SELECT schemaname, relname as tablename, indexrelname as indexname, idx_scan, idx_tup_read, idx_tup_fetch "
+                "FROM pg_stat_user_indexes ORDER BY idx_scan DESC LIMIT 50"
+            )
+            return [dict(r) for r in rows]
+        finally:
+            await conn.close()
+
+    async def get_lock_waits(self) -> List[Dict[str, Any]]:
+        """Get current lock waits."""
+        conn = await self._connect()
+        try:
+            rows = await conn.fetch(
+                "SELECT blocked.pid AS blocked_pid, blocked.query AS blocked_query, "
+                "blocking.pid AS blocking_pid, blocking.query AS blocking_query "
+                "FROM pg_stat_activity AS blocked "
+                "JOIN pg_stat_activity AS blocking ON blocking.pid = ANY(pg_blocking_pids(blocked.pid)) "
+                "WHERE blocked.pid != blocking.pid"
+            )
+            return [dict(r) for r in rows]
+        finally:
+            await conn.close()
+
+    async def get_table_fragmentation(self) -> List[Dict[str, Any]]:
+        """Get table bloat/fragmentation info."""
+        conn = await self._connect()
+        try:
+            rows = await conn.fetch(
+                "SELECT schemaname, relname as tablename, n_dead_tup, n_live_tup, "
+                "CASE WHEN n_live_tup > 0 THEN ROUND(100.0 * n_dead_tup / (n_live_tup + n_dead_tup), 2) ELSE 0 END as dead_ratio "
+                "FROM pg_stat_user_tables WHERE n_dead_tup > 1000 ORDER BY n_dead_tup DESC LIMIT 20"
+            )
+            return [dict(r) for r in rows]
+        finally:
+            await conn.close()
+

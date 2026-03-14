@@ -15,7 +15,7 @@ class SkillExecutor:
     """Executes skills in a controlled environment"""
 
     DEFAULT_TIMEOUT = 30  # seconds
-    MAX_TIMEOUT = 300  # 5 minutes
+    MAX_TIMEOUT = 3600  # 1 hour
 
     @staticmethod
     def _serialize_result(obj):
@@ -36,7 +36,7 @@ class SkillExecutor:
         return obj
 
     async def execute(
-        self, skill: Skill, params: Dict[str, Any], context: SkillContext
+        self, skill: Skill, params: Dict[str, Any], context: SkillContext, timeout: int = None
     ) -> Dict[str, Any]:
         """
         Execute a skill with given parameters and context.
@@ -59,8 +59,9 @@ class SkillExecutor:
         # Execute with timeout
         start_time = time.time()
         try:
-            # Use skill-specific timeout if provided, otherwise use default
-            timeout = skill.timeout if skill.timeout else self.DEFAULT_TIMEOUT
+            # Priority: dynamic timeout > skill timeout > default timeout
+            if timeout is None:
+                timeout = skill.timeout if skill.timeout else self.DEFAULT_TIMEOUT
             # Cap at MAX_TIMEOUT for safety
             timeout = min(timeout, self.MAX_TIMEOUT)
 
@@ -79,8 +80,7 @@ class SkillExecutor:
 
         except asyncio.TimeoutError:
             execution_time_ms = int((time.time() - start_time) * 1000)
-            timeout_used = skill.timeout if skill.timeout else self.DEFAULT_TIMEOUT
-            error = f"Skill execution timed out after {timeout_used}s"
+            error = f"Skill execution timed out after {timeout}s"
             await self._log_execution(
                 skill, params, None, error, execution_time_ms, context
             )

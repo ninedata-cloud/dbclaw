@@ -293,8 +293,11 @@ async def chat_websocket(websocket: WebSocket, session_id: int, token: str = Que
     except WebSocketDisconnect:
         logger.info(f"Chat WebSocket disconnected for session {session_id}")
     except Exception as e:
-        logger.error(f"Chat WebSocket error: {e}")
+        logger.error(f"Chat WebSocket error: {e}", exc_info=True)
         try:
+            # Try to send error message first
             await websocket.send_json({"type": "error", "content": str(e)})
+            # Then close with error code and reason
+            await websocket.close(code=1011, reason=f"Server error: {str(e)[:100]}")
         except Exception:
             pass

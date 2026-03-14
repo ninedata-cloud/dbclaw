@@ -23,20 +23,21 @@ async def get_db() -> AsyncSession:
 async def init_db():
     # Import all models so Base.metadata knows about them
     import backend.models.datasource  # noqa: F401
-    import backend.models.ssh_host  # noqa: F401
+    import backend.models.host  # noqa: F401
     import backend.models.metric_snapshot  # noqa: F401
     import backend.models.diagnostic_session  # noqa: F401
     import backend.models.ai_model  # noqa: F401
     import backend.models.knowledge_base  # noqa: F401
     import backend.models.user  # noqa: F401
     import backend.models.login_log  # noqa: F401
+    import backend.models.report  # noqa: F401
     import backend.skills.models  # noqa: F401
-    # AI Guardian models
-    import backend.models.baseline  # noqa: F401
-    import backend.models.importance  # noqa: F401
-    import backend.models.anomaly  # noqa: F401
-    import backend.models.guardian_rule  # noqa: F401
-    import backend.models.diagnostic_case  # noqa: F401
+    # Inspection models
+    try:
+        import backend.models.inspection_config  # noqa: F401
+        import backend.models.inspection_trigger  # noqa: F401
+    except ImportError:
+        pass
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -47,6 +48,7 @@ async def init_db():
             from backend.migrations.rename_connection_to_datasource import migrate as rename_migration
             from backend.migrations.rename_reports_connection_to_datasource import migrate as rename_reports_migration
             from backend.migrations.rename_metrics_connection_to_datasource import migrate as rename_metrics_migration
+            from backend.migrations.remove_anomaly_fields import migrate as remove_anomaly_migration
 
             # Migration 1: Rename connections to datasources
             rename_migration(connection)
@@ -56,6 +58,9 @@ async def init_db():
 
             # Migration 3: Rename connection_id to datasource_id in metric_snapshots table
             rename_metrics_migration(connection)
+
+            # Migration 4: Remove anomaly fields from inspection_configs
+            remove_anomaly_migration(connection)
 
             insp = inspect(connection)
 

@@ -240,12 +240,9 @@ const ChatWidget = {
         const streamingMsg = DOM.$('#streaming-message');
         if (streamingMsg) {
             const bubble = streamingMsg.querySelector('.chat-bubble');
-            if (typeof marked !== 'undefined') {
+            if (typeof MarkdownRenderer !== 'undefined') {
                 try {
-                    bubble.innerHTML = marked.parse(this.currentContent, {
-                        breaks: true,
-                        gfm: true
-                    });
+                    bubble.innerHTML = MarkdownRenderer.render(this.currentContent);
                 } catch (error) {
                     console.error('Markdown rendering error:', error);
                     bubble.innerHTML = this.currentContent.replace(/\n/g, '<br>');
@@ -505,12 +502,9 @@ const ChatWidget = {
             } else if (msg.role === 'assistant') {
                 const msgEl = DOM.el('div', { className: 'chat-message assistant' });
                 let renderedContent;
-                if (typeof marked !== 'undefined') {
+                if (typeof MarkdownRenderer !== 'undefined') {
                     try {
-                        renderedContent = marked.parse(msg.content, {
-                            breaks: true,
-                            gfm: true
-                        });
+                        renderedContent = MarkdownRenderer.render(msg.content);
                     } catch (error) {
                         console.error('Markdown rendering error:', error);
                         renderedContent = msg.content.replace(/\n/g, '<br>');

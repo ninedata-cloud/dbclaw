@@ -15,7 +15,7 @@ class Datasource(Base):
     username = Column(String(100), nullable=True)
     password_encrypted = Column(Text, nullable=True)
     database = Column(String(100), nullable=True)
-    ssh_host_id = Column(Integer, nullable=True)
+    host_id = Column(Integer, nullable=True)
     extra_params = Column(Text, nullable=True)  # JSON string for additional params
     is_active = Column(Boolean, default=True)
 
@@ -25,12 +25,3 @@ class Datasource(Base):
 
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-
-    # AI Guardian relationships
-    baselines = relationship("MetricBaseline", back_populates="datasource", cascade="all, delete-orphan")
-    importance = relationship("DatasourceImportance", back_populates="datasource", uselist=False, cascade="all, delete-orphan")
-    anomalies = relationship("Anomaly", back_populates="datasource", cascade="all, delete-orphan")
-    diagnostic_cases = relationship("DiagnosticCase", back_populates="datasource", cascade="all, delete-orphan")
-
-    # Scheduled reports relationship
-    scheduled_report_config = relationship("ScheduledReportConfig", back_populates="datasource", uselist=False, cascade="all, delete-orphan")
