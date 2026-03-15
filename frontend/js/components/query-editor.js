@@ -123,6 +123,22 @@ const QueryEditor = {
         return '';
     },
 
+    getSelectedText() {
+        if (this.editor) {
+            const selection = this.editor.getSelection();
+            if (selection && !selection.isEmpty()) {
+                return this.editor.getModel().getValueInRange(selection);
+            }
+        } else if (this.fallbackTextarea) {
+            const start = this.fallbackTextarea.selectionStart;
+            const end = this.fallbackTextarea.selectionEnd;
+            if (start !== end) {
+                return this.fallbackTextarea.value.substring(start, end);
+            }
+        }
+        return '';
+    },
+
     setValue(value) {
         if (this.editor) {
             this.editor.setValue(value);

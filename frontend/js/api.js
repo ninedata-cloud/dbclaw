@@ -110,7 +110,13 @@ const API = {
     getHighRiskTools() { return this.get('/api/chat/high-risk-tools'); },
 
     // Query endpoints
-    executeQuery(data) { return this.post('/api/query/execute', data); },
+    executeQuery(data, options = {}) {
+        return this.request('/api/query/execute', {
+            method: 'POST',
+            body: data,
+            signal: options.signal
+        });
+    },
     explainQuery(data) { return this.post('/api/query/explain', data); },
     getQueryHistory() { return this.get('/api/query/history'); },
     getSchemas(datasourceId) { return this.get(`/api/query/schema/databases?datasource_id=${datasourceId}`); },

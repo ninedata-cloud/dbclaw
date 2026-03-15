@@ -28,6 +28,11 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("Database initialized")
 
+    # Start SSH connection pool
+    from backend.services.ssh_connection_pool import start_ssh_pool
+    await start_ssh_pool()
+    logger.info("SSH connection pool started")
+
     # Start metric collector
     from backend.services.metric_collector import start_scheduler
     start_scheduler(settings.metric_interval)
@@ -66,10 +71,13 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     from backend.services.metric_collector import stop_scheduler
+    from backend.services.ssh_connection_pool import stop_ssh_pool
+
     stop_scheduler()
     if kb_processor:
         kb_processor.stop()
     await inspection_service.stop()
+    await stop_ssh_pool()
     logger.info("Application shutdown complete")
 
 

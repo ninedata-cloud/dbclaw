@@ -11,8 +11,24 @@ const MonitorPage = {
     currentTimeRange: 60, // default 1 hour in minutes
     isRealtime: true,
 
-    render() {
-        const conn = Store.get('currentConnection');
+    async render() {
+        // Load datasources first if not in store
+        let connections = Store.get('datasources') || [];
+        if (connections.length === 0) {
+            try {
+                connections = await API.getDatasources();
+                Store.set('datasources', connections);
+            } catch (e) {
+                console.error('[Monitor] Failed to load datasources:', e);
+            }
+        }
+
+        // Get or auto-select current connection
+        let conn = Store.get('currentConnection');
+        if (!conn && connections.length > 0) {
+            conn = connections[0];
+            Store.set('currentConnection', conn);
+        }
 
         // Header with connection selector and time range selector
         const headerActions = DOM.el('div', { className: 'flex gap-8' });
@@ -20,7 +36,6 @@ const MonitorPage = {
         // Connection selector
         const connSelect = DOM.el('select', { className: 'form-select', style: { minWidth: '200px' } });
         connSelect.appendChild(DOM.el('option', { value: '', textContent: '选择数据源...' }));
-        const connections = Store.get('datasources') || [];
         for (const c of connections) {
             const opt = DOM.el('option', { value: c.id, textContent: `${c.name} (${c.db_type})` });
             if (conn && c.id === conn.id) opt.selected = true;
@@ -228,21 +243,6 @@ const MonitorPage = {
                 if (this.isRealtime) {
                     this._startMonitoring(conn.id);
                 }
-            } else {
-                // Auto-select first connection
-                API.getDatasources().then(conns => {
-                    Store.set('datasources', conns);
-                    if (conns.length > 0) {
-                        Store.set('currentConnection', conns[0]);
-                        connSelect.value = conns[0].id;
-                        this._loadLatestData(conns[0].id).then(() => {
-                            this._loadHistory(conns[0].id);
-                        });
-                        if (this.isRealtime) {
-                            this._startMonitoring(conns[0].id);
-                        }
-                    }
-                });
             }
         });
 

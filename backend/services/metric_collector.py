@@ -241,60 +241,25 @@ def stop_scheduler():
 
 
 async def _collect_os_metrics(db, host_id: int) -> Dict[str, Any]:
-    """采集操作系统指标"""
+    """采集操作系统指标（使用连接池）"""
     try:
-        from sqlalchemy import select
-        from backend.models.host import Host
-        from backend.utils.encryption import decrypt_value
         from backend.services.os_metrics_collector import OSMetricsCollector
-        import paramiko
+        from backend.services.ssh_connection_pool import get_ssh_pool
 
-        # 获取 SSH 主机配置
-        result = await db.execute(
-            select(Host).where(Host.id == host_id)
-        )
-        host = result.scalar_one_or_none()
-        if not host:
-            return {}
-
-        # 创建 SSH 连接
-        ssh_client = paramiko.SSHClient()
-        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        # 从连接池获取SSH连接
+        ssh_pool = get_ssh_pool()
 
         try:
-            if host.auth_type == 'password':
-                password = decrypt_value(host.password_encrypted) if host.password_encrypted else None
-                ssh_client.connect(
-                    hostname=host.host,
-                    port=host.port,
-                    username=host.username,
-                    password=password,
-                    timeout=10
-                )
-            else:
-                # 密钥认证
-                private_key_str = decrypt_value(host.private_key_encrypted) if host.private_key_encrypted else None
-                if private_key_str:
-                    from io import StringIO
-                    key_file = StringIO(private_key_str)
-                    private_key = paramiko.RSAKey.from_private_key(key_file)
-                    ssh_client.connect(
-                        hostname=host.host,
-                        port=host.port,
-                        username=host.username,
-                        pkey=private_key,
-                        timeout=10
-                    )
+            async with ssh_pool.get_connection(db, host_id) as ssh_client:
+                # 采集 OS 指标
+                os_metrics = await OSMetricsCollector.collect_via_ssh(ssh_client, os_type='linux')
+                return os_metrics
 
-            # 采集 OS 指标
-            os_metrics = await OSMetricsCollector.collect_via_ssh(ssh_client, os_type='linux')
-            ssh_client.close()
-
-            return os_metrics
-
+        except ConnectionError as e:
+            logger.warning(f"Failed to get SSH connection for host {host_id}: {e}")
+            return {}
         except Exception as e:
             logger.warning(f"Failed to collect OS metrics via SSH {host_id}: {e}")
-            ssh_client.close()
             return {}
 
     except Exception as e:

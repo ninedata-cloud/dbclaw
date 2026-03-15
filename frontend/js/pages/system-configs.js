@@ -5,6 +5,12 @@ const SystemConfigsPage = {
     editingId: null,
 
     render() {
+        Header.render('参数配置', DOM.el('button', {
+            className: 'btn btn-primary',
+            innerHTML: '<i data-lucide="plus"></i> 添加参数',
+            onClick: () => this.showAddModal()
+        }));
+
         const content = DOM.$('#page-content');
         content.innerHTML = '<div class="loading">Loading configurations...</div>';
         this.loadConfigs();
@@ -19,13 +25,6 @@ const SystemConfigsPage = {
 
             content.innerHTML = `
                 <div class="system-configs-page">
-                    <div class="page-header-actions">
-                        <h1>参数配置</h1>
-                        <button class="btn btn-primary" onclick="SystemConfigsPage.showAddModal()">
-                            <i data-lucide="plus"></i> 添加参数
-                        </button>
-                    </div>
-
                     <div class="configs-filters">
                         <input type="text" id="search-input" placeholder="搜索参数..." 
                                oninput="SystemConfigsPage.filterConfigs()">
