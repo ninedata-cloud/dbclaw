@@ -91,27 +91,97 @@ class SystemConfig(Base):
 
 **Purpose**: Provide type-safe configuration retrieval with automatic type conversion.
 
-**Key Methods**:
-- `get_config(key: str, default: Any = None) -> Any`: Retrieve and parse configuration value
-- `get_all_configs(category: str = None) -> List[SystemConfig]`: List configurations
-- `set_config(key: str, value: Any, value_type: str, description: str = None, category: str = None)`: Create/update configuration
-- `delete_config(key: str)`: Soft delete configuration
+**Implementation Pattern**: Stateless async functions (following project service patterns).
 
-**Type Conversion Logic**:
+**Key Functions**:
 ```python
-def _parse_value(self, value: str, value_type: str) -> Any:
-    if value_type == "string":
-        return value
-    elif value_type == "integer":
-        return int(value)
-    elif value_type == "float":
-        return float(value)
-    elif value_type == "boolean":
-        return value.lower() in ("true", "1", "yes")
-    elif value_type == "json":
-        return json.loads(value)
+import json
+from typing import Any, List, Optional
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from backend.models.system_config import SystemConfig
+
+async def get_config(db: AsyncSession, key: str, default: Any = None) -> Any:
+    """Retrieve and parse configuration value"""
+    result = await db.execute(
+        select(SystemConfig).where(
+            SystemConfig.key == key,
+            SystemConfig.is_active == True
+        )
+    )
+    config = result.scalar_one_or_none()
+    if not config:
+        return default
+    return _parse_value(config.value, config.value_type)
+
+async def get_all_configs(db: AsyncSession, category: Optional[str] = None) -> List[SystemConfig]:
+    """List configurations"""
+    query = select(SystemConfig).where(SystemConfig.is_active == True)
+    if category:
+        query = query.where(SystemConfig.category == category)
+    result = await db.execute(query)
+    return result.scalars().all()
+
+async def set_config(
+    db: AsyncSession,
+    key: str,
+    value: str,
+    value_type: str,
+    description: Optional[str] = None,
+    category: Optional[str] = None
+) -> SystemConfig:
+    """Create or update configuration"""
+    result = await db.execute(select(SystemConfig).where(SystemConfig.key == key))
+    config = result.scalar_one_or_none()
+
+    if config:
+        config.value = value
+        config.value_type = value_type
+        if description is not None:
+            config.description = description
+        if category is not None:
+            config.category = category
     else:
-        return value
+        config = SystemConfig(
+            key=key,
+            value=value,
+            value_type=value_type,
+            description=description,
+            category=category
+        )
+        db.add(config)
+
+    await db.commit()
+    await db.refresh(config)
+    return config
+
+async def delete_config(db: AsyncSession, key: str) -> bool:
+    """Soft delete configuration"""
+    result = await db.execute(select(SystemConfig).where(SystemConfig.key == key))
+    config = result.scalar_one_or_none()
+    if not config:
+        return False
+    config.is_active = False
+    await db.commit()
+    return True
+
+def _parse_value(value: str, value_type: str) -> Any:
+    """Parse string value to appropriate type with error handling"""
+    try:
+        if value_type == "string":
+            return value
+        elif value_type == "integer":
+            return int(value)
+        elif value_type == "float":
+            return float(value)
+        elif value_type == "boolean":
+            return value.lower() in ("true", "1", "yes")
+        elif value_type == "json":
+            return json.loads(value)
+        else:
+            return value
+    except (ValueError, json.JSONDecodeError) as e:
+        raise ValueError(f"Cannot convert value '{value}' to {value_type}: {str(e)}")
 ```
 
 #### 3. Router (`backend/routers/system_configs.py`)
@@ -123,20 +193,24 @@ def _parse_value(self, value: str, value_type: str) -> Any:
 - `PUT /api/system-configs/{id}`: Update configuration
 - `DELETE /api/system-configs/{id}`: Delete configuration
 
-**Authentication**: All endpoints require admin role via `get_current_admin_user` dependency.
+**Authentication**: All endpoints require admin role via `get_current_admin` dependency (from `backend/dependencies.py`).
 
-**Request/Response Models**:
+**Schemas** (`backend/schemas/system_config.py`):
 ```python
+from pydantic import BaseModel
+from typing import Optional, Literal
+from datetime import datetime
+
 class SystemConfigCreate(BaseModel):
     key: str
     value: str
-    value_type: str  # "string", "integer", "float", "boolean", "json"
+    value_type: Literal["string", "integer", "float", "boolean", "json"]
     description: Optional[str] = None
     category: Optional[str] = None
 
 class SystemConfigUpdate(BaseModel):
     value: Optional[str] = None
-    value_type: Optional[str] = None
+    value_type: Optional[Literal["string", "integer", "float", "boolean", "json"]] = None
     description: Optional[str] = None
     category: Optional[str] = None
     is_active: Optional[bool] = None
@@ -151,17 +225,133 @@ class SystemConfigResponse(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+
+    class Config:
+        from_attributes = True
+```
+
+**Router Implementation Example**:
+```python
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
+from backend.database import get_db
+from backend.dependencies import get_current_admin
+from backend.models.user import User
+from backend.models.system_config import SystemConfig
+from backend.schemas.system_config import SystemConfigCreate, SystemConfigUpdate, SystemConfigResponse
+from backend.services import config_service
+
+router = APIRouter(prefix="/api/system-configs", tags=["system-configs"])
+
+@router.get("", response_model=List[SystemConfigResponse])
+async def list_configs(
+    category: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin)
+):
+    """List all configurations"""
+    configs = await config_service.get_all_configs(db, category)
+    return configs
+
+@router.post("", response_model=SystemConfigResponse)
+async def create_config(
+    data: SystemConfigCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin)
+):
+    """Create new configuration"""
+    try:
+        config = await config_service.set_config(
+            db, data.key, data.value, data.value_type, data.description, data.category
+        )
+        return config
+    except IntegrityError:
+        raise HTTPException(status_code=400, detail="Configuration key already exists")
+
+@router.delete("/{id}")
+async def delete_config(
+    id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin)
+):
+    """Soft delete configuration by setting is_active=False"""
+    config = await db.get(SystemConfig, id)
+    if not config:
+        raise HTTPException(status_code=404, detail="Configuration not found")
+
+    config.is_active = False
+    await db.commit()
+    return {"message": "Configuration deleted successfully"}
+```
+
+**Router Registration** (in `backend/app.py`):
+```python
+# Add to imports:
+from backend.routers import system_configs
+
+# In create_app(), add after other routers:
+app.include_router(system_configs.router)
 ```
 
 #### 4. Migration (`backend/migrations/add_system_configs.py`)
 
 **Purpose**: Create table and initialize default configurations.
 
-**Steps**:
-1. Check if table exists
-2. Create table with indexes
-3. Insert initial bocha_api_key and bocha_api_url
-4. Verify insertion
+**Implementation**:
+```python
+"""Add system_configs table and initialize default configurations"""
+import asyncio
+from sqlalchemy import text
+from backend.database import async_session
+
+async def migrate():
+    async with async_session() as db:
+        # Check if table exists
+        result = await db.execute(text(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='system_configs'"
+        ))
+        if result.scalar_one_or_none():
+            print("Table system_configs already exists")
+            return
+
+        # Create table
+        await db.execute(text("""
+            CREATE TABLE system_configs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                key VARCHAR(100) UNIQUE NOT NULL,
+                value TEXT,
+                value_type VARCHAR(20) NOT NULL,
+                description TEXT,
+                category VARCHAR(50),
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+
+        # Create indexes
+        await db.execute(text(
+            "CREATE INDEX idx_system_configs_key ON system_configs(key)"
+        ))
+        await db.execute(text(
+            "CREATE INDEX idx_system_configs_category ON system_configs(category)"
+        ))
+
+        # Insert initial configurations
+        await db.execute(text("""
+            INSERT INTO system_configs (key, value, value_type, description, category)
+            VALUES
+            ('bocha_api_key', 'sk-66d203942a6c404b89eff2adb494febc', 'string', 'Bocha AI Web Search API Key', 'external_api'),
+            ('bocha_api_url', 'https://api.bochaai.com/v1/web-search', 'string', 'Bocha AI Web Search API URL', 'external_api')
+        """))
+
+        await db.commit()
+        print("Successfully created system_configs table and initialized default configurations")
+
+if __name__ == "__main__":
+    asyncio.run(migrate())
+```
 
 ### Frontend Components
 
@@ -195,18 +385,18 @@ class SystemConfigResponse(BaseModel):
 - `boolean`: Checkbox
 - `json`: Textarea with JSON validation
 
-**API Integration**:
+**API Integration** (using centralized `api.js`):
 ```javascript
 async function loadConfigs() {
-    const response = await api.get('/api/system-configs');
-    renderConfigTable(response.data);
+    const response = await API.get('/api/system-configs');
+    renderConfigTable(response);
 }
 
 async function saveConfig(data) {
     if (editingId) {
-        await api.put(`/api/system-configs/${editingId}`, data);
+        await API.put(`/api/system-configs/${editingId}`, data);
     } else {
-        await api.post('/api/system-configs', data);
+        await API.post('/api/system-configs', data);
     }
 }
 ```
@@ -214,6 +404,8 @@ async function saveConfig(data) {
 #### Navigation
 
 **Location**: System Management group (after Skills Management)
+
+**Integration**: Add to `frontend/js/components/sidebar.js` navigation configuration:
 
 ```javascript
 {
@@ -240,13 +432,13 @@ api_url = settings.bocha_api_url
 **New Code**:
 ```python
 # Get API configuration from database
-from backend.services.config_service import ConfigService
-config_service = ConfigService(context.db)
-api_key = await config_service.get_config('bocha_api_key')
-api_url = await config_service.get_config('bocha_api_url')
+from backend.services import config_service
+
+api_key = await config_service.get_config(context.db, 'bocha_api_key')
+api_url = await config_service.get_config(context.db, 'bocha_api_url')
 ```
 
-**Context Enhancement**: The skill execution context must provide database session access via `context.db`.
+**Context Note**: The skill execution context already provides database session access via `context.db` (an `AsyncSession` instance). No changes to `SkillContext` are required.
 
 ## Data Flow
 
@@ -313,22 +505,26 @@ Return success response
 
 ### Backend Tests
 
+**Test Files**: `test_system_config_service.py`, `test_system_config_router.py`
+
 1. **Model Tests**:
    - Create/read/update/delete operations
    - Unique key constraint
    - Timestamp auto-update
 
 2. **Service Tests**:
-   - Type conversion for all supported types
-   - Default value handling
+   - Type conversion for all supported types (string, integer, float, boolean, json)
+   - Default value handling when key not found
    - Category filtering
-   - Error handling for invalid types
+   - Error handling for invalid type conversions
+   - ValueError raised for malformed JSON
 
 3. **Router Tests**:
-   - Admin authentication enforcement
+   - Admin authentication enforcement (401 for non-admin)
    - CRUD endpoint functionality
-   - Request validation
-   - Error responses
+   - Request validation (Pydantic schema validation)
+   - IntegrityError handling for duplicate keys
+   - 404 for non-existent configurations
 
 ### Frontend Tests
 
@@ -365,19 +561,23 @@ Return success response
 
 ### Backend Files
 - [ ] `backend/models/system_config.py` - Model definition
+- [ ] `backend/schemas/system_config.py` - Pydantic schemas
 - [ ] `backend/services/config_service.py` - Service layer
 - [ ] `backend/routers/system_configs.py` - API endpoints
 - [ ] `backend/migrations/add_system_configs.py` - Database migration
 - [ ] `backend/models/__init__.py` - Add SystemConfig import
 - [ ] `backend/app.py` - Register router
-- [ ] `backend/skills/builtin/web_search_bocha.yaml` - Update to use ConfigService
-- [ ] `backend/skills/context.py` - Add db session to context
+- [ ] `backend/skills/builtin/web_search_bocha.yaml` - Update to use config_service
 
 ### Frontend Files
 - [ ] `frontend/js/pages/system-configs.js` - Page implementation
 - [ ] `frontend/css/system-configs.css` - Page styles (optional, can reuse existing)
-- [ ] `frontend/index.html` - Add script tag
+- [ ] `frontend/index.html` - Add script tag: `<script src="/js/pages/system-configs.js"></script>`
 - [ ] `frontend/js/components/sidebar.js` - Add navigation item
+
+### Test Files
+- [ ] `test_system_config_service.py` - Service layer tests
+- [ ] `test_system_config_router.py` - API endpoint tests
 
 ### Documentation
 - [x] `docs/superpowers/specs/2026-03-15-system-config-module-design.md` - This document
