@@ -1,12 +1,29 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <rect width="32" height="32" rx="6" fill="#161b22"/>
-  <circle cx="16" cy="13" r="5" stroke="#2f81f7" stroke-width="1.5" fill="none"/>
-  <ellipse cx="16" cy="13" rx="8" ry="3" stroke="#2f81f7" stroke-width="1" fill="none" opacity="0.5"/>
-  <circle cx="16" cy="13" r="1.5" fill="#2f81f7"/>
-  <path d="M13 20 L11 26" stroke="#3fb950" stroke-width="1.5" stroke-linecap="round"/>
-  <path d="M16 19 L16 26" stroke="#3fb950" stroke-width="1.5" stroke-linecap="round"/>
-  <path d="M19 20 L21 26" stroke="#3fb950" stroke-width="1.5" stroke-linecap="round"/>
-  <circle cx="11" cy="27" r="1" fill="#3fb950"/>
-  <circle cx="16" cy="27" r="1" fill="#3fb950"/>
-  <circle cx="21" cy="27" r="1" fill="#3fb950"/>
+  <!-- Background -->
+  <rect width="32" height="32" rx="6" fill="#0d1117"/>
+  
+  <!-- Shield outline (Security) -->
+  <path d="M16 4 L24 7 L24 14 C24 19 20 23 16 26 C12 23 8 19 8 14 L8 7 Z" 
+        stroke="#58a6ff" stroke-width="1.2" fill="none" opacity="0.8"/>
+  
+  <!-- Database cylinder (Database) -->
+  <ellipse cx="16" cy="12" rx="5" ry="2" fill="#238636" opacity="0.9"/>
+  <path d="M11 12 L11 15 C11 16.1 13.2 17 16 17 C18.8 17 21 16.1 21 15 L21 12" 
+        fill="#238636" opacity="0.9"/>
+  <ellipse cx="16" cy="15" rx="5" ry="2" fill="#238636"/>
+  
+  <!-- AI Neural nodes (AI) -->
+  <circle cx="13" cy="20" r="1.2" fill="#f778ba"/>
+  <circle cx="16" cy="22" r="1.2" fill="#f778ba"/>
+  <circle cx="19" cy="20" r="1.2" fill="#f778ba"/>
+  
+  <!-- Neural connections -->
+  <line x1="13" y1="20" x2="16" y2="22" stroke="#f778ba" stroke-width="0.8" opacity="0.6"/>
+  <line x1="19" y1="20" x2="16" y2="22" stroke="#f778ba" stroke-width="0.8" opacity="0.6"/>
+  <line x1="13" y1="20" x2="19" y2="20" stroke="#f778ba" stroke-width="0.8" opacity="0.6"/>
+  
+  <!-- Lock symbol (Security accent) -->
+  <rect x="14.5" y="18" width="3" height="3" rx="0.5" fill="#58a6ff" opacity="0.7"/>
+  <path d="M15 18 L15 17 C15 16.4 15.4 16 16 16 C16.6 16 17 16.4 17 17 L17 18" 
+        stroke="#58a6ff" stroke-width="0.8" fill="none" opacity="0.7"/>
 </svg>

@@ -1,17 +1,66 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <rect width="64" height="64" rx="14" fill="#161b22"/>
-  <rect x="2" y="2" width="60" height="60" rx="12" stroke="#2f81f7" stroke-width="2" fill="none"/>
-  <circle cx="32" cy="26" r="10" stroke="#2f81f7" stroke-width="2.5" fill="none"/>
-  <ellipse cx="32" cy="26" rx="16" ry="6" stroke="#2f81f7" stroke-width="1.5" fill="none" opacity="0.5"/>
-  <circle cx="32" cy="26" r="3" fill="#2f81f7"/>
-  <path d="M26 40 L22 52" stroke="#3fb950" stroke-width="2" stroke-linecap="round"/>
-  <path d="M32 38 L32 52" stroke="#3fb950" stroke-width="2" stroke-linecap="round"/>
-  <path d="M38 40 L42 52" stroke="#3fb950" stroke-width="2" stroke-linecap="round"/>
-  <circle cx="22" cy="53" r="2" fill="#3fb950"/>
-  <circle cx="32" cy="53" r="2" fill="#3fb950"/>
-  <circle cx="42" cy="53" r="2" fill="#3fb950"/>
-  <path d="M16 26 L8 26" stroke="#2f81f7" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
-  <path d="M48 26 L56 26" stroke="#2f81f7" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
-  <circle cx="7" cy="26" r="2" fill="#a371f7" opacity="0.8"/>
-  <circle cx="57" cy="26" r="2" fill="#a371f7" opacity="0.8"/>
+  <!-- Background with gradient effect -->
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0d1117;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#161b22;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#58a6ff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1f6feb;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="64" height="64" rx="14" fill="url(#bgGrad)"/>
+  
+  <!-- Shield outline (Security) - Main container -->
+  <path d="M32 8 L50 13 L50 28 C50 38 42 48 32 54 C22 48 14 38 14 28 L14 13 Z" 
+        stroke="url(#shieldGrad)" stroke-width="2.5" fill="none" opacity="0.9"/>
+  
+  <!-- Inner shield glow -->
+  <path d="M32 11 L47 15 L47 28 C47 36.5 40.5 45 32 50 C23.5 45 17 36.5 17 28 L17 15 Z" 
+        stroke="#58a6ff" stroke-width="1" fill="none" opacity="0.3"/>
+  
+  <!-- Database stack (Database) - 3 layers -->
+  <ellipse cx="32" cy="22" rx="10" ry="3.5" fill="#238636" opacity="0.95"/>
+  <path d="M22 22 L22 26 C22 27.9 26.5 29.5 32 29.5 C37.5 29.5 42 27.9 42 26 L42 22" 
+        fill="#238636" opacity="0.9"/>
+  <ellipse cx="32" cy="26" rx="10" ry="3.5" fill="#2ea043"/>
+  
+  <path d="M22 26 L22 30 C22 31.9 26.5 33.5 32 33.5 C37.5 33.5 42 31.9 42 30 L42 26" 
+        fill="#2ea043" opacity="0.9"/>
+  <ellipse cx="32" cy="30" rx="10" ry="3.5" fill="#3fb950"/>
+  
+  <!-- AI Neural network (AI) - Brain-like structure -->
+  <!-- Top layer nodes -->
+  <circle cx="26" cy="38" r="2" fill="#f778ba"/>
+  <circle cx="32" cy="37" r="2" fill="#f778ba"/>
+  <circle cx="38" cy="38" r="2" fill="#f778ba"/>
+  
+  <!-- Middle layer nodes -->
+  <circle cx="28" cy="43" r="2" fill="#db61a2"/>
+  <circle cx="36" cy="43" r="2" fill="#db61a2"/>
+  
+  <!-- Bottom layer node -->
+  <circle cx="32" cy="47" r="2.5" fill="#bc4a94"/>
+  
+  <!-- Neural connections -->
+  <line x1="26" y1="38" x2="28" y2="43" stroke="#f778ba" stroke-width="1.2" opacity="0.5"/>
+  <line x1="32" y1="37" x2="28" y2="43" stroke="#f778ba" stroke-width="1.2" opacity="0.5"/>
+  <line x1="32" y1="37" x2="36" y2="43" stroke="#f778ba" stroke-width="1.2" opacity="0.5"/>
+  <line x1="38" y1="38" x2="36" y2="43" stroke="#f778ba" stroke-width="1.2" opacity="0.5"/>
+  <line x1="28" y1="43" x2="32" y2="47" stroke="#db61a2" stroke-width="1.2" opacity="0.5"/>
+  <line x1="36" y1="43" x2="32" y2="47" stroke="#db61a2" stroke-width="1.2" opacity="0.5"/>
+  
+  <!-- Lock symbol (Security accent) - Centered on database -->
+  <rect x="29" y="24" width="6" height="6" rx="1" fill="#58a6ff" opacity="0.85"/>
+  <path d="M30.5 24 L30.5 22.5 C30.5 21.7 31.2 21 32 21 C32.8 21 33.5 21.7 33.5 22.5 L33.5 24" 
+        stroke="#58a6ff" stroke-width="1.5" fill="none" opacity="0.85"/>
+  <circle cx="32" cy="27" r="1" fill="#0d1117"/>
+  
+  <!-- Sparkle effects for AI -->
+  <circle cx="24" cy="35" r="0.8" fill="#f778ba" opacity="0.8"/>
+  <circle cx="40" cy="36" r="0.8" fill="#f778ba" opacity="0.8"/>
+  <circle cx="32" cy="51" r="0.8" fill="#bc4a94" opacity="0.8"/>
 </svg>
