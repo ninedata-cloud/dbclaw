@@ -23,7 +23,7 @@ const ChatWidget = {
         const input = DOM.el('textarea', {
             className: 'chat-input',
             id: 'chat-input',
-            placeholder: '询问数据库相关问题...',
+            placeholder: '询问数据库相关问题，按 Ctrl/Command+Enter 发送...',
             rows: '1',
         });
 

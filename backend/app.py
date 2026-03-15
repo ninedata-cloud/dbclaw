@@ -81,7 +81,7 @@ def create_app() -> FastAPI:
     )
 
     # Register routers
-    from backend.routers import datasources, hosts, metrics, monitor_ws, chat, query, ai_models, knowledge_bases, auth, users, inspections
+    from backend.routers import datasources, hosts, metrics, monitor_ws, chat, query, ai_models, knowledge_bases, auth, users, inspections, system_configs
     from backend.api import skills
     app.include_router(auth.router)
     app.include_router(users.router)
@@ -95,6 +95,7 @@ def create_app() -> FastAPI:
     app.include_router(knowledge_bases.router)
     app.include_router(skills.router)
     app.include_router(inspections.router)
+    app.include_router(system_configs.router)
 
     # Serve frontend static files
     app.mount("/css", StaticFiles(directory="frontend/css"), name="css")

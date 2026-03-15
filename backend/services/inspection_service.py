@@ -11,6 +11,7 @@ from backend.models.inspection_trigger import InspectionTrigger
 from backend.models.datasource import Datasource
 from backend.models.metric_snapshot import MetricSnapshot
 from backend.models.report import Report
+from backend.utils.datetime_helper import now as get_now
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ class InspectionService:
                         "memory_usage": {"threshold": 85, "duration": 60},
                         "connections": {"threshold": 100, "duration": 120}
                     },
-                    next_scheduled_at=datetime.utcnow() + timedelta(seconds=86400)
+                    next_scheduled_at=get_now() + timedelta(seconds=86400)
                 )
                 db.add(config)
 
@@ -97,7 +98,7 @@ class InspectionService:
         while self.running:
             try:
                 async with self.db_session_factory() as db:
-                    now = datetime.utcnow()
+                    now = get_now()
                     result = await db.execute(
                         select(InspectionConfig).where(
                             and_(

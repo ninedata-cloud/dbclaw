@@ -7,12 +7,17 @@ const MonitorPage = {
     prevNetworkRx: null,
     prevNetworkTx: null,
     prevNetworkTime: null,
+    // Time range state
+    currentTimeRange: 60, // default 1 hour in minutes
+    isRealtime: true,
 
     render() {
         const conn = Store.get('currentConnection');
 
-        // Connection selector
+        // Header with connection selector and time range selector
         const headerActions = DOM.el('div', { className: 'flex gap-8' });
+
+        // Connection selector
         const connSelect = DOM.el('select', { className: 'form-select', style: { minWidth: '200px' } });
         connSelect.appendChild(DOM.el('option', { value: '', textContent: '选择数据源...' }));
         const connections = Store.get('datasources') || [];
@@ -27,10 +32,67 @@ const MonitorPage = {
                 const conns = Store.get('datasources') || [];
                 const selected = conns.find(c => c.id === id);
                 Store.set('currentConnection', selected);
-                this._startMonitoring(id);
+                this._reloadData(id);
             }
         });
         headerActions.appendChild(connSelect);
+
+        // Time range selector
+        const timeRangeSelect = DOM.el('select', {
+            className: 'form-select',
+            style: { minWidth: '150px' },
+            id: 'time-range-select'
+        });
+        const timeRanges = [
+            { value: 1, label: '最近 1 分钟' },
+            { value: 10, label: '最近 10 分钟' },
+            { value: 60, label: '最近 1 小时' },
+            { value: 360, label: '最近 6 小时' },
+            { value: 1440, label: '最近 1 天' },
+            { value: 10080, label: '最近 7 天' },
+            { value: 43200, label: '最近 1 个月' },
+            { value: 'custom', label: '自定义时间' }
+        ];
+        for (const range of timeRanges) {
+            const opt = DOM.el('option', {
+                value: range.value,
+                textContent: range.label
+            });
+            if (range.value === this.currentTimeRange) opt.selected = true;
+            timeRangeSelect.appendChild(opt);
+        }
+        timeRangeSelect.addEventListener('change', () => {
+            const value = timeRangeSelect.value;
+            if (value === 'custom') {
+                this._showCustomTimeDialog();
+            } else {
+                this.currentTimeRange = parseInt(value);
+                this.isRealtime = true;
+                if (conn) {
+                    this._reloadData(conn.id);
+                }
+            }
+        });
+        headerActions.appendChild(timeRangeSelect);
+
+        // Realtime toggle button
+        const realtimeBtn = DOM.el('button', {
+            className: 'btn btn-secondary',
+            id: 'realtime-toggle',
+            textContent: '实时监控'
+        });
+        realtimeBtn.addEventListener('click', () => {
+            this.isRealtime = !this.isRealtime;
+            realtimeBtn.textContent = this.isRealtime ? '实时监控' : '暂停实时';
+            realtimeBtn.className = this.isRealtime ? 'btn btn-secondary' : 'btn btn-outline';
+            if (this.isRealtime && conn) {
+                this._startMonitoring(conn.id);
+            } else {
+                this._stopMonitoring();
+            }
+        });
+        headerActions.appendChild(realtimeBtn);
+
         Header.render('性能监控', headerActions);
 
         const content = DOM.$('#page-content');
@@ -163,7 +225,9 @@ const MonitorPage = {
                 this._loadLatestData(conn.id).then(() => {
                     this._loadHistory(conn.id);
                 });
-                this._startMonitoring(conn.id);
+                if (this.isRealtime) {
+                    this._startMonitoring(conn.id);
+                }
             } else {
                 // Auto-select first connection
                 API.getDatasources().then(conns => {
@@ -174,13 +238,160 @@ const MonitorPage = {
                         this._loadLatestData(conns[0].id).then(() => {
                             this._loadHistory(conns[0].id);
                         });
-                        this._startMonitoring(conns[0].id);
+                        if (this.isRealtime) {
+                            this._startMonitoring(conns[0].id);
+                        }
                     }
                 });
             }
         });
 
         return () => this._cleanup();
+    },
+
+    _reloadData(connId) {
+        // Stop WebSocket if running
+        this._stopMonitoring();
+
+        // Clear charts
+        for (const id of [...this.chartIds, ...this.osChartIds]) {
+            ChartPanel.clear(id);
+        }
+
+        // Reset network tracking
+        this.prevNetworkRx = null;
+        this.prevNetworkTx = null;
+        this.prevNetworkTime = null;
+
+        // Load new data
+        this._loadLatestData(connId).then(() => {
+            this._loadHistory(connId);
+        });
+
+        // Start monitoring if realtime is enabled
+        if (this.isRealtime) {
+            this._startMonitoring(connId);
+        }
+    },
+
+    _showCustomTimeDialog() {
+        const dialog = DOM.el('div', { className: 'modal-overlay' });
+        const modal = DOM.el('div', { className: 'modal', style: { maxWidth: '500px' } });
+
+        const header = DOM.el('div', { className: 'modal-header' });
+        header.appendChild(DOM.el('h3', { textContent: '自定义时间范围' }));
+        const closeBtn = DOM.el('button', { className: 'btn-icon', innerHTML: '<i data-lucide="x"></i>' });
+        closeBtn.addEventListener('click', () => {
+            document.body.removeChild(dialog);
+            // Reset select to current range
+            DOM.$('#time-range-select').value = this.currentTimeRange;
+        });
+        header.appendChild(closeBtn);
+        modal.appendChild(header);
+
+        const body = DOM.el('div', { className: 'modal-body' });
+
+        // Start time
+        const startGroup = DOM.el('div', { className: 'form-group' });
+        startGroup.appendChild(DOM.el('label', { textContent: '开始时间' }));
+        const startInput = DOM.el('input', {
+            type: 'datetime-local',
+            className: 'form-input',
+            id: 'custom-start-time'
+        });
+        startGroup.appendChild(startInput);
+        body.appendChild(startGroup);
+
+        // End time
+        const endGroup = DOM.el('div', { className: 'form-group' });
+        endGroup.appendChild(DOM.el('label', { textContent: '结束时间' }));
+        const endInput = DOM.el('input', {
+            type: 'datetime-local',
+            className: 'form-input',
+            id: 'custom-end-time',
+            value: new Date().toISOString().slice(0, 16)
+        });
+        endGroup.appendChild(endInput);
+        body.appendChild(endGroup);
+
+        modal.appendChild(body);
+
+        const footer = DOM.el('div', { className: 'modal-footer' });
+        const cancelBtn = DOM.el('button', { className: 'btn btn-secondary', textContent: '取消' });
+        cancelBtn.addEventListener('click', () => {
+            document.body.removeChild(dialog);
+            DOM.$('#time-range-select').value = this.currentTimeRange;
+        });
+        const confirmBtn = DOM.el('button', { className: 'btn btn-primary', textContent: '确定' });
+        confirmBtn.addEventListener('click', () => {
+            const start = startInput.value;
+            const end = endInput.value;
+            if (!start || !end) {
+                alert('请选择开始和结束时间');
+                return;
+            }
+            if (new Date(start) >= new Date(end)) {
+                alert('开始时间必须早于结束时间');
+                return;
+            }
+            document.body.removeChild(dialog);
+            this.isRealtime = false;
+            this._loadCustomRange(Store.get('currentConnection').id, start, end);
+            DOM.$('#realtime-toggle').textContent = '暂停实时';
+            DOM.$('#realtime-toggle').className = 'btn btn-outline';
+        });
+        footer.appendChild(cancelBtn);
+        footer.appendChild(confirmBtn);
+        modal.appendChild(footer);
+
+        dialog.appendChild(modal);
+        document.body.appendChild(dialog);
+        DOM.createIcons();
+    },
+
+    async _loadCustomRange(connId, startTime, endTime) {
+        try {
+            console.log('[Monitor] Loading custom range:', startTime, 'to', endTime);
+
+            // Convert to ISO format for API
+            const start = new Date(startTime).toISOString();
+            const end = new Date(endTime).toISOString();
+
+            const metrics = await API.getMetrics(
+                connId,
+                `metric_type=db_status&start_time=${encodeURIComponent(start)}&end_time=${encodeURIComponent(end)}&limit=10000`
+            );
+
+            console.log('[Monitor] Loaded custom range metrics:', metrics.length, 'records');
+
+            if (metrics.length === 0) {
+                alert('所选时间范围内没有数据');
+                return;
+            }
+
+            // Clear charts
+            for (const id of [...this.chartIds, ...this.osChartIds]) {
+                ChartPanel.clear(id);
+            }
+
+            // Reset network tracking
+            this.prevNetworkRx = null;
+            this.prevNetworkTx = null;
+            this.prevNetworkTime = null;
+
+            const reversed = [...metrics].reverse();
+
+            // Update latest metric card
+            if (metrics.length > 0) {
+                this._updateMetricCards(metrics[0].data);
+            }
+
+            // Batch populate charts
+            this._batchUpdateCharts(reversed);
+        } catch (e) {
+            console.error('[Monitor] Failed to load custom range:', e);
+            alert('加载数据失败: ' + e.message);
+        }
     },
 
     async _loadLatestData(connId) {
@@ -198,8 +409,8 @@ const MonitorPage = {
 
     async _loadHistory(connId) {
         try {
-            console.log('[Monitor] Loading history for connection:', connId);
-            const metrics = await API.getMetrics(connId, 'metric_type=db_status&limit=30');
+            console.log('[Monitor] Loading history for connection:', connId, 'range:', this.currentTimeRange, 'minutes');
+            const metrics = await API.getMetrics(connId, `metric_type=db_status&minutes=${this.currentTimeRange}&limit=10000`);
             console.log('[Monitor] Loaded metrics:', metrics.length, 'records');
             if (metrics.length === 0) {
                 console.warn('[Monitor] No metrics found');
@@ -222,11 +433,9 @@ const MonitorPage = {
     },
 
     _startMonitoring(connId) {
-        // Only cleanup WebSocket, don't destroy charts
-        if (this.ws) {
-            this.ws.disconnect();
-            this.ws = null;
-        }
+        // Stop existing WebSocket if any
+        this._stopMonitoring();
+
         console.log('[Monitor] Starting WebSocket monitoring for connection:', connId);
         this.ws = new WSManager(`/ws/monitor/${connId}`);
         this.ws.on('open', () => {
@@ -252,6 +461,13 @@ const MonitorPage = {
             }
         });
         this.ws.connect();
+    },
+
+    _stopMonitoring() {
+        if (this.ws) {
+            this.ws.disconnect();
+            this.ws = null;
+        }
     },
 
     _updateMetricCards(data) {
@@ -491,14 +707,14 @@ const MonitorPage = {
     },
 
     _cleanup() {
-        if (this.ws) {
-            this.ws.disconnect();
-            this.ws = null;
-        }
+        this._stopMonitoring();
         ChartPanel.destroyAll();
         // Reset network tracking
         this.prevNetworkRx = null;
         this.prevNetworkTx = null;
         this.prevNetworkTime = null;
+        // Reset time range state
+        this.currentTimeRange = 60;
+        this.isRealtime = true;
     }
 };

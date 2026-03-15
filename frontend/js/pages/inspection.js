@@ -118,73 +118,88 @@ const InspectionPage = {
         if (this.filters.start_date) params.append('start_date', this.filters.start_date);
         if (this.filters.end_date) params.append('end_date', this.filters.end_date);
 
-        const response = await API.get(`/api/inspections/reports?${params.toString()}`);
-        const reports = Array.isArray(response) ? response : response.reports || [];
-        this.totalReports = response.total || reports.length;
-
         const container = DOM.$('#reports');
-        if (reports.length === 0) {
-            container.innerHTML = '<p style="text-align:center;color:#666;padding:20px;">未找到报告</p>';
-            DOM.$('#pagination').innerHTML = '';
-            return;
+
+        // Show loading indicator only on initial load or filter change
+        if (!this.pollInterval || container.innerHTML === '') {
+            container.innerHTML = '<div style="text-align:center;padding:40px;color:#666;"><div class="spinner"></div><p style="margin-top:10px;">加载中...</p></div>';
         }
 
-        container.innerHTML = `
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>数据源</th>
-                        <th>触发类型</th>
-                        <th>状态</th>
-                        <th>标题</th>
-                        <th>创建时间</th>
-                        <th>原因</th>
-                        <th style="width:150px;">操作</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${reports.map(r => `
+        try {
+            const response = await API.get(`/api/inspections/reports?${params.toString()}`);
+            const reports = Array.isArray(response) ? response : response.reports || [];
+            this.totalReports = response.total || reports.length;
+
+            if (reports.length === 0) {
+                container.innerHTML = '<p style="text-align:center;color:#666;padding:20px;">未找到报告</p>';
+                DOM.$('#pagination').innerHTML = '';
+                return;
+            }
+
+            container.innerHTML = `
+                <table class="data-table">
+                    <thead>
                         <tr>
-                            <td>${r.datasource_name || 'N/A'}</td>
-                            <td>
-                                <span class="badge badge-${r.trigger_type === 'anomaly' ? 'danger' : r.trigger_type === 'scheduled' ? 'success' : 'info'}">
-                                    ${r.trigger_type === 'anomaly' ? '🔴 异常' : r.trigger_type === 'scheduled' ? '📅 定时' : '👤 手动'}
-                                </span>
-                            </td>
-                            <td>
-                                <span class="badge badge-${r.status === 'completed' ? 'success' : r.status === 'failed' ? 'danger' : 'warning'}">
-                                    ${r.status === 'completed' ? '✓ 已完成' : r.status === 'failed' ? '✗ 失败' : '⏳ 生成中'}
-                                </span>
-                                ${r.status === 'failed' && r.error_message ? `
-                                    <span class="error-icon" data-error="${r.error_message.replace(/"/g, '&quot;')}" style="margin-left:6px;color:#dc3545;cursor:help;font-size:16px;">⚠️</span>
-                                ` : ''}
-                            </td>
-                            <td><strong>${r.title}</strong></td>
-                            <td>${r.created_at}</td>
-                            <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.trigger_reason || '-'}</td>
-                            <td>
-                                <button onclick="InspectionPage.viewReport(${r.report_id})" class="btn btn-sm btn-primary" style="padding:4px 8px;margin-right:5px;">查看报告</button>
-                                <button onclick="InspectionPage.confirmDelete(${r.report_id})" class="btn btn-sm btn-danger" style="padding:4px 8px;">删除</button>
-                            </td>
+                            <th>数据源</th>
+                            <th>触发类型</th>
+                            <th>状态</th>
+                            <th>标题</th>
+                            <th>创建时间</th>
+                            <th>原因</th>
+                            <th style="width:150px;">操作</th>
                         </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-        `;
+                    </thead>
+                    <tbody>
+                        ${reports.map(r => `
+                            <tr>
+                                <td>${r.datasource_name || 'N/A'}</td>
+                                <td>
+                                    <span class="badge badge-${r.trigger_type === 'anomaly' ? 'danger' : r.trigger_type === 'scheduled' ? 'success' : 'info'}">
+                                        ${r.trigger_type === 'anomaly' ? '🔴 异常' : r.trigger_type === 'scheduled' ? '📅 定时' : '👤 手动'}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge badge-${r.status === 'completed' ? 'success' : r.status === 'failed' ? 'danger' : 'warning'}">
+                                        ${r.status === 'completed' ? '✓ 已完成' : r.status === 'failed' ? '✗ 失败' : '⏳ 生成中'}
+                                    </span>
+                                    ${r.status === 'failed' && r.error_message ? `
+                                        <span class="error-icon" data-error="${r.error_message.replace(/"/g, '&quot;')}" style="margin-left:6px;color:#dc3545;cursor:help;font-size:16px;">⚠️</span>
+                                    ` : ''}
+                                </td>
+                                <td><strong>${r.title}</strong></td>
+                                <td>${r.created_at}</td>
+                                <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.trigger_reason || '-'}</td>
+                                <td>
+                                    <button onclick="InspectionPage.viewReport(${r.report_id})" class="btn btn-sm btn-primary" style="padding:4px 8px;margin-right:5px;">查看报告</button>
+                                    <button onclick="InspectionPage.confirmDelete(${r.report_id})" class="btn btn-sm btn-danger" style="padding:4px 8px;">删除</button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
 
-        // Setup error icon tooltips
-        this.setupErrorTooltips();
+            // Setup error icon tooltips
+            this.setupErrorTooltips();
 
-        this.renderPagination();
+            this.renderPagination();
 
-        // Stop polling if no reports are generating
-        const hasGeneratingReports = reports.some(r =>
-            r.status !== 'completed' && r.status !== 'failed'
-        );
+            // Stop polling if no reports are generating
+            const hasGeneratingReports = reports.some(r =>
+                r.status !== 'completed' && r.status !== 'failed'
+            );
 
-        if (!hasGeneratingReports && this.pollInterval) {
-            clearInterval(this.pollInterval);
-            this.pollInterval = null;
+            if (!hasGeneratingReports && this.pollInterval) {
+                clearInterval(this.pollInterval);
+                this.pollInterval = null;
+            } else if (hasGeneratingReports && !this.pollInterval) {
+                // Restart polling if there are generating reports but polling stopped
+                this.startPolling();
+            }
+        } catch (error) {
+            console.error('Failed to load reports:', error);
+            container.innerHTML = '<p style="text-align:center;color:#dc3545;padding:20px;">加载失败，请刷新重试</p>';
+            Toast.show('加载报告失败', 'error');
         }
     },
 
@@ -232,7 +247,7 @@ const InspectionPage = {
                 triggerDetailsHtml = `
                     <div style="background:#e3f2fd;padding:12px;border-radius:4px;margin-bottom:15px;border-left:4px solid #2196f3;">
                         <strong style="color:#1976d2;">触发原因:</strong>
-                        <span style="margin-left:8px;">${report.trigger_reason}</span>
+                        <span style="margin-left:8px; color:black">${report.trigger_reason}</span>
                     </div>
                 `;
             }
@@ -319,8 +334,8 @@ const InspectionPage = {
             clearInterval(this.pollInterval);
         }
 
-        // Poll every 3 seconds
-        this.pollInterval = setInterval(() => this.loadReports(), 3000);
+        // Poll every 5 seconds (reduced frequency)
+        this.pollInterval = setInterval(() => this.loadReports(), 5000);
     },
 
     setupErrorTooltips() {

@@ -8,6 +8,7 @@ from backend.services.document_parser import DocumentParser
 from backend.services.document_chunker import DocumentChunker
 from backend.services.vector_store import VectorStore
 from backend.config import get_settings
+from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,7 @@ class KBProcessor:
                         if doc_obj:
                             doc_obj.status = "failed"
                             doc_obj.error_message = str(e)
-                            doc_obj.processed_at = datetime.now()
+                            doc_obj.processed_at = now()
                             await db2.commit()
 
     async def _process_document(self, doc: Document):

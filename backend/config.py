@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     knowledge_base_dir: str = "./data/knowledge_bases"
 
+    # Bocha AI Web Search API
+    bocha_api_key: str = "sk-66d203942a6c404b89eff2adb494febc"
+    bocha_api_url: str = "https://api.bochaai.com/v1/web-search"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

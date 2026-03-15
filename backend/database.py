@@ -5,7 +5,11 @@ from backend.config import get_settings
 engine = create_async_engine(
     get_settings().database_url,
     echo=get_settings().debug,
-    connect_args={"check_same_thread": False},
+    connect_args={
+        "check_same_thread": False,
+        "timeout": 30,  # 增加超时时间到 30 秒
+    },
+    pool_pre_ping=True,  # 检测连接是否有效
 )
 
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -41,6 +45,14 @@ async def init_db():
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+        # Enable WAL mode for better concurrency
+        def _enable_wal(connection):
+            from sqlalchemy import text
+            connection.execute(text("PRAGMA journal_mode=WAL"))
+            connection.execute(text("PRAGMA busy_timeout=30000"))  # 30 秒超时
+
+        await conn.run_sync(_enable_wal)
 
         # Run migrations
         def _migrate(connection):

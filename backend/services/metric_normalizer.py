@@ -4,6 +4,7 @@ Metric Normalizer Service
 """
 from typing import Dict, Any, Optional
 from datetime import datetime
+from backend.utils.datetime_helper import now
 
 
 class MetricNormalizer:
@@ -105,16 +106,57 @@ class MetricNormalizer:
         normalized = {}
 
         # 连接数
-        if 'user_connections' in metrics:
-            normalized['connections'] = metrics['user_connections']
+        if 'user_sessions' in metrics:
+            normalized['connections'] = metrics['user_sessions']
 
-        # 批处理请求数可以作为 QPS
-        if 'batch_requests_per_sec' in metrics:
-            normalized['qps'] = metrics['batch_requests_per_sec']
+        # 计算 QPS（基于 batch_requests_total 累积值）
+        if 'batch_requests_total' in metrics:
+            qps = cls._calculate_rate(
+                datasource_id, 'batch_requests_total', metrics['batch_requests_total']
+            )
+            if qps is not None:
+                normalized['qps'] = qps
 
-        # 事务数
-        if 'transactions_per_sec' in metrics:
-            normalized['tps'] = metrics['transactions_per_sec']
+        # 事务数（如果有的话）
+        if 'transactions_total' in metrics:
+            tps = cls._calculate_rate(
+                datasource_id, 'transactions_total', metrics['transactions_total']
+            )
+            if tps is not None:
+                normalized['tps'] = tps
+
+        # OS 指标已经在 get_status 中返回，直接保留
+        # cpu_usage, memory_usage, disk_usage 已经是百分比格式
+
+        # 计算磁盘 I/O 速率（从累积值计算）
+        if 'disk_reads_total' in metrics:
+            reads_per_sec = cls._calculate_rate(
+                datasource_id, 'disk_reads_total', metrics['disk_reads_total']
+            )
+            if reads_per_sec is not None:
+                normalized['disk_reads_per_sec'] = reads_per_sec
+
+        if 'disk_writes_total' in metrics:
+            writes_per_sec = cls._calculate_rate(
+                datasource_id, 'disk_writes_total', metrics['disk_writes_total']
+            )
+            if writes_per_sec is not None:
+                normalized['disk_writes_per_sec'] = writes_per_sec
+
+        # 计算网络 I/O 速率（从累积值计算）
+        if 'network_reads_total' in metrics:
+            net_rx = cls._calculate_rate(
+                datasource_id, 'network_reads_total', metrics['network_reads_total']
+            )
+            if net_rx is not None:
+                normalized['network_rx_bytes'] = net_rx
+
+        if 'network_writes_total' in metrics:
+            net_tx = cls._calculate_rate(
+                datasource_id, 'network_writes_total', metrics['network_writes_total']
+            )
+            if net_tx is not None:
+                normalized['network_tx_bytes'] = net_tx
 
         return normalized
 
@@ -159,13 +201,13 @@ class MetricNormalizer:
             每秒增量，如果是第一次采集则返回 None
         """
         key = f"{datasource_id}:{metric_name}"
-        now = datetime.utcnow()
+        timestamp = now()
 
         if key not in cls._last_values:
             # 第一次采集，保存值
             cls._last_values[key] = {
                 'value': current_value,
-                'timestamp': now
+                'timestamp': timestamp
             }
             return None
 
@@ -174,7 +216,7 @@ class MetricNormalizer:
         last_time = last_data['timestamp']
 
         # 计算时间差（秒）
-        time_diff = (now - last_time).total_seconds()
+        time_diff = (timestamp - last_time).total_seconds()
 
         if time_diff <= 0:
             return None
@@ -192,7 +234,7 @@ class MetricNormalizer:
         # 更新缓存
         cls._last_values[key] = {
             'value': current_value,
-            'timestamp': now
+            'timestamp': timestamp
         }
 
         return round(rate, 2)

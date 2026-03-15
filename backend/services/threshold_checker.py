@@ -6,6 +6,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
 from collections import defaultdict
+from backend.utils.datetime_helper import now as get_now
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ class ThresholdChecker:
                 }
             ]
         """
-        now = datetime.utcnow()
+        now = get_now()
         violations_to_trigger = []
 
         if not threshold_rules:
@@ -342,7 +343,7 @@ class ThresholdChecker:
 
     def get_violation_status(self, datasource_id: int) -> Dict[str, Dict[str, Any]]:
         """Get current violation status for a datasource (for debugging/monitoring)"""
-        now = datetime.utcnow()
+        now = get_now()
         status = {}
 
         for metric_name, start_time in self._violation_start_times.get(datasource_id, {}).items():

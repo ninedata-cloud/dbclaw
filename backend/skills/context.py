@@ -3,6 +3,7 @@ Skill execution context - provides safe API for skills to access system resource
 """
 from typing import Dict, Any, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
+from backend.utils.datetime_helper import now
 
 
 class SkillContext:
@@ -156,7 +157,7 @@ class SkillContext:
         from sqlalchemy import select
         from datetime import datetime, timedelta
 
-        cutoff = datetime.utcnow() - timedelta(minutes=minutes)
+        cutoff = now() - timedelta(minutes=minutes)
         result = await self.db.execute(
             select(MetricSnapshot)
             .where(
@@ -187,6 +188,27 @@ class SkillContext:
         # Use provided timeout, or fall back to context timeout
         exec_timeout = timeout if timeout is not None else self.timeout
         return await self.execute_host_command(command, datasource_id, allow_write=False, timeout=exec_timeout)
+
+    async def execute_command_on_host(self, command: str, host_id: int, allow_write: bool = False, timeout: int = None) -> Dict[str, Any]:
+        """Execute an OS command directly on a host by host_id
+
+        Args:
+            command: Shell command to execute
+            host_id: SSH host ID to execute the command on
+            allow_write: If False (default), only read-only commands are allowed
+            timeout: Command execution timeout in seconds (uses context timeout if not specified)
+        """
+        if allow_write:
+            self._check_permission("execute_any_os_command")
+        else:
+            self._check_permission("execute_command")
+
+        from backend.utils.host_executor import execute_host_command
+
+        # Use provided timeout, or fall back to context timeout
+        exec_timeout = timeout if timeout is not None else self.timeout
+        result = await execute_host_command(self.db, host_id, command, allow_write=allow_write, timeout=exec_timeout)
+        return result
 
     async def call_skill(self, skill_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Call another skill (for skill composition)"""

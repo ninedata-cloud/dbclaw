@@ -13,6 +13,7 @@ from backend.services.db_connector import get_connector
 from backend.services.ssh_service import SSHService
 from backend.services.os_metrics_service import OSMetricsService
 from backend.agent.conversation_skills import generate_report_with_skills
+from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +158,7 @@ async def _update_report_status(report_id: int, status: str, **kwargs):
         if report:
             report.status = status
             if status == "completed":
-                report.completed_at = datetime.utcnow()
+                report.completed_at = now()
             for k, v in kwargs.items():
                 setattr(report, k, v)
             await db.commit()
@@ -177,18 +178,18 @@ def _build_markdown_report(datasource, data: dict, findings: list) -> str:
     status = data.get("status", {})
     db_size = data.get("db_size", {})
     os_metrics = data.get("os_metrics", {})
-    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    timestamp = now().strftime("%Y-%m-%d %H:%M:%S")
 
-    md = f"""# Database Diagnostic Report
+    md = f"""# 数据库诊断报告
 
-**Generated:** {now}
-**Datasource:** {datasource.name} ({datasource.db_type})
-**Host:** {datasource.host}:{datasource.port}
-**Database:** {datasource.database or 'N/A'}
+**生成时间：** {now}
+**数据源：** {datasource.name} ({datasource.db_type})
+**主机：** {datasource.host}:{datasource.port}
+**数据库：** {datasource.database or '不适用'}
 
 ---
 
-## Executive Summary
+## 执行摘要
 
 """
     critical = [f for f in findings if f["severity"] == "CRITICAL"]
@@ -196,57 +197,57 @@ def _build_markdown_report(datasource, data: dict, findings: list) -> str:
     infos = [f for f in findings if f["severity"] == "INFO"]
 
     if critical:
-        md += f"**{len(critical)} Critical issues** require immediate attention.\n\n"
+        md += f"**{len(critical)} 个严重问题** 需要立即处理。\n\n"
     if warnings:
-        md += f"**{len(warnings)} Warnings** should be reviewed.\n\n"
-    md += f"**{len(infos)} Informational** findings noted.\n\n"
+        md += f"**{len(warnings)} 个警告** 应该尽快审查。\n\n"
+    md += f"**{len(infos)} 个信息** 发现已记录。\n\n"
 
-    md += "---\n\n## Database Configuration\n\n"
+    md += "---\n\n## 数据库配置\n\n"
     variables = data.get("variables", {})
-    version = data.get("version", "Unknown")
+    version = data.get("version", "未知")
 
-    md += f"- **Version:** {version}\n"
+    md += f"- **版本：** {version}\n"
 
     if datasource.db_type == "postgresql":
-        md += f"- **Uptime:** {status.get('uptime', 'N/A')} seconds\n"
-        md += f"- **Max Connections:** {variables.get('max_connections', 'N/A')}\n"
-        md += f"- **Shared Buffers:** {variables.get('shared_buffers', 'N/A')}\n"
-        md += f"- **Work Mem:** {variables.get('work_mem', 'N/A')}\n"
+        md += f"- **运行时间：** {status.get('uptime', '不适用')} 秒\n"
+        md += f"- **最大连接数：** {variables.get('max_connections', '不适用')}\n"
+        md += f"- **共享缓冲区：** {variables.get('shared_buffers', '不适用')}\n"
+        md += f"- **工作内存：** {variables.get('work_mem', '不适用')}\n"
     elif datasource.db_type == "mysql":
-        md += f"- **Uptime:** {status.get('uptime', 'N/A')} seconds\n"
-        md += f"- **Max Connections:** {variables.get('max_connections', 'N/A')}\n"
-        md += f"- **InnoDB Buffer Pool Size:** {variables.get('innodb_buffer_pool_size', 'N/A')}\n"
-        md += f"- **Query Cache Size:** {variables.get('query_cache_size', 'N/A')}\n"
+        md += f"- **运行时间：** {status.get('uptime', '不适用')} 秒\n"
+        md += f"- **最大连接数：** {variables.get('max_connections', '不适用')}\n"
+        md += f"- **InnoDB 缓冲池大小：** {variables.get('innodb_buffer_pool_size', '不适用')}\n"
+        md += f"- **查询缓存大小：** {variables.get('query_cache_size', '不适用')}\n"
     else:
-        md += f"- **Uptime:** {status.get('uptime', 'N/A')}\n"
-        md += f"- **Max Connections:** {variables.get('max_connections', 'N/A')}\n"
+        md += f"- **运行时间：** {status.get('uptime', '不适用')}\n"
+        md += f"- **最大连接数：** {variables.get('max_connections', '不适用')}\n"
     md += "\n"
 
-    md += "---\n\n## Database Status\n\n"
-    md += "| Metric | Value |\n|--------|-------|\n"
+    md += "---\n\n## 数据库状态\n\n"
+    md += "| 指标 | 值 |\n|--------|-------|\n"
     for k, v in status.items():
         if k != "error":
             md += f"| {k.replace('_', ' ').title()} | {v} |\n"
 
     if db_size:
-        md += f"\n### Database Size\n\n"
+        md += f"\n### 数据库大小\n\n"
         for k, v in db_size.items():
             if "bytes" in k:
-                md += f"- **{k.replace('_', ' ').title()}:** {_format_bytes(v)}\n"
+                md += f"- **{k.replace('_', ' ').title()}：** {_format_bytes(v)}\n"
             else:
-                md += f"- **{k.replace('_', ' ').title()}:** {v}\n"
+                md += f"- **{k.replace('_', ' ').title()}：** {v}\n"
 
     if os_metrics:
-        md += "\n---\n\n## OS Resource Usage\n\n"
-        md += f"- **CPU Usage:** {os_metrics.get('cpu_usage_percent', 'N/A')}%\n"
-        md += f"- **Memory Usage:** {os_metrics.get('memory_usage_percent', 'N/A')}%\n"
-        md += f"- **Disk Usage:** {os_metrics.get('disk_usage_percent', 'N/A')}%\n"
-        md += f"- **Load Average:** {os_metrics.get('load_1m', 'N/A')} / {os_metrics.get('load_5m', 'N/A')} / {os_metrics.get('load_15m', 'N/A')}\n"
+        md += "\n---\n\n## 操作系统资源使用\n\n"
+        md += f"- **CPU 使用率：** {os_metrics.get('cpu_usage_percent', '不适用')}%\n"
+        md += f"- **内存使用率：** {os_metrics.get('memory_usage_percent', '不适用')}%\n"
+        md += f"- **磁盘使用率：** {os_metrics.get('disk_usage_percent', '不适用')}%\n"
+        md += f"- **负载平均值：** {os_metrics.get('load_1m', '不适用')} / {os_metrics.get('load_5m', '不适用')} / {os_metrics.get('load_15m', '不适用')}\n"
 
     # Index Analysis
     index_stats = data.get("index_stats", [])
     if index_stats:
-        md += "\n---\n\n## Index Analysis\n\n"
+        md += "\n---\n\n## 索引分析\n\n"
         tables_with_indexes = {}
         for idx in index_stats:
             table = idx.get("tablename") or idx.get("table")
@@ -254,30 +255,30 @@ def _build_markdown_report(datasource, data: dict, findings: list) -> str:
                 tables_with_indexes[table] = []
             tables_with_indexes[table].append(idx)
 
-        md += f"**Total Indexes:** {len(index_stats)}\n\n"
+        md += f"**索引总数：** {len(index_stats)}\n\n"
         for table, indexes in list(tables_with_indexes.items())[:10]:
-            md += f"### Table: {table}\n"
+            md += f"### 表：{table}\n"
             for idx in indexes[:5]:
                 idx_name = idx.get('indexname') or idx.get('index')
-                column = idx.get('column') or 'N/A'
+                column = idx.get('column') or '不适用'
                 cardinality = idx.get('cardinality') or idx.get('idx_scan') or 0
-                md += f"- **{idx_name}** (scans: {cardinality})\n"
+                md += f"- **{idx_name}** (扫描次数：{cardinality})\n"
             md += "\n"
 
     # Lock Waits
     lock_waits = data.get("lock_waits", [])
     if lock_waits:
-        md += "\n---\n\n## Lock Waits\n\n"
-        md += f"**Active Lock Waits:** {len(lock_waits)}\n\n"
+        md += "\n---\n\n## 锁等待\n\n"
+        md += f"**活动锁等待：** {len(lock_waits)}\n\n"
         for lock in lock_waits[:10]:
-            md += f"- Waiting Thread {lock.get('waiting_thread')} blocked by Thread {lock.get('blocking_thread')}\n"
-            md += f"  Query: `{lock.get('waiting_query', 'N/A')[:100]}...`\n\n"
+            md += f"- 等待线程 {lock.get('waiting_thread')} 被线程 {lock.get('blocking_thread')} 阻塞\n"
+            md += f"  查询：`{lock.get('waiting_query', '不适用')[:100]}...`\n\n"
 
     # Table Fragmentation
     fragmentation = data.get("fragmentation", [])
     if fragmentation:
-        md += "\n---\n\n## Table Fragmentation\n\n"
-        md += "| Table | Dead Tuples | Live Tuples | Dead Ratio % |\n|-------|-------------|-------------|-------------|\n"
+        md += "\n---\n\n## 表碎片\n\n"
+        md += "| 表名 | 死元组 | 活元组 | 死元组比例 % |\n|-------|-------------|-------------|-------------|\n"
         for frag in fragmentation[:10]:
             table = frag.get('tablename') or frag.get('table')
             dead = frag.get('n_dead_tup') or frag.get('data_free', 0)
@@ -286,15 +287,15 @@ def _build_markdown_report(datasource, data: dict, findings: list) -> str:
             md += f"| {table} | {dead} | {live} | {ratio}% |\n"
         md += "\n"
 
-    md += "\n---\n\n## Findings\n\n"
+    md += "\n---\n\n## 发现\n\n"
     for f in findings:
         icon = {"CRITICAL": "🔴", "WARNING": "🟡", "INFO": "🔵"}.get(f["severity"], "⚪")
         md += f"### {icon} [{f['severity']}] {f['title']}\n\n"
-        md += f"**Category:** {f['category']}\n\n"
+        md += f"**类别：** {f['category']}\n\n"
         md += f"{f['detail']}\n\n"
-        md += f"**Recommendation:** {f['recommendation']}\n\n"
+        md += f"**建议：** {f['recommendation']}\n\n"
 
-    md += "---\n\n*Report generated by NineData DBMaster*\n"
+    md += "---\n\n*报告由 SmartDBA 生成*\n"
     return md
 
 
@@ -307,7 +308,7 @@ def _build_html_report(datasource, data: dict, findings: list) -> str:
             conn=datasource,
             data=data,
             findings=findings,
-            generated_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+            generated_at=now().strftime("%Y-%m-%d %H:%M:%S"),
             format_bytes=_format_bytes,
         )
     except Exception as e:
@@ -497,7 +498,7 @@ class ReportGenerator:
         {content_html_body}
         <div class="footer">
             <p>报告由 <strong>SmartDBA 智能诊断引擎</strong> 生成</p>
-            <p>数据源: {datasource.name} ({datasource.db_type.upper()}) | 生成时间: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}</p>
+            <p>数据源: {datasource.name} ({datasource.db_type.upper()}) | 生成时间: {now().strftime('%Y-%m-%d %H:%M')}</p>
         </div>
     </div>
 </body>

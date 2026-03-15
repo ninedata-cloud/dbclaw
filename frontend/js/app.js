@@ -11,6 +11,7 @@
     Router.register('ai-models', () => AIModelsPage.render());
     Router.register('knowledge-bases', () => KnowledgeBasesPage.render());
     Router.register('skills', () => SkillsPage.render());
+    Router.register('system-configs', () => SystemConfigsPage.render());
     Router.register('users', () => UsersPage.render());
     Router.register('inspection', () => InspectionPage.render());
 

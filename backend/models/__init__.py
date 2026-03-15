@@ -10,6 +10,7 @@ from backend.models.diagnostic_session import DiagnosticSession, ChatMessage
 from backend.models.report import Report
 from backend.models.metric_snapshot import MetricSnapshot
 from backend.models.host_metric import HostMetric
+from backend.models.system_config import SystemConfig
 
 __all__ = [
     "User",
@@ -22,4 +23,5 @@ __all__ = [
     "Report",
     "MetricSnapshot",
     "HostMetric",
+    "SystemConfig",
 ]

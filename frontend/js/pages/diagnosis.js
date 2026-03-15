@@ -96,16 +96,20 @@ const DiagnosisPage = {
 
         // Two-column layout: sessions sidebar + chat area
         content.innerHTML = '';
-        const layout = DOM.el('div', { style: { display: 'flex', height: 'calc(100vh - 56px)', gap: '0' } });
+        const layout = DOM.el('div', { style: { display: 'flex', height: 'calc(100vh - 56px)', gap: '0', position: 'relative' } });
 
         // Left sidebar: session list
         const sidebar = DOM.el('div', {
+            id: 'session-sidebar',
             style: {
                 width: '280px',
+                height: '100%',
                 borderRight: '1px solid var(--border-color)',
                 display: 'flex',
                 flexDirection: 'column',
-                background: 'var(--bg-secondary)'
+                background: 'var(--bg-secondary)',
+                transition: 'width 0.3s ease',
+                overflow: 'hidden'
             }
         });
 
@@ -135,14 +139,96 @@ const DiagnosisPage = {
         // Right area: chat with tool panel
         const chatContainer = DOM.el('div', {
             className: 'chat-container',
-            style: { flex: '1', display: 'flex', flexDirection: 'row', gap: '0' }
+            style: { flex: '1', display: 'flex', flexDirection: 'row', gap: '0', height: '100%' }
         });
 
         // Main chat area
         const chatMain = DOM.el('div', {
-            style: { flex: '1', display: 'flex', flexDirection: 'column', minWidth: '0' }
+            style: { flex: '1', display: 'flex', flexDirection: 'column', minWidth: '0', position: 'relative', height: '100%' }
         });
 
+        // Toggle buttons container (floating on chat area)
+        const toggleButtonsContainer = DOM.el('div', {
+            style: {
+                position: 'absolute',
+                top: '12px',
+                left: '12px',
+                right: '12px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                zIndex: '10',
+                pointerEvents: 'none'
+            }
+        });
+
+        // Left sidebar toggle button
+        const toggleSidebarBtn = DOM.el('button', {
+            className: 'btn btn-sm btn-secondary',
+            innerHTML: '<i data-lucide="panel-left-close"></i>',
+            title: 'Hide sessions',
+            id: 'toggle-sidebar-btn',
+            style: {
+                padding: '6px 10px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                pointerEvents: 'auto'
+            },
+            onClick: () => {
+                const sidebar = DOM.$('#session-sidebar');
+                const btn = DOM.$('#toggle-sidebar-btn');
+                if (sidebar && btn) {
+                    const isCollapsed = sidebar.style.width === '0px' || sidebar.style.width === '0';
+                    if (isCollapsed) {
+                        sidebar.style.width = '280px';
+                        sidebar.style.display = 'flex';
+                        btn.innerHTML = '<i data-lucide="panel-left-close"></i>';
+                        btn.title = 'Hide sessions';
+                    } else {
+                        sidebar.style.width = '0px';
+                        sidebar.style.display = 'none';
+                        btn.innerHTML = '<i data-lucide="panel-left-open"></i>';
+                        btn.title = 'Show sessions';
+                    }
+                    requestAnimationFrame(() => DOM.createIcons());
+                }
+            }
+        });
+
+        // Right tool panel toggle button
+        const togglePanelBtn = DOM.el('button', {
+            className: 'btn btn-sm btn-secondary',
+            innerHTML: '<i data-lucide="panel-right-close"></i>',
+            title: 'Hide tool panel',
+            id: 'toggle-tool-panel-btn',
+            style: {
+                padding: '6px 10px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                pointerEvents: 'auto'
+            },
+            onClick: () => {
+                const panel = DOM.$('#tool-execution-panel');
+                const btn = DOM.$('#toggle-tool-panel-btn');
+                if (panel && btn) {
+                    const isCollapsed = panel.style.width === '0px' || panel.style.width === '0';
+                    if (isCollapsed) {
+                        panel.style.width = '400px';
+                        panel.style.display = 'flex';
+                        btn.innerHTML = '<i data-lucide="panel-right-close"></i>';
+                        btn.title = 'Hide tool panel';
+                    } else {
+                        panel.style.width = '0px';
+                        panel.style.display = 'none';
+                        btn.innerHTML = '<i data-lucide="panel-right-open"></i>';
+                        btn.title = 'Show tool panel';
+                    }
+                    requestAnimationFrame(() => DOM.createIcons());
+                }
+            }
+        });
+
+        toggleButtonsContainer.appendChild(toggleSidebarBtn);
+        toggleButtonsContainer.appendChild(togglePanelBtn);
+
+        chatMain.appendChild(toggleButtonsContainer);
         chatMain.appendChild(ChatWidget.createMessagesContainer());
         chatMain.appendChild(ChatWidget.createInputBar(
             (text, attachments) => this._sendMessage(text, attachments),
@@ -154,6 +240,7 @@ const DiagnosisPage = {
             id: 'tool-execution-panel',
             style: {
                 width: '400px',
+                height: '100%',
                 borderLeft: '1px solid var(--border-color)',
                 background: 'var(--bg-secondary)',
                 display: 'flex',
@@ -180,29 +267,6 @@ const DiagnosisPage = {
         });
         toolHeaderLeft.innerHTML = '<i data-lucide="activity"></i> skill调用';
 
-        const togglePanelBtn = DOM.el('button', {
-            className: 'btn btn-sm btn-secondary',
-            innerHTML: '<i data-lucide="panel-right-close"></i>',
-            title: 'Toggle tool panel',
-            id: 'toggle-tool-panel-btn',
-            style: { padding: '4px 8px' },
-            onClick: () => {
-                const panel = DOM.$('#tool-execution-panel');
-                const btn = DOM.$('#toggle-tool-panel-btn');
-                if (panel && btn) {
-                    const isCollapsed = panel.style.width === '0px' || panel.style.width === '0';
-                    if (isCollapsed) {
-                        panel.style.width = '400px';
-                        btn.innerHTML = '<i data-lucide="panel-right-close"></i>';
-                    } else {
-                        panel.style.width = '0px';
-                        btn.innerHTML = '<i data-lucide="panel-right-open"></i>';
-                    }
-                    DOM.createIcons();
-                }
-            }
-        });
-
         const clearToolsBtn = DOM.el('button', {
             className: 'btn btn-sm btn-secondary',
             innerHTML: '<i data-lucide="trash-2"></i>',
@@ -218,7 +282,6 @@ const DiagnosisPage = {
         });
 
         toolPanelHeader.appendChild(toolHeaderLeft);
-        toolPanelHeader.appendChild(togglePanelBtn);
         toolPanelHeader.appendChild(clearToolsBtn);
 
         const toolPanelContent = DOM.el('div', {
@@ -478,8 +541,8 @@ const DiagnosisPage = {
                     container.innerHTML = `
                         <div class="empty-state" style="padding:40px">
                             <i data-lucide="bot"></i>
-                            <h3>DBMaster AI</h3>
-                            <p>Ask me anything about your database. I can analyze performance, diagnose issues, review configurations, and suggest optimizations.</p>
+                            <h3>数据库智能卫士</h3>
+                            <p>关于您的数据库，有任何问题都可以问我。我可以分析性能、诊断问题、审查配置并提出优化建议。</p>
                         </div>
                     `;
                     DOM.createIcons();
@@ -592,6 +655,8 @@ const DiagnosisPage = {
                 break;
             case 'done':
                 ChatWidget.finishAssistantMessage();
+                // Refresh session list to update title after first message
+                this._loadSessions();
                 break;
             case 'error':
                 ChatWidget.showError(data.content);
@@ -612,8 +677,8 @@ const DiagnosisPage = {
                 container.innerHTML = `
                     <div class="empty-state" style="padding:40px">
                         <i data-lucide="bot"></i>
-                        <h3>DBMaster AI</h3>
-                        <p>Ask me anything about your database. I can analyze performance, diagnose issues, review configurations, and suggest optimizations.</p>
+                        <h3>数据库智能卫士</h3>
+                        <p>关于您的数据库，有任何问题都可以问我。我可以分析性能、诊断问题、审查配置并提出优化建议。</p>
                     </div>
                 `;
                 DOM.createIcons();

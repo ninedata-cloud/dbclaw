@@ -15,6 +15,7 @@ from backend.models.datasource import Datasource
 from backend.models.report import Report
 from backend.agent.conversation_skills import run_conversation_with_skills
 from backend.agent.prompts import DIAGNOSTIC_PROMPT, REPORT_GENERATION_PROMPT
+from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
 
@@ -46,14 +47,14 @@ async def generate_ai_report(
 
     try:
         # Phase 1: Initialization
-        yield {"type": "status", "message": "Initializing diagnostic session..."}
+        yield {"type": "status", "message": "正在初始化诊断会话..."}
 
         # Load datasource configuration
         datasource_result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
         datasource = datasource_result.scalar_one_or_none()
 
         if not datasource:
-            yield {"type": "error", "message": "Datasource not found"}
+            yield {"type": "error", "message": "数据源未找到"}
             await _update_report_status(db, report_id, "failed", error_message="Datasource not found")
             return
 
@@ -68,27 +69,27 @@ async def generate_ai_report(
 
         yield {
             "type": "status",
-            "message": f"Connected to {datasource.db_type.upper()} database: {datasource.name}"
+            "message": f"已连接到 {datasource.db_type.upper()} 数据库：{datasource.name}"
         }
 
         # Phase 2: AI Diagnostic Analysis
-        yield {"type": "status", "message": "Starting AI diagnostic analysis..."}
+        yield {"type": "status", "message": "正在启动 AI 诊断分析..."}
 
         # Build system prompt for professional DBA report generation
         system_prompt = REPORT_GENERATION_PROMPT
 
         # Create initial diagnostic message
-        initial_message = f"""Generate a comprehensive diagnostic report for this {datasource.db_type.upper()} database.
+        initial_message = f"""请为这个 {datasource.db_type.upper()} 数据库生成一份全面的诊断报告。
 
-**Database Information:**
-- Name: {datasource.name}
-- Type: {datasource.db_type.upper()}
-- Host: {datasource.host}:{datasource.port}
-- Report Type: {report_type}
+**数据库信息：**
+- 名称：{datasource.name}
+- 类型：{datasource.db_type.upper()}
+- 主机：{datasource.host}:{datasource.port}
+- 报告类型：{report_type}
 
-As a senior DBA, systematically analyze this database and write a complete professional diagnostic report in markdown format. Use available diagnostic skills to gather data, then provide your expert analysis and recommendations.
+作为一名资深 DBA，请系统地分析这个数据库，并撰写一份完整的专业诊断报告（markdown 格式）。使用可用的诊断技能收集数据，然后提供你的专家分析和建议。
 
-Write the ENTIRE report - this will be saved directly as the final report document."""
+请撰写完整的报告 - 这将直接保存为最终的报告文档。**报告必须使用中文撰写。**"""
 
         messages = [{"role": "user", "content": initial_message}]
 
@@ -240,7 +241,7 @@ Write the ENTIRE report - this will be saved directly as the final report docume
         full_report_markdown = "".join(ai_analysis_parts)
 
         # Phase 3: Rule-Based Validation (for supplementary validation)
-        yield {"type": "status", "message": "Running supplementary validation..."}
+        yield {"type": "status", "message": "正在运行补充验证..."}
 
         engine = DiagnosticEngine()
         rule_based_findings = engine.analyze(
@@ -265,7 +266,7 @@ Write the ENTIRE report - this will be saved directly as the final report docume
             }
 
         # Phase 4: Report Finalization
-        yield {"type": "status", "message": "Finalizing report..."}
+        yield {"type": "status", "message": "正在完成报告..."}
 
         # Use AI-generated markdown as the report content
         md_content = full_report_markdown
@@ -282,7 +283,7 @@ Write the ENTIRE report - this will be saved directly as the final report docume
         warning_count = sum(1 for f in rule_based_findings if f["severity"] == "WARNING")
         info_count = sum(1 for f in rule_based_findings if f["severity"] == "INFO")
 
-        summary = f"Professional DBA report generated. Validation found {len(rule_based_findings)} issues: {critical_count} critical, {warning_count} warnings, {info_count} informational."
+        summary = f"已生成专业 DBA 报告。验证发现 {len(rule_based_findings)} 个问题：{critical_count} 个严重，{warning_count} 个警告，{info_count} 个信息。"
 
         # Update report in database
         await _update_report_status(
@@ -335,7 +336,7 @@ async def _update_report_status(
     if report:
         report.status = status
         if status == "completed":
-            report.completed_at = datetime.utcnow()
+            report.completed_at = now()
 
         for k, v in kwargs.items():
             if hasattr(report, k):
@@ -361,7 +362,7 @@ def _markdown_to_html(
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Database Diagnostic Report - {datasource.name}</title>
+    <title>数据库诊断报告 - {datasource.name}</title>
     <style>
         * {{ box-sizing: border-box; }}
         body {{
@@ -481,8 +482,8 @@ def _markdown_to_html(
     <div class="container">
         {content_html}
         <div class="footer">
-            <p>Report generated by <strong>SmartDBA AI-Powered Diagnostic Engine</strong></p>
-            <p>Database: {datasource.name} ({datasource.db_type.upper()}) | Type: {report_type.title()} | Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}</p>
+            <p>报告由 <strong>SmartDBA 智能诊断引擎</strong> 生成</p>
+            <p>数据库：{datasource.name} ({datasource.db_type.upper()}) | 类型：{report_type.title()} | 生成时间：{now().strftime('%Y-%m-%d %H:%M')}</p>
         </div>
     </div>
 </body>

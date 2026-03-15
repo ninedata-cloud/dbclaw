@@ -4,7 +4,7 @@ version: 1.0.0
 author: SmartDBA
 category: system
 description: |
-  Execute READ-ONLY diagnostic shell commands on the database host server via host connection.
+  Execute READ-ONLY diagnostic shell commands on a server via SSH host connection.
 
   ALLOWED commands (read-only diagnostics):
   - System info: uname, hostname, uptime, date, whoami, id
@@ -33,10 +33,10 @@ tags: [linux, ssh, command, system, diagnostic, readonly]
 timeout: 120
 
 parameters:
-  - name: datasource_id
+  - name: host_id
     type: integer
     required: true
-    description: The database connection ID (must have host configured)
+    description: The SSH host ID to execute the command on
   - name: command
     type: string
     required: true
@@ -47,10 +47,10 @@ permissions:
 
 code: |
   async def execute(context, params):
-      datasource_id = params['datasource_id']
+      host_id = params['host_id']
       command = params['command']
 
-      # Execute the command
-      result = await context.execute_command(command, datasource_id)
+      # Execute the command directly on the host
+      result = await context.execute_command_on_host(command, host_id)
 
       return result

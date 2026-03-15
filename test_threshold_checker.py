@@ -4,6 +4,7 @@ Tests for ThresholdChecker service with custom expression evaluation
 import asyncio
 from datetime import datetime, timedelta
 from backend.services.threshold_checker import ThresholdChecker
+from backend.utils.datetime_helper import now
 
 
 def test_simple_threshold_rules():
@@ -18,7 +19,7 @@ def test_simple_threshold_rules():
     assert len(violations) == 0, "Should not trigger immediately"
     
     # Wait for duration to pass (simulate)
-    checker._violation_start_times[1]["cpu_usage"] = datetime.utcnow() - timedelta(seconds=61)
+    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
     violations = checker.check_thresholds(1, metrics, rules)
     assert len(violations) == 1, "Should trigger after duration"
     assert violations[0]["metric_name"] == "cpu_usage"
@@ -45,7 +46,7 @@ def test_custom_expression_evaluation():
     assert len(violations) == 0, "Should not trigger immediately"
     
     # Simulate duration passing
-    checker._violation_start_times[1]["custom_expression"] = datetime.utcnow() - timedelta(seconds=61)
+    checker._violation_start_times[1]["custom_expression"] = now() - timedelta(seconds=61)
     violations = checker.check_thresholds(1, metrics, rules)
     assert len(violations) == 1, "Should trigger after duration"
     assert violations[0]["metric_name"] == "custom_expression"
@@ -109,12 +110,12 @@ def test_duration_tracking_custom_expression():
     assert "custom_expression" in checker._violation_start_times[1]
     
     # Second check - duration not met yet (simulate 60s passed)
-    checker._violation_start_times[1]["custom_expression"] = datetime.utcnow() - timedelta(seconds=60)
+    checker._violation_start_times[1]["custom_expression"] = now() - timedelta(seconds=60)
     violations = checker.check_thresholds(1, metrics, rules)
     assert len(violations) == 0, "Should not trigger before duration"
     
     # Third check - duration met (simulate 121s passed)
-    checker._violation_start_times[1]["custom_expression"] = datetime.utcnow() - timedelta(seconds=121)
+    checker._violation_start_times[1]["custom_expression"] = now() - timedelta(seconds=121)
     violations = checker.check_thresholds(1, metrics, rules)
     assert len(violations) == 1, "Should trigger after duration"
     
@@ -129,7 +130,7 @@ def test_cooldown_period():
     rules = {"cpu_usage": {"threshold": 80, "duration": 60}}
     
     # First trigger
-    checker._violation_start_times[1]["cpu_usage"] = datetime.utcnow() - timedelta(seconds=61)
+    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
     violations = checker.check_thresholds(1, metrics, rules)
     assert len(violations) == 1, "Should trigger first time"
     
@@ -138,7 +139,7 @@ def test_cooldown_period():
     assert len(violations) == 0, "Should not trigger during cooldown"
     
     # Third check after cooldown (simulate 3601s passed)
-    checker._last_trigger_times[1]["cpu_usage"] = datetime.utcnow() - timedelta(seconds=3601)
+    checker._last_trigger_times[1]["cpu_usage"] = now() - timedelta(seconds=3601)
     violations = checker.check_thresholds(1, metrics, rules)
     assert len(violations) == 1, "Should trigger after cooldown"
     
@@ -162,7 +163,7 @@ def test_backward_compatibility():
     }
     
     # Simulate all durations passed
-    now = datetime.utcnow()
+    current_time = now()
     checker._violation_start_times[1]["cpu_usage"] = now - timedelta(seconds=61)
     checker._violation_start_times[1]["disk_usage"] = now - timedelta(seconds=301)
     checker._violation_start_times[1]["connections"] = now - timedelta(seconds=121)

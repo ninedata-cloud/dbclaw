@@ -1,5 +1,4 @@
 from sqlalchemy import Column, ForeignKey, Integer, String, DateTime, Text, Float, JSON
-from sqlalchemy.sql import func
 from backend.database import Base
 
 
@@ -10,4 +9,4 @@ class MetricSnapshot(Base):
     datasource_id = Column(Integer, ForeignKey("datasources.id", ondelete="CASCADE"), nullable=False, index=True)
     metric_type = Column(String(50), nullable=False)  # db_status, os_metrics, slow_queries, etc.
     data = Column(JSON, nullable=False)
-    collected_at = Column(DateTime, server_default=func.now(), index=True)
+    collected_at = Column(DateTime, nullable=False, index=True)  # 移除 server_default，由代码显式设置本地时间

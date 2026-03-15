@@ -13,6 +13,7 @@ from backend.models.metric_snapshot import MetricSnapshot
 from backend.services.db_connector import get_connector
 from backend.utils.encryption import decrypt_value
 from backend.services.threshold_checker import ThresholdChecker
+from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,9 @@ _inspection_service = None
 
 # Threshold checker instance
 _threshold_checker = ThresholdChecker()
+
+# Semaphore to limit concurrent database writes
+_db_write_semaphore = asyncio.Semaphore(3)  # 最多 3 个并发写入
 
 
 def set_inspection_service(service):
@@ -72,66 +76,68 @@ async def _push_to_subscribers(datasource_id: int, data: Dict[str, Any]):
 
 async def collect_metrics_for_connection(datasource_id: int):
     """Collect and store metrics for a single datasource."""
-    try:
-        async with async_session() as db:
-            result = await db.execute(
-                select(Datasource).where(Datasource.id == datasource_id, Datasource.is_active == True)
-            )
-            datasource = result.scalar_one_or_none()
-            if not datasource:
-                return
+    async with _db_write_semaphore:  # 限制并发写入
+        try:
+            async with async_session() as db:
+                result = await db.execute(
+                    select(Datasource).where(Datasource.id == datasource_id, Datasource.is_active == True)
+                )
+                datasource = result.scalar_one_or_none()
+                if not datasource:
+                    return
 
-            password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
-            connector = get_connector(
-                db_type=datasource.db_type,
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-            )
+                password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
+                connector = get_connector(
+                    db_type=datasource.db_type,
+                    host=datasource.host,
+                    port=datasource.port,
+                    username=datasource.username,
+                    password=password,
+                    database=datasource.database,
+                )
 
-            try:
-                status = await connector.get_status()
-            except Exception as e:
-                logger.warning(f"Failed to collect metrics for datasource {datasource_id}: {e}")
-                status = {"error": str(e)}
+                try:
+                    status = await connector.get_status()
+                except Exception as e:
+                    logger.warning(f"Failed to collect metrics for datasource {datasource_id}: {e}")
+                    status = {"error": str(e)}
 
-            # 标准化指标
-            from backend.services.metric_normalizer import MetricNormalizer
-            normalized_status = MetricNormalizer.normalize(
-                datasource.db_type, datasource_id, status
-            )
+                # 标准化指标
+                from backend.services.metric_normalizer import MetricNormalizer
+                normalized_status = MetricNormalizer.normalize(
+                    datasource.db_type, datasource_id, status
+                )
 
-            # 采集 OS 指标（如果配置了 SSH）
-            if datasource.host_id:
-                os_metrics = await _collect_os_metrics(db, datasource.host_id)
-                if os_metrics:
-                    normalized_status.update(os_metrics)
+                # 采集 OS 指标（如果配置了 SSH）
+                if datasource.host_id:
+                    os_metrics = await _collect_os_metrics(db, datasource.host_id)
+                    if os_metrics:
+                        normalized_status.update(os_metrics)
 
-            snapshot = MetricSnapshot(
-                datasource_id=datasource_id,
-                metric_type="db_status",
-                data=normalized_status,
-            )
-            db.add(snapshot)
-            await db.commit()
+                snapshot = MetricSnapshot(
+                    datasource_id=datasource_id,
+                    metric_type="db_status",
+                    data=normalized_status,
+                    collected_at=now(),  # 使用本地时间
+                )
+                db.add(snapshot)
+                await db.commit()
 
-            # Check thresholds and trigger inspection if needed
-            await _check_thresholds_and_trigger(db, datasource_id, normalized_status)
+                # Check thresholds and trigger inspection if needed
+                await _check_thresholds_and_trigger(db, datasource_id, normalized_status)
 
-            # Push to WebSocket subscribers
-            await _push_to_subscribers(datasource_id, {
-                "type": "db_status",
-                "datasource_id": datasource_id,
-                "data": normalized_status,
-                "collected_at": datetime.utcnow().isoformat(),
-            })
+                # Push to WebSocket subscribers
+                await _push_to_subscribers(datasource_id, {
+                    "type": "db_status",
+                    "datasource_id": datasource_id,
+                    "data": normalized_status,
+                    "collected_at": now().isoformat(),
+                })
 
-            await connector.close()
+                await connector.close()
 
-    except Exception as e:
-        logger.error(f"Error collecting metrics for datasource {datasource_id}: {e}")
+        except Exception as e:
+            logger.error(f"Error collecting metrics for datasource {datasource_id}: {e}")
 
 
 async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[str, Any]):
@@ -176,7 +182,7 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
             metric_snapshot = {
                 "violation": violation,
                 "full_metrics": metrics,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": now().isoformat()
             }
 
             # Trigger inspection asynchronously

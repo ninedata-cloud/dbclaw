@@ -43,6 +43,7 @@ class SkillDefinition(BaseModel):
             "read_datasource",
             "execute_any_sql",  # Dangerous: Execute any SQL including DDL/DML
             "execute_any_os_command",  # Dangerous: Execute any OS command
+            "access_external_api",  # Access external APIs (web search, etc.)
             "admin",  # Administrative privileges
         }
         for perm in v:

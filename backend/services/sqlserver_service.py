@@ -46,6 +46,8 @@ class SQLServerConnector(DBConnector):
             conn = self._connect()
             try:
                 cursor = conn.cursor()
+
+                # Database metrics
                 cursor.execute(
                     "SELECT "
                     "(SELECT count(*) FROM sys.dm_exec_sessions WHERE is_user_process = 1) as user_sessions, "
@@ -58,13 +60,83 @@ class SQLServerConnector(DBConnector):
                     " WHERE counter_name = 'Page life expectancy' AND object_name LIKE '%Buffer Manager%') as ple"
                 )
                 row = cursor.fetchone()
-                return {
+                result = {
                     "user_sessions": row[0] if row else 0,
                     "active_requests": row[1] if row else 0,
-                    "batch_requests_sec": row[2] if row else 0,
+                    "batch_requests_total": row[2] if row else 0,  # 累积值，需要计算增量
                     "buffer_cache_hit_ratio": row[3] if row else 0,
                     "page_life_expectancy": row[4] if row else 0,
                 }
+
+                # OS metrics via DMV
+                try:
+                    # CPU usage
+                    cursor.execute(
+                        "SELECT TOP 1 "
+                        "100 - record.value('(./Record/SchedulerMonitorEvent/SystemHealth/SystemIdle)[1]', 'int') AS cpu_usage "
+                        "FROM ( "
+                        "  SELECT CAST(record AS XML) AS record "
+                        "  FROM sys.dm_os_ring_buffers "
+                        "  WHERE ring_buffer_type = N'RING_BUFFER_SCHEDULER_MONITOR' "
+                        "  AND record LIKE '%<SystemHealth>%' "
+                        ") AS x "
+                        "ORDER BY record.value('(./Record/@id)[1]', 'int') DESC"
+                    )
+                    cpu_row = cursor.fetchone()
+                    if cpu_row and cpu_row[0] is not None:
+                        result["cpu_usage"] = float(cpu_row[0])
+
+                    # Memory usage
+                    cursor.execute(
+                        "SELECT "
+                        "(total_physical_memory_kb - available_physical_memory_kb) * 100.0 / total_physical_memory_kb AS memory_usage "
+                        "FROM sys.dm_os_sys_memory"
+                    )
+                    mem_row = cursor.fetchone()
+                    if mem_row and mem_row[0] is not None:
+                        result["memory_usage"] = float(mem_row[0])
+
+                    # Disk usage (database files)
+                    cursor.execute(
+                        "SELECT "
+                        "SUM(CAST(FILEPROPERTY(name, 'SpaceUsed') AS bigint) * 8) * 100.0 / "
+                        "SUM(CAST(size AS bigint) * 8) AS disk_usage "
+                        "FROM sys.database_files"
+                    )
+                    disk_row = cursor.fetchone()
+                    if disk_row and disk_row[0] is not None:
+                        result["disk_usage"] = float(disk_row[0])
+
+                    # Disk I/O
+                    cursor.execute(
+                        "SELECT "
+                        "SUM(num_of_reads) AS total_reads, "
+                        "SUM(num_of_writes) AS total_writes "
+                        "FROM sys.dm_io_virtual_file_stats(NULL, NULL)"
+                    )
+                    io_row = cursor.fetchone()
+                    if io_row:
+                        result["disk_reads_total"] = io_row[0] or 0
+                        result["disk_writes_total"] = io_row[1] or 0
+
+                    # Network I/O (connection level)
+                    cursor.execute(
+                        "SELECT "
+                        "SUM(num_reads) AS total_reads, "
+                        "SUM(num_writes) AS total_writes "
+                        "FROM sys.dm_exec_connections"
+                    )
+                    net_row = cursor.fetchone()
+                    if net_row:
+                        result["network_reads_total"] = net_row[0] or 0
+                        result["network_writes_total"] = net_row[1] or 0
+
+                except Exception as e:
+                    # OS metrics are optional, don't fail if they're not available
+                    import logging
+                    logging.warning(f"Failed to collect SQL Server OS metrics: {e}")
+
+                return result
             finally:
                 conn.close()
         return await asyncio.get_event_loop().run_in_executor(None, _status)

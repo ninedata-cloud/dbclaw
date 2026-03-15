@@ -120,7 +120,7 @@ async def clear_session_messages(session_id: int, db: AsyncSession = Depends(get
     )
     session = result.scalar_one_or_none()
     if session:
-        session.title = "New Session"
+        session.title = "新建会话"
     await db.commit()
     return {"message": "Messages cleared"}
 
@@ -171,8 +171,9 @@ async def chat_websocket(websocket: WebSocket, session_id: int, token: str = Que
                 )
                 session = session_result.scalar_one_or_none()
                 if session:
-                    if session.title == "New Session":
-                        session.title = user_message[:80]
+                    # Update title if it's still the default (support both Chinese and English)
+                    if session.title in ("New Session", "新建会话"):
+                        session.title = user_message[:80] if user_message else "[Attachment]"
                     if model_id and not session.ai_model_id:
                         session.ai_model_id = model_id
 

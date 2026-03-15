@@ -9,6 +9,7 @@ from backend.agent.prompts import DIAGNOSTIC_PROMPT, INFORMATIONAL_PROMPT, ADMIN
 from backend.agent.intent_detector import detect_query_intent
 from backend.agent.skill_selector import get_available_skills_as_tools
 from backend.services.ai_agent import get_ai_client
+from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
 
@@ -308,12 +309,12 @@ async def generate_report_with_skills(
     skill_executions = []
     collected_content = ""
 
-    initial_message = f"""Generate a comprehensive inspection report for:
-- Database: {datasource_name} ({datasource_type})
-- Datasource ID: {datasource_id}
-- Trigger: {trigger_reason}
+    initial_message = f"""请为以下数据库生成一份全面的巡检报告：
+- 数据库名称：{datasource_name} ({datasource_type})
+- 数据源 ID：{datasource_id}
+- 触发原因：{trigger_reason}
 
-Follow the required sections and use skills to gather data."""
+请使用技能收集数据，并按照专业 DBA 报告的标准格式撰写完整的中文报告。"""
 
     messages = [{"role": "user", "content": initial_message}]
 
@@ -332,7 +333,7 @@ Follow the required sections and use skills to gather data."""
                     skill_executions.append({
                         "skill_id": event["tool_name"],
                         "arguments": event["tool_args"],
-                        "timestamp": datetime.utcnow().isoformat()
+                        "timestamp": now().isoformat()
                     })
                 elif event["type"] == "done":
                     break

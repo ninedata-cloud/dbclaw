@@ -194,6 +194,28 @@ const ChartPanel = {
         }
     },
 
+    clear(id) {
+        const chart = this.charts[id];
+        if (!chart) {
+            console.error(`[ChartPanel] Chart not found: ${id}`);
+            return;
+        }
+
+        // Clear all data
+        chart.data.labels = [];
+        chart.data.datasets.forEach(dataset => {
+            dataset.data = [];
+        });
+
+        chart.update('none');
+
+        // Clear value display
+        const valueEl = document.getElementById(`chart-value-${id}`);
+        if (valueEl) {
+            valueEl.textContent = '--';
+        }
+    },
+
     destroy(id) {
         if (this.charts[id]) {
             this.charts[id].destroy();
