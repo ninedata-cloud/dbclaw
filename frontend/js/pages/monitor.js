@@ -108,6 +108,37 @@ const MonitorPage = {
         });
         headerActions.appendChild(realtimeBtn);
 
+        // Refresh button
+        const refreshBtn = DOM.el('button', {
+            className: 'btn btn-primary',
+            id: 'refresh-btn',
+            innerHTML: '<i data-lucide="refresh-cw"></i> 刷新'
+        });
+        refreshBtn.addEventListener('click', async () => {
+            if (!conn) return;
+
+            // Disable button and show loading state
+            refreshBtn.disabled = true;
+            refreshBtn.innerHTML = '<i data-lucide="loader"></i> 采集中...';
+
+            try {
+                await API.refreshMetrics(conn.id);
+                // Wait a moment for the metric to be collected and stored
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                // Reload latest data
+                await this._loadLatestData(conn.id);
+            } catch (e) {
+                console.error('[Monitor] Failed to refresh metrics:', e);
+                alert('刷新失败: ' + e.message);
+            } finally {
+                // Re-enable button
+                refreshBtn.disabled = false;
+                refreshBtn.innerHTML = '<i data-lucide="refresh-cw"></i> 刷新';
+                DOM.createIcons();
+            }
+        });
+        headerActions.appendChild(refreshBtn);
+
         Header.render('性能监控', headerActions);
 
         const content = DOM.$('#page-content');
@@ -125,6 +156,15 @@ const MonitorPage = {
             DOM.createIcons();
             return;
         }
+
+        // Health Status Banner
+        const healthBanner = DOM.el('div', { className: 'health-banner mb-24', id: 'health-banner' });
+        healthBanner.innerHTML = `
+            <span class="health-banner-icon">⚪</span>
+            <span class="health-banner-status">数据库健康状态: 检查中...</span>
+            <div class="health-banner-details" id="health-details"></div>
+        `;
+        content.appendChild(healthBanner);
 
         // Database Metric cards row
         const dbMetricsRow = DOM.el('div', { className: 'grid-4 mb-24', id: 'monitor-metrics' });
@@ -236,6 +276,8 @@ const MonitorPage = {
 
             // Load initial data and start WS AFTER charts are initialized
             if (conn) {
+                // Load health status first
+                this._loadHealthStatus(conn.id);
                 // Load latest data first for immediate display, then load history
                 this._loadLatestData(conn.id).then(() => {
                     this._loadHistory(conn.id);
@@ -263,6 +305,9 @@ const MonitorPage = {
         this.prevNetworkTx = null;
         this.prevNetworkTime = null;
 
+        // Load health status
+        this._loadHealthStatus(connId);
+
         // Load new data
         this._loadLatestData(connId).then(() => {
             this._loadHistory(connId);
@@ -271,6 +316,72 @@ const MonitorPage = {
         // Start monitoring if realtime is enabled
         if (this.isRealtime) {
             this._startMonitoring(connId);
+        }
+    },
+
+    async _loadHealthStatus(connId) {
+        try {
+            const health = await API.getDatasourceHealth(connId);
+            this._updateHealthBanner(health);
+        } catch (e) {
+            console.error('[Monitor] Failed to load health status:', e);
+            this._updateHealthBanner({
+                healthy: false,
+                status: 'unknown',
+                message: '无法获取健康状态',
+                violations: []
+            });
+        }
+    },
+
+    _updateHealthBanner(health) {
+        const banner = DOM.$('#health-banner');
+        if (!banner) return;
+
+        const statusMap = {
+            'healthy': { icon: '✓', text: '健康', color: 'var(--accent-green)' },
+            'warning': { icon: '⚠', text: '警告', color: 'var(--accent-yellow)' },
+            'critical': { icon: '✗', text: '异常', color: 'var(--accent-red)' },
+            'unknown': { icon: '?', text: '未知', color: 'var(--text-muted)' }
+        };
+
+        const statusInfo = statusMap[health.status] || statusMap.unknown;
+
+        // Update icon with color
+        const iconEl = banner.querySelector('.health-banner-icon');
+        iconEl.textContent = statusInfo.icon;
+        iconEl.style.color = statusInfo.color;
+
+        // Update status text
+        const statusEl = banner.querySelector('.health-banner-status');
+        statusEl.innerHTML = `数据库健康状态: <span style="color:${statusInfo.color}">${statusInfo.text}</span> - ${health.message}`;
+
+        // Update details section
+        const detailsEl = DOM.$('#health-details');
+        detailsEl.innerHTML = '';
+
+        if (health.violations && health.violations.length > 0) {
+            const violationsList = DOM.el('div', { className: 'health-violations' });
+
+            for (const violation of health.violations) {
+                const item = DOM.el('div', { className: 'health-violation-item' });
+
+                if (violation.type === 'threshold') {
+                    item.innerHTML = `
+                        <span style="color:var(--accent-red)">✗</span>
+                        <span>${violation.metric}: ${violation.value.toFixed(2)} (阈值: ${violation.threshold})</span>
+                    `;
+                } else if (violation.type === 'custom_expression') {
+                    item.innerHTML = `
+                        <span style="color:var(--accent-red)">✗</span>
+                        <span>自定义规则触发: ${violation.expression}</span>
+                    `;
+                }
+
+                violationsList.appendChild(item);
+            }
+
+            detailsEl.appendChild(violationsList);
         }
     },
 

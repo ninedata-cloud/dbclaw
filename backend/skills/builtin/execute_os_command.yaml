@@ -13,8 +13,10 @@ description: |
   - Network: netstat, ss, ip addr, ifconfig, ping, traceroute, nslookup, dig
   - Logs: cat, tail, head, grep, less, more (for reading log files)
   - File inspection: ls, find, stat, file, wc, md5sum
-  - Database processes: checking MySQL/PostgreSQL/Oracle processes and connections
+  - Database processes: checking MySQL/PostgreSQL/Oracle/SQL Server/Redis/MongoDB processes and connections
+  - Docker：ps,logs,stats,inspect,exec
   - Performance: iotop, iftop, dstat, perf
+  - Output safe redirection: >, >>, | (pipe), tee
 
   BLOCKED commands (will be rejected):
   - File operations: rm, rmdir, mv, cp (with output redirection)
@@ -25,7 +27,6 @@ description: |
   - Network config: iptables, firewall-cmd
   - User management: useradd, userdel, usermod, groupadd, groupdel
   - Package management: apt install, yum install, dnf install
-  - Output redirection: >, >>, | (pipe), tee
   - Downloads: wget, curl -o/-O
 
   For write operations or blocked commands, use 'execute_any_os_command' skill instead (requires admin permission).

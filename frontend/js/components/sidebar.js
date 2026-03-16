@@ -15,7 +15,7 @@ const Sidebar = {
         { section: '系统配置', items: [
             { id: 'datasources', icon: 'database', label: '数据源管理' },
             { id: 'hosts', icon: 'terminal', label: '主机管理' },
-            { id: 'system-configs', icon: 'settings', label: '参数配置' },
+            { id: 'system-configs', icon: 'settings', label: '系统参数配置' },
         ]},
     ],
 

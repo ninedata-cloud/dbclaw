@@ -25,3 +25,7 @@ class Datasource(Base):
 
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    # Relationships (using string references to avoid circular imports)
+    alert_events = relationship("AlertEvent", back_populates="datasource", lazy="selectin")
+

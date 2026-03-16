@@ -110,7 +110,12 @@ async def run_conversation_with_skills(
 
     # Detect intent from first user message
     first_user_message = next((msg['content'] for msg in messages if msg['role'] == 'user'), '')
-    intent = detect_query_intent(first_user_message)
+    # first_user_message.content may be a list (multimodal with attachments)
+    if isinstance(first_user_message, list):
+        intent_text = " ".join(p.get("text", "") for p in first_user_message if isinstance(p, dict) and p.get("type") == "text")
+    else:
+        intent_text = first_user_message
+    intent = detect_query_intent(intent_text)
 
     # Select appropriate prompt based on intent
     if intent == 'diagnostic':

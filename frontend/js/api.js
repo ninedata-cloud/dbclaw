@@ -102,6 +102,7 @@ const API = {
     getMetrics(connId, params = '') { return this.get(`/api/metrics/${connId}${params ? '?' + params : ''}`); },
     getLatestMetric(connId, type = 'db_status') { return this.get(`/api/metrics/${connId}/latest?metric_type=${type}`); },
     getDatasourceHealth(connId) { return this.get(`/api/metrics/${connId}/health`); },
+    refreshMetrics(connId) { return this.post(`/api/metrics/${connId}/refresh`); },
 
     // Chat endpoints
     getChatSessions() { return this.get('/api/chat/sessions'); },

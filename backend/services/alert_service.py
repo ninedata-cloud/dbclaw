@@ -102,7 +102,16 @@ class AlertService:
         await db.commit()
         await db.refresh(alert)
 
-        logger.info(f"Created alert {alert.id}: {title} (severity: {severity})")
+        # Process into event
+        from backend.services.alert_event_service import AlertEventService
+        event = await AlertEventService.process_new_alert(db, alert)
+
+        # Link alert to event
+        alert.event_id = event.id
+        await db.commit()
+        await db.refresh(alert)
+
+        logger.info(f"Created alert {alert.id}: {title} (severity: {severity}), event {event.id}")
         return alert
 
     @staticmethod
@@ -210,7 +219,8 @@ class AlertService:
     @staticmethod
     async def resolve_alert(
         db: AsyncSession,
-        alert_id: int
+        alert_id: int,
+        resolved_value: Optional[float] = None
     ) -> Optional[AlertMessage]:
         """
         Mark alert as resolved.
@@ -218,6 +228,7 @@ class AlertService:
         Args:
             db: Database session
             alert_id: Alert ID
+            resolved_value: Metric value at time of recovery
 
         Returns:
             Updated AlertMessage or None if not found
@@ -229,11 +240,22 @@ class AlertService:
         alert.status = "resolved"
         alert.resolved_at = datetime.utcnow()
         alert.updated_at = datetime.utcnow()
+        if resolved_value is not None:
+            alert.resolved_value = resolved_value
 
         await db.commit()
         await db.refresh(alert)
 
         logger.info(f"Alert {alert_id} resolved")
+
+        # Check if parent event should be auto-resolved
+        if alert.event_id:
+            from backend.services.alert_event_service import AlertEventService
+            resolved_event = await AlertEventService.check_and_auto_resolve_event(db, alert.event_id)
+            if resolved_event:
+                await db.commit()
+                logger.info(f"Auto-resolved event {alert.event_id} after all alerts resolved")
+
         return alert
 
     @staticmethod
@@ -378,3 +400,49 @@ class AlertService:
                 pending_alerts.append(alert)
 
         return pending_alerts
+
+    @staticmethod
+    async def get_pending_recovery_notifications(
+        db: AsyncSession,
+        minutes: int = 60
+    ) -> List[AlertMessage]:
+        """
+        Get recently resolved alerts that haven't had a recovery notification sent yet.
+
+        Args:
+            db: Database session
+            minutes: Only consider alerts resolved within this window
+
+        Returns:
+            List of resolved alerts needing recovery notification
+        """
+        cutoff_time = datetime.utcnow() - timedelta(minutes=minutes)
+
+        # Get recently resolved alerts
+        result = await db.execute(
+            select(AlertMessage).where(
+                and_(
+                    AlertMessage.status == "resolved",
+                    AlertMessage.resolved_at >= cutoff_time
+                )
+            )
+        )
+        resolved_alerts = result.scalars().all()
+
+        # Filter out alerts that already have a recovery notification sent
+        pending = []
+        for alert in resolved_alerts:
+            delivery_result = await db.execute(
+                select(AlertDeliveryLog).where(
+                    and_(
+                        AlertDeliveryLog.alert_id == alert.id,
+                        AlertDeliveryLog.channel == "recovery",
+                        AlertDeliveryLog.status == "sent"
+                    )
+                )
+            )
+            recovery_logs = delivery_result.scalars().all()
+            if not recovery_logs:
+                pending.append(alert)
+
+        return pending

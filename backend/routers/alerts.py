@@ -5,6 +5,7 @@ from datetime import datetime
 
 from backend.database import get_db
 from backend.services.alert_service import AlertService
+from backend.services.alert_event_service import AlertEventService
 from backend.services.notification_service import NotificationService
 from backend.schemas.alert import (
     AlertMessageResponse,
@@ -14,7 +15,10 @@ from backend.schemas.alert import (
     AlertSubscriptionCreate,
     AlertSubscriptionUpdate,
     AlertSubscriptionResponse,
-    TestNotificationRequest
+    TestNotificationRequest,
+    AlertEventResponse,
+    AlertEventQueryParams,
+    AlertEventAcknowledgeRequest
 )
 
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
@@ -60,6 +64,100 @@ async def list_alerts(
         "limit": limit,
         "offset": offset
     }
+
+
+# Alert Event Endpoints (must be before /{alert_id} to avoid route conflicts)
+@router.get("/events", response_model=dict)
+async def list_alert_events(
+    datasource_ids: Optional[str] = Query(None, description="Comma-separated datasource IDs"),
+    start_time: Optional[datetime] = None,
+    end_time: Optional[datetime] = None,
+    status: Optional[str] = Query("all", pattern="^(active|acknowledged|resolved|all)$"),
+    severity: Optional[str] = Query(None, pattern="^(critical|high|medium|low)$"),
+    search: Optional[str] = None,
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db)
+):
+    """List aggregated alert events with filters"""
+    # Parse datasource_ids
+    datasource_id_list = None
+    if datasource_ids:
+        try:
+            datasource_id_list = [int(x.strip()) for x in datasource_ids.split(",")]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid datasource_ids format")
+
+    events, total = await AlertEventService.get_events(
+        db=db,
+        datasource_ids=datasource_id_list,
+        start_time=start_time,
+        end_time=end_time,
+        status=status,
+        severity=severity,
+        search=search,
+        limit=limit,
+        offset=offset
+    )
+
+    return {
+        "events": [AlertEventResponse.model_validate(event) for event in events],
+        "total": total,
+        "limit": limit,
+        "offset": offset
+    }
+
+
+@router.get("/events/{event_id}/alerts", response_model=dict)
+async def get_event_alerts(
+    event_id: int,
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all alerts in an event"""
+    alerts, total = await AlertEventService.get_alerts_in_event(
+        db=db,
+        event_id=event_id,
+        limit=limit,
+        offset=offset
+    )
+
+    return {
+        "alerts": [AlertMessageResponse.model_validate(alert) for alert in alerts],
+        "total": total,
+        "limit": limit,
+        "offset": offset
+    }
+
+
+@router.post("/events/{event_id}/acknowledge", response_model=AlertEventResponse)
+async def acknowledge_event(
+    event_id: int,
+    request: AlertEventAcknowledgeRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Acknowledge event and all its alerts"""
+    try:
+        event = await AlertEventService.acknowledge_event(db, event_id, request.user_id)
+        await db.commit()
+        return AlertEventResponse.model_validate(event)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/events/{event_id}/resolve", response_model=AlertEventResponse)
+async def resolve_event(
+    event_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Resolve event and all its alerts"""
+    try:
+        event = await AlertEventService.resolve_event(db, event_id)
+        await db.commit()
+        return AlertEventResponse.model_validate(event)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.get("/{alert_id}", response_model=AlertMessageResponse)
@@ -159,9 +257,13 @@ async def test_notification(
     db: AsyncSession = Depends(get_db)
 ):
     """Test notification delivery for a subscription"""
-    # Get subscription
-    subscriptions = await AlertService.get_all_subscriptions(db)
-    subscription = next((s for s in subscriptions if s.id == subscription_id), None)
+    # Get subscription (including disabled ones for testing)
+    from sqlalchemy import select as sa_select
+    from backend.models.alert_subscription import AlertSubscription
+    sub_result = await db.execute(
+        sa_select(AlertSubscription).where(AlertSubscription.id == subscription_id)
+    )
+    subscription = sub_result.scalar_one_or_none()
 
     if not subscription:
         raise HTTPException(status_code=404, detail="Subscription not found")

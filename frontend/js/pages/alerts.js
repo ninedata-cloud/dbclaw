@@ -2,8 +2,12 @@
 const AlertsPage = {
     datasources: [],
     alerts: [],
+    events: [],
     subscriptions: [],
     currentUser: null,
+    viewMode: 'events',  // 'events' or 'alerts'
+    expandedEvents: new Set(),
+    eventAlerts: {},  // Cache: {eventId: [alerts]}
     filters: {
         datasource_id: null,
         status: 'all',
@@ -21,6 +25,7 @@ const AlertsPage = {
         }
 
         await this.loadDatasources();
+        await this.loadEvents();
         await this.loadAlerts();
         await this.loadSubscriptions();
         this.render();
@@ -32,6 +37,37 @@ const AlertsPage = {
         } catch (error) {
             console.error('Failed to load datasources:', error);
             this.datasources = [];
+        }
+    },
+
+    async loadEvents() {
+        try {
+            const params = new URLSearchParams();
+
+            if (this.filters.datasource_id) {
+                params.append('datasource_ids', this.filters.datasource_id);
+            }
+            if (this.filters.status && this.filters.status !== 'all') {
+                params.append('status', this.filters.status);
+            }
+            if (this.filters.severity) {
+                params.append('severity', this.filters.severity);
+            }
+            if (this.filters.search) {
+                params.append('search', this.filters.search);
+            }
+            if (this.filters.start_time) {
+                params.append('start_time', this.filters.start_time);
+            }
+            if (this.filters.end_time) {
+                params.append('end_time', this.filters.end_time);
+            }
+
+            const response = await API.get(`/api/alerts/events?${params.toString()}`);
+            this.events = response.events || [];
+        } catch (error) {
+            console.error('Failed to load events:', error);
+            this.events = [];
         }
     },
 
@@ -75,6 +111,62 @@ const AlertsPage = {
         }
     },
 
+    async loadEventAlerts(eventId) {
+        if (this.eventAlerts[eventId]) {
+            return this.eventAlerts[eventId];
+        }
+
+        try {
+            const response = await API.get(`/api/alerts/events/${eventId}/alerts`);
+            this.eventAlerts[eventId] = response.alerts || [];
+            return this.eventAlerts[eventId];
+        } catch (error) {
+            console.error('Failed to load event alerts:', error);
+            return [];
+        }
+    },
+
+    async acknowledgeEvent(eventId) {
+        try {
+            await API.post(`/api/alerts/events/${eventId}/acknowledge`, {
+                user_id: this.currentUser.id
+            });
+            await this.loadEvents();
+            this.updateEventsList();
+            Toast.success('事件已确认');
+        } catch (error) {
+            console.error('Failed to acknowledge event:', error);
+            Toast.error('确认事件失败');
+        }
+    },
+
+    async resolveEvent(eventId) {
+        try {
+            await API.post(`/api/alerts/events/${eventId}/resolve`, {});
+            await this.loadEvents();
+            this.updateEventsList();
+            Toast.success('事件已解决');
+        } catch (error) {
+            console.error('Failed to resolve event:', error);
+            Toast.error('解决事件失败');
+        }
+    },
+
+    async toggleEventExpansion(eventId) {
+        if (this.expandedEvents.has(eventId)) {
+            this.expandedEvents.delete(eventId);
+        } else {
+            this.expandedEvents.add(eventId);
+            await this.loadEventAlerts(eventId);
+        }
+        this.updateEventsList();
+    },
+
+    switchViewMode(mode) {
+        this.viewMode = mode;
+        this.updateAlertsList();
+    },
+
     render() {
         // Use standard header component
         const headerActions = DOM.el('div', { className: 'flex gap-8' });
@@ -92,6 +184,22 @@ const AlertsPage = {
         // Filters
         const filters = this.renderFilters();
         container.appendChild(filters);
+
+        // View toggle (for alerts tab)
+        const viewToggle = DOM.el('div', { className: 'view-toggle' });
+        const eventsViewBtn = DOM.el('button', {
+            className: `btn ${this.viewMode === 'events' ? 'btn-primary' : 'btn-secondary'}`,
+            textContent: '事件视图',
+            onClick: () => this.switchViewMode('events')
+        });
+        const alertsViewBtn = DOM.el('button', {
+            className: `btn ${this.viewMode === 'alerts' ? 'btn-primary' : 'btn-secondary'}`,
+            textContent: '告警视图',
+            onClick: () => this.switchViewMode('alerts')
+        });
+        viewToggle.appendChild(eventsViewBtn);
+        viewToggle.appendChild(alertsViewBtn);
+        container.appendChild(viewToggle);
 
         // Tabs
         const tabs = DOM.el('div', { className: 'tabs' });
@@ -112,7 +220,7 @@ const AlertsPage = {
         // Tab content
         const tabContent = DOM.el('div', { className: 'tab-content' });
         const alertsContent = DOM.el('div', { className: 'tab-pane active', id: 'alerts-pane' });
-        alertsContent.appendChild(this.renderAlertsList());
+        alertsContent.appendChild(this.viewMode === 'events' ? this.renderEventsList() : this.renderAlertsList());
         const subscriptionsContent = DOM.el('div', { className: 'tab-pane', id: 'subscriptions-pane' });
         subscriptionsContent.appendChild(this.renderSubscriptionsList());
         tabContent.appendChild(alertsContent);
@@ -133,7 +241,7 @@ const AlertsPage = {
             value: this.filters.datasource_id || '',
             onChange: (e) => {
                 this.filters.datasource_id = e.target.value ? parseInt(e.target.value) : null;
-                this.loadAlerts().then(() => this.updateAlertsList());
+                Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
             }
         });
         datasourceSelect.appendChild(DOM.el('option', { value: '', textContent: '全部' }));
@@ -155,7 +263,7 @@ const AlertsPage = {
             value: this.filters.status,
             onChange: (e) => {
                 this.filters.status = e.target.value;
-                this.loadAlerts().then(() => this.updateAlertsList());
+                Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
             }
         });
         statusSelect.appendChild(DOM.el('option', { value: 'all', textContent: '全部' }));
@@ -172,7 +280,7 @@ const AlertsPage = {
             className: 'form-control',
             onChange: (e) => {
                 this.filters.severity = e.target.value || null;
-                this.loadAlerts().then(() => this.updateAlertsList());
+                Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
             }
         });
         severitySelect.appendChild(DOM.el('option', { value: '', textContent: '全部' }));
@@ -192,7 +300,7 @@ const AlertsPage = {
             value: this.filters.start_time || '',
             onChange: (e) => {
                 this.filters.start_time = e.target.value || null;
-                this.loadAlerts().then(() => this.updateAlertsList());
+                Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
             }
         });
         startTimeFilter.appendChild(startTimeInput);
@@ -207,7 +315,7 @@ const AlertsPage = {
             value: this.filters.end_time || '',
             onChange: (e) => {
                 this.filters.end_time = e.target.value || null;
-                this.loadAlerts().then(() => this.updateAlertsList());
+                Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
             }
         });
         endTimeFilter.appendChild(endTimeInput);
@@ -224,7 +332,7 @@ const AlertsPage = {
                 this.filters.search = e.target.value;
                 clearTimeout(this.searchTimeout);
                 this.searchTimeout = setTimeout(() => {
-                    this.loadAlerts().then(() => this.updateAlertsList());
+                    Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
                 }, 500);
             }
         });
@@ -232,6 +340,192 @@ const AlertsPage = {
         filters.appendChild(searchFilter);
 
         return filters;
+    },
+
+    renderEventsList() {
+        const list = DOM.el('div', { className: 'events-list', id: 'events-list' });
+
+        if (this.events.length === 0) {
+            list.appendChild(DOM.el('div', {
+                className: 'empty-state',
+                textContent: '暂无事件'
+            }));
+            return list;
+        }
+
+        const table = DOM.el('table', { className: 'data-table events-table' });
+        const thead = DOM.el('thead');
+        const headerRow = DOM.el('tr');
+        headerRow.appendChild(DOM.el('th', { textContent: '', style: 'width: 40px' }));
+        headerRow.appendChild(DOM.el('th', { textContent: '严重程度' }));
+        headerRow.appendChild(DOM.el('th', { textContent: '数据源' }));
+        headerRow.appendChild(DOM.el('th', { textContent: '类型/指标' }));
+        headerRow.appendChild(DOM.el('th', { textContent: '标题' }));
+        headerRow.appendChild(DOM.el('th', { textContent: '开始时间' }));
+        headerRow.appendChild(DOM.el('th', { textContent: '恢复时间' }));
+        headerRow.appendChild(DOM.el('th', { textContent: '数量' }));
+        headerRow.appendChild(DOM.el('th', { textContent: '状态' }));
+        headerRow.appendChild(DOM.el('th', { textContent: '操作' }));
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+
+        const tbody = DOM.el('tbody');
+        for (const event of this.events) {
+            const isExpanded = this.expandedEvents.has(event.id);
+
+            // Main event row
+            const row = DOM.el('tr', { className: `event-row ${isExpanded ? 'expanded' : ''}` });
+
+            // Expand icon
+            const expandCell = DOM.el('td');
+            const expandIcon = DOM.el('span', {
+                className: `expand-icon ${isExpanded ? 'expanded' : ''}`,
+                textContent: '▶',
+                style: 'cursor: pointer; user-select: none;'
+            });
+            expandCell.appendChild(expandIcon);
+            expandCell.onclick = () => this.toggleEventExpansion(event.id);
+            row.appendChild(expandCell);
+
+            // Severity badge
+            const severityCell = DOM.el('td');
+            const severityBadge = DOM.el('span', {
+                className: `severity-badge severity-${event.severity}`,
+                textContent: this.getSeverityLabel(event.severity)
+            });
+            severityCell.appendChild(severityBadge);
+            row.appendChild(severityCell);
+
+            // Datasource
+            const datasource = this.datasources.find(ds => ds.id === event.datasource_id);
+            row.appendChild(DOM.el('td', { textContent: datasource ? datasource.name : `ID: ${event.datasource_id}` }));
+
+            // Type/Metric
+            const typeMetric = event.metric_name || this.getAlertTypeLabel(event.alert_type);
+            row.appendChild(DOM.el('td', { textContent: typeMetric }));
+
+            // Title
+            row.appendChild(DOM.el('td', { textContent: event.title }));
+
+            // Start time
+            row.appendChild(DOM.el('td', { textContent: new Date(event.event_start_time).toLocaleString('zh-CN') }));
+
+            // End time
+            // End time (recovery time)
+            const endTime = event.status === 'resolved' && event.event_end_time
+                ? new Date(event.event_end_time).toLocaleString('zh-CN')
+                : '-';
+            row.appendChild(DOM.el('td', { textContent: endTime }));
+
+            // Count
+            const countCell = DOM.el('td');
+            const countBadge = DOM.el('span', {
+                className: 'count-badge',
+                textContent: event.alert_count
+            });
+            countCell.appendChild(countBadge);
+            row.appendChild(countCell);
+
+            // Status
+            const statusCell = DOM.el('td');
+            const statusBadge = DOM.el('span', {
+                className: `status-badge status-${event.status}`,
+                textContent: this.getStatusLabel(event.status)
+            });
+            statusCell.appendChild(statusBadge);
+            row.appendChild(statusCell);
+
+            // Actions
+            const actionsCell = DOM.el('td', { className: 'actions-cell' });
+            if (event.status === 'active') {
+                const ackBtn = DOM.el('button', {
+                    className: 'btn btn-sm btn-secondary',
+                    textContent: '✓',
+                    title: '确认',
+                    onClick: (e) => {
+                        e.stopPropagation();
+                        this.acknowledgeEvent(event.id);
+                    }
+                });
+                actionsCell.appendChild(ackBtn);
+            }
+            if (event.status !== 'resolved') {
+                const resolveBtn = DOM.el('button', {
+                    className: 'btn btn-sm btn-success',
+                    textContent: '✓✓',
+                    title: '解决',
+                    onClick: (e) => {
+                        e.stopPropagation();
+                        this.resolveEvent(event.id);
+                    }
+                });
+                actionsCell.appendChild(resolveBtn);
+            }
+            row.appendChild(actionsCell);
+
+            tbody.appendChild(row);
+
+            // Expanded alerts row
+            if (isExpanded) {
+                const expandedRow = DOM.el('tr', { className: 'expanded-row' });
+                const expandedCell = DOM.el('td', { colSpan: 10 });
+                const alertsContainer = DOM.el('div', { className: 'event-alerts-container' });
+
+                const alerts = this.eventAlerts[event.id] || [];
+                if (alerts.length > 0) {
+                    const alertsTable = DOM.el('table', { className: 'nested-alerts-table' });
+                    const alertsThead = DOM.el('thead');
+                    const alertsHeaderRow = DOM.el('tr');
+                    alertsHeaderRow.appendChild(DOM.el('th', { textContent: '时间' }));
+                    alertsHeaderRow.appendChild(DOM.el('th', { textContent: '指标值' }));
+                    alertsHeaderRow.appendChild(DOM.el('th', { textContent: '阈值' }));
+                    alertsHeaderRow.appendChild(DOM.el('th', { textContent: '状态' }));
+                    alertsHeaderRow.appendChild(DOM.el('th', { textContent: '操作' }));
+                    alertsThead.appendChild(alertsHeaderRow);
+                    alertsTable.appendChild(alertsThead);
+
+                    const alertsTbody = DOM.el('tbody');
+                    for (const alert of alerts) {
+                        const alertRow = DOM.el('tr');
+                        alertRow.appendChild(DOM.el('td', { textContent: new Date(alert.created_at).toLocaleString('zh-CN') }));
+                        alertRow.appendChild(DOM.el('td', { textContent: alert.metric_value !== null ? alert.metric_value.toFixed(2) : '-' }));
+                        alertRow.appendChild(DOM.el('td', { textContent: alert.threshold_value !== null ? alert.threshold_value.toFixed(2) : '-' }));
+
+                        const alertStatusCell = DOM.el('td');
+                        const alertStatusBadge = DOM.el('span', {
+                            className: `status-badge status-${alert.status}`,
+                            textContent: this.getStatusLabel(alert.status)
+                        });
+                        alertStatusCell.appendChild(alertStatusBadge);
+                        alertRow.appendChild(alertStatusCell);
+
+                        const alertActionsCell = DOM.el('td');
+                        const viewBtn = DOM.el('button', {
+                            className: 'btn-icon',
+                            textContent: '👁',
+                            title: '查看详情',
+                            onClick: () => this.showAlertDetail(alert)
+                        });
+                        alertActionsCell.appendChild(viewBtn);
+                        alertRow.appendChild(alertActionsCell);
+
+                        alertsTbody.appendChild(alertRow);
+                    }
+                    alertsTable.appendChild(alertsTbody);
+                    alertsContainer.appendChild(alertsTable);
+                } else {
+                    alertsContainer.textContent = '加载中...';
+                }
+
+                expandedCell.appendChild(alertsContainer);
+                expandedRow.appendChild(expandedCell);
+                tbody.appendChild(expandedRow);
+            }
+        }
+        table.appendChild(tbody);
+        list.appendChild(table);
+
+        return list;
     },
 
     renderAlertsList() {
@@ -429,13 +723,17 @@ const AlertsPage = {
     },
 
     updateAlertsList() {
-        const listContainer = DOM.$('#alerts-list');
+        const listContainer = this.viewMode === 'events' ? DOM.$('#events-list') : DOM.$('#alerts-list');
         if (listContainer) {
             DOM.clear(listContainer);
-            const newList = this.renderAlertsList();
+            const newList = this.viewMode === 'events' ? this.renderEventsList() : this.renderAlertsList();
             listContainer.parentNode.replaceChild(newList, listContainer);
             DOM.createIcons();
         }
+    },
+
+    updateEventsList() {
+        this.updateAlertsList();
     },
 
     updateSubscriptionsList() {
@@ -457,7 +755,7 @@ const AlertsPage = {
                 {
                     text: '关闭',
                     className: 'btn-secondary',
-                    onClick: () => modal.close()
+                    onClick: () => Modal.hide()
                 }
             ]
         });
@@ -572,7 +870,7 @@ const AlertsPage = {
                 {
                     text: '取消',
                     className: 'btn-secondary',
-                    onClick: () => modal.close()
+                    onClick: () => Modal.hide()
                 },
                 {
                     text: '保存',
@@ -590,7 +888,7 @@ const AlertsPage = {
                             }
                             await this.loadSubscriptions();
                             this.updateSubscriptionsList();
-                            modal.close();
+                            Modal.hide();
                             alert('保存成功');
                         } catch (error) {
                             console.error('Failed to save subscription:', error);

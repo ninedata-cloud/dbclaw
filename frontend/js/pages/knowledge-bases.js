@@ -64,7 +64,7 @@ const KnowledgeBasesPage = {
                         <span><i data-lucide="calendar"></i> ${Utils.formatDate(kb.created_at)}</span>
                     </div>
                     <div class="kb-actions">
-                        <button class="btn btn-sm btn-primary" onclick="KnowledgeBasesPage.show文档(${kb.id})">
+                        <button class="btn btn-sm btn-primary" onclick="KnowledgeBasesPage.showDocuments(${kb.id})">
                             <i data-lucide="folder-open"></i> 文档
                         </button>
                         <button class="btn btn-sm btn-secondary" onclick="KnowledgeBasesPage.showKBModal(${kb.id})">
@@ -170,7 +170,7 @@ const KnowledgeBasesPage = {
         }
     },
 
-    async show文档(kbId) {
+    async showDocuments(kbId) {
         this.currentKB = kbId;
         const kb = await API.getKnowledgeBase(kbId);
 
@@ -222,17 +222,17 @@ const KnowledgeBasesPage = {
             this.handleFileUpload(e.dataTransfer.files);
         });
 
-        await this.load文档();
+        await this.loadDocuments();
 
         // Poll for document status updates
-        this.pollInterval = setInterval(() => this.load文档(), 3000);
+        this.pollInterval = setInterval(() => this.loadDocuments(), 3000);
     },
 
-    async load文档() {
+    async loadDocuments() {
         if (!this.currentKB) return;
 
         try {
-            this.documents = await API.get文档(this.currentKB);
+            this.documents = await API.getDocuments(this.currentKB);
             const container = DOM.$('#document-list');
 
             if (this.documents.length === 0) {
@@ -312,7 +312,7 @@ const KnowledgeBasesPage = {
             }
         }
 
-        await this.load文档();
+        await this.loadDocuments();
     },
 
     async deleteDocument(docId) {
@@ -321,7 +321,7 @@ const KnowledgeBasesPage = {
         try {
             await API.deleteDocument(this.currentKB, docId);
             Utils.showToast('Document deleted', 'success');
-            await this.load文档();
+            await this.loadDocuments();
         } catch (error) {
             Utils.showToast('Failed to delete: ' + error.message, 'error');
         }
@@ -365,7 +365,7 @@ const KnowledgeBasesPage = {
                     { text: 'Close', variant: 'secondary', onClick: () => {
                         Modal.hide();
                         // Re-open documents view to restore polling
-                        this.show文档(kbId);
+                        this.showDocuments(kbId);
                     }}
                 ]
             });

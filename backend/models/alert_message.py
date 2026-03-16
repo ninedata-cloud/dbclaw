@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Float, Text, DateTime, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from backend.database import Base
 
@@ -20,5 +21,10 @@ class AlertMessage(Base):
     acknowledged_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     acknowledged_at = Column(DateTime, nullable=True)
     resolved_at = Column(DateTime, nullable=True)
+    resolved_value = Column(Float, nullable=True)  # metric value at time of recovery
+    event_id = Column(Integer, ForeignKey("alert_events.id"), nullable=True, index=True)
     created_at = Column(DateTime, nullable=False, server_default=func.now(), index=True)
     updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    event = relationship("AlertEvent", foreign_keys=[event_id], back_populates="alerts")

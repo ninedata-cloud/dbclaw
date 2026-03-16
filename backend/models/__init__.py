@@ -11,6 +11,8 @@ from backend.models.report import Report
 from backend.models.metric_snapshot import MetricSnapshot
 from backend.models.host_metric import HostMetric
 from backend.models.system_config import SystemConfig
+from backend.models.alert_event import AlertEvent
+from backend.models.alert_message import AlertMessage
 
 __all__ = [
     "User",
@@ -24,4 +26,6 @@ __all__ = [
     "MetricSnapshot",
     "HostMetric",
     "SystemConfig",
+    "AlertEvent",
+    "AlertMessage",
 ]

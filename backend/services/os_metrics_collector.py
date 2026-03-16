@@ -76,7 +76,7 @@ class OSMetricsCollector:
 
         return metrics
 
-@staticmethod
+    @staticmethod
     async def _exec(ssh_client, command: str) -> str:
         """在线程池中执行 SSH 命令，避免阻塞事件循环"""
         import asyncio

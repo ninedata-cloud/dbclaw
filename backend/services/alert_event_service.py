@@ -1,0 +1,355 @@
+"""
+Alert Event Service
+
+Handles aggregation of alerts into events and event management.
+"""
+
+from datetime import datetime, timedelta
+from typing import List, Optional, Tuple
+from sqlalchemy import select, func, and_, or_
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.models.alert_event import AlertEvent
+from backend.models.alert_message import AlertMessage
+from backend.config import ALERT_AGGREGATION_TIME_WINDOW_MINUTES
+
+
+class AlertEventService:
+    """Service for managing alert events"""
+
+    @staticmethod
+    async def process_new_alert(
+        db: AsyncSession,
+        alert: AlertMessage,
+        time_window_minutes: Optional[int] = None
+    ) -> AlertEvent:
+        """
+        Process new alert into event system.
+
+        Algorithm:
+        1. Calculate aggregation keys (prefer metric_name, fallback to alert_type)
+        2. Find recent events matching keys (within time window)
+        3. If found and gap < time_window_minutes: add to existing event
+        4. Else: create new event
+        """
+        if time_window_minutes is None:
+            time_window_minutes = ALERT_AGGREGATION_TIME_WINDOW_MINUTES
+
+        # Find matching event
+        existing_event = await AlertEventService._find_matching_event(
+            db, alert, time_window_minutes
+        )
+
+        if existing_event:
+            # Add to existing event
+            return await AlertEventService._add_alert_to_event(db, existing_event, alert)
+        else:
+            # Create new event
+            aggregation_type = "by_metric_name" if alert.metric_name else "by_alert_type"
+            return await AlertEventService._create_new_event(db, alert, aggregation_type)
+
+    @staticmethod
+    async def _find_matching_event(
+        db: AsyncSession,
+        alert: AlertMessage,
+        time_window_minutes: int
+    ) -> Optional[AlertEvent]:
+        """Find existing event within time window"""
+        # Calculate aggregation key (prefer metric_name)
+        if alert.metric_name:
+            aggregation_key = f"{alert.datasource_id}:{alert.metric_name}"
+        else:
+            aggregation_key = f"{alert.datasource_id}:{alert.alert_type}"
+
+        # Calculate time threshold
+        time_threshold = alert.created_at - timedelta(minutes=time_window_minutes)
+
+        # Find matching event
+        result = await db.execute(
+            select(AlertEvent)
+            .where(
+                and_(
+                    AlertEvent.aggregation_key == aggregation_key,
+                    AlertEvent.event_end_time >= time_threshold
+                )
+            )
+            .order_by(AlertEvent.event_end_time.desc())
+            .limit(1)
+        )
+
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def _create_new_event(
+        db: AsyncSession,
+        alert: AlertMessage,
+        aggregation_type: str
+    ) -> AlertEvent:
+        """Create new event for alert"""
+        # Calculate aggregation key
+        if aggregation_type == "by_metric_name":
+            aggregation_key = f"{alert.datasource_id}:{alert.metric_name}"
+        else:
+            aggregation_key = f"{alert.datasource_id}:{alert.alert_type}"
+
+        # Create event
+        event = AlertEvent(
+            datasource_id=alert.datasource_id,
+            aggregation_key=aggregation_key,
+            aggregation_type=aggregation_type,
+            first_alert_id=alert.id,
+            latest_alert_id=alert.id,
+            alert_count=1,
+            event_start_time=alert.created_at,
+            event_end_time=alert.created_at,
+            last_updated=datetime.utcnow(),
+            status=alert.status,
+            severity=alert.severity,
+            title=alert.title,
+            alert_type=alert.alert_type,
+            metric_name=alert.metric_name
+        )
+
+        db.add(event)
+        await db.flush()
+        await db.refresh(event)
+
+        return event
+
+    @staticmethod
+    async def _add_alert_to_event(
+        db: AsyncSession,
+        event: AlertEvent,
+        alert: AlertMessage
+    ) -> AlertEvent:
+        """Add alert to existing event and update metadata"""
+        # Update event metadata
+        event.latest_alert_id = alert.id
+        event.alert_count += 1
+        event.event_end_time = alert.created_at
+        event.last_updated = datetime.utcnow()
+        event.status = alert.status  # Inherit status from latest alert
+
+        # Update severity (keep highest)
+        severity_order = {'critical': 4, 'high': 3, 'medium': 2, 'low': 1}
+        if severity_order.get(alert.severity, 0) > severity_order.get(event.severity, 0):
+            event.severity = alert.severity
+
+        await db.flush()
+        await db.refresh(event)
+
+        return event
+
+    @staticmethod
+    async def get_events(
+        db: AsyncSession,
+        datasource_ids: Optional[List[int]] = None,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        status: Optional[str] = None,
+        severity: Optional[str] = None,
+        search: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0
+    ) -> Tuple[List[AlertEvent], int]:
+        """Query events with filters"""
+        # Build query
+        query = select(AlertEvent)
+        count_query = select(func.count(AlertEvent.id))
+
+        # Apply filters
+        filters = []
+
+        if datasource_ids:
+            filters.append(AlertEvent.datasource_id.in_(datasource_ids))
+
+        if start_time:
+            filters.append(AlertEvent.event_start_time >= start_time)
+
+        if end_time:
+            filters.append(AlertEvent.event_end_time <= end_time)
+
+        if status and status != "all":
+            filters.append(AlertEvent.status == status)
+
+        if severity:
+            filters.append(AlertEvent.severity == severity)
+
+        if search:
+            search_pattern = f"%{search}%"
+            filters.append(
+                or_(
+                    AlertEvent.title.like(search_pattern),
+                    AlertEvent.alert_type.like(search_pattern),
+                    AlertEvent.metric_name.like(search_pattern)
+                )
+            )
+
+        if filters:
+            query = query.where(and_(*filters))
+            count_query = count_query.where(and_(*filters))
+
+        # Get total count
+        count_result = await db.execute(count_query)
+        total = count_result.scalar()
+
+        # Apply ordering and pagination
+        query = query.order_by(AlertEvent.event_start_time.desc())
+        query = query.limit(limit).offset(offset)
+
+        # Execute query
+        result = await db.execute(query)
+        events = result.scalars().all()
+
+        return events, total
+
+    @staticmethod
+    async def get_alerts_in_event(
+        db: AsyncSession,
+        event_id: int,
+        limit: int = 100,
+        offset: int = 0
+    ) -> Tuple[List[AlertMessage], int]:
+        """Get all alerts in an event"""
+        # Count query
+        count_result = await db.execute(
+            select(func.count(AlertMessage.id))
+            .where(AlertMessage.event_id == event_id)
+        )
+        total = count_result.scalar()
+
+        # Data query
+        result = await db.execute(
+            select(AlertMessage)
+            .where(AlertMessage.event_id == event_id)
+            .order_by(AlertMessage.created_at.asc())
+            .limit(limit)
+            .offset(offset)
+        )
+        alerts = result.scalars().all()
+
+        return alerts, total
+
+    @staticmethod
+    async def acknowledge_event(
+        db: AsyncSession,
+        event_id: int,
+        user_id: int
+    ) -> AlertEvent:
+        """Acknowledge event and all its alerts"""
+        # Get event
+        result = await db.execute(
+            select(AlertEvent).where(AlertEvent.id == event_id)
+        )
+        event = result.scalar_one_or_none()
+
+        if not event:
+            raise ValueError(f"Event {event_id} not found")
+
+        # Update event status
+        event.status = "acknowledged"
+        event.last_updated = datetime.utcnow()
+
+        # Update all alerts in event
+        await db.execute(
+            select(AlertMessage)
+            .where(AlertMessage.event_id == event_id)
+        )
+
+        # Update alerts
+        result = await db.execute(
+            select(AlertMessage).where(AlertMessage.event_id == event_id)
+        )
+        alerts = result.scalars().all()
+
+        for alert in alerts:
+            if alert.status == "active":
+                alert.status = "acknowledged"
+                alert.acknowledged_by = user_id
+                alert.acknowledged_at = datetime.utcnow()
+
+        await db.flush()
+        await db.refresh(event)
+
+        return event
+
+    @staticmethod
+    async def resolve_event(
+        db: AsyncSession,
+        event_id: int
+    ) -> AlertEvent:
+        """Resolve event and all its alerts"""
+        # Get event
+        result = await db.execute(
+            select(AlertEvent).where(AlertEvent.id == event_id)
+        )
+        event = result.scalar_one_or_none()
+
+        if not event:
+            raise ValueError(f"Event {event_id} not found")
+
+        # Update event status
+        event.status = "resolved"
+        event.last_updated = datetime.utcnow()
+
+        # Update all alerts in event
+        result = await db.execute(
+            select(AlertMessage).where(AlertMessage.event_id == event_id)
+        )
+        alerts = result.scalars().all()
+
+        for alert in alerts:
+            if alert.status != "resolved":
+                alert.status = "resolved"
+                alert.resolved_at = datetime.utcnow()
+
+        await db.flush()
+        await db.refresh(event)
+
+        return event
+
+    @staticmethod
+    async def check_and_auto_resolve_event(
+        db: AsyncSession,
+        event_id: int
+    ) -> Optional[AlertEvent]:
+        """
+        Check if all alerts in an event are resolved, and if so, auto-resolve the event.
+
+        Args:
+            db: Database session
+            event_id: Event ID to check
+
+        Returns:
+            Updated event if it was auto-resolved, None otherwise
+        """
+        # Get event
+        result = await db.execute(
+            select(AlertEvent).where(AlertEvent.id == event_id)
+        )
+        event = result.scalar_one_or_none()
+
+        if not event or event.status == "resolved":
+            return None
+
+        # Get all alerts in event
+        result = await db.execute(
+            select(AlertMessage).where(AlertMessage.event_id == event_id)
+        )
+        alerts = result.scalars().all()
+
+        if not alerts:
+            return None
+
+        # Check if all alerts are resolved
+        all_resolved = all(alert.status == "resolved" for alert in alerts)
+
+        if all_resolved:
+            # Auto-resolve the event
+            event.status = "resolved"
+            event.last_updated = datetime.utcnow()
+            await db.flush()
+            await db.refresh(event)
+            return event
+
+        return None

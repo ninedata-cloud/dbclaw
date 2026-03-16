@@ -150,7 +150,9 @@ const DashboardPage = {
             if (!el || !metric) return;
             const data = metric.data || {};
             const active = data.connections_active || data.connected_clients || data.user_sessions || data.connections_current || 0;
-            const cpu = data.cpu_usage != null ? data.cpu_usage.toFixed(1) + '%' : '--';
+            // Try cpu_usage first (database-level), fallback to os_cpu_usage (OS-level)
+            const cpuValue = data.cpu_usage != null ? data.cpu_usage : data.os_cpu_usage;
+            const cpu = cpuValue != null ? cpuValue.toFixed(1) + '%' : '--';
             const qps = data.qps != null ? data.qps.toFixed(1) : '--';
 
             // Get health status HTML

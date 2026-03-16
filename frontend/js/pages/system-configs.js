@@ -5,7 +5,7 @@ const SystemConfigsPage = {
     editingId: null,
 
     render() {
-        Header.render('参数配置', DOM.el('button', {
+        Header.render('系统参数配置', DOM.el('button', {
             className: 'btn btn-primary',
             innerHTML: '<i data-lucide="plus"></i> 添加参数',
             onClick: () => this.showAddModal()

@@ -1,0 +1,104 @@
+id: diagnose_high_cpu
+name: Diagnose High CPU Usage
+version: 1.0.0
+author: SmartDBA
+category: diagnosis
+description: Diagnose high CPU usage by checking OS-level processes, load average, I/O wait, and identifying top CPU consumers
+tags: [linux, cpu, diagnosis, performance, system]
+timeout: 120
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID (must have host configured)
+
+permissions:
+  - execute_command
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      results = {
+          "success": True,
+          "diagnosis": {}
+      }
+
+      # 1. Get top CPU consuming processes
+      top_processes = await context.execute_command(
+          "ps aux --sort=-%cpu | head -11",
+          datasource_id
+      )
+      if top_processes.get("success"):
+          results["diagnosis"]["top_cpu_processes"] = top_processes.get("output", "")
+
+      # 2. Get load average and CPU info
+      load_avg = await context.execute_command(
+          "uptime",
+          datasource_id
+      )
+      if load_avg.get("success"):
+          results["diagnosis"]["load_average"] = load_avg.get("output", "")
+
+      # 3. Get CPU core count
+      cpu_cores = await context.execute_command(
+          "nproc",
+          datasource_id
+      )
+      if cpu_cores.get("success"):
+          results["diagnosis"]["cpu_cores"] = cpu_cores.get("output", "").strip()
+
+      # 4. Get detailed CPU usage breakdown (user, system, iowait, etc.)
+      cpu_breakdown = await context.execute_command(
+          "top -bn1 | grep 'Cpu(s)'",
+          datasource_id
+      )
+      if cpu_breakdown.get("success"):
+          results["diagnosis"]["cpu_breakdown"] = cpu_breakdown.get("output", "")
+
+      # 5. Check I/O wait (high iowait indicates disk bottleneck)
+      iostat = await context.execute_command(
+          "iostat -x 1 2 | tail -n +4",
+          datasource_id
+      )
+      if iostat.get("success"):
+          results["diagnosis"]["io_stats"] = iostat.get("output", "")
+
+      # 6. Check for zombie processes
+      zombies = await context.execute_command(
+          "ps aux | awk '{if ($8 ~ /Z/) print $0}'",
+          datasource_id
+      )
+      if zombies.get("success"):
+          zombie_output = zombies.get("output", "").strip()
+          if zombie_output:
+              results["diagnosis"]["zombie_processes"] = zombie_output
+          else:
+              results["diagnosis"]["zombie_processes"] = "No zombie processes found"
+
+      # 7. Get running process count
+      process_count = await context.execute_command(
+          "ps aux | wc -l",
+          datasource_id
+      )
+      if process_count.get("success"):
+          results["diagnosis"]["total_processes"] = process_count.get("output", "").strip()
+
+      # 8. Check context switches (high rate can indicate CPU contention)
+      context_switches = await context.execute_command(
+          "vmstat 1 2 | tail -1",
+          datasource_id
+      )
+      if context_switches.get("success"):
+          results["diagnosis"]["vmstat"] = context_switches.get("output", "")
+
+      # 9. Get database process CPU usage specifically
+      db_process_cpu = await context.execute_command(
+          "ps aux | grep -E '(postgres|mysql|oracle|sqlserver|mongod)' | grep -v grep",
+          datasource_id
+      )
+      if db_process_cpu.get("success"):
+          results["diagnosis"]["database_processes"] = db_process_cpu.get("output", "")
+
+      return results

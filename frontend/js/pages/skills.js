@@ -1,6 +1,14 @@
 // Skills management page
 const SkillsPage = {
     render() {
+        Header.render('Skills Management', `
+            <button class="btn btn-secondary" onclick="SkillsPage.importSkill()">
+                <i data-lucide="upload"></i> Import Skill
+            </button>
+            <button class="btn btn-primary" onclick="SkillsPage.createSkill()">
+                <i data-lucide="plus"></i> Create Skill
+            </button>
+        `);
         const content = DOM.$('#page-content');
         content.innerHTML = '<div class="loading">Loading skills...</div>';
 
@@ -16,17 +24,6 @@ const SkillsPage = {
 
             content.innerHTML = `
             <div class="skills-page">
-                <div class="page-header-actions">
-                    <h1>Skills Management</h1>
-                    <div class="actions">
-                        <button class="btn btn-secondary" onclick="SkillsPage.importSkill()">
-                            <i data-lucide="upload"></i> Import Skill
-                        </button>
-                        <button class="btn btn-primary" onclick="SkillsPage.createSkill()">
-                            <i data-lucide="plus"></i> Create Skill
-                        </button>
-                    </div>
-                </div>
 
                 <div class="skills-filters">
                     <div class="search-box">

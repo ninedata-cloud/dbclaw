@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # Inspection trigger deduplication window (in minutes)
     inspection_dedup_window_minutes: int = 60
 
+    # Alert aggregation time window (in minutes)
+    alert_aggregation_time_window_minutes: int = 5
+
     # JWT settings
     jwt_secret_key: str = "change-me-to-a-random-secret-key"
     jwt_algorithm: str = "HS256"
@@ -44,3 +47,10 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+# Export commonly used settings as module-level constants
+settings = get_settings()
+DATABASE_URL = settings.database_url
+ALERT_AGGREGATION_TIME_WINDOW_MINUTES = settings.alert_aggregation_time_window_minutes
+

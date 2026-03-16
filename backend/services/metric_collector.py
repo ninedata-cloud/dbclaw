@@ -241,11 +241,8 @@ async def _auto_resolve_recovered_alerts(
                 continue
 
             # Find the threshold rule for this metric
-            threshold_rule = None
-            for rule in threshold_rules:
-                if rule.get('metric_name') == alert.metric_name:
-                    threshold_rule = rule
-                    break
+            # threshold_rules is a dict like {"cpu_usage": {"threshold": 80, "duration": 60}}
+            threshold_rule = threshold_rules.get(alert.metric_name)
 
             if not threshold_rule:
                 continue
@@ -258,7 +255,7 @@ async def _auto_resolve_recovered_alerts(
             if current_value < threshold:
                 # Metric has recovered - auto-resolve the alert
                 from backend.services.alert_service import AlertService
-                await AlertService.resolve_alert(db, alert.id)
+                await AlertService.resolve_alert(db, alert.id, resolved_value=current_value)
                 logger.info(
                     f"Auto-resolved alert {alert.id}: {alert.metric_name} recovered "
                     f"(current={current_value:.2f} < threshold={threshold})"

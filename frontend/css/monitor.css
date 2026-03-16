@@ -10,6 +10,23 @@
     white-space: nowrap;
 }
 
+#refresh-btn {
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+#refresh-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+#refresh-btn i {
+    width: 16px;
+    height: 16px;
+}
+
 /* Custom time dialog */
 .modal-overlay {
     position: fixed;
@@ -71,4 +88,62 @@
 .form-input[type="datetime-local"]:focus {
     outline: none;
     border-color: #2f81f7;
+}
+
+/* === Health Status Banner === */
+.health-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+}
+
+.health-banner-icon {
+    font-size: 20px;
+    line-height: 1;
+}
+
+.health-banner-status {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.health-banner-details {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+}
+
+/* Health violations list */
+.health-violations {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.health-violation-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(248, 81, 73, 0.1);
+    border: 1px solid rgba(248, 81, 73, 0.3);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.health-violation-item span:first-child {
+    font-size: 14px;
+    line-height: 1;
+}
+
+.health-violation-item span:last-child {
+    color: var(--text-primary);
 }

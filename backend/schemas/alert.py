@@ -149,3 +149,44 @@ class AlertResolveRequest(BaseModel):
 
 class TestNotificationRequest(BaseModel):
     subscription_id: int
+
+
+# Alert Event Schemas
+class AlertEventBase(BaseModel):
+    datasource_id: int
+    aggregation_key: str
+    aggregation_type: str
+    alert_count: int
+    event_start_time: datetime
+    event_end_time: datetime
+    status: str
+    severity: str
+    title: str
+    alert_type: Optional[str] = None
+    metric_name: Optional[str] = None
+
+
+class AlertEventResponse(AlertEventBase):
+    id: int
+    first_alert_id: int
+    latest_alert_id: int
+    last_updated: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AlertEventQueryParams(BaseModel):
+    datasource_ids: Optional[List[int]] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    status: Optional[str] = Field(None, pattern="^(active|acknowledged|resolved|all)$")
+    severity: Optional[str] = Field(None, pattern="^(critical|high|medium|low)$")
+    search: Optional[str] = None
+    limit: int = Field(default=100, ge=1, le=1000)
+    offset: int = Field(default=0, ge=0)
+
+
+class AlertEventAcknowledgeRequest(BaseModel):
+    user_id: int
+

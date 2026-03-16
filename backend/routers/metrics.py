@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from typing import List, Optional, Dict, Any
@@ -11,6 +11,7 @@ from backend.schemas.metrics import MetricResponse
 from backend.dependencies import get_current_user
 from backend.utils.datetime_helper import now
 from backend.services.threshold_checker import ThresholdChecker
+from backend.services import metric_collector
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"], dependencies=[Depends(get_current_user)])
 
@@ -243,3 +244,34 @@ def _to_float(value: Any) -> Optional[float]:
         except ValueError:
             return None
     return None
+
+
+@router.post("/{conn_id}/refresh")
+async def refresh_metrics(
+    conn_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    手动触发指标采集
+
+    立即采集指定数据源的监控指标，不等待定时任务
+    """
+    # Verify datasource exists
+    from backend.models.datasource import Datasource
+    result = await db.execute(
+        select(Datasource).where(Datasource.id == conn_id)
+    )
+    datasource = result.scalar_one_or_none()
+
+    if not datasource:
+        raise HTTPException(status_code=404, detail="数据源不存在")
+
+    if not datasource.is_active:
+        raise HTTPException(status_code=400, detail="数据源未激活")
+
+    # Trigger metric collection
+    try:
+        await metric_collector.collect_metrics_for_connection(conn_id)
+        return {"success": True, "message": "指标采集已触发"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"采集失败: {str(e)}")
