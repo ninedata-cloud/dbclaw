@@ -89,8 +89,9 @@ async def run_conversation_with_skills(
     from backend.routers.ai_models import decrypt_api_key
 
     # Get model config
+    from sqlalchemy import select
+    client = None
     if model_id and db:
-        from sqlalchemy import select
         result = await db.execute(select(AIModel).filter(AIModel.id == model_id, AIModel.is_active == True))
         model = result.scalar_one_or_none()
         if model:
@@ -99,13 +100,22 @@ async def run_conversation_with_skills(
                 base_url=model.base_url,
                 model_name=model.model_name
             )
-        else:
-            client = get_ai_client()
-    else:
+    # Fallback: use first active model from DB
+    if not client and db:
+        result = await db.execute(select(AIModel).filter(AIModel.is_active == True))
+        model = result.scalars().first()
+        if model:
+            client = get_ai_client(
+                api_key=decrypt_api_key(model.api_key_encrypted),
+                base_url=model.base_url,
+                model_name=model.model_name
+            )
+    # Last resort: env var
+    if not client:
         client = get_ai_client()
 
     if not client:
-        yield {"type": "error", "message": "AI client not configured. Set OPENAI_API_KEY in .env"}
+        yield {"type": "error", "message": "AI model not configured. Please add an AI model in the AI Model Management page."}
         return
 
     # Detect intent from first user message
