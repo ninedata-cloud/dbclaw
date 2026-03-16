@@ -189,15 +189,15 @@ const SystemConfigsPage = {
                     </div>
                 </form>
             `,
-            actions: [
+            buttons: [
                 {
-                    label: '取消',
-                    className: 'btn-secondary',
+                    text: '取消',
+                    variant: 'secondary',
                     onClick: () => Modal.hide()
                 },
                 {
-                    label: '保存',
-                    className: 'btn-primary',
+                    text: '保存',
+                    variant: 'primary',
                     onClick: () => this.saveConfig()
                 }
             ]

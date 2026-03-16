@@ -57,7 +57,7 @@ const AIModelsPage = {
                 <span><i data-lucide="key-round"></i> ${model.api_key_masked}</span>
             </div>
             <div class="datasource-card-actions">
-                ${!model.is_default ? '<button class="btn btn-sm btn-secondary default-btn"><i data-lucide="star"></i> Set 默认</button>' : '<button class="btn btn-sm btn-success" disabled><i data-lucide="check"></i> 默认</button>'}
+                ${!model.is_default ? '<button class="btn btn-sm btn-secondary default-btn"><i data-lucide="star"></i> 设置为默认</button>' : '<button class="btn btn-sm btn-success" disabled><i data-lucide="check"></i> 默认</button>'}
                 <button class="btn btn-sm btn-secondary edit-btn"><i data-lucide="pencil"></i> Edit</button>
                 <button class="btn btn-sm btn-danger delete-btn"><i data-lucide="trash-2"></i></button>
             </div>
@@ -66,7 +66,7 @@ const AIModelsPage = {
         if (!model.is_default) {
             card.querySelector('.default-btn').addEventListener('click', (e) => {
                 e.stopPropagation();
-                this._set默认(model.id);
+                this._setDefault(model.id);
             });
         }
         card.querySelector('.edit-btn').addEventListener('click', (e) => {
@@ -101,7 +101,7 @@ const AIModelsPage = {
         `;
 
         form.addEventListener('submit', async (e) => {
-            e.prevent默认();
+            e.preventDefault();
             const data = Object.fromEntries(new FormData(form).entries());
             try {
                 if (isEdit) {
@@ -119,7 +119,7 @@ const AIModelsPage = {
             }
         });
 
-        const footer = DOM.el('div', { style: { display: 'flex', gap: '8px', justifyContent: 'flex-end' } });
+        const footer = DOM.el('div');
         footer.appendChild(DOM.el('button', { className: 'btn btn-secondary', textContent: '取消', type: 'button', onClick: () => Modal.hide() }));
         footer.appendChild(DOM.el('button', {
             className: 'btn btn-primary', textContent: isEdit ? '保存' : '创建', type: 'button',
@@ -140,10 +140,10 @@ const AIModelsPage = {
         }
     },
 
-    async _set默认(id) {
+    async _setDefault(id) {
         try {
-            await API.set默认AIModel(id);
-            Toast.success('默认 model updated');
+            await API.setDefaultAIModel(id);
+            Toast.success('默认模型已更新');
             this.render();
         } catch (err) {
             Toast.error('Failed to set default: ' + err.message);

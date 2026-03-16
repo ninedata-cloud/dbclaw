@@ -107,7 +107,7 @@ const DatasourceForm = {
             }
         });
 
-        const footer = DOM.el('div', { style: { display: 'flex', gap: '8px' } });
+        const footer = DOM.el('div');
         footer.appendChild(DOM.el('button', {
             className: 'btn btn-secondary',
             textContent: 'Cancel',

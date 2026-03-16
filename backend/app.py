@@ -107,6 +107,10 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    @app.get("/health")
+    async def health_check():
+        return {"status": "ok"}
+
     # Register routers
     from backend.routers import datasources, hosts, metrics, monitor_ws, chat, query, ai_models, knowledge_bases, auth, users, inspections, system_configs, alerts
     from backend.api import skills

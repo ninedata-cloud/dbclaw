@@ -88,8 +88,13 @@ async def update_model(model_id: int, data: AIModelUpdate, db: AsyncSession = De
     await db.commit()
     await db.refresh(model)
 
+    try:
+        api_key_masked = mask_api_key(decrypt_api_key(model.api_key_encrypted))
+    except Exception:
+        api_key_masked = "****[invalid]"
+
     return AIModelResponse(
-        **{**model.__dict__, "api_key_masked": mask_api_key(decrypt_api_key(model.api_key_encrypted))}
+        **{**model.__dict__, "api_key_masked": api_key_masked}
     )
 
 

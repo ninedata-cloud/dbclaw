@@ -25,6 +25,9 @@ const Modal = {
 
         if (footer) {
             if (footer instanceof Node) {
+                if (!footer.classList.contains('modal-footer')) {
+                    footer.classList.add('modal-footer');
+                }
                 container.appendChild(footer);
             }
         } else if (buttons && buttons.length > 0) {

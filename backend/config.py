@@ -9,11 +9,11 @@ class Settings(BaseSettings):
     app_port: int = 8000
     debug: bool = True
 
-    encryption_key: str = ""
+    encryption_key: str = "temporary-encryption-key"
 
     openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
-    openai_model: str = "gpt-4o"
+    openai_model: str = ""
 
     database_url: str = "sqlite+aiosqlite:///./data/smartdba.db"
 

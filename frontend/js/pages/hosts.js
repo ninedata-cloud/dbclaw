@@ -214,7 +214,7 @@ const HostsPage = {
             }
         });
 
-        const footer = DOM.el('div', { style: { display: 'flex', gap: '8px', justifyContent: 'flex-end' } });
+        const footer = DOM.el('div');
         footer.appendChild(DOM.el('button', { className: 'btn btn-secondary', textContent: '取消', type: 'button', onClick: () => Modal.hide() }));
         if (isEdit) {
             footer.appendChild(DOM.el('button', {

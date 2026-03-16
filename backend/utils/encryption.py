@@ -5,7 +5,7 @@ from backend.config import get_settings
 def _get_fernet() -> Fernet:
     key = get_settings().encryption_key
     if not key or key == "your-fernet-key-here":
-        key = Fernet.generate_key().decode()
+        raise ValueError("ENCRYPTION_KEY is not configured. Set a valid Fernet key in your environment.")
     if isinstance(key, str):
         key = key.encode()
     return Fernet(key)
