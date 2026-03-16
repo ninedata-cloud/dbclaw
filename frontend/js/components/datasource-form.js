@@ -114,32 +114,49 @@ const DatasourceForm = {
             type: 'button',
             onClick: () => Modal.hide()
         }));
-        if (isEdit) {
-            footer.appendChild(DOM.el('button', {
-                className: 'btn btn-secondary',
-                innerHTML: '<i data-lucide="plug"></i> Test',
-                type: 'button',
-                onClick: async (e) => {
-                    const btn = e.currentTarget;
-                    btn.innerHTML = '<div class="spinner"></div>';
-                    btn.disabled = true;
-                    try {
-                        const result = await API.testDatasource(datasource.id);
-                        if (result.success) {
-                            Toast.success(`Datasource successful! ${result.version || ''}`);
-                        } else {
-                            Toast.error(`Datasource failed: ${result.message}`);
-                        }
-                    } catch (err) {
-                        Toast.error('Test failed: ' + err.message);
-                    } finally {
-                        btn.innerHTML = '<i data-lucide="plug"></i> Test';
-                        btn.disabled = false;
-                        DOM.createIcons();
+
+        // Add test button for both create and edit modes
+        footer.appendChild(DOM.el('button', {
+            className: 'btn btn-secondary',
+            innerHTML: '<i data-lucide="plug"></i> Test',
+            type: 'button',
+            onClick: async (e) => {
+                const btn = e.currentTarget;
+                btn.innerHTML = '<div class="spinner"></div>';
+                btn.disabled = true;
+                try {
+                    // Get current form values
+                    const formData = new FormData(form);
+                    const data = {
+                        db_type: formData.get('db_type'),
+                        host: formData.get('host'),
+                        port: parseInt(formData.get('port')),
+                        username: formData.get('username') || null,
+                        password: formData.get('password') || null,
+                        database: formData.get('database') || null
+                    };
+
+                    // If editing, include datasource_id so backend can use saved password if needed
+                    if (isEdit) {
+                        data.datasource_id = datasource.id;
                     }
+
+                    const result = await API.testDatasourceConnection(data);
+                    if (result.success) {
+                        Toast.success(`连接成功! ${result.version || ''}`);
+                    } else {
+                        Toast.error(`连接失败: ${result.message}`);
+                    }
+                } catch (err) {
+                    Toast.error('测试失败: ' + err.message);
+                } finally {
+                    btn.innerHTML = '<i data-lucide="plug"></i> Test';
+                    btn.disabled = false;
+                    DOM.createIcons();
                 }
-            }));
-        }
+            }
+        }));
+
         footer.appendChild(DOM.el('button', {
             className: 'btn btn-primary',
             textContent: isEdit ? 'Update' : 'Create',

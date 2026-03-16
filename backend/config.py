@@ -19,6 +19,9 @@ class Settings(BaseSettings):
 
     metric_interval: int = 60
 
+    # Inspection trigger deduplication window (in minutes)
+    inspection_dedup_window_minutes: int = 60
+
     # JWT settings
     jwt_secret_key: str = "change-me-to-a-random-secret-key"
     jwt_algorithm: str = "HS256"

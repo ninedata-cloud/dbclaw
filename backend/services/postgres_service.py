@@ -42,11 +42,26 @@ class PostgreSQLConnector(DBConnector):
             size = await conn.fetchrow(
                 "SELECT pg_database_size(current_database()) as db_size"
             )
+            # Get database start time
+            start_time = await conn.fetchrow(
+                "SELECT pg_postmaster_start_time() as start_time"
+            )
+
             hit_rate = 0
             if stats:
                 total = (stats["blks_hit"] or 0) + (stats["blks_read"] or 0)
                 if total > 0:
                     hit_rate = round((stats["blks_hit"] / total) * 100, 2)
+
+            # Calculate uptime in seconds
+            uptime = 0
+            if start_time and start_time["start_time"]:
+                from datetime import datetime, timezone
+                boot_time = start_time["start_time"]
+                if boot_time.tzinfo is None:
+                    boot_time = boot_time.replace(tzinfo=timezone.utc)
+                now = datetime.now(timezone.utc)
+                uptime = int((now - boot_time).total_seconds())
 
             return {
                 "connections_active": activity["active"] if activity else 0,
@@ -64,6 +79,8 @@ class PostgreSQLConnector(DBConnector):
                 "deadlocks": stats["deadlocks"] if stats else 0,
                 "conflicts": stats["conflicts"] if stats else 0,
                 "db_size_bytes": size["db_size"] if size else 0,
+                "uptime": uptime,
+                "boot_time": start_time["start_time"].isoformat() if start_time and start_time["start_time"] else None,
             }
         finally:
             await conn.close()

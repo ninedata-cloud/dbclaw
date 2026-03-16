@@ -28,6 +28,20 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("Database initialized")
 
+    # Seed default system configs
+    from backend.database import async_session as _async_session
+    from backend.services import config_service as _config_service
+    async with _async_session() as _db:
+        await _config_service.set_config(
+            _db,
+            key="inspection_dedup_window_minutes",
+            value=str(settings.inspection_dedup_window_minutes),
+            value_type="integer",
+            description="巡检触发去重窗口（分钟），同一数据源在此时间内不重复触发巡检",
+            category="inspection"
+        ) if not await _config_service.get_config(_db, "inspection_dedup_window_minutes") else None
+    logger.info("Default system configs seeded")
+
     # Start SSH connection pool
     from backend.services.ssh_connection_pool import start_ssh_pool
     await start_ssh_pool()
@@ -67,6 +81,11 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(collect_host_metrics())
     logger.info("📊 Host metrics collector started")
 
+    # Start notification dispatcher
+    from backend.services.notification_dispatcher import start_notification_dispatcher
+    asyncio.create_task(start_notification_dispatcher())
+    logger.info("🔔 Notification dispatcher started")
+
     yield
 
     # Shutdown
@@ -89,7 +108,7 @@ def create_app() -> FastAPI:
     )
 
     # Register routers
-    from backend.routers import datasources, hosts, metrics, monitor_ws, chat, query, ai_models, knowledge_bases, auth, users, inspections, system_configs
+    from backend.routers import datasources, hosts, metrics, monitor_ws, chat, query, ai_models, knowledge_bases, auth, users, inspections, system_configs, alerts
     from backend.api import skills
     app.include_router(auth.router)
     app.include_router(users.router)
@@ -104,6 +123,7 @@ def create_app() -> FastAPI:
     app.include_router(skills.router)
     app.include_router(inspections.router)
     app.include_router(system_configs.router)
+    app.include_router(alerts.router)
 
     # Serve frontend static files
     app.mount("/css", StaticFiles(directory="frontend/css"), name="css")

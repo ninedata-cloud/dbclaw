@@ -5,12 +5,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, desc
 from typing import List, Optional
 from pydantic import BaseModel
+import logging
 
 from backend.database import get_db
 from backend.models.inspection_config import InspectionConfig
 from backend.models.inspection_trigger import InspectionTrigger
 from backend.models.report import Report
 from backend.services.inspection_service import InspectionService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/inspections", tags=["inspections"])
 
@@ -77,6 +80,7 @@ async def validate_threshold_expression(request: ExpressionValidationRequest):
     except SyntaxError as e:
         return ExpressionValidationResponse(valid=False, error=str(e))
     except Exception as e:
+        logger.error(f"Failed to validate expression '{request.expression}': {e}", exc_info=True)
         return ExpressionValidationResponse(valid=False, error=f"Validation error: {str(e)}")
 
 

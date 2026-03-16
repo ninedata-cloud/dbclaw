@@ -89,6 +89,7 @@ const API = {
     updateDatasource(id, data) { return this.put(`/api/datasources/${id}`, data); },
     deleteDatasource(id) { return this.delete(`/api/datasources/${id}`); },
     testDatasource(id) { return this.post(`/api/datasources/${id}/test`); },
+    testDatasourceConnection(data) { return this.post('/api/datasources/test', data); },
 
     // Host endpoints
     getHosts() { return this.get('/api/hosts'); },
@@ -100,6 +101,7 @@ const API = {
     // Metrics endpoints
     getMetrics(connId, params = '') { return this.get(`/api/metrics/${connId}${params ? '?' + params : ''}`); },
     getLatestMetric(connId, type = 'db_status') { return this.get(`/api/metrics/${connId}/latest?metric_type=${type}`); },
+    getDatasourceHealth(connId) { return this.get(`/api/metrics/${connId}/health`); },
 
     // Chat endpoints
     getChatSessions() { return this.get('/api/chat/sessions'); },
@@ -212,6 +214,20 @@ const API = {
     },
 
     // Skills
-    getSkills() { return this.get('/api/skills'); }
+    getSkills() { return this.get('/api/skills'); },
+
+    // Alerts
+    getAlerts(params) {
+        const queryString = params ? `?${new URLSearchParams(params).toString()}` : '';
+        return this.get(`/api/alerts${queryString}`);
+    },
+    getAlert(id) { return this.get(`/api/alerts/${id}`); },
+    acknowledgeAlert(id, userId) { return this.post(`/api/alerts/${id}/acknowledge`, { user_id: userId }); },
+    resolveAlert(id) { return this.post(`/api/alerts/${id}/resolve`, {}); },
+    getSubscriptions(userId) { return this.get(`/api/alerts/subscriptions/list?user_id=${userId}`); },
+    createSubscription(data) { return this.post('/api/alerts/subscriptions', data); },
+    updateSubscription(id, data) { return this.put(`/api/alerts/subscriptions/${id}`, data); },
+    deleteSubscription(id) { return this.delete(`/api/alerts/subscriptions/${id}`); },
+    testNotification(subscriptionId) { return this.post(`/api/alerts/subscriptions/${subscriptionId}/test`, {}); }
 
 };

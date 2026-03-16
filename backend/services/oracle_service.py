@@ -8,18 +8,11 @@ class OracleConnector(DBConnector):
 
     async def _connect(self):
         import oracledb
-        # Use thin mode (no Oracle Client required)
-        oracledb.init_oracle_client(lib_dir=None)
-
-        # Build connection string
         dsn = f"{self.host}:{self.port}/{self.database or 'ORCL'}"
-
-        # Create connection pool for better performance
         connection = await oracledb.connect_async(
             user=self.username,
             password=self.password or "",
-            dsn=dsn,
-            encoding="UTF-8"
+            dsn=dsn
         )
         return connection
 
@@ -27,9 +20,9 @@ class OracleConnector(DBConnector):
         conn = await self._connect()
         try:
             cursor = conn.cursor()
-            result = await cursor.execute("SELECT banner FROM v$version WHERE ROWNUM = 1")
-            row = await result.fetchone()
-            await cursor.close()
+            await cursor.execute("SELECT banner FROM v$version WHERE ROWNUM = 1")
+            row = await cursor.fetchone()
+            cursor.close()
             return row[0] if row else "unknown"
         finally:
             await conn.close()
@@ -39,7 +32,6 @@ class OracleConnector(DBConnector):
         try:
             cursor = conn.cursor()
 
-            # Get session count
             await cursor.execute(
                 "SELECT COUNT(*) as total, "
                 "SUM(CASE WHEN status = 'ACTIVE' THEN 1 ELSE 0 END) as active "
@@ -47,13 +39,11 @@ class OracleConnector(DBConnector):
             )
             session_stats = await cursor.fetchone()
 
-            # Get database size
             await cursor.execute(
                 "SELECT SUM(bytes) as total_size FROM dba_data_files"
             )
             size_row = await cursor.fetchone()
 
-            # Get cache hit ratio
             await cursor.execute(
                 "SELECT (1 - (phy.value / (db.value + cons.value))) * 100 as hit_ratio "
                 "FROM v$sysstat phy, v$sysstat db, v$sysstat cons "
@@ -63,13 +53,32 @@ class OracleConnector(DBConnector):
             )
             cache_row = await cursor.fetchone()
 
-            await cursor.close()
+            # Get database startup time
+            await cursor.execute(
+                "SELECT startup_time FROM v$instance"
+            )
+            startup_row = await cursor.fetchone()
+
+            # Calculate uptime
+            uptime = 0
+            boot_time = None
+            if startup_row and startup_row[0]:
+                from datetime import datetime, timezone
+                boot_time = startup_row[0]
+                if boot_time.tzinfo is None:
+                    boot_time = boot_time.replace(tzinfo=timezone.utc)
+                now = datetime.now(timezone.utc)
+                uptime = int((now - boot_time).total_seconds())
+
+            cursor.close()
 
             return {
                 "connections_total": session_stats[0] if session_stats else 0,
                 "connections_active": session_stats[1] if session_stats else 0,
                 "db_size_bytes": size_row[0] if size_row and size_row[0] else 0,
                 "cache_hit_rate": round(cache_row[0], 2) if cache_row and cache_row[0] else 0,
+                "uptime": uptime,
+                "boot_time": boot_time.isoformat() if boot_time else None,
             }
         finally:
             await conn.close()
@@ -80,7 +89,7 @@ class OracleConnector(DBConnector):
             cursor = conn.cursor()
             await cursor.execute("SELECT name, value FROM v$parameter ORDER BY name")
             rows = await cursor.fetchall()
-            await cursor.close()
+            cursor.close()
             return {row[0]: row[1] for row in rows}
         finally:
             await conn.close()
@@ -101,7 +110,7 @@ class OracleConnector(DBConnector):
             )
             rows = await cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]
-            await cursor.close()
+            cursor.close()
 
             return [dict(zip(columns, row)) for row in rows]
         finally:
@@ -123,7 +132,7 @@ class OracleConnector(DBConnector):
             )
             rows = await cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]
-            await cursor.close()
+            cursor.close()
 
             return [dict(zip(columns, row)) for row in rows]
         finally:
@@ -141,7 +150,7 @@ class OracleConnector(DBConnector):
             columns = [desc[0] for desc in cursor.description] if cursor.description else []
             row_count = cursor.rowcount if cursor.rowcount > 0 else len(rows)
 
-            await cursor.close()
+            cursor.close()
 
             return {
                 "columns": columns,
@@ -158,22 +167,18 @@ class OracleConnector(DBConnector):
         try:
             cursor = conn.cursor()
 
-            # Set statement ID for explain plan
             stmt_id = f"EXPLAIN_{int(time.time())}"
 
-            # Execute explain plan
             await cursor.execute(f"EXPLAIN PLAN SET STATEMENT_ID = '{stmt_id}' FOR {sql}")
 
-            # Get the plan
             await cursor.execute(
                 f"SELECT plan_table_output FROM TABLE(DBMS_XPLAN.DISPLAY('PLAN_TABLE', '{stmt_id}', 'ALL'))"
             )
             rows = await cursor.fetchall()
 
-            # Clean up
             await cursor.execute(f"DELETE FROM plan_table WHERE statement_id = '{stmt_id}'")
             await conn.commit()
-            await cursor.close()
+            cursor.close()
 
             return {"plan": [row[0] for row in rows]}
         finally:
@@ -193,7 +198,7 @@ class OracleConnector(DBConnector):
             )
             rows = await cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]
-            await cursor.close()
+            cursor.close()
 
             return [dict(zip(columns, row)) for row in rows]
         finally:
@@ -204,7 +209,6 @@ class OracleConnector(DBConnector):
         try:
             cursor = conn.cursor()
 
-            # Check if Data Guard is configured
             await cursor.execute(
                 "SELECT database_role, protection_mode, protection_level "
                 "FROM v$database"
@@ -212,14 +216,13 @@ class OracleConnector(DBConnector):
             row = await cursor.fetchone()
 
             if row and row[0] != 'PRIMARY':
-                # Get standby status
                 await cursor.execute(
                     "SELECT process, status, thread#, sequence# "
                     "FROM v$managed_standby"
                 )
                 standby_rows = await cursor.fetchall()
                 columns = [desc[0] for desc in cursor.description]
-                await cursor.close()
+                cursor.close()
 
                 return {
                     "role": row[0],
@@ -228,7 +231,7 @@ class OracleConnector(DBConnector):
                     "standby_processes": [dict(zip(columns, r)) for r in standby_rows]
                 }
 
-            await cursor.close()
+            cursor.close()
             return {"role": row[0] if row else "UNKNOWN", "status": "not configured"}
         finally:
             await conn.close()
@@ -243,7 +246,7 @@ class OracleConnector(DBConnector):
                 "SELECT SUM(bytes) as log_size FROM v$log"
             )
             rows = await cursor.fetchall()
-            await cursor.close()
+            cursor.close()
 
             data_size = rows[0][0] if rows and rows[0][0] else 0
             log_size = rows[1][0] if len(rows) > 1 and rows[1][0] else 0
@@ -267,7 +270,7 @@ class OracleConnector(DBConnector):
                 "ORDER BY username"
             )
             rows = await cursor.fetchall()
-            await cursor.close()
+            cursor.close()
             return [row[0] for row in rows]
         finally:
             await conn.close()
@@ -285,7 +288,7 @@ class OracleConnector(DBConnector):
                 {"schema": target_schema}
             )
             rows = await cursor.fetchall()
-            await cursor.close()
+            cursor.close()
             return [
                 {
                     "name": row[0],
@@ -312,7 +315,7 @@ class OracleConnector(DBConnector):
                 {"schema": target_schema, "table": table.upper()}
             )
             rows = await cursor.fetchall()
-            await cursor.close()
+            cursor.close()
             return [
                 {
                     "name": row[0],

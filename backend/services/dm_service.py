@@ -49,6 +49,21 @@ class DMConnector(DBConnector):
                 )
                 stats = {row[0]: row[1] for row in cursor.fetchall()}
 
+                # Get database startup time
+                cursor.execute("SELECT STARTUP_TIME FROM V$INSTANCE WHERE ROWNUM = 1")
+                startup_row = cursor.fetchone()
+
+                # Calculate uptime
+                uptime = 0
+                boot_time = None
+                if startup_row and startup_row[0]:
+                    from datetime import datetime, timezone
+                    boot_time = startup_row[0]
+                    if boot_time.tzinfo is None:
+                        boot_time = boot_time.replace(tzinfo=timezone.utc)
+                    now = datetime.now(timezone.utc)
+                    uptime = int((now - boot_time).total_seconds())
+
                 return {
                     "session_count": session_count,
                     "active_sessions": active_sessions,
@@ -56,6 +71,8 @@ class DMConnector(DBConnector):
                     "user_rollbacks": int(stats.get("user rollbacks", 0)),
                     "physical_reads": int(stats.get("physical reads", 0)),
                     "db_block_gets": int(stats.get("db block gets", 0)),
+                    "uptime": uptime,
+                    "boot_time": boot_time.isoformat() if boot_time else None,
                 }
             finally:
                 conn.close()

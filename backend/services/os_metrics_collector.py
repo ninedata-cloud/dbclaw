@@ -76,15 +76,24 @@ class OSMetricsCollector:
 
         return metrics
 
+@staticmethod
+    async def _exec(ssh_client, command: str) -> str:
+        """在线程池中执行 SSH 命令，避免阻塞事件循环"""
+        import asyncio
+        loop = asyncio.get_event_loop()
+        def _run():
+            stdin, stdout, stderr = ssh_client.exec_command(command, timeout=15)
+            return stdout.read().decode().strip()
+        return await loop.run_in_executor(None, _run)
+
     @staticmethod
     async def _get_linux_cpu_usage(ssh_client) -> Optional[float]:
         """获取 CPU 使用率"""
         try:
-            # 使用 top 命令获取 CPU 使用率
-            stdin, stdout, stderr = ssh_client.exec_command(
+            output = await OSMetricsCollector._exec(
+                ssh_client,
                 "top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/' | awk '{print 100 - $1}'"
             )
-            output = stdout.read().decode().strip()
             if output:
                 return round(float(output), 2)
         except Exception:
@@ -92,10 +101,10 @@ class OSMetricsCollector:
 
         # 备用方法：使用 mpstat
         try:
-            stdin, stdout, stderr = ssh_client.exec_command(
+            output = await OSMetricsCollector._exec(
+                ssh_client,
                 "mpstat 1 1 | awk '/Average/ {print 100 - $NF}'"
             )
-            output = stdout.read().decode().strip()
             if output:
                 return round(float(output), 2)
         except Exception:
@@ -107,10 +116,10 @@ class OSMetricsCollector:
     async def _get_linux_memory_usage(ssh_client) -> Optional[float]:
         """获取内存使用率"""
         try:
-            stdin, stdout, stderr = ssh_client.exec_command(
+            output = await OSMetricsCollector._exec(
+                ssh_client,
                 "free | grep Mem | awk '{print ($3/$2) * 100.0}'"
             )
-            output = stdout.read().decode().strip()
             if output:
                 return round(float(output), 2)
         except Exception:
@@ -122,10 +131,10 @@ class OSMetricsCollector:
     async def _get_linux_disk_usage(ssh_client, mount_point: str = '/') -> Optional[float]:
         """获取磁盘使用率"""
         try:
-            stdin, stdout, stderr = ssh_client.exec_command(
+            output = await OSMetricsCollector._exec(
+                ssh_client,
                 f"df -h {mount_point} | awk 'NR==2 {{print $5}}' | sed 's/%//'"
             )
-            output = stdout.read().decode().strip()
             if output:
                 return round(float(output), 2)
         except Exception:
@@ -137,10 +146,10 @@ class OSMetricsCollector:
     async def _get_linux_disk_io(ssh_client) -> Dict[str, float]:
         """获取磁盘 IO 统计"""
         try:
-            stdin, stdout, stderr = ssh_client.exec_command(
+            output = await OSMetricsCollector._exec(
+                ssh_client,
                 "iostat -dx 1 2 | awk '/^[a-z]/ && NR>3 {reads+=$4; writes+=$5} END {print reads, writes}'"
             )
-            output = stdout.read().decode().strip()
             if output:
                 parts = output.split()
                 if len(parts) == 2:
@@ -157,11 +166,10 @@ class OSMetricsCollector:
     async def _get_linux_network_io(ssh_client) -> Dict[str, float]:
         """获取网络 IO 统计"""
         try:
-            # 读取网络接口统计
-            stdin, stdout, stderr = ssh_client.exec_command(
+            output = await OSMetricsCollector._exec(
+                ssh_client,
                 "cat /proc/net/dev | awk 'NR>2 {rx+=$2; tx+=$10} END {print rx, tx}'"
             )
-            output = stdout.read().decode().strip()
             if output:
                 parts = output.split()
                 if len(parts) == 2:
@@ -178,8 +186,7 @@ class OSMetricsCollector:
     async def _get_linux_load_average(ssh_client) -> Dict[str, float]:
         """获取系统负载平均值"""
         try:
-            stdin, stdout, stderr = ssh_client.exec_command("cat /proc/loadavg")
-            output = stdout.read().decode().strip()
+            output = await OSMetricsCollector._exec(ssh_client, "cat /proc/loadavg")
             if output:
                 parts = output.split()
                 if len(parts) >= 3:
@@ -199,29 +206,24 @@ class OSMetricsCollector:
         info = {}
 
         try:
-            # CPU 核心数
-            stdin, stdout, stderr = ssh_client.exec_command("nproc")
-            output = stdout.read().decode().strip()
+            output = await OSMetricsCollector._exec(ssh_client, "nproc")
             if output:
                 info['cpu_cores'] = int(output)
         except Exception:
             pass
 
         try:
-            # 总内存 (MB)
-            stdin, stdout, stderr = ssh_client.exec_command(
+            output = await OSMetricsCollector._exec(
+                ssh_client,
                 "free -m | grep Mem | awk '{print $2}'"
             )
-            output = stdout.read().decode().strip()
             if output:
                 info['total_memory_mb'] = int(output)
         except Exception:
             pass
 
         try:
-            # 系统运行时间
-            stdin, stdout, stderr = ssh_client.exec_command("uptime -s")
-            output = stdout.read().decode().strip()
+            output = await OSMetricsCollector._exec(ssh_client, "uptime -s")
             if output:
                 info['boot_time'] = output
         except Exception:
@@ -235,33 +237,30 @@ class OSMetricsCollector:
         metrics = {}
 
         try:
-            # CPU 使用率
-            stdin, stdout, stderr = ssh_client.exec_command(
+            output = await OSMetricsCollector._exec(
+                ssh_client,
                 'powershell "Get-Counter \'\\Processor(_Total)\\% Processor Time\' | Select-Object -ExpandProperty CounterSamples | Select-Object -ExpandProperty CookedValue"'
             )
-            output = stdout.read().decode().strip()
             if output:
                 metrics['cpu_usage'] = round(float(output), 2)
         except Exception:
             pass
 
         try:
-            # 内存使用率
-            stdin, stdout, stderr = ssh_client.exec_command(
+            output = await OSMetricsCollector._exec(
+                ssh_client,
                 'powershell "$os = Get-WmiObject Win32_OperatingSystem; [math]::Round((($os.TotalVisibleMemorySize - $os.FreePhysicalMemory) / $os.TotalVisibleMemorySize) * 100, 2)"'
             )
-            output = stdout.read().decode().strip()
             if output:
                 metrics['memory_usage'] = round(float(output), 2)
         except Exception:
             pass
 
         try:
-            # 磁盘使用率
-            stdin, stdout, stderr = ssh_client.exec_command(
+            output = await OSMetricsCollector._exec(
+                ssh_client,
                 'powershell "Get-PSDrive C | Select-Object @{Name=\'UsedPercent\';Expression={[math]::Round(($_.Used / ($_.Used + $_.Free)) * 100, 2)}} | Select-Object -ExpandProperty UsedPercent"'
             )
-            output = stdout.read().decode().strip()
             if output:
                 metrics['disk_usage'] = round(float(output), 2)
         except Exception:

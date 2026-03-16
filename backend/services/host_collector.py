@@ -47,20 +47,21 @@ async def _collect_host_metrics(db: AsyncSession, host: Host):
             private_key=private_key
         )
 
-        # Execute commands to get metrics
+        # Execute commands to get metrics (SSHService.execute_multi is blocking, run in executor)
         loop = asyncio.get_event_loop()
-        commands = {
-            "cpu": "top -bn1 | grep 'Cpu(s)' | awk '{print $2}' | cut -d'%' -f1",
-            "memory": "free | grep Mem | awk '{print ($3/$2) * 100.0}'",
-            "disk": "df -h / | tail -1 | awk '{print $5}' | cut -d'%' -f1"
-        }
+        commands = [
+            "top -bn1 | grep 'Cpu(s)' | awk '{print $2}' | cut -d'%' -f1",
+            "free | grep Mem | awk '{print ($3/$2) * 100.0}'",
+            "df -h / | tail -1 | awk '{print $5}' | cut -d'%' -f1"
+        ]
 
-        results = await loop.run_in_executor(None, ssh.execute_multi, list(commands.values()))
+        results = await loop.run_in_executor(None, ssh.execute_multi, commands)
 
         # Parse results
-        cpu_usage = float(list(results.values())[0].strip() or 0)
-        memory_usage = float(list(results.values())[1].strip() or 0)
-        disk_usage = float(list(results.values())[2].strip() or 0)
+        values = list(results.values())
+        cpu_usage = float(values[0].strip() or 0)
+        memory_usage = float(values[1].strip() or 0)
+        disk_usage = float(values[2].strip() or 0)
 
         # Save to host_metrics table
         metric = HostMetric(

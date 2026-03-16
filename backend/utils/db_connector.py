@@ -2,6 +2,7 @@
 Utility functions for skill execution
 """
 from typing import Dict, Any
+import logging
 from backend.models.datasource import Datasource
 from backend.services.mysql_service import MySQLConnector
 from backend.services.postgres_service import PostgreSQLConnector
@@ -14,6 +15,8 @@ from backend.services.oceanbase_service import OceanBaseConnector
 from backend.services.opengauss_service import OpenGaussConnector
 from backend.services.dm_service import DMConnector
 from backend.utils.encryption import decrypt_value
+
+logger = logging.getLogger(__name__)
 
 
 async def execute_query(datasource: Datasource, query: str, allow_write: bool = False) -> Dict[str, Any]:
@@ -135,5 +138,6 @@ async def execute_query(datasource: Datasource, query: str, allow_write: bool = 
         return result
 
     except Exception as e:
+        logger.error(f"Failed to execute query on datasource {datasource.id} ({datasource.name}): {e}", exc_info=True)
         return {"success": False, "error": str(e)}
 

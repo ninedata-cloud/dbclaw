@@ -21,12 +21,12 @@ const InspectionPage = {
                 <div class="filters" style="margin: 20px 0; display: flex; gap: 10px; flex-wrap: wrap; align-items: end;">
                     <div>
                         <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">数据源</label>
-                        <select id="filterDatasource" class="form-select" style="padding: 8px; border-radius: 4px; min-width: 180px;">
+                        <select id="filterDatasource" class="form-select" style="padding: 8px; border-radius: 4px; min-width: 360px;">
                             <option value="">所有数据源</option>
                         </select>
                     </div>
                     <div>
-                        <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">状态</label>
+                        <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">报告状态</label>
                         <select id="filterStatus" class="form-select" style="padding: 8px; border-radius: 4px;">
                             <option value="">所有状态</option>
                             <option value="completed">已完成</option>
@@ -120,6 +120,15 @@ const InspectionPage = {
 
         const container = DOM.$('#reports');
 
+        // If container doesn't exist (user navigated away), stop polling
+        if (!container) {
+            if (this.pollInterval) {
+                clearInterval(this.pollInterval);
+                this.pollInterval = null;
+            }
+            return;
+        }
+
         // Show loading indicator only on initial load or filter change
         if (!this.pollInterval || container.innerHTML === '') {
             container.innerHTML = '<div style="text-align:center;padding:40px;color:#666;"><div class="spinner"></div><p style="margin-top:10px;">加载中...</p></div>';
@@ -142,7 +151,7 @@ const InspectionPage = {
                         <tr>
                             <th>数据源</th>
                             <th>触发类型</th>
-                            <th>状态</th>
+                            <th>报告状态</th>
                             <th>标题</th>
                             <th>创建时间</th>
                             <th>原因</th>

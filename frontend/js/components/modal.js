@@ -42,10 +42,6 @@ const Modal = {
 
         DOM.show(overlay);
         DOM.createIcons();
-
-        overlay.onclick = (e) => {
-            if (e.target === overlay) this.hide();
-        };
     },
 
     hide() {

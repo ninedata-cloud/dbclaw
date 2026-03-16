@@ -123,12 +123,15 @@ class SkillRegistry:
         return list(skills)
 
     async def search_skills(self, query: str) -> List[Skill]:
-        """Search skills by name, description, or tags"""
+        """Search skills by id, name, description, tags, or code (case-insensitive)"""
         result = await self.db.execute(
             select(Skill).where(
                 or_(
+                    Skill.id.ilike(f"%{query}%"),
                     Skill.name.ilike(f"%{query}%"),
                     Skill.description.ilike(f"%{query}%"),
+                    Skill.tags.like(f'%"{query}"%'),  # JSON array contains (case-sensitive for JSON)
+                    Skill.code.ilike(f"%{query}%"),
                 )
             )
         )

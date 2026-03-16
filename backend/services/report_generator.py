@@ -354,13 +354,20 @@ class ReportGenerator:
         await self.db.flush()
 
         try:
+            # Select appropriate system prompt based on trigger type
+            if trigger.trigger_type == "connection_failure":
+                from backend.agent.prompts import CONNECTION_FAILURE_DIAGNOSIS_PROMPT
+                system_prompt = CONNECTION_FAILURE_DIAGNOSIS_PROMPT
+            else:
+                system_prompt = REPORT_GENERATION_PROMPT
+
             # Generate AI report
             content_md, skill_executions = await generate_report_with_skills(
                 datasource_id=datasource.id,
                 datasource_name=datasource.name,
                 datasource_type=datasource.db_type,
                 trigger_reason=trigger.trigger_reason or "Inspection requested",
-                system_prompt=REPORT_GENERATION_PROMPT,
+                system_prompt=system_prompt,
                 db=self.db,
                 model_id=config.ai_model_id if config else None,
                 timeout_seconds=300

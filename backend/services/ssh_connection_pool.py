@@ -99,20 +99,25 @@ class SSHConnectionPool:
             if not host:
                 logger.warning(f"Host {host_id} not found")
                 return None
-            
+
             # 创建SSH客户端
             ssh_client = paramiko.SSHClient()
             ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            
-            # 连接
+
+            # 在线程池中执行阻塞的 SSH 连接，避免阻塞事件循环
+            loop = asyncio.get_event_loop()
+
             if host.auth_type == 'password':
                 password = decrypt_value(host.password_encrypted) if host.password_encrypted else None
-                ssh_client.connect(
-                    hostname=host.host,
-                    port=host.port,
-                    username=host.username,
-                    password=password,
-                    timeout=10
+                await loop.run_in_executor(
+                    None,
+                    lambda: ssh_client.connect(
+                        hostname=host.host,
+                        port=host.port,
+                        username=host.username,
+                        password=password,
+                        timeout=10
+                    )
                 )
             else:
                 # 密钥认证
@@ -121,27 +126,30 @@ class SSHConnectionPool:
                     from io import StringIO
                     key_file = StringIO(private_key_str)
                     private_key = paramiko.RSAKey.from_private_key(key_file)
-                    ssh_client.connect(
-                        hostname=host.host,
-                        port=host.port,
-                        username=host.username,
-                        pkey=private_key,
-                        timeout=10
+                    await loop.run_in_executor(
+                        None,
+                        lambda: ssh_client.connect(
+                            hostname=host.host,
+                            port=host.port,
+                            username=host.username,
+                            pkey=private_key,
+                            timeout=10
+                        )
                     )
                 else:
                     logger.warning(f"No private key found for host {host_id}")
                     return None
-            
+
             conn = SSHConnection(
                 client=ssh_client,
                 host_id=host_id,
                 last_used=time.time(),
                 is_healthy=True
             )
-            
+
             logger.info(f"Created SSH connection for host {host_id} ({host.host}:{host.port})")
             return conn
-            
+
         except Exception as e:
             logger.error(f"Failed to create SSH connection for host {host_id}: {e}")
             return None
@@ -152,9 +160,6 @@ class SSHConnectionPool:
             transport = conn.client.get_transport()
             if transport is None or not transport.is_active():
                 return False
-            
-            # 发送简单命令测试连接
-            conn.client.exec_command('echo ping', timeout=5)
             return True
         except Exception as e:
             logger.debug(f"Health check failed for host {conn.host_id}: {e}")

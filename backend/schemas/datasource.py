@@ -51,6 +51,16 @@ class DatasourceResponse(BaseModel):
         from_attributes = True
 
 
+class DatasourceTestRequest(BaseModel):
+    datasource_id: Optional[int] = None  # If provided, use saved password when password is None
+    db_type: str = Field(..., pattern="^(mysql|postgresql|mongodb|redis|sqlserver|oracle|tidb|oceanbase|opengauss|dm)$")
+    host: str = Field(..., min_length=1)
+    port: int = Field(..., gt=0, lt=65536)
+    username: Optional[str] = None
+    password: Optional[str] = None
+    database: Optional[str] = None
+
+
 class DatasourceTestResult(BaseModel):
     success: bool
     message: str

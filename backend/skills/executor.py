@@ -4,11 +4,14 @@ Skill executor - runs skills in a sandboxed environment
 import asyncio
 import time
 import json
+import logging
 from decimal import Decimal
 from typing import Dict, Any
 from backend.skills.models import Skill
 from backend.skills.context import SkillContext
 from backend.skills.validator import SkillValidator
+
+logger = logging.getLogger(__name__)
 
 
 class SkillExecutor:
@@ -81,6 +84,7 @@ class SkillExecutor:
         except asyncio.TimeoutError:
             execution_time_ms = int((time.time() - start_time) * 1000)
             error = f"Skill execution timed out after {timeout}s"
+            logger.error(f"Skill {skill.id} ({skill.name}) timed out after {timeout}s with params: {params}")
             await self._log_execution(
                 skill, params, None, error, execution_time_ms, context
             )
@@ -89,6 +93,8 @@ class SkillExecutor:
         except Exception as e:
             execution_time_ms = int((time.time() - start_time) * 1000)
             error = str(e)
+            logger.error(f"Skill {skill.id} ({skill.name}) failed: {e}", exc_info=True)
+            logger.error(f"Skill params: {params}")
             await self._log_execution(
                 skill, params, None, error, execution_time_ms, context
             )

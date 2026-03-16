@@ -2,7 +2,7 @@
 (function() {
     // Register routes
     Router.register('login', () => LoginPage.render());
-    Router.register('dashboard', () => { DashboardPage.render(); });
+    Router.register('dashboard', () => { DashboardPage.render(); return () => DashboardPage._stopTimer(); });
     Router.register('datasources', () => { DatasourcesPage.render(); });
     Router.register('hosts', () => { HostsPage.render(); });
     Router.register('monitor', () => MonitorPage.render());
@@ -14,6 +14,7 @@
     Router.register('system-configs', () => SystemConfigsPage.render());
     Router.register('users', () => UsersPage.render());
     Router.register('inspection', () => InspectionPage.render());
+    Router.register('alerts', () => AlertsPage.init());
 
     // Check auth
     const token = localStorage.getItem('auth_token');

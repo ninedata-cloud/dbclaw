@@ -1,19 +1,21 @@
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy import select
+from sqlalchemy import select, and_, desc
 
 from backend.database import async_session
 from backend.models.datasource import Datasource
 from backend.models.metric_snapshot import MetricSnapshot
+from backend.models.inspection_trigger import InspectionTrigger
 from backend.services.db_connector import get_connector
 from backend.utils.encryption import decrypt_value
 from backend.services.threshold_checker import ThresholdChecker
 from backend.utils.datetime_helper import now
+from backend.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -98,9 +100,11 @@ async def collect_metrics_for_connection(datasource_id: int):
 
                 try:
                     status = await connector.get_status()
+                    connection_failed = False
                 except Exception as e:
                     logger.warning(f"Failed to collect metrics for datasource {datasource_id}: {e}")
-                    status = {"error": str(e)}
+                    status = {"error": str(e), "connection_failed": True}
+                    connection_failed = True
 
                 # 标准化指标
                 from backend.services.metric_normalizer import MetricNormalizer
@@ -122,6 +126,10 @@ async def collect_metrics_for_connection(datasource_id: int):
                 )
                 db.add(snapshot)
                 await db.commit()
+
+                # Handle connection failure - create alert and trigger diagnosis
+                if connection_failed:
+                    await _handle_connection_failure(db, datasource_id, datasource, status.get("error", "Unknown error"))
 
                 # Check thresholds and trigger inspection if needed
                 await _check_thresholds_and_trigger(db, datasource_id, normalized_status)
@@ -169,12 +177,33 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
             threshold_rules=config.threshold_rules
         )
 
-        # Trigger inspection for each violation
+        # Trigger inspection and create alert for each violation
         for violation in violations:
+            metric_name = violation['metric_name']
             reason = (
-                f"{violation['metric_name']}={violation['current_value']:.2f} > "
+                f"{metric_name}={violation['current_value']:.2f} > "
                 f"{violation['threshold']} for {violation['violation_duration']:.0f}s"
             )
+
+            # Check if there's a recent anomaly trigger for the same metric
+            # to avoid duplicate triggers for ongoing issues
+            from backend.services.config_service import get_config as _get_config
+            dedup_minutes = await _get_config(db, "inspection_dedup_window_minutes", default=get_settings().inspection_dedup_window_minutes)
+            recent_trigger = await db.execute(
+                select(InspectionTrigger).where(
+                    and_(
+                        InspectionTrigger.datasource_id == datasource_id,
+                        InspectionTrigger.trigger_type == "anomaly",
+                        InspectionTrigger.trigger_reason.like(f"{metric_name}=%"),
+                        InspectionTrigger.triggered_at >= now() - timedelta(minutes=dedup_minutes)
+                    )
+                ).order_by(desc(InspectionTrigger.triggered_at)).limit(1)
+            )
+            existing_trigger = recent_trigger.scalar_one_or_none()
+
+            if existing_trigger:
+                logger.debug(f"Skipping duplicate anomaly trigger for datasource {datasource_id} metric {metric_name} - recent trigger {existing_trigger.id} exists")
+                continue
 
             logger.info(f"Triggering anomaly inspection for datasource {datasource_id}: {reason}")
 
@@ -194,8 +223,92 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
                 metric_snapshot=metric_snapshot
             )
 
+            # Create alert for the violation
+            from backend.services.alert_service import AlertService
+
+            # Calculate severity based on percentage over threshold
+            percent_over = ((violation['current_value'] - violation['threshold']) / violation['threshold']) * 100
+            severity = AlertService.calculate_severity(percent_over)
+
+            await AlertService.create_alert(
+                db=db,
+                datasource_id=datasource_id,
+                alert_type="threshold_violation",
+                severity=severity,
+                metric_name=violation['metric_name'],
+                metric_value=violation['current_value'],
+                threshold_value=violation['threshold'],
+                trigger_reason=reason
+            )
+
     except Exception as e:
         logger.error(f"Error checking thresholds for datasource {datasource_id}: {e}", exc_info=True)
+
+
+async def _handle_connection_failure(db, datasource_id: int, datasource, error_message: str):
+    """Handle database/host connection failure - create alert and trigger diagnosis"""
+    global _inspection_service
+
+    try:
+        from backend.services.alert_service import AlertService
+
+        # Check if there's a recent unprocessed connection_failure trigger
+        # to avoid duplicate triggers for the same ongoing issue
+        from backend.services.config_service import get_config as _get_config
+        dedup_minutes = await _get_config(db, "inspection_dedup_window_minutes", default=get_settings().inspection_dedup_window_minutes)
+        recent_trigger = await db.execute(
+            select(InspectionTrigger).where(
+                and_(
+                    InspectionTrigger.datasource_id == datasource_id,
+                    InspectionTrigger.trigger_type == "connection_failure",
+                    InspectionTrigger.triggered_at >= now() - timedelta(minutes=dedup_minutes)
+                )
+            ).order_by(desc(InspectionTrigger.triggered_at)).limit(1)
+        )
+        existing_trigger = recent_trigger.scalar_one_or_none()
+
+        if existing_trigger:
+            logger.debug(f"Skipping duplicate connection_failure trigger for datasource {datasource_id} - recent trigger {existing_trigger.id} exists")
+            return
+
+        # Create critical alert for connection failure
+        alert = await AlertService.create_alert(
+            db=db,
+            datasource_id=datasource_id,
+            alert_type="system_error",
+            severity="critical",
+            metric_name="connection_status",
+            metric_value=0.0,  # 0 = failed
+            threshold_value=1.0,  # 1 = expected success
+            trigger_reason=f"Connection failed: {error_message}"
+        )
+
+        logger.error(f"Connection failure alert created for datasource {datasource_id}: {alert.id}")
+
+        # Trigger AI diagnosis if inspection service is available
+        if _inspection_service:
+            reason = f"Database connection failed: {datasource.name} ({datasource.db_type})"
+            metric_snapshot = {
+                "error": error_message,
+                "datasource_name": datasource.name,
+                "db_type": datasource.db_type,
+                "host": datasource.host,
+                "port": datasource.port,
+                "timestamp": now().isoformat()
+            }
+
+            await _inspection_service.trigger_inspection(
+                db=db,
+                datasource_id=datasource_id,
+                trigger_type="connection_failure",
+                reason=reason,
+                metric_snapshot=metric_snapshot
+            )
+
+            logger.info(f"Triggered AI diagnosis for connection failure: datasource {datasource_id}")
+
+    except Exception as e:
+        logger.error(f"Error handling connection failure for datasource {datasource_id}: {e}", exc_info=True)
 
 
 async def collect_all_metrics():

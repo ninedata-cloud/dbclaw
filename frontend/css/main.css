@@ -169,6 +169,7 @@ a:hover { color: var(--accent-blue-hover); }
 }
 
 .form-select { cursor: pointer; }
+.form-select.datasource-select { min-width: 400px; }
 .form-textarea { resize: vertical; min-height: 80px; font-family: var(--font-mono); }
 
 .form-row {
@@ -266,3 +267,11 @@ a:hover { color: var(--accent-blue-hover); }
 .text-muted { color: var(--text-muted); }
 .text-sm { font-size: 12px; }
 .font-mono { font-family: var(--font-mono); }
+
+/* === Health Status === */
+.health-status {
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}

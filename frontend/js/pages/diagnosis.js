@@ -17,7 +17,7 @@ const DiagnosisPage = {
 
         // Header with connection, model, KB selectors, and tool safety toggle
         const headerActions = DOM.el('div', { className: 'flex gap-8' });
-        const connSelect = DOM.el('select', { className: 'form-select', style: { minWidth: '200px' } });
+        const connSelect = DOM.el('select', { className: 'form-select', style: { minWidth: '400px' } });
         connSelect.appendChild(DOM.el('option', { value: '', textContent: '选择数据源...' }));
 
         try {

@@ -57,15 +57,30 @@ class SQLServerConnector(DBConnector):
                     "(SELECT cntr_value FROM sys.dm_os_performance_counters "
                     " WHERE counter_name = 'Buffer cache hit ratio') as buffer_cache_hit, "
                     "(SELECT cntr_value FROM sys.dm_os_performance_counters "
-                    " WHERE counter_name = 'Page life expectancy' AND object_name LIKE '%Buffer Manager%') as ple"
+                    " WHERE counter_name = 'Page life expectancy' AND object_name LIKE '%Buffer Manager%') as ple, "
+                    "(SELECT sqlserver_start_time FROM sys.dm_os_sys_info) as start_time"
                 )
                 row = cursor.fetchone()
+
+                # Calculate uptime
+                uptime = 0
+                boot_time = None
+                if row and row[5]:
+                    from datetime import datetime, timezone
+                    boot_time = row[5]
+                    if boot_time.tzinfo is None:
+                        boot_time = boot_time.replace(tzinfo=timezone.utc)
+                    now = datetime.now(timezone.utc)
+                    uptime = int((now - boot_time).total_seconds())
+
                 result = {
                     "user_sessions": row[0] if row else 0,
                     "active_requests": row[1] if row else 0,
                     "batch_requests_total": row[2] if row else 0,  # 累积值，需要计算增量
                     "buffer_cache_hit_ratio": row[3] if row else 0,
                     "page_life_expectancy": row[4] if row else 0,
+                    "uptime": uptime,
+                    "boot_time": boot_time.isoformat() if boot_time else None,
                 }
 
                 # OS metrics via DMV

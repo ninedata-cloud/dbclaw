@@ -56,10 +56,10 @@ class InspectionService:
                     schedule_interval=86400,  # daily
                     use_ai_analysis=True,
                     threshold_rules={
-                        "cpu_usage": {"threshold": 80, "duration": 60},
-                        "disk_usage": {"threshold": 80, "duration": 300},
-                        "memory_usage": {"threshold": 85, "duration": 60},
-                        "connections": {"threshold": 100, "duration": 120}
+                        "cpu_usage": {"threshold": 50, "duration": 60},
+                        "disk_usage": {"threshold": 80, "duration": 60},
+                        "memory_usage": {"threshold": 95, "duration": 60},
+                        "connections": {"threshold": 20, "duration": 60}
                     },
                     next_scheduled_at=get_now() + timedelta(seconds=86400)
                 )

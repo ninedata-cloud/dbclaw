@@ -2,14 +2,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
+import logging
 
 from backend.database import get_db
 from backend.models.datasource import Datasource
 from backend.schemas.datasource import (
-    DatasourceCreate, DatasourceUpdate, DatasourceResponse, DatasourceTestResult
+    DatasourceCreate, DatasourceUpdate, DatasourceResponse, DatasourceTestResult, DatasourceTestRequest
 )
 from backend.utils.encryption import encrypt_value, decrypt_value
 from backend.dependencies import get_current_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/datasources", tags=["datasources"], dependencies=[Depends(get_current_user)])
 
@@ -82,8 +85,39 @@ async def delete_datasource(datasource_id: int, db: AsyncSession = Depends(get_d
     return {"message": "Datasource deleted"}
 
 
+@router.post("/test", response_model=DatasourceTestResult)
+async def test_datasource_connection(data: DatasourceTestRequest, db: AsyncSession = Depends(get_db)):
+    """Test database connection with provided parameters (without saving to database)"""
+    try:
+        from backend.services.db_connector import get_connector
+
+        password = data.password
+
+        # If datasource_id is provided and password is None, use saved password
+        if data.datasource_id is not None and password is None:
+            result = await db.execute(select(Datasource).where(Datasource.id == data.datasource_id))
+            datasource = result.scalar_one_or_none()
+            if datasource and datasource.password_encrypted:
+                password = decrypt_value(datasource.password_encrypted)
+
+        connector = get_connector(
+            db_type=data.db_type,
+            host=data.host,
+            port=data.port,
+            username=data.username,
+            password=password,
+            database=data.database,
+        )
+        version = await connector.test_connection()
+        return DatasourceTestResult(success=True, message="Connection successful", version=version)
+    except Exception as e:
+        logger.error(f"Failed to test connection to {data.host}:{data.port}: {e}", exc_info=True)
+        return DatasourceTestResult(success=False, message=str(e))
+
+
 @router.post("/{datasource_id}/test", response_model=DatasourceTestResult)
 async def test_datasource(datasource_id: int, db: AsyncSession = Depends(get_db)):
+    """Test database connection using saved datasource configuration"""
     result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
     datasource = result.scalar_one_or_none()
     if not datasource:
@@ -103,4 +137,5 @@ async def test_datasource(datasource_id: int, db: AsyncSession = Depends(get_db)
         version = await connector.test_connection()
         return DatasourceTestResult(success=True, message="Connection successful", version=version)
     except Exception as e:
+        logger.error(f"Failed to test datasource {datasource_id} ({datasource.name}): {e}", exc_info=True)
         return DatasourceTestResult(success=False, message=str(e))

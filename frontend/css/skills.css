@@ -20,12 +20,47 @@
 }
 
 .skills-filters {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
     gap: 15px;
     margin-bottom: 20px;
     padding: 15px;
     background: var(--bg-secondary);
     border-radius: 8px;
+    align-items: center;
+}
+
+@media (max-width: 1024px) {
+    .skills-filters {
+        grid-template-columns: 1fr;
+    }
+}
+
+.skills-filters .search-box {
+    position: relative;
+    width: 100%;
+    display: flex;
+    align-items: center;
+}
+
+.skills-filters .search-box i {
+    position: absolute;
+    left: 12px;
+    color: var(--text-secondary);
+    width: 18px;
+    height: 18px;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.skills-filters .search-box input {
+    width: 100%;
+    padding: 8px 12px 8px 40px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 14px;
 }
 
 .skills-filters select {
@@ -217,4 +252,76 @@
 .skill-details ul li {
     padding: 8px 0;
     border-bottom: 1px solid var(--border-color);
+}
+
+/* Skill form styles */
+#create-skill-form .form-group,
+#edit-skill-form .form-group {
+    margin-bottom: 20px;
+}
+
+#create-skill-form label,
+#edit-skill-form label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+#create-skill-form .form-control,
+#edit-skill-form .form-control {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 14px;
+}
+
+#create-skill-form textarea.form-control,
+#edit-skill-form textarea.form-control {
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    resize: vertical;
+}
+
+#create-skill-form .form-text,
+#edit-skill-form .form-text {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+#permissions-checkboxes label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px;
+    cursor: pointer;
+    font-weight: normal;
+}
+
+#permissions-checkboxes input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+}
+
+#test-skill-form .form-group {
+    margin-bottom: 15px;
+}
+
+#test-result {
+    background: var(--bg-tertiary);
+    padding: 15px;
+    border-radius: 4px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+#test-result pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
 }

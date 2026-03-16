@@ -34,7 +34,7 @@ const MonitorPage = {
         const headerActions = DOM.el('div', { className: 'flex gap-8' });
 
         // Connection selector
-        const connSelect = DOM.el('select', { className: 'form-select', style: { minWidth: '200px' } });
+        const connSelect = DOM.el('select', { className: 'form-select', style: { minWidth: '400px' } });
         connSelect.appendChild(DOM.el('option', { value: '', textContent: '选择数据源...' }));
         for (const c of connections) {
             const opt = DOM.el('option', { value: c.id, textContent: `${c.name} (${c.db_type})` });
@@ -197,12 +197,12 @@ const MonitorPage = {
                 if (id === 'cpu_usage' || id === 'memory_usage' || id === 'disk_usage') {
                     config.options = { scales: { y: { max: 100, min: 0 } } };
                 }
-                // Multi-line charts keep their dual colors for clarity
+                // Multi-line charts with distinct colors for better differentiation
                 if (id === 'disk_io') {
                     config.data = {
                         datasets: [
                             { label: '读', borderColor: '#2f81f7', backgroundColor: 'rgba(47,129,247,0.1)', borderWidth: 1, data: [] },
-                            { label: '写', borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)', borderWidth: 1, data: [] }
+                            { label: '写', borderColor: '#f97316', backgroundColor: 'rgba(249,115,22,0.1)', borderWidth: 1, data: [] }
                         ]
                     };
                     config.options = {
@@ -213,8 +213,8 @@ const MonitorPage = {
                 } else if (id === 'network_io') {
                     config.data = {
                         datasets: [
-                            { label: '接收', borderColor: '#2f81f7', backgroundColor: 'rgba(47,129,247,0.1)', borderWidth: 1, data: [] },
-                            { label: '发送', borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)', borderWidth: 1, data: [] }
+                            { label: '接收', borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', borderWidth: 1, data: [] },
+                            { label: '发送', borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.1)', borderWidth: 1, data: [] }
                         ]
                     };
                     config.options = {

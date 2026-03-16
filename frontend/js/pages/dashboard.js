@@ -1,13 +1,19 @@
 /* Dashboard page */
 const DashboardPage = {
+    _timer: null,
+    _datasources: [],
+
     async render() {
         const content = DOM.$('#page-content');
-        Header.render('资源大盘');
+        Header.render('资源大盘', this._buildHeaderActions());
         content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
+
+        this._stopTimer();
 
         try {
             const datasources = await API.getDatasources();
             Store.set('datasources', datasources);
+            this._datasources = datasources;
             content.innerHTML = '';
 
             if (datasources.length === 0) {
@@ -50,33 +56,111 @@ const DashboardPage = {
                     </div>
                     <div class="type">${conn.host}:${conn.port}${conn.database ? ' / ' + conn.database : ''}</div>
                     <div class="metrics" id="dash-metrics-${conn.id}">
-                        <div class="metric-item"><span class="metric-label">状态</span><span class="metric-val">--</span></div>
-                        <div class="metric-item"><span class="metric-label">连接数</span><span class="metric-val">--</span></div>
+                        <div class="metric-item"><span class="metric-label">健康状态</span><span class="metric-val health-status" id="health-${conn.id}">--</span></div>
+                        <div class="metric-item"><span class="metric-label">活跃连接</span><span class="metric-val">--</span></div>
+                        <div class="metric-item"><span class="metric-label">CPU</span><span class="metric-val">--</span></div>
+                        <div class="metric-item"><span class="metric-label">QPS</span><span class="metric-val">--</span></div>
                     </div>
                 `;
                 grid.appendChild(card);
-
-                // Load latest metrics
-                this._loadConnMetrics(conn.id);
             }
             content.appendChild(grid);
             DOM.createIcons();
+
+            // Load metrics immediately then start auto-refresh
+            await this._refreshMetrics();
+            this._startTimer();
 
         } catch (err) {
             content.innerHTML = `<div class="empty-state"><h3>错误</h3><p>${err.message}</p></div>`;
         }
     },
 
+    _buildHeaderActions() {
+        const btn = DOM.el('button', {
+            className: 'btn btn-secondary',
+            title: '手工刷新',
+            onClick: () => this._onManualRefresh(btn)
+        });
+        btn.innerHTML = '<i data-lucide="refresh-cw"></i> 刷新';
+        return btn;
+    },
+
+    async _onManualRefresh(btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i data-lucide="refresh-cw"></i> 刷新中...';
+        DOM.createIcons();
+        await this._refreshMetrics();
+        btn.disabled = false;
+        btn.innerHTML = '<i data-lucide="refresh-cw"></i> 刷新';
+        DOM.createIcons();
+    },
+
+    async _refreshMetrics() {
+        const ids = this._datasources.map(c => c.id);
+        await Promise.all(ids.map(id => this._loadConnMetrics(id)));
+    },
+
+    _startTimer() {
+        this._stopTimer();
+        this._timer = setInterval(() => this._refreshMetrics(), 15000);
+    },
+
+    _stopTimer() {
+        if (this._timer) {
+            clearInterval(this._timer);
+            this._timer = null;
+        }
+    },
+
     async _loadConnMetrics(connId) {
         try {
+            // Load health status
+            const health = await API.getDatasourceHealth(connId);
+            const healthEl = DOM.$(`#health-${connId}`);
+            if (healthEl) {
+                let statusText = '未知';
+                let statusColor = 'var(--text-muted)';
+                let statusIcon = '';
+
+                if (health.status === 'healthy') {
+                    statusText = '健康';
+                    statusColor = 'var(--accent-green)';
+                    statusIcon = '✓';
+                } else if (health.status === 'critical') {
+                    statusText = '异常';
+                    statusColor = 'var(--accent-red)';
+                    statusIcon = '✗';
+                } else if (health.status === 'warning') {
+                    statusText = '警告';
+                    statusColor = 'var(--accent-orange)';
+                    statusIcon = '⚠';
+                } else {
+                    statusText = health.message || '未知';
+                    statusColor = 'var(--text-muted)';
+                }
+
+                healthEl.innerHTML = `<span style="color:${statusColor}">${statusIcon} ${statusText}</span>`;
+                healthEl.title = health.message || '';
+            }
+
+            // Load metrics
             const metric = await API.getLatestMetric(connId);
             const el = DOM.$(`#dash-metrics-${connId}`);
             if (!el || !metric) return;
             const data = metric.data || {};
             const active = data.connections_active || data.connected_clients || data.user_sessions || data.connections_current || 0;
+            const cpu = data.cpu_usage != null ? data.cpu_usage.toFixed(1) + '%' : '--';
+            const qps = data.qps != null ? data.qps.toFixed(1) : '--';
+
+            // Get health status HTML
+            const healthStatusHtml = healthEl ? healthEl.innerHTML : '<span style="color:var(--text-muted)">--</span>';
+
             el.innerHTML = `
-                <div class="metric-item"><span class="metric-label">状态</span><span class="metric-val" style="color:var(--accent-green)">在线</span></div>
+                <div class="metric-item"><span class="metric-label">健康状态</span><span class="metric-val health-status" id="health-${connId}">${healthStatusHtml}</span></div>
                 <div class="metric-item"><span class="metric-label">活跃连接</span><span class="metric-val">${active}</span></div>
+                <div class="metric-item"><span class="metric-label">CPU</span><span class="metric-val">${cpu}</span></div>
+                <div class="metric-item"><span class="metric-label">QPS</span><span class="metric-val">${qps}</span></div>
             `;
         } catch (e) {
             // Leave as --

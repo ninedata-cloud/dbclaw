@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
+import logging
 
 from backend.database import get_db
 from backend.models.host import Host
@@ -10,6 +11,8 @@ from backend.schemas.host import (
 )
 from backend.utils.encryption import encrypt_value, decrypt_value
 from backend.dependencies import get_current_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/hosts", tags=["hosts"], dependencies=[Depends(get_current_user)])
 
@@ -126,4 +129,5 @@ async def test_host(host_id: int, db: AsyncSession = Depends(get_db)):
         output = ssh.execute("echo 'SSH connection successful'")
         return SSHTestResult(success=True, message=output.strip())
     except Exception as e:
+        logger.error(f"Failed to test SSH host {host_id} ({host.name}): {e}", exc_info=True)
         return SSHTestResult(success=False, message=str(e))

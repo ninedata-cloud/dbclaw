@@ -29,6 +29,12 @@ const SkillsPage = {
                 </div>
 
                 <div class="skills-filters">
+                    <div class="search-box">
+                        <i data-lucide="search"></i>
+                        <input type="text" id="search-input" class="form-control"
+                               placeholder="Search by ID, name, description, tags, or code..."
+                               onkeyup="SkillsPage.handleSearch(event)">
+                    </div>
                     <select id="category-filter" onchange="SkillsPage.filterSkills()">
                         <option value="">All Categories</option>
                         ${categories.categories.map(cat => `<option value="${cat}">${cat}</option>`).join('')}
@@ -92,6 +98,11 @@ const SkillsPage = {
                     <button class="btn btn-sm" onclick="SkillsPage.testSkill('${skill.id}')">
                         <i data-lucide="play"></i> Test
                     </button>
+                    ${!skill.is_builtin ? `
+                        <button class="btn btn-sm" onclick="SkillsPage.editSkill('${skill.id}')">
+                            <i data-lucide="edit"></i> Edit
+                        </button>
+                    ` : ''}
                     <button class="btn btn-sm" onclick="SkillsPage.exportSkill('${skill.id}')">
                         <i data-lucide="download"></i> Export
                     </button>
@@ -127,6 +138,33 @@ const SkillsPage = {
             DOM.createIcons();
         } catch (error) {
             Toast.error('Failed to filter skills');
+        }
+    },
+
+    handleSearch(event) {
+        // Debounce search to avoid too many API calls
+        clearTimeout(this.searchTimeout);
+        this.searchTimeout = setTimeout(() => {
+            this.performSearch();
+        }, 300);
+    },
+
+    async performSearch() {
+        const searchQuery = document.getElementById('search-input').value.trim();
+
+        if (!searchQuery) {
+            // If search is empty, reload with filters
+            this.filterSkills();
+            return;
+        }
+
+        try {
+            const skills = await API.get(`/api/skills/search?q=${encodeURIComponent(searchQuery)}`);
+            document.getElementById('skills-grid').innerHTML =
+                skills.map(skill => SkillsPage.renderSkillCard(skill)).join('');
+            DOM.createIcons();
+        } catch (error) {
+            Toast.error('Search failed');
         }
     },
 
@@ -192,7 +230,7 @@ const SkillsPage = {
                     inputHtml = `
                         <div class="form-group">
                             <label>${p.name} ${p.required ? '*' : ''}</label>
-                            <select id="param-${p.name}" class="form-control">
+                            <select id="param-${p.name}" class="form-control" style="min-width: 400px;">
                                 <option value="">-- Select Datasource --</option>
                                 ${options}
                             </select>
@@ -386,8 +424,267 @@ const SkillsPage = {
         };
     },
 
-    createSkill() {
-        Toast.info('Skill creation UI coming soon. Use import for now.');
+    async createSkill() {
+        Modal.show({
+            title: 'Create New Skill',
+            content: `
+                <form id="create-skill-form">
+                    <div class="form-group">
+                        <label>Skill ID *</label>
+                        <input type="text" id="skill-id" class="form-control"
+                               pattern="[a-z0-9_]+"
+                               placeholder="e.g., my_custom_skill" required>
+                        <small class="form-text">Lowercase letters, numbers, and underscores only</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Name *</label>
+                        <input type="text" id="skill-name" class="form-control"
+                               placeholder="e.g., My Custom Skill" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Version *</label>
+                        <input type="text" id="skill-version" class="form-control"
+                               pattern="\\d+\\.\\d+\\.\\d+"
+                               placeholder="e.g., 1.0.0" value="1.0.0" required>
+                        <small class="form-text">Semantic versioning (major.minor.patch)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Category</label>
+                        <input type="text" id="skill-category" class="form-control"
+                               placeholder="e.g., diagnostics, monitoring">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Description *</label>
+                        <textarea id="skill-description" class="form-control" rows="3"
+                                  placeholder="Describe what this skill does" required></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Tags</label>
+                        <input type="text" id="skill-tags" class="form-control"
+                               placeholder="e.g., mysql, performance, slow-query (comma-separated)">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Permissions</label>
+                        <div id="permissions-checkboxes" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+                            <label><input type="checkbox" value="execute_query"> execute_query</label>
+                            <label><input type="checkbox" value="execute_command"> execute_command</label>
+                            <label><input type="checkbox" value="read_logs"> read_logs</label>
+                            <label><input type="checkbox" value="modify_config"> modify_config</label>
+                            <label><input type="checkbox" value="access_kb"> access_kb</label>
+                            <label><input type="checkbox" value="read_datasource"> read_datasource</label>
+                            <label><input type="checkbox" value="execute_any_sql"> execute_any_sql (危险)</label>
+                            <label><input type="checkbox" value="execute_any_os_command"> execute_any_os_command (危险)</label>
+                            <label><input type="checkbox" value="access_external_api"> access_external_api</label>
+                            <label><input type="checkbox" value="admin"> admin</label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Timeout (seconds)</label>
+                        <input type="number" id="skill-timeout" class="form-control"
+                               min="1" max="300" placeholder="Default: 30">
+                        <small class="form-text">Maximum execution time (1-300 seconds)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Parameters (JSON)</label>
+                        <textarea id="skill-parameters" class="form-control" rows="6"
+                                  placeholder='[{"name": "param1", "type": "string", "required": true, "description": "Parameter description"}]'>[]</textarea>
+                        <small class="form-text">Array of parameter definitions</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Code *</label>
+                        <textarea id="skill-code" class="form-control" rows="12"
+                                  placeholder="async def execute(context, params):\n    # Your code here\n    return {'result': 'success'}" required></textarea>
+                        <small class="form-text">Python async function code</small>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; margin-top: 20px;">
+                        <button type="submit" class="btn btn-primary">Create Skill</button>
+                        <button type="button" class="btn btn-secondary" onclick="Modal.hide()">Cancel</button>
+                    </div>
+                </form>
+            `,
+            size: 'large'
+        });
+
+        document.getElementById('create-skill-form').onsubmit = async (e) => {
+            e.preventDefault();
+
+            try {
+                // Collect form data
+                const id = document.getElementById('skill-id').value.trim();
+                const name = document.getElementById('skill-name').value.trim();
+                const version = document.getElementById('skill-version').value.trim();
+                const category = document.getElementById('skill-category').value.trim() || null;
+                const description = document.getElementById('skill-description').value.trim();
+                const tagsInput = document.getElementById('skill-tags').value.trim();
+                const tags = tagsInput ? tagsInput.split(',').map(t => t.trim()).filter(t => t) : [];
+                const timeout = document.getElementById('skill-timeout').value;
+                const code = document.getElementById('skill-code').value.trim();
+
+                // Collect permissions
+                const permissions = Array.from(document.querySelectorAll('#permissions-checkboxes input:checked'))
+                    .map(cb => cb.value);
+
+                // Parse parameters JSON
+                let parameters = [];
+                const parametersInput = document.getElementById('skill-parameters').value.trim();
+                if (parametersInput) {
+                    try {
+                        parameters = JSON.parse(parametersInput);
+                        if (!Array.isArray(parameters)) {
+                            throw new Error('Parameters must be an array');
+                        }
+                    } catch (e) {
+                        Toast.error('Invalid parameters JSON: ' + e.message);
+                        return;
+                    }
+                }
+
+                // Build skill definition
+                const skillDef = {
+                    id,
+                    name,
+                    version,
+                    category,
+                    description,
+                    tags,
+                    parameters,
+                    dependencies: [],
+                    permissions,
+                    code
+                };
+
+                if (timeout) {
+                    skillDef.timeout = parseInt(timeout);
+                }
+
+                // Submit to API
+                await API.post('/api/skills', {
+                    skill: skillDef,
+                    is_enabled: true
+                });
+
+                Toast.success('Skill created successfully');
+                Modal.hide();
+                SkillsPage.loadSkills();
+            } catch (error) {
+                Toast.error('Failed to create skill: ' + error.message);
+            }
+        };
+    },
+
+    async editSkill(skillId) {
+        try {
+            const skill = await API.get(`/api/skills/${skillId}`);
+
+            Modal.show({
+                title: `Edit Skill: ${skill.name}`,
+                content: `
+                    <form id="edit-skill-form">
+                        <div class="form-group">
+                            <label>Skill ID</label>
+                            <input type="text" class="form-control" value="${skill.id}" disabled>
+                            <small class="form-text">ID cannot be changed</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Name *</label>
+                            <input type="text" id="edit-skill-name" class="form-control"
+                                   value="${skill.name}" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Description *</label>
+                            <textarea id="edit-skill-description" class="form-control" rows="3" required>${skill.description}</textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Tags</label>
+                            <input type="text" id="edit-skill-tags" class="form-control"
+                                   value="${(skill.tags || []).join(', ')}"
+                                   placeholder="comma-separated">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Parameters (JSON)</label>
+                            <textarea id="edit-skill-parameters" class="form-control" rows="6">${JSON.stringify(skill.parameters || [], null, 2)}</textarea>
+                            <small class="form-text">Array of parameter definitions</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Code *</label>
+                            <textarea id="edit-skill-code" class="form-control" rows="12" required>${skill.code}</textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="edit-skill-enabled" ${skill.is_enabled ? 'checked' : ''}>
+                                Enabled
+                            </label>
+                        </div>
+
+                        <div style="display: flex; gap: 10px; margin-top: 20px;">
+                            <button type="submit" class="btn btn-primary">Save Changes</button>
+                            <button type="button" class="btn btn-secondary" onclick="Modal.hide()">Cancel</button>
+                        </div>
+                    </form>
+                `,
+                size: 'large'
+            });
+
+            document.getElementById('edit-skill-form').onsubmit = async (e) => {
+                e.preventDefault();
+
+                try {
+                    const name = document.getElementById('edit-skill-name').value.trim();
+                    const description = document.getElementById('edit-skill-description').value.trim();
+                    const tagsInput = document.getElementById('edit-skill-tags').value.trim();
+                    const tags = tagsInput ? tagsInput.split(',').map(t => t.trim()).filter(t => t) : [];
+                    const code = document.getElementById('edit-skill-code').value.trim();
+                    const is_enabled = document.getElementById('edit-skill-enabled').checked;
+
+                    let parameters = skill.parameters || [];
+                    const parametersInput = document.getElementById('edit-skill-parameters').value.trim();
+                    if (parametersInput) {
+                        try {
+                            parameters = JSON.parse(parametersInput);
+                            if (!Array.isArray(parameters)) {
+                                throw new Error('Parameters must be an array');
+                            }
+                        } catch (e) {
+                            Toast.error('Invalid parameters JSON: ' + e.message);
+                            return;
+                        }
+                    }
+
+                    await API.put(`/api/skills/${skillId}`, {
+                        name,
+                        description,
+                        tags,
+                        parameters,
+                        code,
+                        is_enabled
+                    });
+
+                    Toast.success('Skill updated successfully');
+                    Modal.hide();
+                    SkillsPage.loadSkills();
+                } catch (error) {
+                    Toast.error('Failed to update skill: ' + error.message);
+                }
+            };
+        } catch (error) {
+            Toast.error('Failed to load skill: ' + error.message);
+        }
     }
 };
 

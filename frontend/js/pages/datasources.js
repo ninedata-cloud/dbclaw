@@ -5,7 +5,7 @@ const DatasourcesPage = {
 
     async render() {
         console.log('DatasourcesPage: Using NEW table layout');
-        Header.render('数据源', DOM.el('button', {
+        Header.render('数据源管理', DOM.el('button', {
             className: 'btn btn-primary',
             innerHTML: '<i data-lucide="plus"></i> New Datasource',
             onClick: () => DatasourceForm.show(null, () => this.render())
@@ -254,11 +254,11 @@ const DatasourcesPage = {
 
             const diskEnabled = !hasCustomExpression && !!thresholdRules.disk_usage;
             const diskThreshold = thresholdRules.disk_usage?.threshold || 80;
-            const diskDuration = thresholdRules.disk_usage?.duration || 300;
+            const diskDuration = thresholdRules.disk_usage?.duration || 60;
 
             const connectionsEnabled = !hasCustomExpression && !!thresholdRules.connections;
             const connectionsThreshold = thresholdRules.connections?.threshold || 20;
-            const connectionsDuration = thresholdRules.connections?.duration || 120;
+            const connectionsDuration = thresholdRules.connections?.duration || 60;
 
             Modal.show({
                 title: '巡检配置',
