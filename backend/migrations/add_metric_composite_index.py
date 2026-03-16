@@ -14,10 +14,11 @@ async def add_composite_index():
     """Add composite index on (datasource_id, metric_type, collected_at) for faster queries"""
     async with async_session() as db:
         try:
-            # Check if index already exists
+            # Check if index already exists using pg_indexes
             result = await db.execute(text("""
-                SELECT name FROM sqlite_master 
-                WHERE type='index' AND name='idx_metric_snapshots_composite'
+                SELECT indexname FROM pg_indexes
+                WHERE tablename = 'metric_snapshots'
+                AND indexname = 'idx_metric_snapshots_composite'
             """))
             if result.scalar_one_or_none():
                 logger.info("Composite index already exists, skipping")
@@ -25,7 +26,7 @@ async def add_composite_index():
 
             # Create composite index
             await db.execute(text("""
-                CREATE INDEX idx_metric_snapshots_composite 
+                CREATE INDEX idx_metric_snapshots_composite
                 ON metric_snapshots(datasource_id, metric_type, collected_at DESC)
             """))
             await db.commit()

@@ -5,46 +5,24 @@ from sqlalchemy import text
 def migrate(connection):
     """Remove anomaly fields from inspection_configs table"""
     try:
-        # SQLite doesn't support DROP COLUMN directly, need to recreate table
-        connection.execute(text("""
-            CREATE TABLE inspection_configs_new (
-                id INTEGER NOT NULL,
-                datasource_id INTEGER NOT NULL,
-                enabled BOOLEAN NOT NULL,
-                schedule_interval INTEGER NOT NULL,
-                last_scheduled_at DATETIME,
-                next_scheduled_at DATETIME,
-                use_ai_analysis BOOLEAN NOT NULL,
-                ai_model_id INTEGER,
-                kb_ids JSON NOT NULL,
-                threshold_rules JSON NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                PRIMARY KEY (id),
-                UNIQUE (datasource_id),
-                FOREIGN KEY(datasource_id) REFERENCES datasources (id)
-            )
+        # PostgreSQL supports DROP COLUMN directly
+        cols_to_drop = ['anomaly_check_enabled', 'anomaly_diagnosis_interval', 'last_anomaly_diagnosis_at']
+        for col in cols_to_drop:
+            result = connection.execute(text("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'inspection_configs' AND column_name = :col
+            """), {"col": col})
+            if result.fetchone():
+                connection.execute(text(f"ALTER TABLE inspection_configs DROP COLUMN {col}"))
+
+        # Recreate index if needed
+        result = connection.execute(text("""
+            SELECT indexname FROM pg_indexes
+            WHERE tablename = 'inspection_configs' AND indexname = 'ix_inspection_configs_id'
         """))
+        if not result.fetchone():
+            connection.execute(text("CREATE INDEX ix_inspection_configs_id ON inspection_configs (id)"))
 
-        # Copy data from old table to new table (excluding anomaly fields)
-        connection.execute(text("""
-            INSERT INTO inspection_configs_new
-            (id, datasource_id, enabled, schedule_interval, last_scheduled_at, next_scheduled_at,
-             use_ai_analysis, ai_model_id, kb_ids, threshold_rules, created_at, updated_at)
-            SELECT id, datasource_id, enabled, schedule_interval, last_scheduled_at, next_scheduled_at,
-                   use_ai_analysis, ai_model_id, kb_ids, threshold_rules, created_at, updated_at
-            FROM inspection_configs
-        """))
-
-        # Drop old table
-        connection.execute(text("DROP TABLE inspection_configs"))
-
-        # Rename new table
-        connection.execute(text("ALTER TABLE inspection_configs_new RENAME TO inspection_configs"))
-
-        # Recreate index
-        connection.execute(text("CREATE INDEX ix_inspection_configs_id ON inspection_configs (id)"))
-
-        print("✓ Removed anomaly fields from inspection_configs table")
+        print("Removed anomaly fields from inspection_configs table")
     except Exception as e:
         print(f"Migration already applied or error: {e}")

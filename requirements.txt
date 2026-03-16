@@ -2,13 +2,13 @@
 fastapi>=0.115.0
 uvicorn>=0.30.0
 
-# Database (async SQLAlchemy + SQLite)
+# Database (async SQLAlchemy + PostgreSQL)
 sqlalchemy[asyncio]>=2.0.0
-aiosqlite>=0.20.0
+asyncpg>=0.29.0          # PostgreSQL / openGauss (primary metadata store)
+psycopg2-binary>=2.9.0   # PostgreSQL sync driver (for data migration script)
 
 # Database drivers (optional, install as needed)
 aiomysql>=0.2.0          # MySQL / MariaDB
-asyncpg>=0.29.0          # PostgreSQL / openGauss
 motor>=3.3.0              # MongoDB
 redis>=5.0.0              # Redis
 pyodbc>=5.0.0             # SQL Server

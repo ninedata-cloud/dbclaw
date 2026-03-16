@@ -17,7 +17,6 @@ async def fix_timezone():
     """修复时区问题：将 UTC 时间转换为本地时间（+8小时）"""
     async with async_session() as db:
         try:
-            # 检查是否有数据需要修复
             result = await db.execute(
                 text("SELECT COUNT(*) FROM metric_snapshots")
             )
@@ -28,23 +27,20 @@ async def fix_timezone():
                 print("没有数据需要修复")
                 return
 
-            # SQLite 中将时间加 8 小时
-            # 使用 datetime() 函数进行时间运算
             print("开始修复时区...")
             await db.execute(
                 text("""
                     UPDATE metric_snapshots
-                    SET collected_at = datetime(collected_at, '+8 hours')
+                    SET collected_at = collected_at + INTERVAL '8 hours'
                 """)
             )
             await db.commit()
 
             print(f"✓ 成功修复 {total_count} 条记录的时区")
 
-            # 验证修复结果
             result = await db.execute(
                 text("""
-                    SELECT 
+                    SELECT
                         MIN(collected_at) as earliest,
                         MAX(collected_at) as latest
                     FROM metric_snapshots

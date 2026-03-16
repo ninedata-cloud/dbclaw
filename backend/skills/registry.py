@@ -110,7 +110,7 @@ class SkillRegistry:
 
         # Tag filtering (JSON contains)
         if tags:
-            # For SQLite, check if any of the provided tags exist in the JSON array
+            # Check if any of the provided tags exist in the JSON array
             tag_conditions = []
             for tag in tags:
                 tag_conditions.append(Skill.tags.like(f'%"{tag}"%'))

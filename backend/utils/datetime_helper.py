@@ -5,7 +5,7 @@ from datetime import datetime
 
 
 def now() -> datetime:
-    """Get current local time (without timezone info for SQLite compatibility)"""
+    """Get current local time (without timezone info)"""
     return datetime.now()
 
 

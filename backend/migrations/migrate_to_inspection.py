@@ -18,15 +18,15 @@ async def migrate():
         print("Creating inspection_configs table...")
         await db.execute(text("""
             CREATE TABLE IF NOT EXISTS inspection_configs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 datasource_id INTEGER UNIQUE NOT NULL,
-                enabled BOOLEAN NOT NULL DEFAULT 1,
+                enabled BOOLEAN NOT NULL DEFAULT TRUE,
                 schedule_interval INTEGER NOT NULL DEFAULT 86400,
-                use_ai_analysis BOOLEAN NOT NULL DEFAULT 1,
+                use_ai_analysis BOOLEAN NOT NULL DEFAULT TRUE,
                 ai_model_id INTEGER,
                 kb_ids TEXT NOT NULL DEFAULT '[]',
                 threshold_rules TEXT NOT NULL DEFAULT '{}',
-                anomaly_check_enabled BOOLEAN NOT NULL DEFAULT 1,
+                anomaly_check_enabled BOOLEAN NOT NULL DEFAULT TRUE,
                 anomaly_diagnosis_interval INTEGER NOT NULL DEFAULT 600,
                 last_scheduled_at TIMESTAMP,
                 next_scheduled_at TIMESTAMP,
@@ -40,13 +40,13 @@ async def migrate():
         print("Creating inspection_triggers table...")
         await db.execute(text("""
             CREATE TABLE IF NOT EXISTS inspection_triggers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 datasource_id INTEGER NOT NULL,
                 trigger_type VARCHAR(20) NOT NULL,
                 trigger_reason VARCHAR(500),
                 metric_snapshot TEXT,
                 triggered_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                processed BOOLEAN NOT NULL DEFAULT 0,
+                processed BOOLEAN NOT NULL DEFAULT FALSE,
                 report_id INTEGER,
                 FOREIGN KEY (datasource_id) REFERENCES datasources(id),
                 FOREIGN KEY (report_id) REFERENCES reports(id)
@@ -57,8 +57,11 @@ async def migrate():
 
         # 2. Add trigger columns to reports table
         print("Adding trigger columns to reports table...")
-        result = await db.execute(text("PRAGMA table_info(reports)"))
-        existing_columns = {row[1] for row in result.fetchall()}
+        result = await db.execute(text("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'reports' AND column_name IN ('trigger_type', 'trigger_id', 'trigger_reason')
+        """))
+        existing_columns = {row[0] for row in result.fetchall()}
 
         if 'trigger_type' not in existing_columns:
             await db.execute(text("ALTER TABLE reports ADD COLUMN trigger_type VARCHAR(20)"))
@@ -70,11 +73,17 @@ async def migrate():
 
         # 3. Migrate scheduled_report_configs to inspection_configs
         print("Migrating scheduled report configs...")
-        result = await db.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='scheduled_report_configs'"))
+        result = await db.execute(text("""
+            SELECT table_name FROM information_schema.tables
+            WHERE table_name = 'scheduled_report_configs'
+        """))
         if result.fetchone():
             # Check what columns exist
-            result = await db.execute(text("PRAGMA table_info(scheduled_report_configs)"))
-            columns = {row[1] for row in result.fetchall()}
+            result = await db.execute(text("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'scheduled_report_configs'
+            """))
+            columns = {row[0] for row in result.fetchall()}
 
             if 'interval_seconds' in columns:
                 await db.execute(text("""
@@ -94,7 +103,7 @@ async def migrate():
         await db.execute(text("""
             UPDATE reports
             SET trigger_type = 'scheduled'
-            WHERE is_scheduled = 1
+            WHERE is_scheduled = TRUE
         """))
 
         # 5. Drop old tables
@@ -109,7 +118,10 @@ async def migrate():
         ]
 
         for table in old_tables:
-            result = await db.execute(text(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table}'"))
+            result = await db.execute(text("""
+                SELECT table_name FROM information_schema.tables
+                WHERE table_name = :tname
+            """), {"tname": table})
             if result.fetchone():
                 await db.execute(text(f"DROP TABLE {table}"))
                 print(f"Dropped table: {table}")

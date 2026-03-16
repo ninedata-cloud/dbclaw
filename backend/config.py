@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     openai_base_url: str = "https://api.openai.com/v1"
     openai_model: str = ""
 
-    database_url: str = "sqlite+aiosqlite:///./data/smartdba.db"
+    database_url: str = "postgresql+asyncpg://smartdba:smartdba@localhost:5432/smartdba"
 
     metric_interval: int = 60
 

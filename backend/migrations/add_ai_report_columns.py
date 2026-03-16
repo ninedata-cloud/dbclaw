@@ -11,9 +11,11 @@ logger = logging.getLogger(__name__)
 
 async def check_column_exists(db, table_name: str, column_name: str) -> bool:
     """Check if a column exists in a table"""
-    result = await db.execute(text(f"PRAGMA table_info({table_name})"))
-    columns = result.fetchall()
-    return any(col[1] == column_name for col in columns)
+    result = await db.execute(text("""
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = :table AND column_name = :col
+    """), {"table": table_name, "col": column_name})
+    return result.fetchone() is not None
 
 
 async def migrate():

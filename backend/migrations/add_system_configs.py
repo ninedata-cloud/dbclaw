@@ -7,9 +7,10 @@ from backend.database import async_session
 async def migrate():
     async with async_session() as db:
         # Check if table exists
-        result = await db.execute(text(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='system_configs'"
-        ))
+        result = await db.execute(text("""
+            SELECT table_name FROM information_schema.tables
+            WHERE table_name = 'system_configs'
+        """))
         if result.scalar_one_or_none():
             print("Table system_configs already exists")
             return
@@ -17,15 +18,15 @@ async def migrate():
         # Create table
         await db.execute(text("""
             CREATE TABLE system_configs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 key VARCHAR(100) UNIQUE NOT NULL,
                 value TEXT,
                 value_type VARCHAR(20) NOT NULL,
                 description TEXT,
                 category VARCHAR(50),
                 is_active BOOLEAN DEFAULT TRUE,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """))
 
