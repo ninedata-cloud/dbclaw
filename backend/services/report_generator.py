@@ -295,7 +295,7 @@ def _build_markdown_report(datasource, data: dict, findings: list) -> str:
         md += f"{f['detail']}\n\n"
         md += f"**建议：** {f['recommendation']}\n\n"
 
-    md += "---\n\n*报告由 SmartDBA 生成*\n"
+    md += "---\n\n*报告由 DbGuard 生成*\n"
     return md
 
 
@@ -504,7 +504,7 @@ class ReportGenerator:
     <div class="container">
         {content_html_body}
         <div class="footer">
-            <p>报告由 <strong>SmartDBA 智能诊断引擎</strong> 生成</p>
+            <p>报告由 <strong>DbGuard 智能诊断引擎</strong> 生成</p>
             <p>数据源: {datasource.name} ({datasource.db_type.upper()}) | 生成时间: {now().strftime('%Y-%m-%d %H:%M')}</p>
         </div>
     </div>

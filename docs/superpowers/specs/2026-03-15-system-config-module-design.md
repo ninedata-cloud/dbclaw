@@ -1,7 +1,7 @@
 # System Configuration Module Design Specification
 
 **Date**: 2026-03-15  
-**Author**: SmartDBA Development Team  
+**Author**: DbGuard Development Team  
 **Status**: Draft
 
 ## Overview
@@ -584,4 +584,4 @@ Return success response
 
 ## Conclusion
 
-This design provides a flexible, type-safe configuration management system that meets all stated requirements. The architecture follows SmartDBA's existing patterns (SQLAlchemy async, FastAPI routers, vanilla JavaScript frontend) and integrates seamlessly with the skills system. The implementation is straightforward with clear separation of concerns and comprehensive error handling.
+This design provides a flexible, type-safe configuration management system that meets all stated requirements. The architecture follows DbGuard's existing patterns (SQLAlchemy async, FastAPI routers, vanilla JavaScript frontend) and integrates seamlessly with the skills system. The implementation is straightforward with clear separation of concerns and comprehensive error handling.

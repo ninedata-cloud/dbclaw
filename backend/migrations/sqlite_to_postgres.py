@@ -3,8 +3,8 @@ One-time data migration script: SQLite -> PostgreSQL
 
 Usage:
     python backend/migrations/sqlite_to_postgres.py \\
-        --sqlite ./data/smartdba.db \\
-        --postgres postgresql://smartdba:smartdba@localhost:5432/smartdba
+        --sqlite ./data/dbguard.db \\
+        --postgres postgresql://dbguard:dbguard@localhost:5432/dbguard
 
 This script reads all data from the SQLite database and inserts it into
 an already-initialized PostgreSQL database (tables must exist first).
@@ -38,8 +38,8 @@ TABLES = [
     "reports",
     "inspection_configs",
     "inspection_triggers",
-    "alert_messages",
     "alert_events",
+    "alert_messages",
     "alert_subscriptions",
     "alert_delivery_log",
     "system_configs",
@@ -62,6 +62,16 @@ def get_pg_columns(pg_conn, table: str) -> list:
     return [row[0] for row in cursor.fetchall()]
 
 
+def get_pg_bool_columns(pg_conn, table: str) -> set:
+    """Return set of boolean column names for a table"""
+    cursor = pg_conn.cursor()
+    cursor.execute("""
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = %s AND data_type = 'boolean'
+    """, (table,))
+    return {row[0] for row in cursor.fetchall()}
+
+
 def get_sqlite_columns(sqlite_conn: sqlite3.Connection, table: str) -> list:
     cursor = sqlite_conn.cursor()
     cursor.execute(f"PRAGMA table_info({table})")
@@ -71,6 +81,7 @@ def get_sqlite_columns(sqlite_conn: sqlite3.Connection, table: str) -> list:
 def migrate_table(sqlite_conn: sqlite3.Connection, pg_conn, table: str, batch_size: int = 500) -> int:
     sqlite_cols = set(get_sqlite_columns(sqlite_conn, table))
     pg_cols = get_pg_columns(pg_conn, table)
+    bool_cols = get_pg_bool_columns(pg_conn, table)
 
     # Use only columns that exist in both databases
     common_cols = [c for c in pg_cols if c in sqlite_cols]
@@ -85,6 +96,9 @@ def migrate_table(sqlite_conn: sqlite3.Connection, pg_conn, table: str, batch_si
         print(f"  {table}: empty, skipping")
         return 0
 
+    # Find indices of boolean columns
+    bool_indices = {i for i, c in enumerate(common_cols) if c in bool_cols}
+
     cols_sql = ", ".join(common_cols)
     placeholders = ", ".join(["%s"] * len(common_cols))
     insert_sql = f"INSERT INTO {table} ({cols_sql}) VALUES ({placeholders}) ON CONFLICT DO NOTHING"
@@ -97,6 +111,16 @@ def migrate_table(sqlite_conn: sqlite3.Connection, pg_conn, table: str, batch_si
         rows = sqlite_cursor.fetchmany(batch_size)
         if not rows:
             break
+        # Convert integer booleans (0/1) to Python bool for PostgreSQL
+        if bool_indices:
+            converted = []
+            for row in rows:
+                row = list(row)
+                for i in bool_indices:
+                    if row[i] is not None:
+                        row[i] = bool(row[i])
+                converted.append(row)
+            rows = converted
         psycopg2.extras.execute_batch(pg_cursor, insert_sql, rows)
         pg_conn.commit()
         inserted += len(rows)
@@ -147,25 +171,57 @@ def main():
     skipped_tables = []
     migrated_tables = []
 
-    # Disable FK checks during bulk insert
-    pg_cursor = pg_conn.cursor()
-    pg_cursor.execute("SET session_replication_role = 'replica'")
-    pg_conn.commit()
-
     print("\nMigrating tables...")
+    pg_cursor = pg_conn.cursor()
+
+    # Temporarily drop FK constraints that cause circular dependency
+    # between alert_events and alert_messages
+    circular_fk_drops = [
+        ("alert_events", "alert_events_first_alert_id_fkey"),
+        ("alert_events", "alert_events_latest_alert_id_fkey"),
+    ]
+    for tbl, constraint in circular_fk_drops:
+        try:
+            pg_cursor.execute(f"ALTER TABLE {tbl} DROP CONSTRAINT IF EXISTS {constraint}")
+            pg_conn.commit()
+        except Exception:
+            pg_conn.rollback()
+
     for table in TABLES:
         if table not in sqlite_tables:
             print(f"  {table}: not found in SQLite, skipping")
             skipped_tables.append(table)
             continue
+        # Disable triggers on this table to bypass FK checks
+        try:
+            pg_cursor.execute(f"ALTER TABLE {table} DISABLE TRIGGER ALL")
+            pg_conn.commit()
+        except Exception:
+            pg_conn.rollback()
         rows = migrate_table(sqlite_conn, pg_conn, table, args.batch_size)
+        try:
+            pg_cursor.execute(f"ALTER TABLE {table} ENABLE TRIGGER ALL")
+            pg_conn.commit()
+        except Exception:
+            pg_conn.rollback()
         if rows > 0:
             migrated_tables.append(table)
             total_rows += rows
 
-    # Re-enable FK checks
-    pg_cursor.execute("SET session_replication_role = 'origin'")
-    pg_conn.commit()
+    # Restore dropped FK constraints
+    try:
+        pg_cursor.execute("""
+            ALTER TABLE alert_events ADD CONSTRAINT alert_events_first_alert_id_fkey
+            FOREIGN KEY (first_alert_id) REFERENCES alert_messages(id)
+        """)
+        pg_cursor.execute("""
+            ALTER TABLE alert_events ADD CONSTRAINT alert_events_latest_alert_id_fkey
+            FOREIGN KEY (latest_alert_id) REFERENCES alert_messages(id)
+        """)
+        pg_conn.commit()
+    except Exception as e:
+        pg_conn.rollback()
+        print(f"  Warning: could not restore FK constraints: {e}")
 
     # Reset sequences
     reset_sequences(pg_conn, migrated_tables)

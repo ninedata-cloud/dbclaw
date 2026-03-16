@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "=== SmartDBA Report Rendering Test ==="
+echo "=== DbGuard Report Rendering Test ==="
 echo ""
 echo "Modified files:"
 echo "  1. frontend/js/pages/reports.js - Enhanced markdown rendering with proper marked.js configuration"
@@ -19,8 +19,8 @@ echo "  ✓ Added :not(.hljs) selector to prevent double-highlighting"
 echo ""
 echo "To test:"
 echo "  1. Start the backend server"
-echo "  2. Open http://localhost:8000/test-report-render.html"
-echo "  3. Open http://localhost:8000/test-api-report.html"
+echo "  2. Open http://localhost:9939/test-report-render.html"
+echo "  3. Open http://localhost:9939/test-api-report.html"
 echo "  4. Navigate to Reports page and view any completed report"
 echo ""
 echo "Expected results:"

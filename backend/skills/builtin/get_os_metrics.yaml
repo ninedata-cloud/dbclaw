@@ -1,7 +1,7 @@
 id: get_os_metrics
 name: OS Metrics
 version: 1.0.0
-author: SmartDBA
+author: DbGuard
 category: system
 description: Get OS-level metrics (CPU, memory, disk, network, load) from the host server via host connection
 tags: [linux, system, monitoring, ssh, cpu, memory, disk]

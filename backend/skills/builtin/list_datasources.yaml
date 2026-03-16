@@ -1,7 +1,7 @@
 id: list_datasources
 name: List Datasources
 version: 1.0.0
-author: SmartDBA
+author: DbGuard
 category: system
 description: List all configured database datasources
 tags: [datasources, configuration]

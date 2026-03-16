@@ -1,7 +1,7 @@
 id: mysql_get_db_size
 name: MySQL Database Size
 version: 1.0.0
-author: SmartDBA
+author: DbGuard
 category: mysql
 description: Get MySQL database size information including data and index sizes
 tags: [mysql, storage, size, capacity]

@@ -1,7 +1,7 @@
 id: mssql_list_connections
 name: SQL Server Active Connections
 version: 1.0.0
-author: SmartDBA
+author: DbGuard
 category: sqlserver
 description: List all active database connections with their current state and queries
 tags: [sqlserver, connections, monitoring]

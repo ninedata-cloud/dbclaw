@@ -1,7 +1,7 @@
 id: oracle_get_table_stats
 name: Oracle Table Statistics
 version: 1.0.0
-author: SmartDBA
+author: DbGuard
 category: oracle
 description: Get Oracle table-level statistics including row counts, sizes, and storage information
 tags: [oracle, tables, statistics, storage]

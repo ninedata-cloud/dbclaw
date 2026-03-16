@@ -1,7 +1,7 @@
 id: mysql_get_db_variables
 name: MySQL Database Variables
 version: 1.0.0
-author: SmartDBA
+author: DbGuard
 category: mysql
 description: Get MySQL database configuration variables/parameters
 tags: [mysql, configuration, variables]

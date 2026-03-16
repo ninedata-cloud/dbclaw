@@ -1,7 +1,7 @@
 id: mysql_explain_query
 name: MySQL Explain Query
 version: 1.0.0
-author: SmartDBA
+author: DbGuard
 category: mysql
 description: Get the execution plan for a SQL query to analyze its performance
 tags: [mysql, explain, query-plan, optimization]

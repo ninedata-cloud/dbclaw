@@ -1,7 +1,7 @@
 id: oracle_explain_query
 name: Oracle Explain Query
 version: 1.0.0
-author: SmartDBA
+author: DbGuard
 category: oracle
 description: Get Oracle execution plan for a SQL query
 tags: [oracle, explain, execution-plan, performance]
@@ -26,7 +26,7 @@ code: |
 
       # Generate a unique statement ID
       import time
-      statement_id = f"SMARTDBA_{int(time.time())}"
+      statement_id = f"DBGUARD_{int(time.time())}"
 
       # First, explain the query
       explain_sql = f"EXPLAIN PLAN SET STATEMENT_ID = '{statement_id}' FOR {sql}"

@@ -1,7 +1,7 @@
 id: mssql_get_wait_stats
 name: SQL Server Wait Statistics
 version: 1.0.0
-author: SmartDBA
+author: DbGuard
 category: sqlserver
 description: Analyze wait statistics to identify performance bottlenecks
 tags: [sqlserver, waits, performance, bottlenecks]

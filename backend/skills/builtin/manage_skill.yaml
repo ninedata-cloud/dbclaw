@@ -1,7 +1,7 @@
 id: manage_skill
 name: Manage Skill
 version: 1.0.0
-author: SmartDBA
+author: DbGuard
 category: system
 description: Manage custom skills - list, get, create, update, enable, disable. Builtin skills cannot be modified.
 tags: [skill, management, registry, system]

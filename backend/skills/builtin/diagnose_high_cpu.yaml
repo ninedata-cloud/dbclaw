@@ -1,7 +1,7 @@
 id: diagnose_high_cpu
 name: Diagnose High CPU Usage
 version: 1.0.0
-author: SmartDBA
+author: DbGuard
 category: diagnosis
 description: Diagnose high CPU usage by checking OS-level processes, load average, I/O wait, and identifying top CPU consumers
 tags: [linux, cpu, diagnosis, performance, system]

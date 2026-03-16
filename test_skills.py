@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Comprehensive test suite for SmartDBA Skill Management System
+Comprehensive test suite for DbGuard Skill Management System
 """
 import asyncio
 import sys
@@ -512,7 +512,7 @@ async def test_serialization():
 async def main():
     """Run all tests"""
     print("\n" + "=" * 60)
-    print("SmartDBA Skill Management System - Comprehensive Test Suite")
+    print("DbGuard Skill Management System - Comprehensive Test Suite")
     print("=" * 60)
 
     test_results = []

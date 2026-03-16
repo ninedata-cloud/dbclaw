@@ -277,7 +277,7 @@ async def chat_websocket(websocket: WebSocket, session_id: int, token: str = Que
                     elif event_type == "error":
                         await websocket.send_json({
                             "type": "error",
-                            "content": event["content"],
+                            "content": event.get("content") or event.get("message", "Unknown error"),
                         })
 
             # Save assistant response

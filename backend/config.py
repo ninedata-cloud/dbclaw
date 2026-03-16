@@ -4,9 +4,9 @@ import os
 
 
 class Settings(BaseSettings):
-    app_name: str = "NineData DBMaster"
+    app_name: str = "NineData DBGuard"
     app_host: str = "0.0.0.0"
-    app_port: int = 8000
+    app_port: int = 9939
     debug: bool = True
 
     encryption_key: str = "temporary-encryption-key"
@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     openai_base_url: str = "https://api.openai.com/v1"
     openai_model: str = ""
 
-    database_url: str = "postgresql+asyncpg://smartdba:smartdba@localhost:5432/smartdba"
+    database_url: str = "postgresql+asyncpg://dbguard:dbguard@localhost:5432/dbguard"
 
     metric_interval: int = 60
 

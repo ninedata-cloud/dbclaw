@@ -13,6 +13,7 @@ class PostgreSQLConnector(DBConnector):
             user=self.username, password=self.password or "",
             database=self.database or "postgres",
             timeout=10,
+            ssl=False,
         )
 
     async def test_connection(self) -> str:

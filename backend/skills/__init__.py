@@ -1,5 +1,5 @@
 """
-SmartDBA Skill Management System
+DbGuard Skill Management System
 
 This module provides a dynamic, extensible skill system for database diagnostics.
 Skills can be defined in YAML format and executed in a sandboxed environment.

@@ -1,7 +1,7 @@
 id: query_monitoring_data
 name: Query Monitoring Data
 version: 1.0.0
-author: SmartDBA
+author: DbGuard
 category: monitoring
 description: Query historical monitoring metrics with statistics calculation (avg, min, max)
 tags: [monitoring, metrics, query, statistics]

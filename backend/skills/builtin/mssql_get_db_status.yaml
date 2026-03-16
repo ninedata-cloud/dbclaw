@@ -1,7 +1,7 @@
 id: mssql_get_db_status
 name: SQL Server Database Status
 version: 1.0.0
-author: SmartDBA
+author: DbGuard
 category: sqlserver
 description: Get current SQL Server database status including performance metrics and resource usage
 tags: [sqlserver, status, performance, monitoring]

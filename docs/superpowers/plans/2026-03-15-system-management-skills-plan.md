@@ -1,4 +1,4 @@
-# Implementation Plan: SmartDBA System Management Skills
+# Implementation Plan: DbGuard System Management Skills
 
 **Spec**: [2026-03-15-system-management-skills-design.md](../specs/2026-03-15-system-management-skills-design.md)  
 **Created**: 2026-03-15  
@@ -6,7 +6,7 @@
 
 ## Overview
 
-Implement 7 system management skills as YAML files in `backend/skills/builtin/`, enabling AI-driven management of SmartDBA system resources through natural language.
+Implement 7 system management skills as YAML files in `backend/skills/builtin/`, enabling AI-driven management of DbGuard system resources through natural language.
 
 ## Prerequisites
 

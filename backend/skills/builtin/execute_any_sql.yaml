@@ -1,7 +1,7 @@
 id: execute_any_sql
 name: Execute Any SQL Command
 version: 1.0.0
-author: SmartDBA
+author: DbGuard
 category: admin
 description: Execute ANY SQL command including DDL, DML, DCL operations. WARNING - This can modify database structure, data, and permissions. Use with extreme caution.
 tags: [sql, admin, ddl, dml, dcl, insert, update, delete, drop, create, alter, grant, dangerous]

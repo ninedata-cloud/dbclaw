@@ -1,7 +1,7 @@
 id: oracle_get_tablespace_usage
 name: Oracle Tablespace Usage
 version: 1.0.0
-author: SmartDBA
+author: DbGuard
 category: oracle
 description: Get Oracle tablespace usage statistics including size, used space, and free space
 tags: [oracle, tablespace, storage, capacity]

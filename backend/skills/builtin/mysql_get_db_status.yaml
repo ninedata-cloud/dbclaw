@@ -1,7 +1,7 @@
 id: mysql_get_db_status
 name: MySQL Database Status
 version: 1.0.0
-author: SmartDBA
+author: DbGuard
 category: mysql
 description: Get current MySQL database status metrics including connections, throughput, cache hit rates, and key performance indicators
 tags: [mysql, status, performance, monitoring]

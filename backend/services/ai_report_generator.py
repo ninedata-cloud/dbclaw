@@ -493,7 +493,7 @@ def _markdown_to_html(
     <div class="container">
         {content_html}
         <div class="footer">
-            <p>报告由 <strong>SmartDBA 智能诊断引擎</strong> 生成</p>
+            <p>报告由 <strong>DbGuard 智能诊断引擎</strong> 生成</p>
             <p>数据库：{datasource.name} ({datasource.db_type.upper()}) | 类型：{report_type.title()} | 生成时间：{now().strftime('%Y-%m-%d %H:%M')}</p>
         </div>
     </div>

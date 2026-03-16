@@ -1,7 +1,7 @@
 id: execute_os_command
 name: Execute OS Command
 version: 1.0.0
-author: SmartDBA
+author: DbGuard
 category: system
 description: |
   Execute READ-ONLY diagnostic shell commands on a server via SSH host connection.

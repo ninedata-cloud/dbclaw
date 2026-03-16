@@ -1,7 +1,7 @@
 id: pg_get_slow_queries
 name: PostgreSQL Slow Queries
 version: 1.0.0
-author: SmartDBA
+author: DbGuard
 category: postgresql
 description: Get slow running queries from pg_stat_statements extension
 tags: [postgresql, slow-queries, performance]

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-SmartDBA is an AI-powered database operations platform that provides intelligent diagnostics, proactive monitoring, and automated maintenance for multiple database types (MySQL, PostgreSQL, Oracle, SQL Server, DM, MongoDB, Redis).
+DbGuard is an AI-powered database operations platform that provides intelligent diagnostics, proactive monitoring, and automated maintenance for multiple database types (MySQL, PostgreSQL, Oracle, SQL Server, DM, MongoDB, Redis).
 
 **Architecture**: FastAPI backend + vanilla JavaScript frontend + SQLite metadata storage + ChromaDB vector store
 
@@ -16,7 +16,7 @@ SmartDBA is an AI-powered database operations platform that provides intelligent
 # Start the backend server (with auto-reload in debug mode)
 python run.py
 
-# The server runs on http://0.0.0.0:8000 by default
+# The server runs on http://0.0.0.0:9939 by default
 # Frontend is served from /frontend directory
 ```
 
@@ -94,7 +94,7 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 
 ### Database Schema
 
-**SQLite with SQLAlchemy async**: `data/smartdba.db`
+**SQLite with SQLAlchemy async**: `data/dbguard.db`
 
 **Key tables**:
 - `datasources`: Database connections (encrypted credentials)

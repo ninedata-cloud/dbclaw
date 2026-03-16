@@ -1,7 +1,7 @@
 id: pg_list_connections
 name: PostgreSQL Active Connections
 version: 1.0.0
-author: SmartDBA
+author: DbGuard
 category: postgresql
 description: List all active database connections with their current state and queries
 tags: [postgresql, connections, monitoring]

@@ -2,7 +2,7 @@
 """Simple verification of export feature implementation"""
 
 print("=" * 80)
-print("SmartDBA Export Feature Verification")
+print("DbGuard Export Feature Verification")
 print("=" * 80)
 
 # 1. Check Chinese prompt

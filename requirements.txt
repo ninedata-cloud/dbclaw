@@ -12,6 +12,8 @@ aiomysql>=0.2.0          # MySQL / MariaDB
 motor>=3.3.0              # MongoDB
 redis>=5.0.0              # Redis
 pyodbc>=5.0.0             # SQL Server
+pymssql>=2.2.0            # SQL Server (alternative)
+oracledb>=1.0.0           # Oracle
 # dmPython                # DM (Dameng) - install manually
 
 # AI / LLM

@@ -1,4 +1,4 @@
-# SmartDBA System Management Skills Design
+# DbGuard System Management Skills Design
 
 **Date**: 2026-03-15  
 **Status**: Draft  
@@ -6,7 +6,7 @@
 
 ## Overview
 
-Design and implement 7 system management skills for SmartDBA, enabling AI-driven management of datasources, hosts, skills, monitoring data, inspection reports, and system metadata through natural language interaction.
+Design and implement 7 system management skills for DbGuard, enabling AI-driven management of datasources, hosts, skills, monitoring data, inspection reports, and system metadata through natural language interaction.
 
 ## Requirements
 
@@ -277,7 +277,7 @@ Design and implement 7 system management skills for SmartDBA, enabling AI-driven
 **Implementation**:
 
 **SQL Query Mode** (query_type=sql):
-- Execute read-only SQL against system database (smartdba.db)
+- Execute read-only SQL against system database (dbguard.db)
 - Whitelist allowed tables: datasources, hosts, skills, metric_snapshots, diagnostic_sessions, reports, users, knowledge_bases
 - Reject non-SELECT statements
 - Apply row limit (max 1000)

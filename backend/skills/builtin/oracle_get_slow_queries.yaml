@@ -1,7 +1,7 @@
 id: oracle_get_slow_queries
 name: Oracle Slow Queries
 version: 1.0.0
-author: SmartDBA
+author: DbGuard
 category: oracle
 description: Get slow running SQL queries from Oracle AWR/ASH or v$sql views
 tags: [oracle, slow-queries, performance, sql]

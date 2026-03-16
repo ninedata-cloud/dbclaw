@@ -1,7 +1,7 @@
 id: oracle_get_wait_events
 name: Oracle Wait Events
 version: 1.0.0
-author: SmartDBA
+author: DbGuard
 category: oracle
 description: Get Oracle database wait events and statistics
 tags: [oracle, wait-events, performance, monitoring]

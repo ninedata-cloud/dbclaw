@@ -1,7 +1,7 @@
 id: oracle_get_db_status
 name: Oracle Database Status
 version: 1.0.0
-author: SmartDBA
+author: DbGuard
 category: oracle
 description: Get current Oracle database status metrics including sessions, SGA usage, and key performance indicators
 tags: [oracle, status, performance, monitoring]

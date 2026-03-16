@@ -1,7 +1,7 @@
 id: mysql_get_table_stats
 name: MySQL Table Statistics
 version: 1.0.0
-author: SmartDBA
+author: DbGuard
 category: mysql
 description: Get MySQL table-level statistics including row counts, sizes, and scan patterns
 tags: [mysql, tables, statistics, storage]
