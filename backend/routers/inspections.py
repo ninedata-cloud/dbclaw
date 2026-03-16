@@ -118,11 +118,16 @@ async def create_or_update_config(
     )
     config = result.scalar_one_or_none()
 
+    from datetime import timedelta
+    from backend.utils.datetime_helper import now as get_now
     if config:
         for key, value in config_data.dict().items():
             setattr(config, key, value)
+        # Recalculate next_scheduled_at based on new interval
+        config.next_scheduled_at = get_now() + timedelta(seconds=config_data.schedule_interval)
     else:
         config = InspectionConfig(datasource_id=datasource_id, **config_data.dict())
+        config.next_scheduled_at = get_now() + timedelta(seconds=config_data.schedule_interval)
         db.add(config)
 
     await db.commit()
@@ -144,8 +149,12 @@ async def update_config(
     if not config:
         raise HTTPException(status_code=404, detail="Configuration not found")
 
+    from datetime import timedelta
+    from backend.utils.datetime_helper import now as get_now
     for key, value in config_data.dict().items():
         setattr(config, key, value)
+    # Recalculate next_scheduled_at based on new interval
+    config.next_scheduled_at = get_now() + timedelta(seconds=config_data.schedule_interval)
 
     await db.commit()
     await db.refresh(config)
