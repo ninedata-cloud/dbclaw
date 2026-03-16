@@ -11,6 +11,7 @@ from backend.database import async_session
 from backend.models.datasource import Datasource
 from backend.models.metric_snapshot import MetricSnapshot
 from backend.models.inspection_trigger import InspectionTrigger
+from backend.models.alert_message import AlertMessage
 from backend.services.db_connector import get_connector
 from backend.utils.encryption import decrypt_value
 from backend.services.threshold_checker import ThresholdChecker
@@ -101,6 +102,10 @@ async def collect_metrics_for_connection(datasource_id: int):
                 try:
                     status = await connector.get_status()
                     connection_failed = False
+
+                    # Auto-resolve connection failure alerts if connection is now successful
+                    await _auto_resolve_connection_alerts(db, datasource_id)
+
                 except Exception as e:
                     logger.warning(f"Failed to collect metrics for datasource {datasource_id}: {e}")
                     status = {"error": str(e), "connection_failed": True}
@@ -116,6 +121,8 @@ async def collect_metrics_for_connection(datasource_id: int):
                 if datasource.host_id:
                     os_metrics = await _collect_os_metrics(db, datasource.host_id)
                     if os_metrics:
+                        # 所有数据库统一使用 SSH 采集的 OS 指标
+                        # 直接使用 OS 指标，覆盖数据库层面的同名指标（如果有）
                         normalized_status.update(os_metrics)
 
                 snapshot = MetricSnapshot(
@@ -148,6 +155,119 @@ async def collect_metrics_for_connection(datasource_id: int):
             logger.error(f"Error collecting metrics for datasource {datasource_id}: {e}")
 
 
+async def _auto_resolve_connection_alerts(db, datasource_id: int):
+    """
+    Auto-resolve connection failure alerts when connection is restored.
+
+    Args:
+        db: Database session
+        datasource_id: Datasource ID
+    """
+    try:
+        # Get all active system_error alerts for connection failures
+        result = await db.execute(
+            select(AlertMessage).where(
+                and_(
+                    AlertMessage.datasource_id == datasource_id,
+                    AlertMessage.alert_type == "system_error",
+                    AlertMessage.metric_name == "connection_status",
+                    AlertMessage.status.in_(["active", "acknowledged"])
+                )
+            )
+        )
+        connection_alerts = result.scalars().all()
+
+        if not connection_alerts:
+            return
+
+        # Resolve all connection failure alerts
+        from backend.services.alert_service import AlertService
+        for alert in connection_alerts:
+            await AlertService.resolve_alert(db, alert.id)
+            logger.info(f"Auto-resolved connection failure alert {alert.id}: connection restored")
+
+    except Exception as e:
+        logger.error(f"Error auto-resolving connection alerts for datasource {datasource_id}: {e}", exc_info=True)
+
+
+async def _auto_resolve_recovered_alerts(
+    db,
+    datasource_id: int,
+    metrics: Dict[str, Any],
+    threshold_rules: List[Dict[str, Any]],
+    current_violations: List[Dict[str, Any]]
+):
+    """
+    Auto-resolve alerts for metrics that have recovered to normal levels.
+
+    Args:
+        db: Database session
+        datasource_id: Datasource ID
+        metrics: Current metric values
+        threshold_rules: Configured threshold rules
+        current_violations: List of current violations (to avoid resolving alerts that are still active)
+    """
+    try:
+        # Get all active threshold_violation alerts for this datasource
+        result = await db.execute(
+            select(AlertMessage).where(
+                and_(
+                    AlertMessage.datasource_id == datasource_id,
+                    AlertMessage.alert_type == "threshold_violation",
+                    AlertMessage.status.in_(["active", "acknowledged"])
+                )
+            )
+        )
+        active_alerts = result.scalars().all()
+
+        if not active_alerts:
+            return
+
+        # Build set of currently violating metrics
+        violating_metrics = {v['metric_name'] for v in current_violations}
+
+        # Check each active alert
+        for alert in active_alerts:
+            if not alert.metric_name:
+                continue
+
+            # Skip if this metric is still violating
+            if alert.metric_name in violating_metrics:
+                continue
+
+            # Get current metric value
+            current_value = metrics.get(alert.metric_name)
+            if current_value is None:
+                continue
+
+            # Find the threshold rule for this metric
+            threshold_rule = None
+            for rule in threshold_rules:
+                if rule.get('metric_name') == alert.metric_name:
+                    threshold_rule = rule
+                    break
+
+            if not threshold_rule:
+                continue
+
+            # Check if metric has recovered (is now below threshold)
+            threshold = threshold_rule.get('threshold')
+            if threshold is None:
+                continue
+
+            if current_value < threshold:
+                # Metric has recovered - auto-resolve the alert
+                from backend.services.alert_service import AlertService
+                await AlertService.resolve_alert(db, alert.id)
+                logger.info(
+                    f"Auto-resolved alert {alert.id}: {alert.metric_name} recovered "
+                    f"(current={current_value:.2f} < threshold={threshold})"
+                )
+
+    except Exception as e:
+        logger.error(f"Error auto-resolving recovered alerts for datasource {datasource_id}: {e}", exc_info=True)
+
+
 async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[str, Any]):
     """Check if metrics violate thresholds and trigger inspection if needed"""
     global _inspection_service, _threshold_checker
@@ -176,6 +296,9 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
             metrics=metrics,
             threshold_rules=config.threshold_rules
         )
+
+        # Auto-resolve alerts for metrics that have recovered
+        await _auto_resolve_recovered_alerts(db, datasource_id, metrics, config.threshold_rules, violations)
 
         # Trigger inspection and create alert for each violation
         for violation in violations:

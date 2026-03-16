@@ -217,6 +217,7 @@ Skills support extended validation:
 - **Logging**: Use Python logging module, configured in app.py lifespan
 - **Security**: Database passwords encrypted with Fernet, JWT for authentication
 - **WebSocket**: Real-time metrics via `/ws/monitor` endpoint
+- **Alert Auto-Resolution**: Alerts are automatically resolved when metrics recover to normal levels or connections are restored (see AUTO_RESOLVE_ALERTS.md)
 
 ## Configuration
 
