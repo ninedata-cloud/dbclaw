@@ -56,29 +56,74 @@ const DiagnosisPage = {
             this.selectedModelId = modelSelect.value ? parseInt(modelSelect.value) : null;
         });
 
-        // Knowledge Base multi-select
-        const kbSelect = DOM.el('select', {
-            className: 'form-select',
-            style: { minWidth: '200px' },
-            multiple: true,
-            size: 1
+        // Knowledge Base multi-select (custom dropdown)
+        const kbContainer = DOM.el('div', {
+            className: 'kb-selector-container',
+            style: { position: 'relative', minWidth: '200px' }
         });
-        kbSelect.appendChild(DOM.el('option', { value: '', textContent: '无知识库', disabled: true }));
 
+        const kbButton = DOM.el('button', {
+            className: 'kb-selector-button',
+            type: 'button',
+            innerHTML: '<span class="kb-selector-text">选择 0项</span><i data-lucide="chevron-down" style="width:16px;height:16px;"></i>'
+        });
+
+        const kbDropdown = DOM.el('div', {
+            className: 'kb-selector-dropdown',
+            style: { display: 'none' }
+        });
+
+        let availableKBs = [];
         try {
             const kbs = await API.getKnowledgeBases();
-            if (kbs.length > 0) {
-                kbSelect.innerHTML = '';
-                for (const kb of kbs.filter(k => k.is_active)) {
-                    const opt = DOM.el('option', { value: kb.id, textContent: kb.name });
-                    kbSelect.appendChild(opt);
+            availableKBs = kbs.filter(k => k.is_active);
+
+            if (availableKBs.length === 0) {
+                kbDropdown.innerHTML = '<div class="kb-selector-empty">暂无可用知识库</div>';
+            } else {
+                for (const kb of availableKBs) {
+                    const item = DOM.el('label', {
+                        className: 'kb-selector-item'
+                    });
+                    const checkbox = DOM.el('input', {
+                        type: 'checkbox',
+                        value: kb.id,
+                        className: 'kb-selector-checkbox'
+                    });
+                    const text = DOM.el('span', {
+                        textContent: kb.name,
+                        className: 'kb-selector-label'
+                    });
+                    item.appendChild(checkbox);
+                    item.appendChild(text);
+                    kbDropdown.appendChild(item);
+
+                    checkbox.addEventListener('change', () => {
+                        this.selectedKBIds = Array.from(kbDropdown.querySelectorAll('.kb-selector-checkbox:checked'))
+                            .map(cb => parseInt(cb.value));
+                        this._updateKBButtonText(kbButton, availableKBs);
+                    });
                 }
             }
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+            kbDropdown.innerHTML = '<div class="kb-selector-empty">加载失败</div>';
+        }
 
-        kbSelect.addEventListener('change', () => {
-            this.selectedKBIds = Array.from(kbSelect.selectedOptions).map(opt => parseInt(opt.value));
+        kbButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isVisible = kbDropdown.style.display === 'block';
+            kbDropdown.style.display = isVisible ? 'none' : 'block';
         });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!kbContainer.contains(e.target)) {
+                kbDropdown.style.display = 'none';
+            }
+        });
+
+        kbContainer.appendChild(kbButton);
+        kbContainer.appendChild(kbDropdown);
 
         // Tool safety settings button
         const toolSafetyBtn = DOM.el('button', {
@@ -90,7 +135,7 @@ const DiagnosisPage = {
 
         headerActions.appendChild(connSelect);
         headerActions.appendChild(modelSelect);
-        headerActions.appendChild(kbSelect);
+        headerActions.appendChild(kbContainer);
         headerActions.appendChild(toolSafetyBtn);
         Header.render('AI 诊断', headerActions);
 
@@ -731,6 +776,19 @@ const DiagnosisPage = {
             Toast.success('Session deleted');
         } catch (e) {
             Toast.error('Failed to delete session: ' + e.message);
+        }
+    },
+
+    _updateKBButtonText(button, availableKBs) {
+        const count = this.selectedKBIds.length;
+        const textSpan = button.querySelector('.kb-selector-text');
+        if (count === 0) {
+            textSpan.textContent = '选择 0项';
+        } else if (count === 1) {
+            const kb = availableKBs.find(k => k.id === this.selectedKBIds[0]);
+            textSpan.textContent = kb ? kb.name : `选择 ${count}项`;
+        } else {
+            textSpan.textContent = `选择 ${count}项`;
         }
     },
 

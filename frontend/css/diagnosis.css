@@ -1,5 +1,125 @@
 /* === AI Diagnosis Page Styles === */
 
+/* Knowledge Base Selector Styles */
+.kb-selector-container {
+    position: relative;
+    display: inline-block;
+}
+
+.kb-selector-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 200px;
+    justify-content: space-between;
+}
+
+.kb-selector-button:hover {
+    border-color: var(--border-light);
+    background: var(--bg-hover);
+}
+
+.kb-selector-button:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(47, 129, 247, 0.1);
+}
+
+.kb-selector-text {
+    flex: 1;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.kb-selector-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+    animation: dropdownSlideIn 0.2s ease;
+}
+
+@keyframes dropdownSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.kb-selector-dropdown::-webkit-scrollbar {
+    width: 6px;
+}
+
+.kb-selector-dropdown::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.kb-selector-dropdown::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+.kb-selector-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.kb-selector-item:last-child {
+    border-bottom: none;
+}
+
+.kb-selector-item:hover {
+    background: var(--bg-hover);
+}
+
+.kb-selector-checkbox {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--accent-blue);
+    margin: 0;
+}
+
+.kb-selector-label {
+    flex: 1;
+    font-size: 13px;
+    color: var(--text-primary);
+    user-select: none;
+}
+
+.kb-selector-empty {
+    padding: 16px 12px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
 /* Session Sidebar Enhancements */
 .session-item {
     position: relative;
