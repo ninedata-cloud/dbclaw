@@ -37,114 +37,116 @@ async def generate_report(report_id: int, datasource_id: int, report_type: str =
             # Collect data
             data = {}
             try:
-                data["version"] = await connector.test_connection()
-            except Exception as e:
-                data["version"] = "Unknown"
-
-            try:
-                data["status"] = await connector.get_status()
-            except Exception as e:
-                data["status"] = {"error": str(e)}
-
-            try:
-                data["variables"] = await connector.get_variables()
-            except Exception as e:
-                data["variables"] = {}
-
-            try:
-                data["slow_queries"] = await connector.get_slow_queries()
-            except Exception as e:
-                data["slow_queries"] = []
-
-            try:
-                data["table_stats"] = await connector.get_table_stats()
-            except Exception as e:
-                data["table_stats"] = []
-
-            try:
-                data["replication"] = await connector.get_replication_status()
-            except Exception as e:
-                data["replication"] = {}
-
-            try:
-                data["db_size"] = await connector.get_db_size()
-            except Exception as e:
-                data["db_size"] = {}
-
-            try:
-                data["processes"] = await connector.get_process_list()
-            except Exception as e:
-                data["processes"] = []
-
-            try:
-                data["index_stats"] = await connector.get_index_stats()
-            except Exception as e:
-                data["index_stats"] = []
-
-            try:
-                data["lock_waits"] = await connector.get_lock_waits()
-            except Exception as e:
-                data["lock_waits"] = []
-
-            try:
-                data["fragmentation"] = await connector.get_table_fragmentation()
-            except Exception as e:
-                data["fragmentation"] = []
-
-            # OS metrics if SSH is configured
-            os_metrics = None
-            if datasource.host_id:
                 try:
-                    ssh_result = await db.execute(select(Host).where(Host.id == datasource.host_id))
-                    host = ssh_result.scalar_one_or_none()
-                    if host:
-                        ssh_pwd = decrypt_value(host.password_encrypted) if host.password_encrypted else None
-                        ssh_key = decrypt_value(host.private_key_encrypted) if host.private_key_encrypted else None
-                        ssh = SSHService(host=host.host, port=host.port, username=host.username,
-                                        password=ssh_pwd, private_key=ssh_key)
-                        os_svc = OSMetricsService(ssh)
-                        os_metrics = os_svc.collect()
-                        data["os_metrics"] = os_metrics
+                    data["version"] = await connector.test_connection()
                 except Exception as e:
-                    logger.warning(f"Failed to collect OS metrics: {e}")
+                    data["version"] = "Unknown"
 
-            # Run diagnostic engine
-            engine = DiagnosticEngine()
-            findings = engine.analyze(
-                db_type=datasource.db_type,
-                status=data.get("status", {}),
-                variables=data.get("variables"),
-                slow_queries=data.get("slow_queries"),
-                table_stats=data.get("table_stats"),
-                replication=data.get("replication"),
-                os_metrics=os_metrics,
-                index_stats=data.get("index_stats"),
-                lock_waits=data.get("lock_waits"),
-                fragmentation=data.get("fragmentation"),
-            )
+                try:
+                    data["status"] = await connector.get_status()
+                except Exception as e:
+                    data["status"] = {"error": str(e)}
 
-            # Generate markdown report
-            md_content = _build_markdown_report(datasource, data, findings)
+                try:
+                    data["variables"] = await connector.get_variables()
+                except Exception as e:
+                    data["variables"] = {}
 
-            # Generate HTML report
-            html_content = _build_html_report(datasource, data, findings)
+                try:
+                    data["slow_queries"] = await connector.get_slow_queries()
+                except Exception as e:
+                    data["slow_queries"] = []
 
-            # Count severities
-            critical_count = sum(1 for f in findings if f["severity"] == "CRITICAL")
-            warning_count = sum(1 for f in findings if f["severity"] == "WARNING")
-            info_count = sum(1 for f in findings if f["severity"] == "INFO")
+                try:
+                    data["table_stats"] = await connector.get_table_stats()
+                except Exception as e:
+                    data["table_stats"] = []
 
-            summary = f"Found {len(findings)} issues: {critical_count} critical, {warning_count} warnings, {info_count} informational."
+                try:
+                    data["replication"] = await connector.get_replication_status()
+                except Exception as e:
+                    data["replication"] = {}
 
-            await _update_report_status(
-                report_id, "completed",
-                summary=summary,
-                content_md=md_content,
-                content_html=html_content,
-                findings=findings,
-            )
+                try:
+                    data["db_size"] = await connector.get_db_size()
+                except Exception as e:
+                    data["db_size"] = {}
 
-            await connector.close()
+                try:
+                    data["processes"] = await connector.get_process_list()
+                except Exception as e:
+                    data["processes"] = []
+
+                try:
+                    data["index_stats"] = await connector.get_index_stats()
+                except Exception as e:
+                    data["index_stats"] = []
+
+                try:
+                    data["lock_waits"] = await connector.get_lock_waits()
+                except Exception as e:
+                    data["lock_waits"] = []
+
+                try:
+                    data["fragmentation"] = await connector.get_table_fragmentation()
+                except Exception as e:
+                    data["fragmentation"] = []
+
+                # OS metrics if SSH is configured
+                os_metrics = None
+                if datasource.host_id:
+                    try:
+                        ssh_result = await db.execute(select(Host).where(Host.id == datasource.host_id))
+                        host = ssh_result.scalar_one_or_none()
+                        if host:
+                            ssh_pwd = decrypt_value(host.password_encrypted) if host.password_encrypted else None
+                            ssh_key = decrypt_value(host.private_key_encrypted) if host.private_key_encrypted else None
+                            ssh = SSHService(host=host.host, port=host.port, username=host.username,
+                                            password=ssh_pwd, private_key=ssh_key)
+                            os_svc = OSMetricsService(ssh)
+                            os_metrics = os_svc.collect()
+                            data["os_metrics"] = os_metrics
+                    except Exception as e:
+                        logger.warning(f"Failed to collect OS metrics: {e}")
+
+                # Run diagnostic engine
+                engine = DiagnosticEngine()
+                findings = engine.analyze(
+                    db_type=datasource.db_type,
+                    status=data.get("status", {}),
+                    variables=data.get("variables"),
+                    slow_queries=data.get("slow_queries"),
+                    table_stats=data.get("table_stats"),
+                    replication=data.get("replication"),
+                    os_metrics=os_metrics,
+                    index_stats=data.get("index_stats"),
+                    lock_waits=data.get("lock_waits"),
+                    fragmentation=data.get("fragmentation"),
+                )
+
+                # Generate markdown report
+                md_content = _build_markdown_report(datasource, data, findings)
+
+                # Generate HTML report
+                html_content = _build_html_report(datasource, data, findings)
+
+                # Count severities
+                critical_count = sum(1 for f in findings if f["severity"] == "CRITICAL")
+                warning_count = sum(1 for f in findings if f["severity"] == "WARNING")
+                info_count = sum(1 for f in findings if f["severity"] == "INFO")
+
+                summary = f"Found {len(findings)} issues: {critical_count} critical, {warning_count} warnings, {info_count} informational."
+
+                await _update_report_status(
+                    report_id, "completed",
+                    summary=summary,
+                    content_md=md_content,
+                    content_html=html_content,
+                    findings=findings,
+                )
+            finally:
+                # 确保连接总是被关闭，即使发生异常
+                await connector.close()
 
     except Exception as e:
         logger.error(f"Report generation failed: {e}")
@@ -516,7 +518,7 @@ class ReportGenerator:
             report.content_html = content_html
             report.skill_executions = skill_executions
             report.status = "completed"
-            report.completed_at = datetime.utcnow()
+            report.completed_at = datetime.now()
 
         except Exception as e:
             logger.error(f"Error generating inspection report: {e}", exc_info=True)
