@@ -28,6 +28,19 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("Database initialized")
 
+    # Run migrations for new columns
+    try:
+        from backend.migrations.add_datasource_connection_status import migrate as migrate_conn_status
+        await migrate_conn_status()
+    except Exception as e:
+        logger.warning(f"Connection status migration: {e}")
+
+    try:
+        from backend.migrations.add_alert_notified_at import migrate as migrate_alert_notified
+        await migrate_alert_notified()
+    except Exception as e:
+        logger.warning(f"Alert notified_at migration: {e}")
+
     # Seed default system configs
     from backend.database import async_session as _async_session
     from backend.services import config_service as _config_service
@@ -40,6 +53,45 @@ async def lifespan(app: FastAPI):
             description="巡检触发去重窗口（分钟），同一数据源在此时间内不重复触发巡检",
             category="inspection"
         ) if not await _config_service.get_config(_db, "inspection_dedup_window_minutes") else None
+
+        # Seed default SMTP notification configs
+        smtp_defaults = [
+            ("smtp_host", "", "string", "SMTP服务器地址"),
+            ("smtp_port", "587", "integer", "SMTP服务器端口（默认587，SSL使用465）"),
+            ("smtp_username", "", "string", "SMTP登录用户名"),
+            ("smtp_password", "", "string", "SMTP登录密码"),
+            ("smtp_from_email", "", "string", "发件人邮箱地址"),
+            ("smtp_use_tls", "true", "boolean", "是否启用STARTTLS加密"),
+        ]
+
+        # Seed default Aliyun configs
+        aliyun_defaults = [
+            ("aliyun_access_key_id", "", "string", "阿里云 AccessKey ID（用于 RDS 监控数据采集）"),
+            ("aliyun_access_key_secret", "", "string", "阿里云 AccessKey Secret（用于 RDS 监控数据采集）"),
+        ]
+
+        from sqlalchemy import select as _select
+        from backend.models.system_config import SystemConfig as _SystemConfig
+
+        # Seed SMTP configs
+        for key, default_val, val_type, desc in smtp_defaults:
+            _exists = await _db.execute(_select(_SystemConfig).where(_SystemConfig.key == key))
+            if not _exists.scalar_one_or_none():
+                await _config_service.set_config(
+                    _db, key=key, value=default_val,
+                    value_type=val_type, description=desc,
+                    category="notification"
+                )
+
+        # Seed Aliyun configs
+        for key, default_val, val_type, desc in aliyun_defaults:
+            _exists = await _db.execute(_select(_SystemConfig).where(_SystemConfig.key == key))
+            if not _exists.scalar_one_or_none():
+                await _config_service.set_config(
+                    _db, key=key, value=default_val,
+                    value_type=val_type, description=desc,
+                    category="integration"
+                )
     logger.info("Default system configs seeded")
 
     # Start SSH connection pool
@@ -86,13 +138,26 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(start_notification_dispatcher())
     logger.info("🔔 Notification dispatcher started")
 
+    # Load builtin integration templates
+    from backend.services.integration_service import IntegrationService
+    async with async_session() as _db:
+        await IntegrationService.load_builtin_templates(_db)
+    logger.info("📦 Integration templates loaded")
+
+    # Start integration scheduler
+    from backend.services.integration_scheduler import start_integration_scheduler
+    asyncio.create_task(start_integration_scheduler())
+    logger.info("🔄 Integration scheduler started")
+
     yield
 
     # Shutdown
     from backend.services.metric_collector import stop_scheduler
     from backend.services.ssh_connection_pool import stop_ssh_pool
+    from backend.services.integration_scheduler import stop_integration_scheduler
 
     stop_scheduler()
+    stop_integration_scheduler()
     if kb_processor:
         kb_processor.stop()
     await inspection_service.stop()
@@ -107,12 +172,41 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Global exception handler for detailed logging
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request, exc):
+        from fastapi.responses import JSONResponse
+        import traceback
+
+        # Log detailed error information
+        logger.error(f"Unhandled exception in {request.method} {request.url.path}")
+        logger.error(f"Exception type: {type(exc).__name__}")
+        logger.error(f"Exception message: {str(exc)}")
+        logger.error(f"Traceback:\n{traceback.format_exc()}")
+
+        # Log request details
+        logger.error(f"Request headers: {dict(request.headers)}")
+        try:
+            body = await request.body()
+            if body:
+                logger.error(f"Request body: {body.decode('utf-8')}")
+        except:
+            pass
+
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": f"Internal server error: {str(exc)}",
+                "type": type(exc).__name__
+            }
+        )
+
     @app.get("/health")
     async def health_check():
         return {"status": "ok"}
 
     # Register routers
-    from backend.routers import datasources, hosts, metrics, monitor_ws, chat, query, ai_models, knowledge_bases, auth, users, inspections, system_configs, alerts
+    from backend.routers import datasources, hosts, metrics, monitor_ws, chat, query, ai_models, knowledge_bases, auth, users, inspections, system_configs, alerts, integrations
     from backend.api import skills
     app.include_router(auth.router)
     app.include_router(users.router)
@@ -128,6 +222,7 @@ def create_app() -> FastAPI:
     app.include_router(inspections.router)
     app.include_router(system_configs.router)
     app.include_router(alerts.router)
+    app.include_router(integrations.router)
 
     # Serve frontend static files
     app.mount("/css", StaticFiles(directory="frontend/css"), name="css")

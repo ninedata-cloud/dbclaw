@@ -207,8 +207,8 @@ class AlertService:
 
         alert.status = "acknowledged"
         alert.acknowledged_by = user_id
-        alert.acknowledged_at = datetime.utcnow()
-        alert.updated_at = datetime.utcnow()
+        alert.acknowledged_at = datetime.now()
+        alert.updated_at = datetime.now()
 
         await db.commit()
         await db.refresh(alert)
@@ -238,8 +238,8 @@ class AlertService:
             return None
 
         alert.status = "resolved"
-        alert.resolved_at = datetime.utcnow()
-        alert.updated_at = datetime.utcnow()
+        alert.resolved_at = datetime.now()
+        alert.updated_at = datetime.now()
         if resolved_value is not None:
             alert.resolved_value = resolved_value
 
@@ -291,8 +291,7 @@ class AlertService:
             datasource_ids=subscription_data.datasource_ids,
             severity_levels=subscription_data.severity_levels,
             time_ranges=time_ranges_dict,
-            channels=subscription_data.channels,
-            webhook_url=subscription_data.webhook_url,
+            channel_ids=subscription_data.channel_ids,
             enabled=subscription_data.enabled,
             aggregation_script=subscription_data.aggregation_script
         )
@@ -330,7 +329,7 @@ class AlertService:
             if value is not None:
                 setattr(subscription, key, value)
 
-        subscription.updated_at = datetime.utcnow()
+        subscription.updated_at = datetime.now()
 
         await db.commit()
         await db.refresh(subscription)
@@ -343,7 +342,7 @@ class AlertService:
         db: AsyncSession,
         subscription_id: int
     ) -> bool:
-        """Delete an alert subscription"""
+        """Delete an alert subscription and its delivery logs"""
         result = await db.execute(
             select(AlertSubscription).where(AlertSubscription.id == subscription_id)
         )
@@ -352,10 +351,16 @@ class AlertService:
         if not subscription:
             return False
 
+        # Delete related delivery logs first (foreign key constraint)
+        from sqlalchemy import delete as sa_delete
+        await db.execute(
+            sa_delete(AlertDeliveryLog).where(AlertDeliveryLog.subscription_id == subscription_id)
+        )
+
         await db.delete(subscription)
         await db.commit()
 
-        logger.info(f"Deleted subscription {subscription_id}")
+        logger.info(f"Deleted subscription {subscription_id} and its delivery logs")
         return True
 
     @staticmethod
@@ -364,42 +369,28 @@ class AlertService:
         minutes: int = 10
     ) -> List[AlertMessage]:
         """
-        Get active alerts that haven't been notified recently.
+        Get active alerts that haven't been notified yet.
+
+        Only returns alerts where notified_at is NULL, meaning they have
+        never been successfully notified. This prevents the same alert
+        from being sent repeatedly across dispatcher cycles.
 
         Args:
             db: Database session
-            minutes: Time window to check for recent notifications
+            minutes: Time window (kept for API compatibility, no longer used for filtering)
 
         Returns:
             List of alerts that need notification
         """
-        cutoff_time = datetime.utcnow() - timedelta(minutes=minutes)
-
-        # Get active alerts
         result = await db.execute(
-            select(AlertMessage).where(AlertMessage.status == "active")
-        )
-        alerts = result.scalars().all()
-
-        # Filter out alerts that have recent successful deliveries
-        pending_alerts = []
-        for alert in alerts:
-            # Check if there are recent successful deliveries
-            delivery_result = await db.execute(
-                select(AlertDeliveryLog).where(
-                    and_(
-                        AlertDeliveryLog.alert_id == alert.id,
-                        AlertDeliveryLog.status == "sent",
-                        AlertDeliveryLog.sent_at >= cutoff_time
-                    )
+            select(AlertMessage).where(
+                and_(
+                    AlertMessage.status == "active",
+                    AlertMessage.notified_at.is_(None)
                 )
             )
-            recent_deliveries = delivery_result.scalars().all()
-
-            if not recent_deliveries:
-                pending_alerts.append(alert)
-
-        return pending_alerts
+        )
+        return result.scalars().all()
 
     @staticmethod
     async def get_pending_recovery_notifications(
@@ -407,16 +398,16 @@ class AlertService:
         minutes: int = 60
     ) -> List[AlertMessage]:
         """
-        Get recently resolved alerts that haven't had a recovery notification sent yet.
+        Get recently resolved alerts that need recovery notifications.
 
         Args:
             db: Database session
             minutes: Only consider alerts resolved within this window
 
         Returns:
-            List of resolved alerts needing recovery notification
+            List of resolved alerts within the time window
         """
-        cutoff_time = datetime.utcnow() - timedelta(minutes=minutes)
+        cutoff_time = datetime.now() - timedelta(minutes=minutes)
 
         # Get recently resolved alerts
         result = await db.execute(
@@ -427,22 +418,34 @@ class AlertService:
                 )
             )
         )
-        resolved_alerts = result.scalars().all()
+        return result.scalars().all()
 
-        # Filter out alerts that already have a recovery notification sent
-        pending = []
-        for alert in resolved_alerts:
-            delivery_result = await db.execute(
-                select(AlertDeliveryLog).where(
-                    and_(
-                        AlertDeliveryLog.alert_id == alert.id,
-                        AlertDeliveryLog.channel == "recovery",
-                        AlertDeliveryLog.status == "sent"
-                    )
+    @staticmethod
+    async def has_recovery_notification_for_subscription(
+        db: AsyncSession,
+        alert_id: int,
+        subscription_id: int
+    ) -> bool:
+        """
+        Check if a recovery notification has already been sent for a specific
+        alert + subscription combination.
+
+        Args:
+            db: Database session
+            alert_id: Alert ID
+            subscription_id: Subscription ID
+
+        Returns:
+            True if recovery notification already sent
+        """
+        delivery_result = await db.execute(
+            select(AlertDeliveryLog).where(
+                and_(
+                    AlertDeliveryLog.alert_id == alert_id,
+                    AlertDeliveryLog.subscription_id == subscription_id,
+                    AlertDeliveryLog.channel.like("%recovery%"),
+                    AlertDeliveryLog.status == "sent"
                 )
             )
-            recovery_logs = delivery_result.scalars().all()
-            if not recovery_logs:
-                pending.append(alert)
-
-        return pending
+        )
+        return delivery_result.scalars().first() is not None
