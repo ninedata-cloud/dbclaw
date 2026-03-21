@@ -61,12 +61,9 @@ async def list_hosts(db: AsyncSession = Depends(get_db)):
             host_dict["last_check_time"] = metric.collected_at
 
             # Determine status based on metrics and freshness
-            now = datetime.now()  # Use local time since DB stores local time
-            # Make metric.collected_at timezone-aware if it isn't
+            # Use UTC to match PostgreSQL server_default=func.now() which returns UTC
+            now = datetime.utcnow()
             metric_time = metric.collected_at
-            if metric_time.tzinfo is None:
-                # DB stores local time without timezone info
-                metric_time = metric_time
             metric_age = (now - metric_time).total_seconds()
 
             # If metrics are older than 5 minutes, consider offline

@@ -35,7 +35,7 @@ async def execute_host_command(db: AsyncSession, host_id: int, command: str, all
                 'iptables', 'firewall',
                 'useradd', 'userdel', 'usermod',
                 'groupadd', 'groupdel',
-                '>', '>>', 'tee',
+                '>>', 'tee',
                 'wget', 'curl -o', 'curl -O',
                 'apt install', 'yum install', 'dnf install',
                 'systemctl stop', 'systemctl start', 'systemctl restart',

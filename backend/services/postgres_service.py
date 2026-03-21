@@ -12,7 +12,7 @@ class PostgreSQLConnector(DBConnector):
             host=self.host, port=self.port,
             user=self.username, password=self.password or "",
             database=self.database or "postgres",
-            timeout=10,
+            timeout=5,
             ssl=False,
         )
 

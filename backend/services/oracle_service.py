@@ -1,3 +1,4 @@
+import asyncio
 import time
 from typing import Any, Dict, List, Optional
 from backend.services.db_connector import DBConnector
@@ -21,11 +22,14 @@ class OracleConnector(DBConnector):
             mode = oracledb.AUTH_MODE_SYSDBA
         elif self.oracle_conn_mode == 'sysoper':
             mode = oracledb.AUTH_MODE_SYSOPER
-        connection = await oracledb.connect_async(
-            user=self.username,
-            password=self.password or "",
-            dsn=dsn,
-            mode=mode
+        connection = await asyncio.wait_for(
+            oracledb.connect_async(
+                user=self.username,
+                password=self.password or "",
+                dsn=dsn,
+                mode=mode
+            ),
+            timeout=5
         )
         return connection
 

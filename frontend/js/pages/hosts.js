@@ -3,8 +3,7 @@ const HostsPage = {
     allHosts: [],
     filteredHosts: [],
     _filters: {
-        name: '',
-        host: ''
+        search: ''
     },
 
     async render() {
@@ -46,8 +45,7 @@ const HostsPage = {
     _buildHeaderActions() {
         const filtersContainer = DOM.el('div', { className: 'dashboard-filters' });
         filtersContainer.innerHTML = `
-            <input type="text" id="filter-name" class="filter-input" placeholder="按名称搜索...">
-            <input type="text" id="filter-host" class="filter-input" placeholder="按主机 IP 搜索...">
+            <input type="text" id="filter-search" class="filter-input" placeholder="按名称或 IP 搜索..." style="min-width:220px">
             <button id="btn-search" class="btn btn-primary">
                 <i data-lucide="search"></i> 检索
             </button>
@@ -61,21 +59,14 @@ const HostsPage = {
 
         setTimeout(() => {
             const btnSearch = DOM.$('#btn-search');
-            const filterName = DOM.$('#filter-name');
-            const filterHost = DOM.$('#filter-host');
+            const filterSearch = DOM.$('#filter-search');
 
             if (btnSearch) {
                 btnSearch.addEventListener('click', () => this._applyFilters());
             }
-            if (filterName) {
-                filterName.addEventListener('input', () => this._applyFilters());
-                filterName.addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') this._applyFilters();
-                });
-            }
-            if (filterHost) {
-                filterHost.addEventListener('input', () => this._applyFilters());
-                filterHost.addEventListener('keypress', (e) => {
+            if (filterSearch) {
+                filterSearch.addEventListener('input', () => this._applyFilters());
+                filterSearch.addEventListener('keypress', (e) => {
                     if (e.key === 'Enter') this._applyFilters();
                 });
             }
@@ -86,13 +77,12 @@ const HostsPage = {
     },
 
     _applyFilters() {
-        this._filters.name = DOM.$('#filter-name')?.value.trim().toLowerCase() || '';
-        this._filters.host = DOM.$('#filter-host')?.value.trim().toLowerCase() || '';
+        this._filters.search = DOM.$('#filter-search')?.value.trim().toLowerCase() || '';
 
         this.filteredHosts = this.allHosts.filter(h => {
-            const matchName = !this._filters.name || h.name.toLowerCase().includes(this._filters.name);
-            const matchHost = !this._filters.host || h.host.toLowerCase().includes(this._filters.host);
-            return matchName && matchHost;
+            if (!this._filters.search) return true;
+            return h.name.toLowerCase().includes(this._filters.search) ||
+                   h.host.toLowerCase().includes(this._filters.search);
         });
 
         this._renderTable();

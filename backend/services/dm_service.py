@@ -10,8 +10,14 @@ class DMConnector(DBConnector):
     def _connect(self):
         try:
             import dmPython
+            import socket
             conn_str = f"{self.username}/{self.password}@{self.host}:{self.port}"
-            return dmPython.connect(conn_str)
+            old_timeout = socket.getdefaulttimeout()
+            socket.setdefaulttimeout(5)
+            try:
+                return dmPython.connect(conn_str)
+            finally:
+                socket.setdefaulttimeout(old_timeout)
         except ImportError:
             raise ImportError("dmPython library not installed. Install with: pip install dmPython")
 

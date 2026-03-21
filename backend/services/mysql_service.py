@@ -17,7 +17,7 @@ class MySQLConnector(DBConnector):
 
     async def _connect(self):
         import aiomysql
-        return await aiomysql.connect(**self._get_conn_params(), connect_timeout=10)
+        return await aiomysql.connect(**self._get_conn_params(), connect_timeout=5)
 
     async def test_connection(self) -> str:
         conn = await self._connect()

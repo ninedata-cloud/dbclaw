@@ -66,6 +66,16 @@
     white-space: nowrap;
 }
 
+.filter-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    white-space: nowrap;
+    cursor: pointer;
+    color: var(--text-primary);
+}
+
 /* Page filters container - for pages that put filters below header */
 .page-filters {
     display: flex;
