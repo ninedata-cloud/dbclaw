@@ -205,22 +205,10 @@ const AlertsPage = {
     },
 
     render() {
-        // Use standard header component
-        const headerActions = DOM.el('div', { className: 'flex gap-8' });
-        const addSubBtn = DOM.el('button', {
-            className: 'btn btn-primary',
-            innerHTML: '<i data-lucide="plus"></i>新建订阅',
-            onClick: () => this.showSubscriptionModal()
-        });
-        headerActions.appendChild(addSubBtn);
-        Header.render('告警管理', headerActions);
+        Header.render('告警管理', this._buildHeaderActions());
 
         const container = DOM.$('#page-content');
         DOM.clear(container);
-
-        // Filters
-        const filters = this.renderFilters();
-        container.appendChild(filters);
 
         // View toggle (for alerts tab)
         const viewToggle = DOM.el('div', { className: 'view-toggle' });
@@ -265,6 +253,112 @@ const AlertsPage = {
         container.appendChild(tabContent);
 
         DOM.createIcons();
+    },
+
+    _buildHeaderActions() {
+        const filtersContainer = DOM.el('div', { className: 'dashboard-filters' });
+
+        // Datasource select
+        const datasourceSelect = DOM.el('select', {
+            className: 'filter-select',
+            onChange: (e) => {
+                this.filters.datasource_id = e.target.value ? parseInt(e.target.value) : null;
+                this.resetPagination();
+                Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
+            }
+        });
+        datasourceSelect.appendChild(DOM.el('option', { value: '', textContent: '全部数据源' }));
+        for (const ds of this.datasources) {
+            datasourceSelect.appendChild(DOM.el('option', {
+                value: ds.id,
+                textContent: ds.name,
+                selected: this.filters.datasource_id === ds.id
+            }));
+        }
+        filtersContainer.appendChild(datasourceSelect);
+
+        // Status select
+        const statusSelect = DOM.el('select', {
+            className: 'filter-select',
+            onChange: (e) => {
+                this.filters.status = e.target.value;
+                this.resetPagination();
+                Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
+            }
+        });
+        statusSelect.appendChild(DOM.el('option', { value: 'all', textContent: '全部状态' }));
+        statusSelect.appendChild(DOM.el('option', { value: 'active', textContent: '活跃' }));
+        statusSelect.appendChild(DOM.el('option', { value: 'acknowledged', textContent: '已确认' }));
+        statusSelect.appendChild(DOM.el('option', { value: 'resolved', textContent: '已解决' }));
+        filtersContainer.appendChild(statusSelect);
+
+        // Severity select
+        const severitySelect = DOM.el('select', {
+            className: 'filter-select',
+            onChange: (e) => {
+                this.filters.severity = e.target.value || null;
+                this.resetPagination();
+                Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
+            }
+        });
+        severitySelect.appendChild(DOM.el('option', { value: '', textContent: '全部严重程度' }));
+        severitySelect.appendChild(DOM.el('option', { value: 'critical', textContent: '严重' }));
+        severitySelect.appendChild(DOM.el('option', { value: 'high', textContent: '高' }));
+        severitySelect.appendChild(DOM.el('option', { value: 'medium', textContent: '中' }));
+        severitySelect.appendChild(DOM.el('option', { value: 'low', textContent: '低' }));
+        filtersContainer.appendChild(severitySelect);
+
+        // Start time input
+        const startTimeInput = DOM.el('input', {
+            type: 'datetime-local',
+            className: 'filter-input',
+            title: '开始时间',
+            value: this.filters.start_time || '',
+            onChange: (e) => {
+                this.filters.start_time = e.target.value || null;
+                this.resetPagination();
+                Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
+            }
+        });
+        filtersContainer.appendChild(startTimeInput);
+
+        // End time input
+        const endTimeInput = DOM.el('input', {
+            type: 'datetime-local',
+            className: 'filter-input',
+            title: '结束时间',
+            value: this.filters.end_time || '',
+            onChange: (e) => {
+                this.filters.end_time = e.target.value || null;
+                this.resetPagination();
+                Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
+            }
+        });
+        filtersContainer.appendChild(endTimeInput);
+
+        // Search input
+        const searchInput = DOM.el('input', {
+            type: 'text',
+            className: 'filter-input',
+            placeholder: '搜索标题或内容',
+            onInput: (e) => {
+                this.filters.search = e.target.value;
+                clearTimeout(this.searchTimeout);
+                this.searchTimeout = setTimeout(() => {
+                    this.resetPagination();
+                    Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
+                }, 500);
+            }
+        });
+        filtersContainer.appendChild(searchInput);
+
+        const addSubBtn = DOM.el('button', {
+            className: 'btn btn-primary',
+            innerHTML: '<i data-lucide="plus"></i>新建订阅',
+            onClick: () => this.showSubscriptionModal()
+        });
+
+        return [filtersContainer, addSubBtn];
     },
 
     renderFilters() {

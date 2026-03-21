@@ -23,7 +23,7 @@
 }
 
 .filter-input {
-    min-width: 250px;
+    min-width: 100px;
 }
 
 /* Inspection page date input - shorter width and visible calendar icon */
@@ -39,6 +39,16 @@
 }
 
 .inspection-date-input::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+}
+
+.filter-input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    filter: invert(1) brightness(0.8);
+    cursor: pointer;
+    opacity: 0.7;
+}
+
+.filter-input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
     opacity: 1;
 }
 

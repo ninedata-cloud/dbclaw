@@ -4,13 +4,6 @@ const DatasourcesPage = {
     filteredDatasources: [],
 
     async render() {
-        console.log('DatasourcesPage: Using NEW table layout');
-        Header.render('数据源管理', DOM.el('button', {
-            className: 'btn btn-primary',
-            innerHTML: '<i data-lucide="plus"></i> New Datasource',
-            onClick: () => DatasourceForm.show(null, () => this.render())
-        }));
-
         const content = DOM.$('#page-content');
         content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
@@ -18,6 +11,9 @@ const DatasourcesPage = {
             this.allDatasources = await API.getDatasources();
             this.filteredDatasources = [...this.allDatasources];
             Store.set('datasources', this.allDatasources);
+
+            Header.render('数据源管理', this._buildHeaderActions());
+
             content.innerHTML = '';
 
             if (this.allDatasources.length === 0) {
@@ -32,65 +28,51 @@ const DatasourcesPage = {
                 return;
             }
 
-            // Filters + Refresh button
-            const filterBar = DOM.el('div', { style: { marginBottom: '20px', display: 'flex', gap: '10px', alignItems: 'end', flexWrap: 'wrap' } });
-
-            const nameFilter = DOM.el('div');
-            nameFilter.innerHTML = `
-                <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">名称</label>
-                <input type="text" id="filterName" class="form-input" placeholder="按名称搜索..." style="padding:8px;border-radius:4px;min-width:200px;">
-            `;
-
-            const typeFilter = DOM.el('div');
-            typeFilter.innerHTML = `
-                <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">数据库类型</label>
-                <select id="filterType" class="form-select" style="padding:8px;border-radius:4px;">
-                    <option value="">所有类型</option>
-                    <option value="mysql">MySQL</option>
-                    <option value="postgresql">PostgreSQL</option>
-                    <option value="oracle">Oracle</option>
-                    <option value="sqlserver">SQL Server</option>
-                    <option value="dm">DM</option>
-                    <option value="mongodb">MongoDB</option>
-                    <option value="redis">Redis</option>
-                </select>
-            `;
-
-            const importanceFilter = DOM.el('div');
-            importanceFilter.innerHTML = `
-                <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">重要性</label>
-                <select id="filter重要性" class="form-select" style="padding:8px;border-radius:4px;">
-                    <option value="">所有级别</option>
-                    <option value="core">核心系统</option>
-                    <option value="production">生产系统</option>
-                    <option value="development">开发测试</option>
-                    <option value="temporary">临时</option>
-                </select>
-            `;
-
-            const refreshBtn = DOM.el('button', {
-                className: 'btn btn-sm btn-outline-primary',
-                innerHTML: '<i data-lucide="refresh-cw"></i> 刷新状态',
-                style: { marginLeft: 'auto' },
-                onclick: () => this._refreshStatus()
-            });
-
-            filterBar.appendChild(nameFilter);
-            filterBar.appendChild(typeFilter);
-            filterBar.appendChild(importanceFilter);
-            content.appendChild(filterBar);
-
             // Table container
             const tableContainer = DOM.el('div', { id: 'datasource-table-container' });
             content.appendChild(tableContainer);
 
             this._renderTable();
-            this._setupFilterListeners();
             DOM.createIcons();
 
         } catch (err) {
             Toast.error('加载数据源失败: ' + err.message);
         }
+    },
+
+    _buildHeaderActions() {
+        const filtersContainer = DOM.el('div', { className: 'dashboard-filters' });
+        filtersContainer.innerHTML = `
+            <input type="text" id="filterName" class="filter-input" placeholder="按名称搜索...">
+            <select id="filterType" class="filter-select">
+                <option value="">所有类型</option>
+                <option value="mysql">MySQL</option>
+                <option value="postgresql">PostgreSQL</option>
+                <option value="oracle">Oracle</option>
+                <option value="sqlserver">SQL Server</option>
+                <option value="dm">DM</option>
+                <option value="mongodb">MongoDB</option>
+                <option value="redis">Redis</option>
+            </select>
+            <select id="filter重要性" class="filter-select">
+                <option value="">所有级别</option>
+                <option value="core">核心系统</option>
+                <option value="production">生产系统</option>
+                <option value="development">开发测试</option>
+                <option value="temporary">临时</option>
+            </select>
+        `;
+
+        const newBtn = DOM.el('button', { className: 'btn btn-primary' });
+        newBtn.innerHTML = '<i data-lucide="plus"></i> New Datasource';
+        newBtn.onclick = () => DatasourceForm.show(null, () => this.render());
+
+        setTimeout(() => {
+            this._setupFilterListeners();
+            DOM.createIcons();
+        }, 0);
+
+        return [filtersContainer, newBtn];
     },
 
     _setupFilterListeners() {
