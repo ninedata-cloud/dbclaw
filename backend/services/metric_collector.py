@@ -477,7 +477,6 @@ async def _handle_network_probe_failure(host: str):
     """创建全局网络探针失败告警（若尚无活跃告警）"""
     try:
         from backend.services.alert_service import AlertService
-        from sqlalchemy import and_
         async with async_session() as db:
             # 检查是否已存在活跃的网络告警，避免重复
             result = await db.execute(
@@ -509,7 +508,6 @@ async def _auto_resolve_network_probe_alerts():
     """探针恢复后自动解除所有活跃的网络告警"""
     try:
         from backend.services.alert_service import AlertService
-        from sqlalchemy import and_
         async with async_session() as db:
             result = await db.execute(
                 select(AlertMessage).where(
@@ -556,7 +554,7 @@ async def collect_all_metrics():
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
     except Exception as e:
-        logger.error(f"Error in collect_all_metrics: {e}")
+        logger.error(f"Error in collect_all_metrics: {e}", exc_info=True)
 
 
 def start_scheduler(interval_seconds: int = 15):
