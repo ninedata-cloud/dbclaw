@@ -45,7 +45,7 @@ async def create_config(
     """Create new configuration"""
     try:
         config = await config_service.set_config(
-            db, data.key, data.value, data.value_type, data.description, data.category
+            db, data.key, data.value, data.value_type, data.description, data.category, data.is_encrypted
         )
         return config
     except IntegrityError:
@@ -60,12 +60,18 @@ async def update_config(
     current_user: User = Depends(get_current_admin)
 ):
     """Update configuration"""
+    from backend.utils.encryption import encrypt_value
     config = await db.get(SystemConfig, id)
     if not config:
         raise HTTPException(status_code=404, detail="Configuration not found")
 
+    if data.is_encrypted is not None:
+        config.is_encrypted = data.is_encrypted
     if data.value is not None:
-        config.value = data.value
+        # If value is non-empty, store it (encrypting if needed)
+        if data.value != "":
+            config.value = encrypt_value(data.value) if config.is_encrypted else data.value
+        # If value is empty string and field is encrypted, keep existing encrypted value
     if data.value_type is not None:
         config.value_type = data.value_type
     if data.description is not None:
@@ -77,6 +83,10 @@ async def update_config(
 
     await db.commit()
     await db.refresh(config)
+    # Decrypt value before returning
+    if config.is_encrypted and config.value:
+        from backend.utils.encryption import decrypt_value
+        config.value = decrypt_value(config.value)
     return config
 
 

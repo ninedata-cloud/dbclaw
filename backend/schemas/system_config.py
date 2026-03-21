@@ -9,6 +9,7 @@ class SystemConfigCreate(BaseModel):
     value_type: Literal["string", "integer", "float", "boolean", "json"]
     description: Optional[str] = None
     category: Optional[str] = None
+    is_encrypted: bool = False
 
 
 class SystemConfigUpdate(BaseModel):
@@ -17,16 +18,18 @@ class SystemConfigUpdate(BaseModel):
     description: Optional[str] = None
     category: Optional[str] = None
     is_active: Optional[bool] = None
+    is_encrypted: Optional[bool] = None
 
 
 class SystemConfigResponse(BaseModel):
     id: int
     key: str
-    value: str
+    value: Optional[str]
     value_type: str
     description: Optional[str]
     category: Optional[str]
     is_active: bool
+    is_encrypted: bool
     created_at: datetime
     updated_at: datetime
 

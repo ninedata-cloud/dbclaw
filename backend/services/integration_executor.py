@@ -88,6 +88,9 @@ class IntegrationContext:
         config = result.scalar_one_or_none()
 
         if config:
+            if config.is_encrypted and config.value:
+                from backend.utils.encryption import decrypt_value
+                return decrypt_value(config.value)
             return config.value
         return None
 

@@ -324,7 +324,7 @@ async def run_conversation_with_skills(
                     "type": "tool_result",
                     "tool_name": tool_name,
                     "tool_call_id": tc["id"],
-                    "result": tool_result[:2000],  # Truncate for display
+                    "result": tool_result[:10000],  # Truncate for display
                     "execution_time_ms": execution_time_ms,
                 }
 

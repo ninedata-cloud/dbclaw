@@ -194,6 +194,75 @@
     cursor: pointer;
 }
 
+.config-form .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-primary);
+    user-select: none;
+}
+
+.config-form .checkbox-label input[type="checkbox"] {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+}
+
+.encrypted-value {
+    color: var(--text-secondary);
+    font-style: italic;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.encrypted-value-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    position: relative;
+}
+
+.encrypted-mask {
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.btn-copy-secret {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.btn-copy-secret:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.btn-copy-secret svg {
+    width: 13px;
+    height: 13px;
+}
+
+.encrypted-value-cell:hover .btn-copy-secret {
+    display: inline-flex;
+}
+
 /* Responsive adjustments */
 @media (max-width: 1200px) {
     .configs-table td.config-value {
