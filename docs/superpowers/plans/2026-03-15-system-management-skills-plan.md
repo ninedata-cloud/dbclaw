@@ -125,7 +125,7 @@ if metric_type:
     query = query.where(MetricSnapshot.metric_type == metric_type)
 
 # Time range filter
-time_threshold = datetime.utcnow() - timedelta(minutes=minutes)
+time_threshold = datetime.now() - timedelta(minutes=minutes)
 query = query.where(MetricSnapshot.collected_at >= time_threshold)
 query = query.order_by(desc(MetricSnapshot.collected_at)).limit(limit)
 

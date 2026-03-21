@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, Literal
 from datetime import datetime
 
 
@@ -16,6 +16,10 @@ class DatasourceCreate(BaseModel):
     importance_level: Optional[str] = Field(default='production', pattern="^(core|production|development|temporary)$")
     monitoring_interval: Optional[int] = Field(default=60, ge=5, le=3600)
 
+    # 监控数据来源配置
+    metric_source: Optional[Literal['system', 'integration']] = Field(default='system', description="监控数据来源")
+    external_instance_id: Optional[str] = Field(None, description="外部系统实例 ID")
+
 
 class DatasourceUpdate(BaseModel):
     name: Optional[str] = None
@@ -29,6 +33,10 @@ class DatasourceUpdate(BaseModel):
     extra_params: Optional[str] = None
     importance_level: Optional[str] = Field(None, pattern="^(core|production|development|temporary)$")
     monitoring_interval: Optional[int] = Field(None, ge=5, le=3600)
+
+    # 监控数据来源配置
+    metric_source: Optional[Literal['system', 'integration']] = None
+    external_instance_id: Optional[str] = None
 
 
 class DatasourceResponse(BaseModel):
@@ -44,6 +52,20 @@ class DatasourceResponse(BaseModel):
     is_active: bool = True
     importance_level: str = 'production'
     monitoring_interval: int = 60
+
+    # 监控数据来源配置
+    metric_source: str = 'system'
+    external_instance_id: Optional[str] = None
+
+    # 临时静默配置
+    silence_until: Optional[datetime] = None
+    silence_reason: Optional[str] = None
+
+    # 连接状态
+    connection_status: str = 'unknown'
+    connection_error: Optional[str] = None
+    connection_checked_at: Optional[datetime] = None
+
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -59,9 +81,29 @@ class DatasourceTestRequest(BaseModel):
     username: Optional[str] = None
     password: Optional[str] = None
     database: Optional[str] = None
+    extra_params: Optional[str] = None
 
 
 class DatasourceTestResult(BaseModel):
     success: bool
     message: str
     version: Optional[str] = None
+
+
+class DatasourceSilenceRequest(BaseModel):
+    """设置数据源静默的请求"""
+    hours: int = Field(..., ge=1, le=72, description="静默时长（小时），范围1-72")
+    reason: Optional[str] = Field(None, max_length=500, description="静默原因")
+
+
+class DatasourceSilenceResponse(BaseModel):
+    """数据源静默状态响应"""
+    datasource_id: int
+    silence_until: Optional[datetime] = None
+    silence_reason: Optional[str] = None
+    is_silenced: bool = False
+    remaining_hours: Optional[float] = None  # 剩余静默时长（小时）
+
+    class Config:
+        from_attributes = True
+

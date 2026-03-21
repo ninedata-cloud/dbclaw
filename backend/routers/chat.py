@@ -192,6 +192,42 @@ async def chat_websocket(websocket: WebSocket, session_id: int, token: str = Que
             from backend.utils.attachment_handler import AttachmentHandler
 
             for m in all_msgs:
+                # Convert custom roles to standard OpenAI format
+                if m.role == "tool_call":
+                    # Convert tool_call to assistant message with tool_calls
+                    try:
+                        data = json.loads(m.content)
+                        msg_dict = {
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [{
+                                "id": f"call_{data['tool_name']}_{m.id}",
+                                "type": "function",
+                                "function": {
+                                    "name": data["tool_name"],
+                                    "arguments": json.dumps(data["tool_args"])
+                                }
+                            }]
+                        }
+                        messages.append(msg_dict)
+                    except Exception as e:
+                        logger.error(f"Error parsing tool_call message: {e}")
+                    continue
+                elif m.role == "tool_result":
+                    # Convert tool_result to tool message
+                    try:
+                        data = json.loads(m.content)
+                        msg_dict = {
+                            "role": "tool",
+                            "tool_call_id": f"call_{data['tool_name']}_{m.id - 1}",  # Match the tool_call id
+                            "content": data["result"]
+                        }
+                        messages.append(msg_dict)
+                    except Exception as e:
+                        logger.error(f"Error parsing tool_result message: {e}")
+                    continue
+
+                # Handle standard roles
                 # Handle attachments
                 if m.attachments:
                     # Build content array for multimodal messages
@@ -259,12 +295,43 @@ async def chat_websocket(websocket: WebSocket, session_id: int, token: str = Que
                             "content": event["content"],
                         })
                     elif event_type == "tool_call":
+                        # Save tool_call to database
+                        async with async_session() as tool_db:
+                            tool_msg = ChatMessage(
+                                session_id=session_id,
+                                role="tool_call",
+                                content=json.dumps({
+                                    "tool_name": event["tool_name"],
+                                    "tool_args": event["tool_args"]
+                                }),
+                                tool_calls=[{
+                                    "name": event["tool_name"],
+                                    "arguments": event["tool_args"]
+                                }]
+                            )
+                            tool_db.add(tool_msg)
+                            await tool_db.commit()
+
                         await websocket.send_json({
                             "type": "tool_call",
                             "tool_name": event["tool_name"],
                             "tool_args": event["tool_args"],
                         })
                     elif event_type == "tool_result":
+                        # Save tool_result to database
+                        async with async_session() as tool_db:
+                            result_msg = ChatMessage(
+                                session_id=session_id,
+                                role="tool_result",
+                                content=json.dumps({
+                                    "tool_name": event["tool_name"],
+                                    "result": event["result"],
+                                    "execution_time_ms": event.get("execution_time_ms")
+                                })
+                            )
+                            tool_db.add(result_msg)
+                            await tool_db.commit()
+
                         await websocket.send_json({
                             "type": "tool_result",
                             "tool_name": event["tool_name"],

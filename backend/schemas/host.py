@@ -8,7 +8,7 @@ class HostCreate(BaseModel):
     host: str = Field(..., min_length=1)
     port: int = Field(22, gt=0, lt=65536)
     username: str = Field(..., min_length=1)
-    auth_type: str = Field("password", pattern="^(password|key)$")
+    auth_type: str = Field("password", pattern="^(password|key|agent)$")
     password: Optional[str] = None
     private_key: Optional[str] = None
 
@@ -31,6 +31,11 @@ class HostResponse(BaseModel):
     username: str
     auth_type: str
     cpu_usage: Optional[float] = None
+    memory_usage: Optional[float] = None
+    disk_usage: Optional[float] = None
+    status: str = "unknown"  # normal, warning, error, offline
+    status_message: Optional[str] = None
+    last_check_time: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

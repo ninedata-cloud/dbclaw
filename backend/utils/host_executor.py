@@ -59,15 +59,19 @@ async def execute_host_command(db: AsyncSession, host_id: int, command: str, all
         if not host:
             return {"success": False, "error": f"Host {host_id} not found"}
 
-        # Decrypt password
+        # Decrypt credentials based on auth type
         password = decrypt_value(host.password_encrypted) if host.password_encrypted else None
+        private_key = decrypt_value(host.private_key_encrypted) if host.private_key_encrypted else None
+        use_agent = (host.auth_type == 'agent')
 
-        # Create SSH service
+        # Create SSH service with proper auth
         ssh_service = SSHService(
             host=host.host,
             port=host.port,
             username=host.username,
             password=password,
+            private_key=private_key,
+            use_agent=use_agent,
         )
 
         # Execute command (SSHService.execute is synchronous, run in executor)

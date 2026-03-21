@@ -3,10 +3,13 @@ from typing import Any, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from backend.models.system_config import SystemConfig
+from backend.utils.encryption import encrypt_value, decrypt_value
+
+MASKED_VALUE = "****"
 
 
 async def get_config(db: AsyncSession, key: str, default: Any = None) -> Any:
-    """Retrieve and parse configuration value"""
+    """Retrieve and parse configuration value, auto-decrypting if encrypted"""
     result = await db.execute(
         select(SystemConfig).where(
             SystemConfig.key == key,
@@ -16,16 +19,23 @@ async def get_config(db: AsyncSession, key: str, default: Any = None) -> Any:
     config = result.scalar_one_or_none()
     if not config:
         return default
-    return _parse_value(config.value, config.value_type)
+    value = config.value
+    if config.is_encrypted and value:
+        value = decrypt_value(value)
+    return _parse_value(value, config.value_type)
 
 
 async def get_all_configs(db: AsyncSession, category: Optional[str] = None) -> List[SystemConfig]:
-    """List configurations"""
+    """List configurations, decrypting encrypted values"""
     query = select(SystemConfig).where(SystemConfig.is_active == True)
     if category:
         query = query.where(SystemConfig.category == category)
     result = await db.execute(query)
-    return result.scalars().all()
+    configs = result.scalars().all()
+    for config in configs:
+        if config.is_encrypted and config.value:
+            config.value = decrypt_value(config.value)
+    return configs
 
 
 async def set_config(
@@ -34,15 +44,19 @@ async def set_config(
     value: str,
     value_type: str,
     description: Optional[str] = None,
-    category: Optional[str] = None
+    category: Optional[str] = None,
+    is_encrypted: bool = False
 ) -> SystemConfig:
-    """Create or update configuration"""
+    """Create or update configuration, encrypting value if is_encrypted=True"""
     result = await db.execute(select(SystemConfig).where(SystemConfig.key == key))
     config = result.scalar_one_or_none()
 
+    stored_value = encrypt_value(value) if is_encrypted and value else value
+
     if config:
-        config.value = value
+        config.value = stored_value
         config.value_type = value_type
+        config.is_encrypted = is_encrypted
         if description is not None:
             config.description = description
         if category is not None:
@@ -50,15 +64,19 @@ async def set_config(
     else:
         config = SystemConfig(
             key=key,
-            value=value,
+            value=stored_value,
             value_type=value_type,
             description=description,
-            category=category
+            category=category,
+            is_encrypted=is_encrypted
         )
         db.add(config)
 
     await db.commit()
     await db.refresh(config)
+    # Decrypt value before returning
+    if config.is_encrypted and config.value:
+        config.value = decrypt_value(config.value)
     return config
 
 

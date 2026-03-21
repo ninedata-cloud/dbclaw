@@ -11,7 +11,7 @@ class Host(Base):
     host = Column(String(255), nullable=False)
     port = Column(Integer, default=22)
     username = Column(String(100), nullable=False)
-    auth_type = Column(String(20), default="password")  # password or key
+    auth_type = Column(String(20), default="password")  # password, key, or agent
     password_encrypted = Column(Text, nullable=True)
     private_key_encrypted = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now())

@@ -1,0 +1,122 @@
+id: diagnose_network
+name: Diagnose Network Status
+version: 1.0.0
+author: DbGuard
+category: diagnosis
+description: Diagnose network status by checking interface traffic, TCP connection states, network errors/drops, bandwidth usage, and top network connections
+tags: [linux, network, diagnosis, performance, system, tcp, bandwidth]
+timeout: 120
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID (must have host configured)
+
+permissions:
+  - execute_command
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      from backend.models.datasource import Datasource
+      from sqlalchemy import select
+
+      result = await context.db.execute(
+          select(Datasource).where(Datasource.id == datasource_id)
+      )
+      datasource = result.scalar_one_or_none()
+
+      if not datasource:
+          return {
+              "success": False,
+              "error": "datasource_not_found",
+              "message": f"数据源 ID {datasource_id} 不存在"
+          }
+
+      if not datasource.host_id:
+          return {
+              "success": False,
+              "error": "no_host_configured",
+              "message": f"数据源 {datasource.name} (ID: {datasource_id}) 未配置主机连接，无法进行网络诊断。"
+          }
+
+      results = {
+          "success": True,
+          "diagnosis": {}
+      }
+
+      # 1. Network interface traffic stats
+      net_dev = await context.execute_command(
+          "cat /proc/net/dev",
+          datasource_id
+      )
+      if net_dev.get("success"):
+          results["diagnosis"]["interface_stats"] = net_dev.get("output", "")
+
+      # 2. Network interface info (IP, MTU, status)
+      ip_info = await context.execute_command(
+          "ip -s link show 2>/dev/null || ifconfig 2>/dev/null",
+          datasource_id
+      )
+      if ip_info.get("success"):
+          results["diagnosis"]["interface_info"] = ip_info.get("output", "")
+
+      # 3. TCP connection state distribution
+      tcp_states = await context.execute_command(
+          "ss -tan 2>/dev/null | awk 'NR>1 {print $1}' | sort | uniq -c | sort -rn || netstat -tan 2>/dev/null | awk 'NR>2 {print $6}' | sort | uniq -c | sort -rn",
+          datasource_id
+      )
+      if tcp_states.get("success"):
+          results["diagnosis"]["tcp_connection_states"] = tcp_states.get("output", "")
+
+      # 4. Total TCP connections count
+      tcp_count = await context.execute_command(
+          "ss -s 2>/dev/null || netstat -s 2>/dev/null | head -30",
+          datasource_id
+      )
+      if tcp_count.get("success"):
+          results["diagnosis"]["tcp_summary"] = tcp_count.get("output", "")
+
+      # 5. Top connections by remote IP (who is connecting most)
+      top_conns = await context.execute_command(
+          "ss -tn 2>/dev/null | awk 'NR>1 {split($5,a,\":\"); print a[1]}' | sort | uniq -c | sort -rn | head -15 || netstat -tn 2>/dev/null | awk 'NR>2 {split($5,a,\":\"); print a[1]}' | sort | uniq -c | sort -rn | head -15",
+          datasource_id
+      )
+      if top_conns.get("success"):
+          results["diagnosis"]["top_connections_by_ip"] = top_conns.get("output", "")
+
+      # 6. Connections to database ports
+      db_conns = await context.execute_command(
+          "ss -tn 2>/dev/null | grep -E ':(3306|5432|1521|1433|5236|27017|6379|4000|2881|5433) ' | wc -l || netstat -tn 2>/dev/null | grep -E ':(3306|5432|1521|1433|5236|27017|6379|4000|2881|5433) ' | wc -l",
+          datasource_id
+      )
+      if db_conns.get("success"):
+          results["diagnosis"]["database_connections"] = db_conns.get("output", "").strip()
+
+      # 7. Network errors and drops
+      net_errors = await context.execute_command(
+          "netstat -i 2>/dev/null || ip -s link show 2>/dev/null | grep -A2 'RX\\|TX'",
+          datasource_id
+      )
+      if net_errors.get("success"):
+          results["diagnosis"]["network_errors"] = net_errors.get("output", "")
+
+      # 8. Check for TIME_WAIT accumulation
+      time_wait = await context.execute_command(
+          "ss -tan state time-wait 2>/dev/null | wc -l || netstat -tan 2>/dev/null | grep TIME_WAIT | wc -l",
+          datasource_id
+      )
+      if time_wait.get("success"):
+          results["diagnosis"]["time_wait_count"] = time_wait.get("output", "").strip()
+
+      # 9. TCP kernel parameters (relevant tuning)
+      tcp_params = await context.execute_command(
+          "sysctl net.ipv4.tcp_max_syn_backlog net.core.somaxconn net.ipv4.tcp_tw_reuse net.ipv4.tcp_fin_timeout net.ipv4.ip_local_port_range 2>/dev/null",
+          datasource_id
+      )
+      if tcp_params.get("success"):
+          results["diagnosis"]["tcp_kernel_params"] = tcp_params.get("output", "")
+
+      return results

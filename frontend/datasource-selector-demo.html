@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据源选择器组件示例</title>
+    <link rel="stylesheet" href="/css/main.css">
+    <link rel="stylesheet" href="/css/datasource-selector.css">
+    <style>
+        body {
+            padding: 40px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
+        .demo-section {
+            margin-bottom: 40px;
+            padding: 20px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+        .demo-section h2 {
+            margin-top: 0;
+            margin-bottom: 20px;
+            font-size: 18px;
+            color: var(--primary-color);
+        }
+        .demo-row {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            align-items: flex-start;
+        }
+        .demo-item {
+            flex: 1;
+        }
+        .demo-label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-muted);
+        }
+        .demo-output {
+            margin-top: 10px;
+            padding: 10px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 13px;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-muted);
+            min-height: 60px;
+        }
+        .demo-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .btn {
+            padding: 8px 16px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .btn:hover {
+            opacity: 0.9;
+        }
+        .btn-secondary {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+    </style>
+</head>
+<body>
+    <h1>数据源选择器组件示例</h1>
+
+    <!-- 基础单选 -->
+    <div class="demo-section">
+        <h2>1. 基础单选模式</h2>
+        <div class="demo-row">
+            <div class="demo-item">
+                <label class="demo-label">默认配置</label>
+                <div id="selector-basic"></div>
+                <div class="demo-output" id="output-basic">未选择</div>
+            </div>
+            <div class="demo-item">
+                <label class="demo-label">允许空选项</label>
+                <div id="selector-empty"></div>
+                <div class="demo-output" id="output-empty">未选择</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 多选模式 -->
+    <div class="demo-section">
+        <h2>2. 多选模式</h2>
+        <div class="demo-row">
+            <div class="demo-item">
+                <label class="demo-label">多选数据源</label>
+                <div id="selector-multiple"></div>
+                <div class="demo-output" id="output-multiple">未选择</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 显示选项 -->
+    <div class="demo-section">
+        <h2>3. 显示选项</h2>
+        <div class="demo-row">
+            <div class="demo-item">
+                <label class="demo-label">显示详细信息</label>
+                <div id="selector-details"></div>
+            </div>
+            <div class="demo-item">
+                <label class="demo-label">显示描述</label>
+                <div id="selector-description"></div>
+            </div>
+        </div>
+        <div class="demo-row">
+            <div class="demo-item">
+                <label class="demo-label">不显示状态</label>
+                <div id="selector-no-status"></div>
+            </div>
+            <div class="demo-item">
+                <label class="demo-label">不分组</label>
+                <div id="selector-no-group"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 过滤功能 -->
+    <div class="demo-section">
+        <h2>4. 自定义过滤</h2>
+        <div class="demo-row">
+            <div class="demo-item">
+                <label class="demo-label">仅显示 MySQL</label>
+                <div id="selector-mysql-only"></div>
+            </div>
+            <div class="demo-item">
+                <label class="demo-label">仅显示 PostgreSQL</label>
+                <div id="selector-pg-only"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 程序控制 -->
+    <div class="demo-section">
+        <h2>5. 程序控制</h2>
+        <div class="demo-row">
+            <div class="demo-item">
+                <label class="demo-label">可编程控制</label>
+                <div id="selector-programmatic"></div>
+                <div class="demo-output" id="output-programmatic">未选择</div>
+                <div class="demo-controls">
+                    <button class="btn" onclick="setFirstDatasource()">选择第一个</button>
+                    <button class="btn btn-secondary" onclick="clearSelection()">清空选择</button>
+                    <button class="btn btn-secondary" onclick="refreshSelector()">刷新列表</button>
+                    <button class="btn btn-secondary" onclick="toggleDisabled()">切换禁用</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 尺寸控制 -->
+    <div class="demo-section">
+        <h2>6. 尺寸控制</h2>
+        <div class="demo-row">
+            <div class="demo-item">
+                <label class="demo-label">小尺寸 (150px-250px)</label>
+                <div id="selector-small"></div>
+            </div>
+            <div class="demo-item">
+                <label class="demo-label">大尺寸 (300px-600px)</label>
+                <div id="selector-large"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/utils/dom.js"></script>
+    <script src="/js/state.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/components/datasource-selector.js"></script>
+
+    <script>
+        // 全局变量用于程序控制示例
+        let programmaticSelector;
+
+        // 1. 基础单选
+        new DatasourceSelector({
+            container: document.getElementById('selector-basic'),
+            placeholder: '请选择数据源',
+            allowEmpty: false,
+            onChange: (ds) => {
+                document.getElementById('output-basic').textContent =
+                    ds ? JSON.stringify({ id: ds.id, name: ds.name, type: ds.db_type }, null, 2) : '未选择';
+            }
+        });
+
+        new DatasourceSelector({
+            container: document.getElementById('selector-empty'),
+            allowEmpty: true,
+            emptyText: '全部数据源',
+            onChange: (ds) => {
+                document.getElementById('output-empty').textContent =
+                    ds ? JSON.stringify({ id: ds.id, name: ds.name, type: ds.db_type }, null, 2) : '全部数据源';
+            }
+        });
+
+        // 2. 多选模式
+        new DatasourceSelector({
+            container: document.getElementById('selector-multiple'),
+            multiple: true,
+            onChange: (datasources) => {
+                const output = datasources.map(ds => ({ id: ds.id, name: ds.name, type: ds.db_type }));
+                document.getElementById('output-multiple').textContent =
+                    output.length > 0 ? JSON.stringify(output, null, 2) : '未选择';
+            }
+        });
+
+        // 3. 显示选项
+        new DatasourceSelector({
+            container: document.getElementById('selector-details'),
+            showDetails: true,
+            showDescription: false
+        });
+
+        new DatasourceSelector({
+            container: document.getElementById('selector-description'),
+            showDetails: true,
+            showDescription: true
+        });
+
+        new DatasourceSelector({
+            container: document.getElementById('selector-no-status'),
+            showStatus: false
+        });
+
+        new DatasourceSelector({
+            container: document.getElementById('selector-no-group'),
+            groupByType: false
+        });
+
+        // 4. 自定义过滤
+        new DatasourceSelector({
+            container: document.getElementById('selector-mysql-only'),
+            filter: (ds) => ds.db_type.toLowerCase() === 'mysql'
+        });
+
+        new DatasourceSelector({
+            container: document.getElementById('selector-pg-only'),
+            filter: (ds) => ds.db_type.toLowerCase() === 'postgresql'
+        });
+
+        // 5. 程序控制
+        programmaticSelector = new DatasourceSelector({
+            container: document.getElementById('selector-programmatic'),
+            onChange: (ds) => {
+                document.getElementById('output-programmatic').textContent =
+                    ds ? JSON.stringify({ id: ds.id, name: ds.name, type: ds.db_type }, null, 2) : '未选择';
+            }
+        });
+
+        function setFirstDatasource() {
+            const datasources = programmaticSelector.datasources;
+            if (datasources.length > 0) {
+                programmaticSelector.setValue(datasources[0].id);
+            }
+        }
+
+        function clearSelection() {
+            programmaticSelector.setValue(null);
+        }
+
+        async function refreshSelector() {
+            await programmaticSelector.refresh();
+            alert('数据源列表已刷新');
+        }
+
+        function toggleDisabled() {
+            const isDisabled = programmaticSelector.options.disabled;
+            programmaticSelector.setDisabled(!isDisabled);
+        }
+
+        // 6. 尺寸控制
+        new DatasourceSelector({
+            container: document.getElementById('selector-small'),
+            minWidth: '150px',
+            maxWidth: '250px'
+        });
+
+        new DatasourceSelector({
+            container: document.getElementById('selector-large'),
+            minWidth: '300px',
+            maxWidth: '600px'
+        });
+    </script>
+</body>
+</html>

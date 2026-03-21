@@ -48,28 +48,42 @@ class MetricNormalizer:
         if 'connections_active' in metrics:
             normalized['connections'] = metrics['connections_active']
 
-        # 计算 QPS (基于 tup_returned 增量)
-        if 'tup_returned' in metrics:
+        # 计算 QPS — 基于 tup_fetched + tup_inserted + tup_updated + tup_deleted 增量
+        # tup_returned 是 seq scan 返回的行数（含内部过滤前），不适合作为 QPS
+        fetched = metrics.get('tup_fetched', 0)
+        inserted = metrics.get('tup_inserted', 0)
+        updated = metrics.get('tup_updated', 0)
+        deleted = metrics.get('tup_deleted', 0)
+        total_ops = fetched + inserted + updated + deleted
+        if total_ops > 0:
             qps = cls._calculate_rate(
-                datasource_id, 'tup_returned', metrics['tup_returned']
+                datasource_id, 'pg_total_ops', total_ops
             )
             if qps is not None:
                 normalized['qps'] = qps
 
-        # 计算 TPS (基于 xact_commit 增量)
-        if 'xact_commit' in metrics:
+        # 计算 TPS — 基于 xact_commit + xact_rollback 增量
+        xact_commit = metrics.get('xact_commit', 0)
+        xact_rollback = metrics.get('xact_rollback', 0)
+        total_xact = xact_commit + xact_rollback
+        if total_xact > 0:
             tps = cls._calculate_rate(
-                datasource_id, 'xact_commit', metrics['xact_commit']
+                datasource_id, 'pg_total_xact', total_xact
             )
             if tps is not None:
                 normalized['tps'] = tps
 
-        # 缓存命中率可以作为性能指标
+        # 缓存命中率
         if 'cache_hit_rate' in metrics:
             normalized['cache_hit_rate'] = metrics['cache_hit_rate']
 
-        # 磁盘使用率（基于数据库大小，需要配置最大容量）
-        # 这里暂时不计算，因为需要知道磁盘总容量
+        # 磁盘块读取速率
+        if 'blks_read' in metrics:
+            blks_read_sec = cls._calculate_rate(
+                datasource_id, 'blks_read', metrics['blks_read']
+            )
+            if blks_read_sec is not None:
+                normalized['disk_reads_per_sec'] = blks_read_sec
 
         return normalized
 
@@ -82,7 +96,7 @@ class MetricNormalizer:
         if 'threads_connected' in metrics:
             normalized['connections'] = metrics['threads_connected']
 
-        # QPS
+        # QPS — 基于 questions 累积值计算实时速率
         if 'questions' in metrics:
             qps = cls._calculate_rate(
                 datasource_id, 'questions', metrics['questions']
@@ -90,13 +104,58 @@ class MetricNormalizer:
             if qps is not None:
                 normalized['qps'] = qps
 
-        # TPS (基于 com_commit)
-        if 'com_commit' in metrics:
+        # TPS — 基于 com_commit + com_rollback 累积值（与 PostgreSQL/Oracle 对齐）
+        com_commit = metrics.get('com_commit', 0)
+        com_rollback = metrics.get('com_rollback', 0)
+        total_xact = com_commit + com_rollback
+        if total_xact > 0:
             tps = cls._calculate_rate(
-                datasource_id, 'com_commit', metrics['com_commit']
+                datasource_id, 'mysql_total_xact', total_xact
             )
             if tps is not None:
                 normalized['tps'] = tps
+
+        # 缓存命中率
+        if 'cache_hit_rate' in metrics:
+            normalized['cache_hit_rate'] = metrics['cache_hit_rate']
+
+        # 磁盘 IO 速率（基于 InnoDB data reads/writes 累积值）
+        if 'innodb_data_reads' in metrics:
+            reads_sec = cls._calculate_rate(
+                datasource_id, 'innodb_data_reads', metrics['innodb_data_reads']
+            )
+            if reads_sec is not None:
+                normalized['disk_reads_per_sec'] = reads_sec
+
+        if 'innodb_data_writes' in metrics:
+            writes_sec = cls._calculate_rate(
+                datasource_id, 'innodb_data_writes', metrics['innodb_data_writes']
+            )
+            if writes_sec is not None:
+                normalized['disk_writes_per_sec'] = writes_sec
+
+        # 网络 IO 速率（基于 bytes_received/bytes_sent 累积值）
+        if 'bytes_received' in metrics:
+            net_rx = cls._calculate_rate(
+                datasource_id, 'bytes_received', metrics['bytes_received']
+            )
+            if net_rx is not None:
+                normalized['network_rx_bytes'] = net_rx
+
+        if 'bytes_sent' in metrics:
+            net_tx = cls._calculate_rate(
+                datasource_id, 'bytes_sent', metrics['bytes_sent']
+            )
+            if net_tx is not None:
+                normalized['network_tx_bytes'] = net_tx
+
+        # 锁等待速率
+        if 'innodb_row_lock_waits' in metrics:
+            lock_waits_sec = cls._calculate_rate(
+                datasource_id, 'innodb_row_lock_waits', metrics['innodb_row_lock_waits']
+            )
+            if lock_waits_sec is not None:
+                normalized['lock_waits_per_sec'] = lock_waits_sec
 
         return normalized
 
@@ -105,8 +164,10 @@ class MetricNormalizer:
         """SQL Server 指标标准化"""
         normalized = {}
 
-        # 连接数
-        if 'user_sessions' in metrics:
+        # 连接数 — 使用 connections_active（活跃请求数），与 PostgreSQL/MySQL 对齐
+        if 'connections_active' in metrics:
+            normalized['connections'] = metrics['connections_active']
+        elif 'user_sessions' in metrics:
             normalized['connections'] = metrics['user_sessions']
 
         # 计算 QPS（基于 batch_requests_total 累积值）
@@ -117,7 +178,7 @@ class MetricNormalizer:
             if qps is not None:
                 normalized['qps'] = qps
 
-        # 事务数（如果有的话）
+        # 计算 TPS（基于 transactions_total 累积值）
         if 'transactions_total' in metrics:
             tps = cls._calculate_rate(
                 datasource_id, 'transactions_total', metrics['transactions_total']
@@ -125,8 +186,25 @@ class MetricNormalizer:
             if tps is not None:
                 normalized['tps'] = tps
 
-        # OS 指标已经在 get_status 中返回，直接保留
-        # cpu_usage, memory_usage, disk_usage 已经是百分比格式
+        # 缓存命中率（已经是百分比，直接映射）
+        if 'buffer_cache_hit_ratio' in metrics:
+            normalized['cache_hit_rate'] = metrics['buffer_cache_hit_ratio']
+
+        # 计算死锁速率
+        if 'deadlocks_total' in metrics:
+            deadlocks_sec = cls._calculate_rate(
+                datasource_id, 'deadlocks_total', metrics['deadlocks_total']
+            )
+            if deadlocks_sec is not None:
+                normalized['deadlocks_per_sec'] = deadlocks_sec
+
+        # 计算锁等待速率
+        if 'lock_waits_total' in metrics:
+            lock_waits_sec = cls._calculate_rate(
+                datasource_id, 'lock_waits_total', metrics['lock_waits_total']
+            )
+            if lock_waits_sec is not None:
+                normalized['lock_waits_per_sec'] = lock_waits_sec
 
         # 计算磁盘 I/O 速率（从累积值计算）
         if 'disk_reads_total' in metrics:
@@ -166,24 +244,61 @@ class MetricNormalizer:
         normalized = {}
 
         # 连接数
-        if 'sessions_active' in metrics:
-            normalized['connections'] = metrics['sessions_active']
+        if 'connections_active' in metrics:
+            normalized['connections'] = metrics['connections_active']
 
-        # 用户调用数可以作为 QPS
-        if 'user_calls' in metrics:
+        # 计算 QPS — 基于 execute_count 累积值（比 user_calls 更准确反映实际 SQL 执行量）
+        if 'execute_count' in metrics:
             qps = cls._calculate_rate(
-                datasource_id, 'user_calls', metrics['user_calls']
+                datasource_id, 'execute_count', metrics['execute_count']
             )
             if qps is not None:
                 normalized['qps'] = qps
 
-        # 事务数
-        if 'user_commits' in metrics:
+        # 计算 TPS — 基于 user_commits + user_rollbacks
+        user_commits = metrics.get('user_commits', 0)
+        user_rollbacks = metrics.get('user_rollbacks', 0)
+        total_xact = user_commits + user_rollbacks
+        if total_xact > 0:
             tps = cls._calculate_rate(
-                datasource_id, 'user_commits', metrics['user_commits']
+                datasource_id, 'ora_total_xact', total_xact
             )
             if tps is not None:
                 normalized['tps'] = tps
+
+        # 缓存命中率（已经是百分比）
+        if 'cache_hit_rate' in metrics:
+            normalized['cache_hit_rate'] = metrics['cache_hit_rate']
+
+        # 磁盘 IO 速率
+        if 'physical_reads' in metrics:
+            reads_sec = cls._calculate_rate(
+                datasource_id, 'physical_reads', metrics['physical_reads']
+            )
+            if reads_sec is not None:
+                normalized['disk_reads_per_sec'] = reads_sec
+
+        if 'physical_writes' in metrics:
+            writes_sec = cls._calculate_rate(
+                datasource_id, 'physical_writes', metrics['physical_writes']
+            )
+            if writes_sec is not None:
+                normalized['disk_writes_per_sec'] = writes_sec
+
+        # 网络 IO 速率
+        if 'network_bytes_sent' in metrics:
+            net_tx = cls._calculate_rate(
+                datasource_id, 'network_bytes_sent', metrics['network_bytes_sent']
+            )
+            if net_tx is not None:
+                normalized['network_tx_bytes'] = net_tx
+
+        if 'network_bytes_received' in metrics:
+            net_rx = cls._calculate_rate(
+                datasource_id, 'network_bytes_received', metrics['network_bytes_received']
+            )
+            if net_rx is not None:
+                normalized['network_rx_bytes'] = net_rx
 
         return normalized
 

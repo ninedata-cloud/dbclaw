@@ -48,6 +48,15 @@ const DatasourceForm = {
                 <label>Database</label>
                 <input type="text" class="form-input" name="database" value="${datasource?.database || ''}" placeholder="mydb">
             </div>
+            <div class="form-group" id="oracle-conn-mode-group" style="display: ${datasource?.db_type === 'oracle' ? 'block' : 'none'};">
+                <label>连接模式</label>
+                <select class="form-select" name="oracle_conn_mode">
+                    <option value="default" ${this._getExtraParam(datasource, 'oracle_conn_mode', 'default') === 'default' ? 'selected' : ''}>Default</option>
+                    <option value="sysdba" ${this._getExtraParam(datasource, 'oracle_conn_mode', 'default') === 'sysdba' ? 'selected' : ''}>SYSDBA</option>
+                    <option value="sysoper" ${this._getExtraParam(datasource, 'oracle_conn_mode', 'default') === 'sysoper' ? 'selected' : ''}>SYSOPER</option>
+                </select>
+                <small class="text-muted">以 SYSDBA/SYSOPER 身份连接（需要对应权限）</small>
+            </div>
             <div class="form-group">
                 <label>Host (可选)</label>
                 <select class="form-select" name="host_id">
@@ -69,13 +78,41 @@ const DatasourceForm = {
                     <input type="number" class="form-input" name="monitoring_interval" value="${datasource?.monitoring_interval || 60}" min="5" max="3600" required>
                 </div>
             </div>
+            <div class="form-group">
+                <label>监控数据来源</label>
+                <select class="form-select" name="metric_source" id="metric-source-select" required>
+                    <option value="system" ${!datasource || datasource?.metric_source === 'system' ? 'selected' : ''}>系统采集（直连数据库）</option>
+                    <option value="integration" ${datasource?.metric_source === 'integration' ? 'selected' : ''}>集成采集（外部集成系统）</option>
+                </select>
+                <small class="text-muted">选择监控数据的采集方式</small>
+            </div>
+            <div id="integration-config-section" style="display: ${datasource?.metric_source === 'integration' ? 'block' : 'none'};">
+                <div class="form-group">
+                    <label>外部实例 ID</label>
+                    <input type="text" class="form-input" name="external_instance_id" id="external-instance-id" value="${datasource?.external_instance_id || ''}" placeholder="例如：rm-bp16knn4mo4fvh99ieo">
+                    <small class="text-muted">外部监控系统中的实例标识（如阿里云 RDS 实例 ID）</small>
+                </div>
+            </div>
         `;
 
         // Update port when db_type changes
         const dbTypeSelect = form.querySelector('[name="db_type"]');
         const portInput = form.querySelector('[name="port"]');
+        const oracleConnModeGroup = form.querySelector('#oracle-conn-mode-group');
         dbTypeSelect.addEventListener('change', () => {
             if (!datasource) portInput.value = this._defaultPort(dbTypeSelect.value);
+            oracleConnModeGroup.style.display = dbTypeSelect.value === 'oracle' ? 'block' : 'none';
+        });
+
+        // Handle metric source change
+        const metricSourceSelect = form.querySelector('#metric-source-select');
+        const integrationConfigSection = form.querySelector('#integration-config-section');
+        metricSourceSelect.addEventListener('change', () => {
+            if (metricSourceSelect.value === 'integration') {
+                integrationConfigSection.style.display = 'block';
+            } else {
+                integrationConfigSection.style.display = 'none';
+            }
         });
 
         // Load hosts
@@ -91,6 +128,26 @@ const DatasourceForm = {
             if (!data.host_id) data.host_id = null;
             else data.host_id = parseInt(data.host_id);
             if (!data.database) data.database = null;
+
+            // 构建 extra_params（Oracle 连接模式等）
+            const extraParams = {};
+            if (data.db_type === 'oracle' && data.oracle_conn_mode && data.oracle_conn_mode !== 'default') {
+                extraParams.oracle_conn_mode = data.oracle_conn_mode;
+            }
+            data.extra_params = Object.keys(extraParams).length > 0 ? JSON.stringify(extraParams) : null;
+            delete data.oracle_conn_mode;
+
+            // 处理监控来源配置
+            if (data.metric_source === 'system') {
+                // 如果选择系统采集，清空外部实例 ID
+                data.external_instance_id = null;
+            } else if (data.metric_source === 'integration') {
+                // 验证集成配置
+                if (!data.external_instance_id) {
+                    Toast.error('使用集成采集时，必须填写外部实例 ID');
+                    return;
+                }
+            }
 
             try {
                 if (isEdit) {
@@ -136,6 +193,14 @@ const DatasourceForm = {
                         database: formData.get('database') || null
                     };
 
+                    // Oracle 连接模式
+                    if (data.db_type === 'oracle') {
+                        const connMode = formData.get('oracle_conn_mode');
+                        if (connMode && connMode !== 'default') {
+                            data.extra_params = JSON.stringify({ oracle_conn_mode: connMode });
+                        }
+                    }
+
                     // If editing, include datasource_id so backend can use saved password if needed
                     if (isEdit) {
                         data.datasource_id = datasource.id;
@@ -169,6 +234,16 @@ const DatasourceForm = {
             content: form,
             footer: footer,
         });
+    },
+
+    _getExtraParam(datasource, key, defaultValue) {
+        if (!datasource?.extra_params) return defaultValue;
+        try {
+            const params = JSON.parse(datasource.extra_params);
+            return params[key] || defaultValue;
+        } catch (e) {
+            return defaultValue;
+        }
     },
 
     _defaultPort(dbType) {

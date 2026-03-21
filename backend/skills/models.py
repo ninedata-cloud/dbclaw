@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, JSON, ForeignKey, CheckConstraint
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, JSON, CheckConstraint
 from sqlalchemy.sql import func
 from backend.database import Base
 
@@ -9,7 +9,7 @@ class Skill(Base):
     id = Column(String(100), primary_key=True)
     name = Column(String(200), nullable=False)
     version = Column(String(20), nullable=False)
-    author_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    author_id = Column(Integer, nullable=True)
     category = Column(String(50))
     description = Column(Text)
     tags = Column(JSON)  # List of strings
@@ -28,7 +28,7 @@ class SkillExecution(Base):
     __tablename__ = "skill_executions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    skill_id = Column(String(100), ForeignKey("skills.id"), nullable=False)
+    skill_id = Column(String(100), nullable=False)
     session_id = Column(Integer, nullable=True)
     user_id = Column(Integer, nullable=True)
     parameters = Column(JSON)
@@ -42,7 +42,7 @@ class SkillRating(Base):
     __tablename__ = "skill_ratings"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    skill_id = Column(String(100), ForeignKey("skills.id"), nullable=False)
+    skill_id = Column(String(100), nullable=False)
     user_id = Column(Integer, nullable=False)
     rating = Column(Integer, CheckConstraint("rating >= 1 AND rating <= 5"), nullable=False)
     comment = Column(Text)

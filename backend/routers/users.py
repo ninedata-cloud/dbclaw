@@ -31,6 +31,8 @@ async def create_user(data: UserCreate, db: AsyncSession = Depends(get_db)):
         username=data.username,
         password_hash=hash_password(data.password),
         display_name=data.display_name,
+        email=data.email,
+        phone=data.phone,
         is_admin=data.is_admin,
     )
     db.add(user)

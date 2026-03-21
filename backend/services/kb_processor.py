@@ -1,6 +1,5 @@
 import logging
 import asyncio
-from datetime import datetime
 from sqlalchemy import select
 from backend.database import async_session
 from backend.models.knowledge_base import Document, KnowledgeBase
@@ -93,7 +92,7 @@ class KBProcessor:
                 if doc_obj:
                     doc_obj.status = "completed"
                     doc_obj.chunk_count = len(chunks)
-                    doc_obj.processed_at = datetime.now()
+                    doc_obj.processed_at = now()
                     doc_obj.error_message = None
                     await db.commit()
 
@@ -110,7 +109,7 @@ class KBProcessor:
                 if doc_obj:
                     doc_obj.status = "failed"
                     doc_obj.error_message = str(e)
-                    doc_obj.processed_at = datetime.now()
+                    doc_obj.processed_at = now()
                     await db.commit()
             raise
 

@@ -15,6 +15,7 @@ const Sidebar = {
         { section: '系统配置', items: [
             { id: 'datasources', icon: 'database', label: '数据源管理' },
             { id: 'hosts', icon: 'terminal', label: '主机管理' },
+            { id: 'integrations', icon: 'package', label: '外部集成管理' },
             { id: 'system-configs', icon: 'settings', label: '系统参数配置' },
         ]},
     ],
@@ -74,6 +75,12 @@ const Sidebar = {
         // Add user info and logout
         const footer = DOM.$('.sidebar-footer');
         if (currentUser) {
+            // Remove existing user info if present
+            const existingUserInfo = DOM.$('.sidebar-user');
+            if (existingUserInfo) {
+                existingUserInfo.remove();
+            }
+
             const userInfo = DOM.el('div', { className: 'sidebar-user' });
             const avatar = DOM.el('div', { className: 'sidebar-user-avatar', textContent: currentUser.username.charAt(0).toUpperCase() });
             const info = DOM.el('div', { className: 'sidebar-user-info' });

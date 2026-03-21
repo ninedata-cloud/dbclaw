@@ -12,6 +12,8 @@ class UserResponse(BaseModel):
     id: int
     username: str
     display_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
     is_active: bool
     is_admin: bool
     created_at: Optional[datetime] = None
@@ -36,11 +38,15 @@ class UserCreate(BaseModel):
     username: str = Field(..., min_length=1, max_length=50)
     password: str = Field(..., min_length=6)
     display_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
     is_admin: bool = False
 
 
 class UserUpdate(BaseModel):
     display_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
     is_admin: Optional[bool] = None
 
 

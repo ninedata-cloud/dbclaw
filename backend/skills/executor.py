@@ -23,15 +23,19 @@ class SkillExecutor:
     @staticmethod
     def _serialize_result(obj):
         """Convert non-serializable objects to serializable format"""
-        from datetime import datetime, date
+        from datetime import datetime, date, timedelta
         from ipaddress import IPv4Address, IPv6Address, IPv4Network, IPv6Network
 
-        if isinstance(obj, (datetime, date)):
+        if isinstance(obj, timedelta):
+            return str(obj)
+        elif isinstance(obj, (datetime, date)):
             return obj.isoformat()
         elif isinstance(obj, Decimal):
             return float(obj)
         elif isinstance(obj, (IPv4Address, IPv6Address, IPv4Network, IPv6Network)):
             return str(obj)
+        elif isinstance(obj, bytes):
+            return obj.decode('utf-8', errors='replace')
         elif isinstance(obj, dict):
             return {k: SkillExecutor._serialize_result(v) for k, v in obj.items()}
         elif isinstance(obj, (list, tuple)):
@@ -171,20 +175,24 @@ class SkillExecutor:
         """Log skill execution to database"""
         from backend.skills.models import SkillExecution
 
-        # Serialize result to handle Decimal and other non-JSON types
-        serialized_result = None
-        if result is not None:
-            serialized_result = self._serialize_result(result)
+        try:
+            # Serialize result to handle Decimal, timedelta and other non-JSON types
+            serialized_result = None
+            if result is not None:
+                serialized_result = self._serialize_result(result)
 
-        execution = SkillExecution(
-            skill_id=skill.id,
-            session_id=context.session_id,
-            user_id=context.user_id,
-            parameters=params,
-            result=serialized_result,
-            error=error,
-            execution_time_ms=execution_time_ms,
-        )
+            execution = SkillExecution(
+                skill_id=skill.id,
+                session_id=context.session_id,
+                user_id=context.user_id,
+                parameters=params,
+                result=serialized_result,
+                error=error,
+                execution_time_ms=execution_time_ms,
+            )
 
-        context.db.add(execution)
-        await context.db.commit()
+            context.db.add(execution)
+            await context.db.commit()
+        except Exception as e:
+            logger.error(f"Failed to log skill execution for {skill.id}: {e}")
+            await context.db.rollback()

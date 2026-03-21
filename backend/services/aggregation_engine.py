@@ -52,7 +52,10 @@ class AggregationEngine:
         subscription: AlertSubscription
     ) -> bool:
         """
-        Default aggregation rule: Same datasource + same alert_type within 10 minutes = suppress.
+        Default aggregation rule:
+        - If alert belongs to an event, only send notification for the first alert in the event,
+          or if the last notification for this event was sent more than 60 minutes ago (re-notify).
+        - Otherwise, use 60-minute cooldown per datasource + alert_type
 
         Args:
             db: Database session
@@ -62,17 +65,54 @@ class AggregationEngine:
         Returns:
             True if notification should be sent, False if suppressed
         """
-        cutoff_time = datetime.utcnow() - timedelta(minutes=10)
+        # 如果告警属于某个事件，检查该事件是否已经发送过通知
+        if alert.event_id:
+            # 查询该事件的所有告警的投递记录
+            result = await db.execute(
+                select(AlertDeliveryLog).join(
+                    AlertMessage, AlertDeliveryLog.alert_id == AlertMessage.id
+                ).where(
+                    and_(
+                        AlertDeliveryLog.subscription_id == subscription.id,
+                        AlertMessage.event_id == alert.event_id,
+                        AlertDeliveryLog.status == "sent"
+                    )
+                )
+            )
+            event_deliveries = result.scalars().all()
 
-        # Check for recent successful deliveries with same datasource and alert_type
+            if event_deliveries:
+                # 检查最近一次投递是否超过60分钟，超过则允许重新通知
+                latest_delivery = max(event_deliveries, key=lambda d: d.sent_at or d.created_at)
+                latest_sent_at = latest_delivery.sent_at or latest_delivery.created_at
+                minutes_since_last = (datetime.now() - latest_sent_at).total_seconds() / 60
+
+                if minutes_since_last < 60:
+                    logger.info(
+                        f"Suppressing alert {alert.id} - event {alert.event_id} already has "
+                        f"{len(event_deliveries)} notifications sent, last {minutes_since_last:.0f}m ago"
+                    )
+                    return False
+                else:
+                    logger.info(
+                        f"Re-notifying for event {alert.event_id} - last notification was "
+                        f"{minutes_since_last:.0f}m ago"
+                    )
+                    return True
+
+        # 如果没有事件ID，使用传统的时间窗口聚合
+        # 使用60分钟聚合窗口，避免频繁发送相同告警
+        cutoff_time = datetime.now() - timedelta(minutes=60)
+
+        # Check for recent deliveries with same datasource and alert_type
         result = await db.execute(
             select(AlertDeliveryLog).join(
                 AlertMessage, AlertDeliveryLog.alert_id == AlertMessage.id
             ).where(
                 and_(
                     AlertDeliveryLog.subscription_id == subscription.id,
-                    AlertDeliveryLog.status == "sent",
                     AlertDeliveryLog.sent_at >= cutoff_time,
+                    AlertDeliveryLog.status == "sent",
                     AlertMessage.datasource_id == alert.datasource_id,
                     AlertMessage.alert_type == alert.alert_type
                 )
@@ -83,7 +123,8 @@ class AggregationEngine:
         if recent_deliveries:
             logger.info(
                 f"Suppressing alert {alert.id} due to recent delivery "
-                f"(datasource={alert.datasource_id}, type={alert.alert_type})"
+                f"(datasource={alert.datasource_id}, type={alert.alert_type}, "
+                f"found {len(recent_deliveries)} deliveries in last 60 minutes)"
             )
             return False
 
@@ -120,7 +161,7 @@ class AggregationEngine:
             }
 
             # Get delivery history for this subscription (last 24 hours)
-            cutoff_time = datetime.utcnow() - timedelta(hours=24)
+            cutoff_time = datetime.now() - timedelta(hours=24)
             history_result = await db.execute(
                 select(AlertDeliveryLog).where(
                     and_(
@@ -141,7 +182,7 @@ class AggregationEngine:
             ]
 
             # Count similar alerts (same datasource + same alert_type in last 10 minutes)
-            similar_cutoff = datetime.utcnow() - timedelta(minutes=10)
+            similar_cutoff = datetime.now() - timedelta(minutes=10)
             similar_result = await db.execute(
                 select(AlertMessage).where(
                     and_(
@@ -154,7 +195,7 @@ class AggregationEngine:
             similar_alerts_count = len(similar_result.scalars().all())
 
             # Prepare current time info
-            now = datetime.utcnow()
+            now = datetime.now()
             current_time = {
                 "datetime": now,
                 "hour": now.hour,

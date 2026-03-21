@@ -4,6 +4,7 @@ const AlertsPage = {
     alerts: [],
     events: [],
     subscriptions: [],
+    alertChannels: [],  // Integration Alert Channels
     currentUser: null,
     viewMode: 'events',  // 'events' or 'alerts'
     expandedEvents: new Set(),
@@ -16,6 +17,18 @@ const AlertsPage = {
         start_time: null,
         end_time: null
     },
+    currentPage: {
+        events: 1,
+        alerts: 1
+    },
+    pageSize: {
+        events: 10,
+        alerts: 10
+    },
+    totalCount: {
+        events: 0,
+        alerts: 0
+    },
 
     async init() {
         this.currentUser = Store.get('currentUser');
@@ -25,10 +38,24 @@ const AlertsPage = {
         }
 
         await this.loadDatasources();
+        await this.loadAlertChannels();  // 加载告警通道
         await this.loadEvents();
         await this.loadAlerts();
         await this.loadSubscriptions();
         this.render();
+    },
+
+    async loadAlertChannels() {
+        try {
+            console.log('Loading alert channels...');
+            this.alertChannels = await API.get('/api/alert-channels');
+            console.log('Alert channels loaded:', this.alertChannels);
+            console.log('Alert channels count:', this.alertChannels ? this.alertChannels.length : 0);
+        } catch (error) {
+            console.error('Failed to load alert channels:', error);
+            console.error('Error details:', error.message);
+            this.alertChannels = [];
+        }
     },
 
     async loadDatasources() {
@@ -42,6 +69,7 @@ const AlertsPage = {
 
     async loadEvents() {
         try {
+            const offset = (this.currentPage.events - 1) * this.pageSize.events;
             const params = new URLSearchParams();
 
             if (this.filters.datasource_id) {
@@ -62,17 +90,22 @@ const AlertsPage = {
             if (this.filters.end_time) {
                 params.append('end_time', this.filters.end_time);
             }
+            params.append('limit', this.pageSize.events);
+            params.append('offset', offset);
 
             const response = await API.get(`/api/alerts/events?${params.toString()}`);
             this.events = response.events || [];
+            this.totalCount.events = response.total || 0;
         } catch (error) {
             console.error('Failed to load events:', error);
             this.events = [];
+            this.totalCount.events = 0;
         }
     },
 
     async loadAlerts() {
         try {
+            const offset = (this.currentPage.alerts - 1) * this.pageSize.alerts;
             const params = new URLSearchParams();
 
             if (this.filters.datasource_id) {
@@ -93,12 +126,16 @@ const AlertsPage = {
             if (this.filters.end_time) {
                 params.append('end_time', this.filters.end_time);
             }
+            params.append('limit', this.pageSize.alerts);
+            params.append('offset', offset);
 
             const response = await API.get(`/api/alerts?${params.toString()}`);
             this.alerts = response.alerts || [];
+            this.totalCount.alerts = response.total || 0;
         } catch (error) {
             console.error('Failed to load alerts:', error);
             this.alerts = [];
+            this.totalCount.alerts = 0;
         }
     },
 
@@ -168,22 +205,10 @@ const AlertsPage = {
     },
 
     render() {
-        // Use standard header component
-        const headerActions = DOM.el('div', { className: 'flex gap-8' });
-        const addSubBtn = DOM.el('button', {
-            className: 'btn btn-primary',
-            innerHTML: '<i data-lucide="plus"></i>新建订阅',
-            onClick: () => this.showSubscriptionModal()
-        });
-        headerActions.appendChild(addSubBtn);
-        Header.render('告警管理', headerActions);
+        Header.render('告警管理', this._buildHeaderActions());
 
         const container = DOM.$('#page-content');
         DOM.clear(container);
-
-        // Filters
-        const filters = this.renderFilters();
-        container.appendChild(filters);
 
         // View toggle (for alerts tab)
         const viewToggle = DOM.el('div', { className: 'view-toggle' });
@@ -199,7 +224,7 @@ const AlertsPage = {
         });
         viewToggle.appendChild(eventsViewBtn);
         viewToggle.appendChild(alertsViewBtn);
-        container.appendChild(viewToggle);
+        //container.appendChild(viewToggle);
 
         // Tabs
         const tabs = DOM.el('div', { className: 'tabs' });
@@ -230,6 +255,112 @@ const AlertsPage = {
         DOM.createIcons();
     },
 
+    _buildHeaderActions() {
+        const filtersContainer = DOM.el('div', { className: 'dashboard-filters' });
+
+        // Datasource select
+        const datasourceSelect = DOM.el('select', {
+            className: 'filter-select',
+            onChange: (e) => {
+                this.filters.datasource_id = e.target.value ? parseInt(e.target.value) : null;
+                this.resetPagination();
+                Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
+            }
+        });
+        datasourceSelect.appendChild(DOM.el('option', { value: '', textContent: '全部数据源' }));
+        for (const ds of this.datasources) {
+            datasourceSelect.appendChild(DOM.el('option', {
+                value: ds.id,
+                textContent: ds.name,
+                selected: this.filters.datasource_id === ds.id
+            }));
+        }
+        filtersContainer.appendChild(datasourceSelect);
+
+        // Status select
+        const statusSelect = DOM.el('select', {
+            className: 'filter-select',
+            onChange: (e) => {
+                this.filters.status = e.target.value;
+                this.resetPagination();
+                Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
+            }
+        });
+        statusSelect.appendChild(DOM.el('option', { value: 'all', textContent: '全部状态' }));
+        statusSelect.appendChild(DOM.el('option', { value: 'active', textContent: '活跃' }));
+        statusSelect.appendChild(DOM.el('option', { value: 'acknowledged', textContent: '已确认' }));
+        statusSelect.appendChild(DOM.el('option', { value: 'resolved', textContent: '已解决' }));
+        filtersContainer.appendChild(statusSelect);
+
+        // Severity select
+        const severitySelect = DOM.el('select', {
+            className: 'filter-select',
+            onChange: (e) => {
+                this.filters.severity = e.target.value || null;
+                this.resetPagination();
+                Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
+            }
+        });
+        severitySelect.appendChild(DOM.el('option', { value: '', textContent: '全部严重程度' }));
+        severitySelect.appendChild(DOM.el('option', { value: 'critical', textContent: '严重' }));
+        severitySelect.appendChild(DOM.el('option', { value: 'high', textContent: '高' }));
+        severitySelect.appendChild(DOM.el('option', { value: 'medium', textContent: '中' }));
+        severitySelect.appendChild(DOM.el('option', { value: 'low', textContent: '低' }));
+        filtersContainer.appendChild(severitySelect);
+
+        // Start time input
+        const startTimeInput = DOM.el('input', {
+            type: 'datetime-local',
+            className: 'filter-input',
+            title: '开始时间',
+            value: this.filters.start_time || '',
+            onChange: (e) => {
+                this.filters.start_time = e.target.value || null;
+                this.resetPagination();
+                Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
+            }
+        });
+        filtersContainer.appendChild(startTimeInput);
+
+        // End time input
+        const endTimeInput = DOM.el('input', {
+            type: 'datetime-local',
+            className: 'filter-input',
+            title: '结束时间',
+            value: this.filters.end_time || '',
+            onChange: (e) => {
+                this.filters.end_time = e.target.value || null;
+                this.resetPagination();
+                Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
+            }
+        });
+        filtersContainer.appendChild(endTimeInput);
+
+        // Search input
+        const searchInput = DOM.el('input', {
+            type: 'text',
+            className: 'filter-input',
+            placeholder: '搜索标题或内容',
+            onInput: (e) => {
+                this.filters.search = e.target.value;
+                clearTimeout(this.searchTimeout);
+                this.searchTimeout = setTimeout(() => {
+                    this.resetPagination();
+                    Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
+                }, 500);
+            }
+        });
+        filtersContainer.appendChild(searchInput);
+
+        const addSubBtn = DOM.el('button', {
+            className: 'btn btn-primary',
+            innerHTML: '<i data-lucide="plus"></i>新建订阅',
+            onClick: () => this.showSubscriptionModal()
+        });
+
+        return [filtersContainer, addSubBtn];
+    },
+
     renderFilters() {
         const filters = DOM.el('div', { className: 'alert-filters' });
 
@@ -241,6 +372,7 @@ const AlertsPage = {
             value: this.filters.datasource_id || '',
             onChange: (e) => {
                 this.filters.datasource_id = e.target.value ? parseInt(e.target.value) : null;
+                this.resetPagination();
                 Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
             }
         });
@@ -263,6 +395,7 @@ const AlertsPage = {
             value: this.filters.status,
             onChange: (e) => {
                 this.filters.status = e.target.value;
+                this.resetPagination();
                 Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
             }
         });
@@ -280,6 +413,7 @@ const AlertsPage = {
             className: 'form-control',
             onChange: (e) => {
                 this.filters.severity = e.target.value || null;
+                this.resetPagination();
                 Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
             }
         });
@@ -300,6 +434,7 @@ const AlertsPage = {
             value: this.filters.start_time || '',
             onChange: (e) => {
                 this.filters.start_time = e.target.value || null;
+                this.resetPagination();
                 Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
             }
         });
@@ -315,6 +450,7 @@ const AlertsPage = {
             value: this.filters.end_time || '',
             onChange: (e) => {
                 this.filters.end_time = e.target.value || null;
+                this.resetPagination();
                 Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
             }
         });
@@ -332,6 +468,7 @@ const AlertsPage = {
                 this.filters.search = e.target.value;
                 clearTimeout(this.searchTimeout);
                 this.searchTimeout = setTimeout(() => {
+                    this.resetPagination();
                     Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
                 }, 500);
             }
@@ -525,6 +662,9 @@ const AlertsPage = {
         table.appendChild(tbody);
         list.appendChild(table);
 
+        // Add pagination
+        list.appendChild(this.renderPagination('events'));
+
         return list;
     },
 
@@ -623,6 +763,9 @@ const AlertsPage = {
         table.appendChild(tbody);
         list.appendChild(table);
 
+        // Add pagination
+        list.appendChild(this.renderPagination('alerts'));
+
         return list;
     },
 
@@ -667,8 +810,14 @@ const AlertsPage = {
                 : sub.severity_levels.map(s => this.getSeverityLabel(s)).join(', ');
             row.appendChild(DOM.el('td', { textContent: severityText }));
 
-            // Channels
-            row.appendChild(DOM.el('td', { textContent: sub.channels.join(', ') }));
+            // Channels - 显示 Integration Channel 名称
+            const channelNames = sub.channel_ids && sub.channel_ids.length > 0
+                ? sub.channel_ids.map(id => {
+                    const channel = this.alertChannels.find(c => c.id === id);
+                    return channel ? channel.name : `ID: ${id}`;
+                }).join(', ')
+                : '未配置';
+            row.appendChild(DOM.el('td', { textContent: channelNames }));
 
             // Status
             const statusCell = DOM.el('td');
@@ -854,8 +1003,7 @@ const AlertsPage = {
             datasource_ids: [],
             severity_levels: [],
             time_ranges: [],
-            channels: [],
-            webhook_url: '',
+            channel_ids: [],  // 使用 channel_ids 而不是 channels
             enabled: true,
             aggregation_script: ''
         };
@@ -941,37 +1089,49 @@ const AlertsPage = {
         severityGroup.appendChild(severityOptions);
         form.appendChild(severityGroup);
 
-        // Channels
+        // Alert Channels (Integration system)
         const channelsGroup = DOM.el('div', { className: 'form-group' });
-        channelsGroup.appendChild(DOM.el('label', { textContent: '通知渠道' }));
-        const channelsOptions = DOM.el('div', { className: 'checkbox-group' });
-        for (const channel of ['email', 'sms', 'phone', 'webhook']) {
-            const checkbox = DOM.el('label', { className: 'checkbox-label' });
-            const input = DOM.el('input', {
-                type: 'checkbox',
-                value: channel,
-                checked: data.channels.includes(channel),
-                className: 'channel-checkbox'
-            });
-            checkbox.appendChild(input);
-            checkbox.appendChild(DOM.el('span', { textContent: channel.toUpperCase() }));
-            channelsOptions.appendChild(checkbox);
-        }
-        channelsGroup.appendChild(channelsOptions);
-        form.appendChild(channelsGroup);
-
-        // Webhook URL
-        const webhookGroup = DOM.el('div', { className: 'form-group' });
-        webhookGroup.appendChild(DOM.el('label', { textContent: 'Webhook URL（选择webhook渠道时必填）' }));
-        const webhookInput = DOM.el('input', {
-            type: 'text',
-            className: 'form-control',
-            id: 'sub-webhook-url',
-            value: data.webhook_url || '',
-            placeholder: 'https://example.com/webhook'
+        const channelsLabel = DOM.el('label', { textContent: '通知渠道' });
+        const manageLink = DOM.el('a', {
+            href: '#',
+            textContent: '（管理通知渠道）',
+            style: 'margin-left: 10px; font-size: 0.9em;',
+            onClick: (e) => {
+                e.preventDefault();
+                Router.navigate('integrations');
+            }
         });
-        webhookGroup.appendChild(webhookInput);
-        form.appendChild(webhookGroup);
+        channelsLabel.appendChild(manageLink);
+        channelsGroup.appendChild(channelsLabel);
+
+        if (!this.alertChannels || this.alertChannels.length === 0) {
+            const noChannelsMsg = DOM.el('div', {
+                className: 'alert alert-warning',
+                innerHTML: '暂无可用的通知渠道。请先在<a href="#integrations">集成管理</a>中配置通知渠道。'
+            });
+            channelsGroup.appendChild(noChannelsMsg);
+        } else {
+            const channelsOptions = DOM.el('div', { className: 'checkbox-group' });
+            for (const channel of this.alertChannels) {
+                if (!channel.enabled) continue;  // 只显示启用的通道
+
+                const checkbox = DOM.el('label', { className: 'checkbox-label' });
+                const input = DOM.el('input', {
+                    type: 'checkbox',
+                    value: channel.id,
+                    checked: data.channel_ids.includes(channel.id),
+                    className: 'channel-checkbox'
+                });
+                const channelInfo = DOM.el('span', {
+                    innerHTML: `<strong>${channel.name}</strong> <small style="color: #666;">(${channel.integration_name})</small>`
+                });
+                checkbox.appendChild(input);
+                checkbox.appendChild(channelInfo);
+                channelsOptions.appendChild(checkbox);
+            }
+            channelsGroup.appendChild(channelsOptions);
+        }
+        form.appendChild(channelsGroup);
 
         // Enabled toggle
         const enabledGroup = DOM.el('div', { className: 'form-group' });
@@ -992,28 +1152,19 @@ const AlertsPage = {
     getSubscriptionFormData() {
         const datasourceIds = Array.from(DOM.$$('#sub-datasources option:checked')).map(opt => parseInt(opt.value));
         const severityLevels = Array.from(DOM.$$('.severity-checkbox:checked')).map(cb => cb.value);
-        const channels = Array.from(DOM.$$('.channel-checkbox:checked')).map(cb => cb.value);
-        const webhookUrl = DOM.$('#sub-webhook-url').value.trim();
+        const channelIds = Array.from(DOM.$$('.channel-checkbox:checked')).map(cb => parseInt(cb.value));
         const enabled = DOM.$('#sub-enabled').checked;
 
-        if (channels.length === 0) {
+        if (channelIds.length === 0) {
             alert('请至少选择一个通知渠道');
-            return null;
-        }
-
-        if (channels.includes('webhook') && !webhookUrl) {
-            alert('选择webhook渠道时必须填写Webhook URL');
             return null;
         }
 
         return {
             datasource_ids: datasourceIds,
             severity_levels: severityLevels,
-            time_ranges: [],  // Simplified for now
-            channels,
-            webhook_url: webhookUrl || null,
-            enabled,
-            aggregation_script: null  // Simplified for now
+            channel_ids: channelIds,
+            enabled
         };
     },
 
@@ -1069,5 +1220,55 @@ const AlertsPage = {
             system_error: '系统错误'
         };
         return labels[type] || type;
+    },
+
+    renderPagination(type) {
+        const totalPages = Math.ceil(this.totalCount[type] / this.pageSize[type]);
+        if (totalPages <= 1) {
+            return DOM.el('div');
+        }
+
+        const container = DOM.el('div', {
+            id: `pagination-${type}`,
+            style: 'margin-top: 15px; display: flex; justify-content: center; gap: 10px;'
+        });
+
+        const buttons = [];
+        const currentPage = this.currentPage[type];
+
+        // Previous button
+        buttons.push(`<button class="btn btn-sm btn-secondary" style="flex: 0 0 auto;" ${currentPage === 1 ? 'disabled' : ''} onclick="AlertsPage.goToPage('${type}', ${currentPage - 1})">上一页</button>`);
+
+        // Page numbers
+        for (let i = 1; i <= totalPages; i++) {
+            if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
+                buttons.push(`<button class="btn btn-sm ${i === currentPage ? 'btn-primary' : 'btn-secondary'}" style="flex: 0 0 auto;" onclick="AlertsPage.goToPage('${type}', ${i})">${i}</button>`);
+            } else if (i === currentPage - 3 || i === currentPage + 3) {
+                buttons.push(`<span style="padding:0 5px; flex: 0 0 auto;">...</span>`);
+            }
+        }
+
+        // Next button
+        buttons.push(`<button class="btn btn-sm btn-secondary" style="flex: 0 0 auto;" ${currentPage === totalPages ? 'disabled' : ''} onclick="AlertsPage.goToPage('${type}', ${currentPage + 1})">下一页</button>`);
+
+        container.innerHTML = buttons.join('');
+        return container;
+    },
+
+    async goToPage(type, page) {
+        this.currentPage[type] = page;
+
+        if (type === 'events') {
+            await this.loadEvents();
+            this.updateEventsList();
+        } else {
+            await this.loadAlerts();
+            this.updateAlertsList();
+        }
+    },
+
+    resetPagination() {
+        this.currentPage.events = 1;
+        this.currentPage.alerts = 1;
     }
 };

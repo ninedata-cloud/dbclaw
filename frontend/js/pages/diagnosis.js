@@ -16,8 +16,8 @@ const DiagnosisPage = {
         } catch (e) { /* ignore */ }
 
         // Header with connection, model, KB selectors, and tool safety toggle
-        const headerActions = DOM.el('div', { className: 'flex gap-8' });
-        const connSelect = DOM.el('select', { className: 'form-select', style: { minWidth: '400px' } });
+        const headerActions = DOM.el('div', { className: 'flex gap-8', style: { flex: '1', minWidth: '0' } });
+        const connSelect = DOM.el('select', { className: 'form-select', style: { minWidth: '200px', maxWidth: '300px', flex: '1' } });
         connSelect.appendChild(DOM.el('option', { value: '', textContent: '选择数据源...' }));
 
         try {
@@ -40,7 +40,7 @@ const DiagnosisPage = {
         });
 
         // Model selector
-        const modelSelect = DOM.el('select', { className: 'form-select', style: { minWidth: '200px' } });
+        const modelSelect = DOM.el('select', { className: 'form-select', style: { minWidth: '150px', maxWidth: '200px', flex: '0 1 auto' } });
         modelSelect.appendChild(DOM.el('option', { value: '', textContent: '默认模型' }));
 
         try {
@@ -59,7 +59,7 @@ const DiagnosisPage = {
         // Knowledge Base multi-select (custom dropdown)
         const kbContainer = DOM.el('div', {
             className: 'kb-selector-container',
-            style: { position: 'relative', minWidth: '200px' }
+            style: { position: 'relative', minWidth: '150px', maxWidth: '200px', flex: '0 1 auto' }
         });
 
         const kbButton = DOM.el('button', {
@@ -159,19 +159,36 @@ const DiagnosisPage = {
         });
 
         const sidebarHeader = DOM.el('div', {
+            id: 'sidebar-header',
             style: {
                 padding: '12px',
                 borderBottom: '1px solid var(--border-color)',
                 display: 'flex',
-                gap: '8px'
+                gap: '8px',
+                alignItems: 'center'
             }
         });
-        sidebarHeader.appendChild(DOM.el('button', {
-            className: 'btn btn-primary btn-sm',
-            innerHTML: '<i data-lucide="plus"></i> New',
+
+        // New session button (icon only)
+        const newSessionBtn = DOM.el('button', {
+            className: 'btn-icon-only',
+            innerHTML: '<i data-lucide="plus"></i>',
+            title: '新建会话',
             style: { flex: '1' },
             onClick: () => this._createSession()
-        }));
+        });
+
+        // Toggle sidebar button
+        const toggleSidebarBtn = DOM.el('button', {
+            className: 'btn-icon-only',
+            id: 'sidebar-toggle-btn',
+            innerHTML: '<i data-lucide="panel-left-close"></i>',
+            title: '隐藏会话列表',
+            onClick: () => this._toggleSidebar()
+        });
+
+        sidebarHeader.appendChild(newSessionBtn);
+        sidebarHeader.appendChild(toggleSidebarBtn);
 
         const sessionList = DOM.el('div', {
             id: 'session-list',
@@ -192,93 +209,25 @@ const DiagnosisPage = {
             style: { flex: '1', display: 'flex', flexDirection: 'column', minWidth: '0', position: 'relative', height: '100%' }
         });
 
-        // Toggle buttons container (floating on chat area)
-        const toggleButtonsContainer = DOM.el('div', {
-            style: {
-                position: 'absolute',
-                top: '12px',
-                left: '12px',
-                right: '12px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                zIndex: '10',
-                pointerEvents: 'none'
-            }
-        });
-
-        // Left sidebar toggle button
-        const toggleSidebarBtn = DOM.el('button', {
-            className: 'btn btn-sm btn-secondary',
-            innerHTML: '<i data-lucide="panel-left-close"></i>',
-            title: 'Hide sessions',
-            id: 'toggle-sidebar-btn',
-            style: {
-                padding: '6px 10px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                pointerEvents: 'auto'
-            },
-            onClick: () => {
-                const sidebar = DOM.$('#session-sidebar');
-                const btn = DOM.$('#toggle-sidebar-btn');
-                if (sidebar && btn) {
-                    const isCollapsed = sidebar.style.width === '0px' || sidebar.style.width === '0';
-                    if (isCollapsed) {
-                        sidebar.style.width = '280px';
-                        sidebar.style.display = 'flex';
-                        btn.innerHTML = '<i data-lucide="panel-left-close"></i>';
-                        btn.title = 'Hide sessions';
-                    } else {
-                        sidebar.style.width = '0px';
-                        sidebar.style.display = 'none';
-                        btn.innerHTML = '<i data-lucide="panel-left-open"></i>';
-                        btn.title = 'Show sessions';
-                    }
-                    requestAnimationFrame(() => DOM.createIcons());
-                }
-            }
-        });
-
-        // Right tool panel toggle button
-        const togglePanelBtn = DOM.el('button', {
-            className: 'btn btn-sm btn-secondary',
-            innerHTML: '<i data-lucide="panel-right-close"></i>',
-            title: 'Hide tool panel',
-            id: 'toggle-tool-panel-btn',
-            style: {
-                padding: '6px 10px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                pointerEvents: 'auto'
-            },
-            onClick: () => {
-                const panel = DOM.$('#tool-execution-panel');
-                const btn = DOM.$('#toggle-tool-panel-btn');
-                if (panel && btn) {
-                    const isCollapsed = panel.style.width === '0px' || panel.style.width === '0';
-                    if (isCollapsed) {
-                        panel.style.width = '400px';
-                        panel.style.display = 'flex';
-                        btn.innerHTML = '<i data-lucide="panel-right-close"></i>';
-                        btn.title = 'Hide tool panel';
-                    } else {
-                        panel.style.width = '0px';
-                        panel.style.display = 'none';
-                        btn.innerHTML = '<i data-lucide="panel-right-open"></i>';
-                        btn.title = 'Show tool panel';
-                    }
-                    requestAnimationFrame(() => DOM.createIcons());
-                }
-            }
-        });
-
-        toggleButtonsContainer.appendChild(toggleSidebarBtn);
-        toggleButtonsContainer.appendChild(togglePanelBtn);
-
-        chatMain.appendChild(toggleButtonsContainer);
         chatMain.appendChild(ChatWidget.createMessagesContainer());
         chatMain.appendChild(ChatWidget.createInputBar(
             (text, attachments) => this._sendMessage(text, attachments),
             () => this.currentSessionId
         ));
+
+        // AI disclaimer
+        const disclaimer = DOM.el('div', {
+            style: {
+                paddingBottom: '20px',
+                textAlign: 'center',
+                fontSize: '12px',
+                color: 'var(--text-muted)',
+                background: 'var(--bg-secondary)'
+
+            }
+        });
+        disclaimer.textContent = '内容由AI生成，仅供参考';
+        chatMain.appendChild(disclaimer);
 
         // Tool execution panel (right side)
         const toolPanel = DOM.el('div', {
@@ -296,38 +245,53 @@ const DiagnosisPage = {
         });
 
         const toolPanelHeader = DOM.el('div', {
+            id: 'tool-panel-header',
             style: {
-                padding: '12px 16px',
+                padding: '12px',
                 borderBottom: '1px solid var(--border-color)',
-                fontWeight: '600',
-                fontSize: '13px',
                 display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
+                gap: '8px',
+                alignItems: 'center'
             }
         });
 
         const toolHeaderLeft = DOM.el('div', {
-            style: { flex: '1', display: 'flex', alignItems: 'center', gap: '8px' }
+            id: 'tool-panel-title',
+            style: { flex: '1', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '600', fontSize: '13px' }
         });
         toolHeaderLeft.innerHTML = '<i data-lucide="activity"></i> skill调用';
 
         const clearToolsBtn = DOM.el('button', {
-            className: 'btn btn-sm btn-secondary',
+            className: 'btn-icon-only',
             innerHTML: '<i data-lucide="trash-2"></i>',
-            title: 'Clear tool history',
-            style: { padding: '4px 8px' },
+            title: '清空记录',
             onClick: () => {
                 const toolPanelContent = DOM.$('#tool-panel-content');
                 if (toolPanelContent) {
                     toolPanelContent.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">暂无skill调用记录</div>';
                     DOM.createIcons();
                 }
+                // Clear restored tools mapping
+                if (ChatWidget.restoredTools) {
+                    ChatWidget.restoredTools.clear();
+                }
+                if (ChatWidget.pendingTools) {
+                    ChatWidget.pendingTools.clear();
+                }
             }
+        });
+
+        const toggleToolPanelBtn = DOM.el('button', {
+            id: 'toggle-tool-panel-btn',
+            className: 'btn-icon-only',
+            innerHTML: '<i data-lucide="panel-right-close"></i>',
+            title: '隐藏工具面板',
+            onClick: () => this._toggleToolPanel()
         });
 
         toolPanelHeader.appendChild(toolHeaderLeft);
         toolPanelHeader.appendChild(clearToolsBtn);
+        toolPanelHeader.appendChild(toggleToolPanelBtn);
 
         const toolPanelContent = DOM.el('div', {
             id: 'tool-panel-content',
@@ -463,20 +427,23 @@ const DiagnosisPage = {
             }
 
             for (const s of sessions) {
+                const isActive = this.currentSessionId === s.id;
                 const item = DOM.el('div', {
-                    className: `session-item ${this.currentSessionId === s.id ? 'active' : ''}`,
+                    className: `session-item ${isActive ? 'active' : ''}`,
                     style: {
                         padding: '10px 12px',
                         marginBottom: '4px',
                         borderRadius: '6px',
                         cursor: 'pointer',
-                        background: this.currentSessionId === s.id ? 'var(--accent-blue)' : 'transparent',
-                        color: this.currentSessionId === s.id ? '#fff' : 'var(--text-primary)',
+                        background: isActive ? 'rgba(47, 129, 247, 0.12)' : 'transparent',
+                        color: 'var(--text-primary)',
                         fontSize: '14px',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '8px',
-                        position: 'relative'
+                        position: 'relative',
+                        borderLeft: isActive ? '3px solid var(--accent-blue)' : '3px solid transparent',
+                        transition: 'all 0.2s ease'
                     }
                 });
                 item._sessionId = s.id;
@@ -518,14 +485,18 @@ const DiagnosisPage = {
 
                 item.addEventListener('click', () => this._switchSession(s.id));
                 item.addEventListener('mouseenter', () => {
-                    if (this.currentSessionId !== s.id) {
+                    const isActive = this.currentSessionId === s.id;
+                    if (!isActive) {
                         item.style.background = 'var(--bg-hover)';
                     }
                     deleteBtn.style.opacity = '1';
                 });
                 item.addEventListener('mouseleave', () => {
-                    if (this.currentSessionId !== s.id) {
+                    const isActive = this.currentSessionId === s.id;
+                    if (!isActive) {
                         item.style.background = 'transparent';
+                    } else {
+                        item.style.background = 'rgba(47, 129, 247, 0.12)';
                     }
                     deleteBtn.style.opacity = '0';
                 });
@@ -533,7 +504,8 @@ const DiagnosisPage = {
             }
 
             if (!this.currentSessionId && sessions.length > 0) {
-                this._switchSession(sessions[0].id);
+                // Load the most recent session (first one in the list)
+                await this._switchSession(sessions[0].id);
             }
         } catch (e) {
             Toast.error('加载失败 sessions');
@@ -567,8 +539,14 @@ const DiagnosisPage = {
         if (list) {
             list.querySelectorAll('.session-item').forEach(item => {
                 const isActive = item._sessionId === sessionId;
-                item.style.background = isActive ? 'var(--accent-blue)' : 'transparent';
-                item.style.color = isActive ? '#fff' : 'var(--text-primary)';
+                item.style.background = isActive ? 'rgba(47, 129, 247, 0.12)' : 'transparent';
+                item.style.color = 'var(--text-primary)';
+                item.style.borderLeft = isActive ? '3px solid var(--accent-blue)' : '3px solid transparent';
+                if (isActive) {
+                    item.classList.add('active');
+                } else {
+                    item.classList.remove('active');
+                }
             });
         }
 
@@ -790,6 +768,80 @@ const DiagnosisPage = {
         } else {
             textSpan.textContent = `选择 ${count}项`;
         }
+    },
+
+    _toggleSidebar() {
+        const sidebar = DOM.$('#session-sidebar');
+        const btn = DOM.$('#sidebar-toggle-btn');
+        const header = DOM.$('#sidebar-header');
+        const sessionList = DOM.$('#session-list');
+
+        if (!sidebar || !btn) return;
+
+        const isCollapsed = sidebar.style.width === '40px';
+
+        if (isCollapsed) {
+            // Expand
+            sidebar.style.width = '280px';
+            btn.innerHTML = '<i data-lucide="panel-left-close"></i>';
+            btn.title = '隐藏会话列表';
+            if (header) {
+                header.style.justifyContent = 'space-between';
+            }
+            if (sessionList) {
+                sessionList.style.display = 'block';
+            }
+        } else {
+            // Collapse
+            sidebar.style.width = '40px';
+            btn.innerHTML = '<i data-lucide="panel-left-open"></i>';
+            btn.title = '显示会话列表';
+            if (header) {
+                header.style.justifyContent = 'center';
+            }
+            if (sessionList) {
+                sessionList.style.display = 'none';
+            }
+        }
+
+        requestAnimationFrame(() => DOM.createIcons());
+    },
+
+    _toggleToolPanel() {
+        const panel = DOM.$('#tool-execution-panel');
+        const btn = DOM.$('#toggle-tool-panel-btn');
+        const header = DOM.$('#tool-panel-header');
+        const content = DOM.$('#tool-panel-content');
+
+        if (!panel || !btn) return;
+
+        const isCollapsed = panel.style.width === '40px';
+
+        if (isCollapsed) {
+            // Expand
+            panel.style.width = '400px';
+            btn.innerHTML = '<i data-lucide="panel-right-close"></i>';
+            btn.title = '隐藏工具面板';
+            if (header) {
+                header.style.justifyContent = 'space-between';
+            }
+            if (content) {
+                content.style.display = 'block';
+            }
+        } else {
+            // Collapse
+            panel.style.width = '40px';
+            btn.innerHTML = '<i data-lucide="panel-right-open"></i>';
+            btn.title = '显示工具面板';
+            if (header) {
+                header.style.justifyContent = 'center';
+            }
+            if (content) {
+                content.style.display = 'none';
+            }
+        }
+
+        requestAnimationFrame(() => DOM.createIcons());
     },
 
     _cleanup() {

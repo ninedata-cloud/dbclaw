@@ -1,0 +1,255 @@
+/* Dashboard Header Actions - works with Header component's flex gap-8 wrapper */
+.dashboard-filters {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.filter-select,
+.filter-input {
+    height: 32px;
+    padding: 0 10px;
+    font-size: 13px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    transition: border-color 0.2s;
+}
+
+.filter-select {
+    min-width: 100px;
+    cursor: pointer;
+}
+
+.filter-input {
+    min-width: 100px;
+}
+
+/* Inspection page date input - shorter width and visible calendar icon */
+.inspection-date-input {
+    min-width: 140px !important;
+    width: 140px;
+}
+
+.inspection-date-input::-webkit-calendar-picker-indicator {
+    filter: invert(40%) sepia(80%) saturate(200%) hue-rotate(180deg);
+    cursor: pointer;
+    opacity: 0.8;
+}
+
+.inspection-date-input::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+}
+
+.filter-input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    filter: invert(1) brightness(0.8);
+    cursor: pointer;
+    opacity: 0.7;
+}
+
+.filter-input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+}
+
+.filter-select:focus,
+.filter-input:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+}
+
+.dashboard-filters .btn,
+.page-filters .btn {
+    height: 32px;
+    padding: 0 14px;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+/* Page filters container - for pages that put filters below header */
+.page-filters {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 12px 16px;
+    background: var(--background-secondary);
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 16px;
+}
+
+.page-filters .filter-select,
+.page-filters .filter-input {
+    height: 32px;
+    padding: 0 10px;
+    font-size: 13px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    transition: border-color 0.2s;
+}
+
+.page-filters .filter-select {
+    min-width: 120px;
+    cursor: pointer;
+}
+
+.page-filters .filter-input {
+    min-width: 200px;
+}
+
+.page-filters .filter-select:focus,
+.page-filters .filter-input:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+}
+
+/* Dashboard Grid */
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 20px;
+}
+
+.dashboard-conn-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.dashboard-conn-card:hover {
+    border-color: var(--accent-blue);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.dashboard-conn-card h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.dashboard-conn-card .type {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 8px;
+}
+
+.dashboard-conn-card .metrics {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+}
+
+.dashboard-conn-card .metric-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.dashboard-conn-card .metric-label {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.dashboard-conn-card .metric-val {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.datasource-card-type {
+    display: inline-block;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 4px;
+    text-transform: uppercase;
+}
+
+.datasource-card-type.type-mysql {
+    background: rgba(0, 117, 134, 0.1);
+    color: #007586;
+}
+
+.datasource-card-type.type-postgresql {
+    background: rgba(51, 103, 145, 0.1);
+    color: #336791;
+}
+
+.datasource-card-type.type-oracle {
+    background: rgba(240, 80, 50, 0.1);
+    color: #f05032;
+}
+
+.datasource-card-type.type-sqlserver {
+    background: rgba(204, 0, 0, 0.1);
+    color: #cc0000;
+}
+
+.datasource-card-type.type-mongodb {
+    background: rgba(71, 162, 72, 0.1);
+    color: #47a248;
+}
+
+.datasource-card-type.type-redis {
+    background: rgba(220, 53, 34, 0.1);
+    color: #dc3522;
+}
+
+/* Responsive */
+@media (max-width: 1400px) {
+    .filter-input {
+        min-width: 200px;
+    }
+}
+
+@media (max-width: 1200px) {
+    .dashboard-filters {
+        flex-wrap: wrap;
+    }
+
+    .filter-select {
+        min-width: 90px;
+    }
+
+    .filter-input {
+        min-width: 180px;
+        flex: 1;
+    }
+}
+
+@media (max-width: 768px) {
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .page-header .flex {
+        flex-direction: column;
+        align-items: stretch;
+        width: 100%;
+    }
+
+    .dashboard-filters {
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .filter-select,
+    .filter-input {
+        width: 100%;
+        min-width: 100%;
+    }
+
+    .dashboard-filters .btn {
+        width: 100%;
+    }
+}

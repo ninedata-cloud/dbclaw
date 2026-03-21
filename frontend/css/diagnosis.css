@@ -18,7 +18,7 @@
     font-size: 13px;
     cursor: pointer;
     transition: all 0.2s ease;
-    min-width: 200px;
+    width: 100%;
     justify-content: space-between;
 }
 
@@ -126,25 +126,14 @@
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.session-item::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 3px;
-    height: 0;
-    background: var(--accent-blue);
-    border-radius: 0 2px 2px 0;
-    transition: height 0.2s ease;
-}
-
-.session-item.active::before {
-    height: 60%;
+.session-item.active {
+    background: rgba(47, 129, 247, 0.12) !important;
+    border-left: 3px solid var(--accent-blue) !important;
+    font-weight: 500;
 }
 
 .session-item:hover:not(.active) {
-    background: var(--bg-hover);
+    background: var(--bg-hover) !important;
     transform: translateX(2px);
 }
 
@@ -183,6 +172,57 @@
 /* Message Bubble Improvements */
 .chat-message {
     animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+}
+
+.chat-message .message-copy-btn {
+    position: absolute;
+    top: 8px;
+    padding: 6px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    cursor: pointer;
+    opacity: 0;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* User message: copy button on the left outside */
+.chat-message.user .message-copy-btn {
+    left: -36px;
+}
+
+/* Assistant message: copy button on the right outside */
+.chat-message.assistant .message-copy-btn {
+    right: -36px;
+}
+
+.chat-message:hover .message-copy-btn {
+    opacity: 1;
+}
+
+.chat-message .message-copy-btn:hover {
+    background: var(--accent-blue);
+    color: white;
+    border-color: var(--accent-blue);
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(47, 129, 247, 0.3);
+}
+
+.chat-message .message-copy-btn:active {
+    transform: scale(0.95);
+}
+
+.chat-message .message-copy-btn i {
+    width: 14px;
+    height: 14px;
 }
 
 @keyframes slideIn {
@@ -202,7 +242,8 @@
 }
 
 .chat-message.user .chat-bubble {
-    background: linear-gradient(135deg, var(--accent-blue) 0%, #4a9eff 100%);
+    background: #dddddd;
+    color: #000000;
 }
 
 .chat-message.assistant .chat-bubble {
@@ -285,7 +326,8 @@
 
 /* Input Bar Enhancements */
 .chat-input-bar {
-    padding: 16px 20px;
+    padding: 12px 16px;
+    padding-bottom: 20px;
     background: var(--bg-secondary);
     border-top: 1px solid var(--border-color);
 }
@@ -427,6 +469,61 @@
     transform: translateY(0);
 }
 
+/* Icon-only Button for New Session and Sidebar Toggle */
+.btn-icon-only {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    background: var(--bg-hover);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    font-size: 16px;
+    min-width: 36px;
+    min-height: 36px;
+}
+
+.btn-icon-only:hover {
+    background: var(--bg-input);
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
+    transform: scale(1.05);
+}
+
+.btn-icon-only:active {
+    transform: scale(0.98);
+}
+
+/* Sidebar collapsed state */
+#session-sidebar[style*="width: 40px"] #sidebar-header {
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+}
+
+#session-sidebar[style*="width: 40px"] .btn-icon-only:first-child {
+    display: none;
+}
+
+/* Tool panel collapsed state */
+#tool-execution-panel[style*="width: 40px"] #tool-panel-header {
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+    justify-content: center;
+}
+
+#tool-execution-panel[style*="width: 40px"] #tool-panel-title {
+    display: none !important;
+}
+
+#tool-execution-panel[style*="width: 40px"] #tool-panel-header .btn-icon-only:not(#toggle-tool-panel-btn) {
+    display: none !important;
+}
+
 /* Tool Panel Toggle Button */
 #toggle-tool-panel-btn,
 .btn-secondary.btn-sm {
@@ -499,19 +596,38 @@
     #tool-execution-panel {
         width: 320px !important;
     }
+
+    .page-header .flex.gap-8 {
+        gap: 6px;
+    }
+
+    .page-header .form-select {
+        font-size: 12px;
+        padding: 6px 10px;
+    }
+
+    .kb-selector-button {
+        font-size: 12px;
+        padding: 6px 10px;
+    }
 }
 
 @media (max-width: 768px) {
     .chat-message {
         max-width: 95%;
     }
-    
+
     #tool-execution-panel {
         position: absolute;
         right: 0;
         top: 0;
         height: 100%;
         z-index: 10;
+    }
+
+    .page-header .flex.gap-8 {
+        flex-wrap: wrap;
+        gap: 4px;
     }
 }
 

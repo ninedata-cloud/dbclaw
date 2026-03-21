@@ -301,6 +301,7 @@
     cursor: pointer;
     width: 16px;
     height: 16px;
+    margin: 4px;
     accent-color: var(--accent-blue);
 }
 
@@ -437,4 +438,3 @@
 .expand-icon.expanded {
     transform: rotate(90deg);
 }
-

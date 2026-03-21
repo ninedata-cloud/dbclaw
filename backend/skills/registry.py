@@ -3,7 +3,7 @@ Skill registry - central registry for all skills
 """
 from typing import List, Optional, Dict
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, cast, Text
 from backend.skills.models import Skill
 from backend.skills.schema import SkillDefinition
 from backend.skills.validator import SkillValidator
@@ -113,7 +113,7 @@ class SkillRegistry:
             # Check if any of the provided tags exist in the JSON array
             tag_conditions = []
             for tag in tags:
-                tag_conditions.append(Skill.tags.like(f'%"{tag}"%'))
+                tag_conditions.append(cast(Skill.tags, Text).like(f'%"{tag}"%'))
             if tag_conditions:
                 query = query.where(or_(*tag_conditions))
 
@@ -130,7 +130,7 @@ class SkillRegistry:
                     Skill.id.ilike(f"%{query}%"),
                     Skill.name.ilike(f"%{query}%"),
                     Skill.description.ilike(f"%{query}%"),
-                    Skill.tags.like(f'%"{query}"%'),  # JSON array contains (case-sensitive for JSON)
+                    cast(Skill.tags, Text).like(f'%"{query}"%'),  # JSON array contains (case-sensitive for JSON)
                     Skill.code.ilike(f"%{query}%"),
                 )
             )

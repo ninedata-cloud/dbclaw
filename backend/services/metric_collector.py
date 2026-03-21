@@ -79,15 +79,27 @@ async def _push_to_subscribers(datasource_id: int, data: Dict[str, Any]):
 
 async def collect_metrics_for_connection(datasource_id: int):
     """Collect and store metrics for a single datasource."""
-    async with _db_write_semaphore:  # 限制并发写入
-        try:
-            async with async_session() as db:
+    try:
+        async with async_session() as db:
                 result = await db.execute(
                     select(Datasource).where(Datasource.id == datasource_id, Datasource.is_active == True)
                 )
                 datasource = result.scalar_one_or_none()
                 if not datasource:
                     return
+
+                # 检查是否在静默期内，如果是则跳过采集
+                if datasource.silence_until:
+                    current_time = now()
+                    if current_time < datasource.silence_until:
+                        logger.debug(f"Skipping metrics collection for datasource {datasource_id}: in silence period until {datasource.silence_until}")
+                        return
+                    else:
+                        # 静默已过期，自动清除
+                        datasource.silence_until = None
+                        datasource.silence_reason = None
+                        await db.commit()
+                        logger.info(f"Silence period expired for datasource {datasource_id}, resuming monitoring")
 
                 password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
                 connector = get_connector(
@@ -97,6 +109,7 @@ async def collect_metrics_for_connection(datasource_id: int):
                     username=datasource.username,
                     password=password,
                     database=datasource.database,
+                    extra_params=datasource.extra_params,
                 )
 
                 try:
@@ -119,20 +132,31 @@ async def collect_metrics_for_connection(datasource_id: int):
 
                 # 采集 OS 指标（如果配置了 SSH）
                 if datasource.host_id:
-                    os_metrics = await _collect_os_metrics(db, datasource.host_id)
-                    if os_metrics:
-                        # 所有数据库统一使用 SSH 采集的 OS 指标
-                        # 直接使用 OS 指标，覆盖数据库层面的同名指标（如果有）
-                        normalized_status.update(os_metrics)
+                    try:
+                        # 使用超时保护，避免SSH连接挂起导致长时间阻塞
+                        os_metrics = await asyncio.wait_for(
+                            _collect_os_metrics(db, datasource.host_id),
+                            timeout=30.0  # 30秒超时
+                        )
+                        if os_metrics:
+                            # 所有数据库统一使用 SSH 采集的 OS 指标
+                            # 直接使用 OS 指标，覆盖数据库层面的同名指标（如果有）
+                            normalized_status.update(os_metrics)
+                    except asyncio.TimeoutError:
+                        logger.warning(f"SSH metrics collection timeout for datasource {datasource_id} (host_id={datasource.host_id})")
+                    except Exception as e:
+                        logger.warning(f"Failed to collect SSH metrics for datasource {datasource_id}: {e}")
 
-                snapshot = MetricSnapshot(
-                    datasource_id=datasource_id,
-                    metric_type="db_status",
-                    data=normalized_status,
-                    collected_at=now(),  # 使用本地时间
-                )
-                db.add(snapshot)
-                await db.commit()
+                # 使用信号量保护数据库写入
+                async with _db_write_semaphore:
+                    snapshot = MetricSnapshot(
+                        datasource_id=datasource_id,
+                        metric_type="db_status",
+                        data=normalized_status,
+                        collected_at=now(),  # 使用本地时间
+                    )
+                    db.add(snapshot)
+                    await db.commit()
 
                 # Handle connection failure - create alert and trigger diagnosis
                 if connection_failed:
@@ -151,8 +175,8 @@ async def collect_metrics_for_connection(datasource_id: int):
 
                 await connector.close()
 
-        except Exception as e:
-            logger.error(f"Error collecting metrics for datasource {datasource_id}: {e}")
+    except Exception as e:
+        logger.error(f"Error collecting metrics for datasource {datasource_id}: {e}")
 
 
 async def _auto_resolve_connection_alerts(db, datasource_id: int):
@@ -194,7 +218,7 @@ async def _auto_resolve_recovered_alerts(
     db,
     datasource_id: int,
     metrics: Dict[str, Any],
-    threshold_rules: List[Dict[str, Any]],
+    threshold_rules: Dict[str, Any],
     current_violations: List[Dict[str, Any]]
 ):
     """
@@ -273,6 +297,17 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
         return
 
     try:
+        # 检查数据源是否在静默期内
+        result = await db.execute(
+            select(Datasource).where(Datasource.id == datasource_id)
+        )
+        datasource = result.scalar_one_or_none()
+        if datasource and datasource.silence_until:
+            current_time = now()
+            if current_time < datasource.silence_until:
+                logger.debug(f"Skipping threshold check for datasource {datasource_id}: in silence period")
+                return
+
         # Get inspection config for this datasource
         from backend.models.inspection_config import InspectionConfig
 
@@ -370,6 +405,13 @@ async def _handle_connection_failure(db, datasource_id: int, datasource, error_m
     global _inspection_service
 
     try:
+        # 检查数据源是否在静默期内
+        if datasource.silence_until:
+            current_time = now()
+            if current_time < datasource.silence_until:
+                logger.debug(f"Skipping connection failure alert for datasource {datasource_id}: in silence period")
+                return
+
         from backend.services.alert_service import AlertService
 
         # Check if there's a recent unprocessed connection_failure trigger

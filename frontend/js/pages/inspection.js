@@ -4,6 +4,7 @@ const InspectionPage = {
     pageSize: 10,
     totalReports: 0,
     pollInterval: null,
+    datasourceSelector: null,
     filters: {
         datasource_id: null,
         status: null,
@@ -14,55 +15,20 @@ const InspectionPage = {
 
     async render() {
         const content = DOM.$('#page-content');
-        Header.render('数据库智能巡检');
+        content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
+
+        // Build header with filters (like dashboard layout)
+        Header.render('数据库智能巡检', this._buildHeaderActions());
 
         content.innerHTML = `
             <div class="page-container">
-                <div class="filters" style="margin: 20px 0; display: flex; gap: 10px; flex-wrap: wrap; align-items: end;">
-                    <div>
-                        <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">数据源</label>
-                        <select id="filterDatasource" class="form-select" style="padding: 8px; border-radius: 4px; min-width: 360px;">
-                            <option value="">所有数据源</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">报告状态</label>
-                        <select id="filterStatus" class="form-select" style="padding: 8px; border-radius: 4px;">
-                            <option value="">所有状态</option>
-                            <option value="completed">已完成</option>
-                            <option value="generating">生成中</option>
-                            <option value="failed">失败</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">触发类型</label>
-                        <select id="filterTriggerType" class="form-select" style="padding: 8px; border-radius: 4px;">
-                            <option value="">所有类型</option>
-                            <option value="manual">手动</option>
-                            <option value="scheduled">定时</option>
-                            <option value="anomaly">异常</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">开始日期</label>
-                        <input type="date" id="filterStartDate" class="form-input" style="padding: 8px; border-radius: 4px;">
-                    </div>
-                    <div>
-                        <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">结束日期</label>
-                        <input type="date" id="filterEndDate" class="form-input" style="padding: 8px; border-radius: 4px;">
-                    </div>
-                    <button id="applyFilters" class="btn btn-primary" style="padding: 8px 16px;">应用筛选</button>
-                    <button id="resetFilters" class="btn btn-secondary" style="padding: 8px 16px;">重置</button>
-                </div>
-                <div id="reportList" style="margin-top: 20px;">
+                <div id="reportList">
                     <div id="reports"></div>
                     <div id="pagination" style="margin-top: 15px; display: flex; justify-content: center; gap: 10px;"></div>
                 </div>
             </div>
         `;
 
-        await this.loadDatasources();
-        this.setupEventListeners();
         await this.loadReports();
         this.startPolling();
 
@@ -70,22 +36,63 @@ const InspectionPage = {
         return () => this.cleanup();
     },
 
-    async loadDatasources() {
-        const datasources = await API.getDatasources();
-        const select = DOM.$('#filterDatasource');
-        datasources.forEach(ds => {
-            const option = DOM.el('option', { value: ds.id, textContent: `${ds.name} (${ds.db_type})` });
-            select.appendChild(option);
+    _buildHeaderActions() {
+        // Build filters container
+        const filtersContainer = DOM.el('div', { className: 'dashboard-filters' });
+        filtersContainer.innerHTML = `
+            <div id="filterDatasource" style="min-width: 400px;"></div>
+            <select id="filterStatus" class="filter-select">
+                <option value="">所有状态</option>
+                <option value="completed">已完成</option>
+                <option value="generating">生成中</option>
+                <option value="failed">失败</option>
+            </select>
+            <select id="filterTriggerType" class="filter-select">
+                <option value="">所有类型</option>
+                <option value="manual">手动</option>
+                <option value="scheduled">定时</option>
+                <option value="anomaly">异常</option>
+            </select>
+            <input type="date" id="filterStartDate" class="filter-input inspection-date-input" placeholder="开始日期">
+            <input type="date" id="filterEndDate" class="filter-input inspection-date-input" placeholder="结束日期">
+            <button id="btn-apply-filters" class="btn btn-primary">
+                <i data-lucide="search"></i> 检索
+            </button>
+            <button id="resetFilters" class="btn btn-secondary">
+                <i data-lucide="x"></i> 重置
+            </button>
+        `;
+
+        // Bind events after render
+        setTimeout(() => {
+            this.initDatasourceSelector();
+            const btnApply = DOM.$('#btn-apply-filters');
+            const btnReset = DOM.$('#resetFilters');
+            if (btnApply) btnApply.addEventListener('click', () => this.applyFilters());
+            if (btnReset) btnReset.addEventListener('click', () => this.resetFilters());
+            DOM.createIcons();
+        }, 0);
+
+        return filtersContainer;
+    },
+
+    initDatasourceSelector() {
+        this.datasourceSelector = new DatasourceSelector({
+            container: DOM.$('#filterDatasource'),
+            allowEmpty: true,
+            emptyText: '所有数据源',
+            minWidth: '400px',
+            maxWidth: '400px',
+            showStatus: true,
+            showDetails: false,
+            onChange: (datasource) => {
+                this.filters.datasource_id = datasource ? datasource.id : null;
+                this.applyFilters();
+            }
         });
     },
 
-    setupEventListeners() {
-        DOM.$('#applyFilters')?.addEventListener('click', () => this.applyFilters());
-        DOM.$('#resetFilters')?.addEventListener('click', () => this.resetFilters());
-    },
-
     applyFilters() {
-        this.filters.datasource_id = DOM.$('#filterDatasource')?.value || null;
         this.filters.status = DOM.$('#filterStatus')?.value || null;
         this.filters.trigger_type = DOM.$('#filterTriggerType')?.value || null;
         this.filters.start_date = DOM.$('#filterStartDate')?.value || null;
@@ -96,7 +103,12 @@ const InspectionPage = {
 
     resetFilters() {
         this.filters = { datasource_id: null, status: null, trigger_type: null, start_date: null, end_date: null };
-        DOM.$('#filterDatasource').value = '';
+
+        // 重置数据源选择器
+        if (this.datasourceSelector) {
+            this.datasourceSelector.setValue(null);
+        }
+
         DOM.$('#filterStatus').value = '';
         DOM.$('#filterTriggerType').value = '';
         DOM.$('#filterStartDate').value = '';
@@ -223,19 +235,19 @@ const InspectionPage = {
         const buttons = [];
 
         // Previous button
-        buttons.push(`<button class="btn btn-sm btn-secondary" ${this.currentPage === 1 ? 'disabled' : ''} onclick="InspectionPage.goToPage(${this.currentPage - 1})">上一页</button>`);
+        buttons.push(`<button class="btn btn-sm btn-secondary" style="flex: 0 0 auto;" ${this.currentPage === 1 ? 'disabled' : ''} onclick="InspectionPage.goToPage(${this.currentPage - 1})">上一页</button>`);
 
         // Page numbers
         for (let i = 1; i <= totalPages; i++) {
             if (i === 1 || i === totalPages || (i >= this.currentPage - 2 && i <= this.currentPage + 2)) {
-                buttons.push(`<button class="btn btn-sm ${i === this.currentPage ? 'btn-primary' : 'btn-secondary'}" onclick="InspectionPage.goToPage(${i})">${i}</button>`);
+                buttons.push(`<button class="btn btn-sm ${i === this.currentPage ? 'btn-primary' : 'btn-secondary'}" style="flex: 0 0 auto;" onclick="InspectionPage.goToPage(${i})">${i}</button>`);
             } else if (i === this.currentPage - 3 || i === this.currentPage + 3) {
-                buttons.push(`<span style="padding:0 5px;">...</span>`);
+                buttons.push(`<span style="padding:0 5px; flex: 0 0 auto;">...</span>`);
             }
         }
 
         // Next button
-        buttons.push(`<button class="btn btn-sm btn-secondary" ${this.currentPage === totalPages ? 'disabled' : ''} onclick="InspectionPage.goToPage(${this.currentPage + 1})">下一页</button>`);
+        buttons.push(`<button class="btn btn-sm btn-secondary" style="flex: 0 0 auto;" ${this.currentPage === totalPages ? 'disabled' : ''} onclick="InspectionPage.goToPage(${this.currentPage + 1})">下一页</button>`);
 
         pagination.innerHTML = buttons.join('');
     },
@@ -264,12 +276,12 @@ const InspectionPage = {
             content.innerHTML = `
                 <div style="max-width: 1200px; margin: 0 auto; padding: 20px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                        <button onclick="InspectionPage.render()" style="padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">← 返回报告列表</button>
+                        <button onclick="InspectionPage.render()" style="padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; flex: 0 0 auto;">← 返回报告列表</button>
                         <div style="display: flex; gap: 10px;">
-                            <button onclick="InspectionPage.exportMarkdown(${reportId})" class="btn btn-secondary" style="padding: 8px 16px;">
+                            <button onclick="InspectionPage.exportMarkdown(${reportId})" class="btn btn-secondary" style="padding: 8px 16px; flex: 0 0 auto;">
                                 📄 Export Markdown
                             </button>
-                            <button onclick="InspectionPage.exportPDF(${reportId})" class="btn btn-primary" style="padding: 8px 16px;">
+                            <button onclick="InspectionPage.exportPDF(${reportId})" class="btn btn-primary" style="padding: 8px 16px; flex: 0 0 auto;">
                                 📑 Export PDF
                             </button>
                         </div>
@@ -414,6 +426,10 @@ const InspectionPage = {
         if (this.pollInterval) {
             clearInterval(this.pollInterval);
             this.pollInterval = null;
+        }
+        if (this.datasourceSelector) {
+            this.datasourceSelector.destroy();
+            this.datasourceSelector = null;
         }
     }
 

@@ -1,6 +1,5 @@
-from sqlalchemy import Column, ForeignKey, Integer, String, DateTime, Text, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Text, JSON
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
 from backend.database import Base
 
 
@@ -8,8 +7,8 @@ class DiagnosticSession(Base):
     __tablename__ = "diagnostic_sessions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    datasource_id = Column(Integer, ForeignKey("datasources.id", ondelete="CASCADE"), nullable=True)
-    ai_model_id = Column(Integer, ForeignKey("ai_models.id"), nullable=True)
+    datasource_id = Column(Integer, nullable=True)
+    ai_model_id = Column(Integer, nullable=True)
     title = Column(String(200), default="New Session")
     kb_ids = Column(JSON, nullable=True)
     disabled_tools = Column(JSON, nullable=True)

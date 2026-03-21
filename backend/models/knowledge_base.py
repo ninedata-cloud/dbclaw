@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime
 from sqlalchemy.sql import func
 from backend.database import Base
 
@@ -19,7 +19,7 @@ class Document(Base):
     __tablename__ = "documents"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    kb_id = Column(Integer, ForeignKey("knowledge_bases.id"), nullable=False, index=True)
+    kb_id = Column(Integer, nullable=False, index=True)
     filename = Column(String(255), nullable=False)
     file_type = Column(String(20), nullable=False)
     file_path = Column(String(500), nullable=False)
@@ -35,8 +35,8 @@ class KnowledgeChunk(Base):
     __tablename__ = "knowledge_chunks"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    kb_id = Column(Integer, ForeignKey("knowledge_bases.id"), nullable=False, index=True)
-    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False, index=True)
+    kb_id = Column(Integer, nullable=False, index=True)
+    document_id = Column(Integer, nullable=False, index=True)
     content = Column(Text, nullable=False)
     chunk_index = Column(Integer, nullable=False)
     chunk_metadata = Column(Text, nullable=True)

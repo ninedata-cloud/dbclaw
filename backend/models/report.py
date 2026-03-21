@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, Integer, String, DateTime, Text, JSON, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Boolean
 from sqlalchemy.sql import func
 from backend.database import Base
 
@@ -7,7 +7,7 @@ class Report(Base):
     __tablename__ = "reports"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    datasource_id = Column(Integer, ForeignKey("datasources.id", ondelete="CASCADE"), nullable=False)
+    datasource_id = Column(Integer, nullable=False)
     title = Column(String(200), nullable=False)
     report_type = Column(String(50), default="comprehensive")  # comprehensive, performance, security
     status = Column(String(20), default="generating")  # generating, completed, failed

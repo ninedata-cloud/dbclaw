@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, DateTime, JSON
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, JSON
 from sqlalchemy.sql import func
 from backend.database import Base
 
@@ -8,7 +8,7 @@ class InspectionConfig(Base):
     __tablename__ = "inspection_configs"
 
     id = Column(Integer, primary_key=True, index=True)
-    datasource_id = Column(Integer, ForeignKey("datasources.id"), unique=True, nullable=False)
+    datasource_id = Column(Integer, unique=True, nullable=False)
     enabled = Column(Boolean, default=True, nullable=False)
 
     # Scheduling

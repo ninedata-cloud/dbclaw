@@ -15,6 +15,7 @@
     Router.register('users', () => UsersPage.render());
     Router.register('inspection', () => InspectionPage.render());
     Router.register('alerts', () => AlertsPage.init());
+    Router.register('integrations', () => integrationsPage.init());
 
     // Check auth
     const token = localStorage.getItem('auth_token');
