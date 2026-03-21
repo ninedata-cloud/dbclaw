@@ -473,9 +473,79 @@ async def _handle_connection_failure(db, datasource_id: int, datasource, error_m
         logger.error(f"Error handling connection failure for datasource {datasource_id}: {e}", exc_info=True)
 
 
+async def _handle_network_probe_failure(host: str):
+    """创建全局网络探针失败告警（若尚无活跃告警）"""
+    try:
+        from backend.services.alert_service import AlertService
+        from sqlalchemy import and_
+        async with async_session() as db:
+            # 检查是否已存在活跃的网络告警，避免重复
+            result = await db.execute(
+                select(AlertMessage).where(
+                    and_(
+                        AlertMessage.metric_name == "network_probe",
+                        AlertMessage.status.in_(["active", "acknowledged"])
+                    )
+                )
+            )
+            if result.scalars().first():
+                logger.debug("Network probe alert already active, skipping creation")
+                return
+
+            await AlertService.create_alert(
+                db=db,
+                datasource_id=0,
+                alert_type="system_error",
+                severity="critical",
+                metric_name="network_probe",
+                trigger_reason=f"网络探针失败：无法连通 {host}"
+            )
+            logger.warning(f"Created network probe failure alert (host={host})")
+    except Exception as e:
+        logger.error(f"Error creating network probe alert: {e}", exc_info=True)
+
+
+async def _auto_resolve_network_probe_alerts():
+    """探针恢复后自动解除所有活跃的网络告警"""
+    try:
+        from backend.services.alert_service import AlertService
+        from sqlalchemy import and_
+        async with async_session() as db:
+            result = await db.execute(
+                select(AlertMessage).where(
+                    and_(
+                        AlertMessage.metric_name == "network_probe",
+                        AlertMessage.status.in_(["active", "acknowledged"])
+                    )
+                )
+            )
+            alerts = result.scalars().all()
+            for alert in alerts:
+                await AlertService.resolve_alert(db, alert.id)
+                logger.info(f"Auto-resolved network probe alert {alert.id}: network restored")
+    except Exception as e:
+        logger.error(f"Error auto-resolving network probe alerts: {e}", exc_info=True)
+
+
 async def collect_all_metrics():
     """Collect metrics for all active datasources."""
     try:
+        # 网络探针：采集前先检测网络连通性
+        from backend.services.network_probe import check_network
+        from backend.services.config_service import get_config as _get_config
+
+        async with async_session() as _probe_db:
+            probe_host = await _get_config(_probe_db, "network_probe_host", default="127.0.0.1")
+
+        network_ok = await check_network(probe_host)
+        if not network_ok:
+            logger.warning(f"Network probe failed (host={probe_host}), skipping all datasource collection")
+            await _handle_network_probe_failure(probe_host)
+            return
+
+        # 网络正常，自动解除已有的网络告警
+        await _auto_resolve_network_probe_alerts()
+
         async with async_session() as db:
             result = await db.execute(
                 select(Datasource.id).where(Datasource.is_active == True)
