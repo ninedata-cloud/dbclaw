@@ -75,7 +75,7 @@ const DashboardPage = {
 
             // Normal section
             const normalSection = DOM.el('div', { className: 'resource-section', id: 'normal-section' });
-            normalSection.innerHTML = `<div class="resource-section-header normal" id="normal-header"><span>全部资源</span><span class="resource-count-badge normal" id="normal-count">0</span></div><div class="dashboard-grid" id="normal-grid"></div>`;
+            normalSection.innerHTML = `<div class="resource-section-header normal" id="normal-header"><span>其余资源</span><span class="resource-count-badge normal" id="normal-count">0</span></div><div class="dashboard-grid" id="normal-grid"></div>`;
             content.appendChild(normalSection);
 
             // Live status bar
@@ -163,6 +163,7 @@ const DashboardPage = {
             const alerts = resp.alerts || [];
             const total  = resp.total  || 0;
             const titleBadge = total > 0 ? `<span class="alert-count-badge">${total}</span>` : '';
+            const viewAllHtml = total > 0 ? `<div class="alert-view-all"><span class="alert-view-all-link" onclick="Router.navigate('alerts')">查看全部 ${total} 条 →</span></div>` : '';
             const listHtml = alerts.length === 0
                 ? `<div class="no-alerts-text">✓ 系统运行正常</div>`
                 : `<div class="alert-list">${alerts.map(a => `
@@ -173,7 +174,8 @@ const DashboardPage = {
                             <div class="alert-time">${this._relTime(a.created_at)}</div>
                         </div>
                     </div>`).join('')}</div>`;
-            panel.innerHTML = `<div class="overview-panel-title">⚡ 活跃告警${titleBadge}</div>${listHtml}`;
+            const titleCls = total > 10 ? ' alert-title-critical' : '';
+            panel.innerHTML = `<div class="overview-panel-title${titleCls}">⚡ 活跃告警${titleBadge}</div>${listHtml}${viewAllHtml}`;
         } catch {
             panel.innerHTML = `<div class="overview-panel-title">⚡ 活跃告警</div><div style="color:rgba(255,255,255,0.3);font-size:13px">加载失败</div>`;
         }
@@ -294,12 +296,14 @@ const DashboardPage = {
                         <span class="status-dot ${statusCls}"></span>
                         ${conn.name}
                     </div>
-                    <span class="dash-card-type type-${conn.db_type}">${conn.db_type}</span>
+                    <div class="dash-card-header-right">
+                        <span class="dash-card-health health-badge-${statusCls}" id="health-${conn.id}">${this._healthLabelShort(status)}</span>
+                        <span class="dash-card-type type-${conn.db_type}">${conn.db_type}</span>
+                    </div>
                 </div>
                 <div class="dash-card-host">${conn.host}:${conn.port}${conn.database ? ' / ' + conn.database : ''}</div>
                 <div class="dash-card-divider"></div>
                 <div class="dash-card-metrics" id="dash-metrics-${conn.id}">
-                    <div><div class="dash-metric-label">健康状态</div><div class="dash-metric-value health-${statusCls}" id="health-${conn.id}">${this._healthLabel(status)}</div></div>
                     <div><div class="dash-metric-label">活跃连接</div><div class="dash-metric-value" id="conn-${conn.id}">--</div></div>
                     <div>
                         <div class="dash-metric-label">CPU</div>
@@ -315,6 +319,11 @@ const DashboardPage = {
     _healthLabel(status) {
         const map = { healthy: '✓ 健康', warning: '⚠ 警告', critical: '✗ 异常', error: '✗ 异常', unknown: '-- 未知' };
         return map[status] || '-- 未知';
+    },
+
+    _healthLabelShort(status) {
+        const map = { healthy: '健康', warning: '警告', critical: '异常', error: '异常', unknown: '未知' };
+        return map[status] || '未知';
     },
 
     // ── Metrics & refresh ────────────────────────────────────
@@ -355,8 +364,8 @@ const DashboardPage = {
                 this._healthStatuses[connId] = status;
                 const hEl = DOM.$(`#health-${connId}`);
                 if (hEl) {
-                    hEl.textContent = this._healthLabel(status);
-                    hEl.className = `dash-metric-value health-${this._statusClass(status)}`;
+                    hEl.textContent = this._healthLabelShort(status);
+                    hEl.className = `dash-card-health health-badge-${this._statusClass(status)}`;
                 }
             }
 

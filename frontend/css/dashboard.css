@@ -12,7 +12,7 @@
     overflow: hidden;
 }
 
-.overview-panel { padding: 24px; }
+.overview-panel { padding: 16px; }
 .overview-panel + .overview-panel { border-left: 1px solid rgba(255,255,255,0.06); }
 
 .overview-panel-title {
@@ -21,11 +21,13 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: rgba(255,255,255,0.35);
-    margin-bottom: 16px;
+    margin-bottom: 12px;
     display: flex;
     align-items: center;
     gap: 8px;
 }
+
+.alert-title-critical { color: #f85149 !important; }
 
 /* Donut Chart */
 .donut-container { display: flex; align-items: center; gap: 20px; margin-bottom: 14px; }
@@ -110,6 +112,15 @@
     font-size: 13px; color: #3fb950;
     display: flex; align-items: center; gap: 6px; padding-top: 4px;
 }
+
+.alert-view-all { margin-top: 8px; text-align: right; }
+
+.alert-view-all-link {
+    font-size: 11px; color: rgba(88,166,255,0.7);
+    cursor: pointer; transition: color 0.2s;
+    text-transform: none; letter-spacing: 0;
+}
+.alert-view-all-link:hover { color: #58a6ff; }
 
 /* DB type distribution */
 .db-type-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; margin-top: 4px; }
@@ -203,6 +214,18 @@
     justify-content: space-between; gap: 8px; margin-bottom: 5px;
 }
 
+.dash-card-header-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+.dash-card-health {
+    font-size: 10px; font-weight: 700;
+    padding: 2px 6px; border-radius: 4px; flex-shrink: 0;
+}
+.health-badge-healthy { background: rgba(63,185,80,0.15); color: #3fb950; }
+.health-badge-warning { background: rgba(210,153,34,0.15); color: #d29922; }
+.health-badge-critical,
+.health-badge-error   { background: rgba(248,81,73,0.15); color: #f85149; }
+.health-badge-unknown { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.4); }
+
 .dash-card-name {
     font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.9);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -226,7 +249,7 @@
 }
 
 .dash-card-metrics {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px;
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px 12px;
 }
 
 .dash-metric-label {
