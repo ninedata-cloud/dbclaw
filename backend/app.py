@@ -95,6 +95,18 @@ async def lifespan(app: FastAPI):
                     value_type=val_type, description=desc,
                     category="integration"
                 )
+
+        # Seed network probe config
+        _probe_exists = await _db.execute(_select(_SystemConfig).where(_SystemConfig.key == "network_probe_host"))
+        if not _probe_exists.scalar_one_or_none():
+            await _config_service.set_config(
+                _db,
+                key="network_probe_host",
+                value="127.0.0.1",
+                value_type="string",
+                description="网络探针目标地址，采集前用于检测网络连通性（默认 127.0.0.1，可改为网关 IP）",
+                category="monitoring"
+            )
     logger.info("Default system configs seeded")
 
     # Start SSH connection pool
