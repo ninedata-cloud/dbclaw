@@ -14,6 +14,7 @@ async def check_network(host: str) -> bool:
     Returns:
         True 表示可达，False 表示不可达或超时或异常
     """
+    proc = None
     try:
         # macOS/Linux: ping -c 1 -W 2 <host>
         # Windows: ping -n 1 -w 2000 <host>
@@ -32,10 +33,11 @@ async def check_network(host: str) -> bool:
 
     except asyncio.TimeoutError:
         logger.warning(f"Network probe timeout for host: {host}")
-        try:
-            proc.kill()
-        except Exception:
-            pass
+        if proc is not None:
+            try:
+                proc.kill()
+            except Exception:
+                pass
         return False
     except Exception as e:
         logger.warning(f"Network probe error for host {host}: {e}")

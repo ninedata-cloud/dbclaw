@@ -36,13 +36,11 @@ async def test_check_network_timeout():
     """超时应返回 False"""
     from backend.services.network_probe import check_network
 
-    async def slow_wait():
-        await asyncio.sleep(10)
-
     mock_proc = MagicMock()
-    mock_proc.wait = slow_wait
+    mock_proc.returncode = 0
 
-    with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+    with patch("asyncio.create_subprocess_exec", return_value=mock_proc), \
+         patch("asyncio.wait_for", side_effect=asyncio.TimeoutError):
         result = await check_network("192.0.2.1")
     assert result is False
 
