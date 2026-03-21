@@ -6,6 +6,11 @@ import logging
 import smtplib
 import aiohttp
 import json
+import time
+import hmac
+import hashlib
+import base64
+import urllib.parse
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
@@ -47,7 +52,7 @@ class NotificationService:
 
         # Check time range filter
         if subscription.time_ranges:
-            current_time = datetime.utcnow()
+            current_time = datetime.now()
             current_hour = current_time.hour
             current_minute = current_time.minute
             current_weekday = current_time.weekday()  # 0=Monday, 6=Sunday
@@ -85,6 +90,7 @@ class NotificationService:
     ) -> List[AlertDeliveryLog]:
         """
         Send notifications for an alert based on subscription channels.
+        Delegates to the Integration system for actual delivery.
 
         Args:
             db: Database session
@@ -94,44 +100,13 @@ class NotificationService:
         Returns:
             List of delivery log entries
         """
-        # Get user information
-        user_result = await db.execute(
-            select(User).where(User.id == subscription.user_id)
-        )
-        user = user_result.scalar_one_or_none()
+        from backend.services.notification_dispatcher import _send_via_integrations
 
-        if not user:
-            logger.error(f"User {subscription.user_id} not found for subscription {subscription.id}")
+        if not subscription.channel_ids:
+            logger.warning(f"Subscription {subscription.id} has no channels configured")
             return []
 
-        # Get datasource information
-        datasource = None
-        if alert.datasource_id:
-            ds_result = await db.execute(
-                select(Datasource).where(Datasource.id == alert.datasource_id)
-            )
-            datasource = ds_result.scalar_one_or_none()
-
-        delivery_logs = []
-
-        for channel in subscription.channels:
-            if channel == "email" and user.email:
-                log = await NotificationService._send_email(db, alert, user.email, subscription.id, datasource)
-                delivery_logs.append(log)
-
-            elif channel == "sms" and user.phone:
-                log = await NotificationService._send_sms(db, alert, user.phone, subscription.id, datasource)
-                delivery_logs.append(log)
-
-            elif channel == "phone" and user.phone:
-                log = await NotificationService._send_phone(db, alert, user.phone, subscription.id, datasource)
-                delivery_logs.append(log)
-
-            elif channel == "webhook" and subscription.webhook_url:
-                log = await NotificationService._send_webhook(db, alert, subscription.webhook_url, subscription.id, datasource)
-                delivery_logs.append(log)
-
-        return delivery_logs
+        return await _send_via_integrations(db, alert, subscription)
 
     @staticmethod
     async def _send_email(
@@ -176,35 +151,37 @@ class NotificationService:
 
             ds_info = ""
             if datasource:
-                ds_info = f"""\nDatabase Info:
+                ds_info = f"""\n数据库信息：
 --------------
-Name: {datasource.name}
-Type: {datasource.db_type.upper()}
-Host: {datasource.host}:{datasource.port}
-Database: {datasource.database or 'N/A'}
+名称：{datasource.name}
+类型：{datasource.db_type.upper()}
+地址：{datasource.host}:{datasource.port}
+数据库：{datasource.database or '无'}
 """
 
             body = f"""
-Alert Details:
+告警详情：
 --------------
-Severity: {alert.severity.upper()}
-Alert Type: {alert.alert_type}
+严重程度：{alert.severity.upper()}
+告警类型：{alert.alert_type}
 {ds_info}
 {alert.content}
 
-Created at: {alert.created_at}
+创建时间：{alert.created_at}
 """
             msg.attach(MIMEText(body, 'plain'))
-
-            # Send email
-            with smtplib.SMTP(smtp_host, smtp_port) as server:
-                if smtp_use_tls:
-                    server.starttls()
+            if smtp_use_tls:
+                server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=20)
+            else:
+                server = smtplib.SMTP(smtp_host, smtp_port, timeout=20)
+            try:
                 server.login(smtp_username, smtp_password)
                 server.send_message(msg)
+            finally:
+                server.quit()
 
             log.status = "sent"
-            log.sent_at = datetime.utcnow()
+            log.sent_at = datetime.now()
             logger.info(f"Email sent to {recipient} for alert {alert.id}")
 
         except Exception as e:
@@ -253,7 +230,7 @@ Created at: {alert.created_at}
                 async with aiohttp.ClientSession() as session:
                     payload = {
                         "phone": recipient,
-                        "message": f"[{alert.severity.upper()}] {ds_prefix}{alert.title}: {alert.content[:100]}"
+                        "message": f"[{alert.severity.upper()}告警] {ds_prefix}{alert.title}: {alert.content[:100]}"
                     }
                     async with session.post(webhook_url, json=payload) as response:
                         if response.status != 200:
@@ -264,7 +241,7 @@ Created at: {alert.created_at}
                 raise NotImplementedError(f"SMS provider {sms_provider} not implemented")
 
             log.status = "sent"
-            log.sent_at = datetime.utcnow()
+            log.sent_at = datetime.now()
             logger.info(f"SMS sent to {recipient} for alert {alert.id}")
 
         except Exception as e:
@@ -313,7 +290,7 @@ Created at: {alert.created_at}
                 async with aiohttp.ClientSession() as session:
                     payload = {
                         "phone": recipient,
-                        "message": f"{ds_prefix}Alert: {alert.title}. Severity: {alert.severity}"
+                        "message": f"[告警] {ds_prefix}{alert.title}，严重程度：{alert.severity}"
                     }
                     async with session.post(webhook_url, json=payload) as response:
                         if response.status != 200:
@@ -324,7 +301,7 @@ Created at: {alert.created_at}
                 raise NotImplementedError(f"Phone provider {phone_provider} not implemented")
 
             log.status = "sent"
-            log.sent_at = datetime.utcnow()
+            log.sent_at = datetime.now()
             logger.info(f"Phone call sent to {recipient} for alert {alert.id}")
 
         except Exception as e:
@@ -377,6 +354,9 @@ Created at: {alert.created_at}
             elif channel == "webhook" and subscription.webhook_url:
                 log = await NotificationService._send_recovery_webhook(db, alert, subscription.webhook_url, subscription.id, datasource)
                 delivery_logs.append(log)
+            elif channel == "dingtalk" and subscription.dingtalk_webhook_url:
+                log = await NotificationService._send_recovery_dingtalk(db, alert, subscription.dingtalk_webhook_url, subscription.dingtalk_secret, subscription.id, datasource)
+                delivery_logs.append(log)
 
         return delivery_logs
 
@@ -421,36 +401,39 @@ Created at: {alert.created_at}
 
             ds_info = ""
             if datasource:
-                ds_info = f"""\nDatabase Info:
+                ds_info = f"""\n数据库信息：
 --------------
-Name: {datasource.name}
-Type: {datasource.db_type.upper()}
-Host: {datasource.host}:{datasource.port}
-Database: {datasource.database or 'N/A'}
+名称：{datasource.name}
+类型：{datasource.db_type.upper()}
+地址：{datasource.host}:{datasource.port}
+数据库：{datasource.database or '无'}
 """
 
-            resolved_at = alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else 'N/A'
+            resolved_at = alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else '未知'
             body = f"""
-Alert Recovered:
+告警已恢复：
 --------------
-Severity: {alert.severity.upper()}
-Alert Type: {alert.alert_type}
+严重程度：{alert.severity.upper()}
+告警类型：{alert.alert_type}
 {ds_info}
 {alert.content}
 
-Original alert at: {alert.created_at}
-Resolved at: {resolved_at}
+告警时间：{alert.created_at}
+恢复时间：{resolved_at}
 """
             msg.attach(MIMEText(body, 'plain'))
-
-            with smtplib.SMTP(smtp_host, smtp_port) as server:
-                if smtp_use_tls:
-                    server.starttls()
+            if smtp_use_tls:
+                server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=20)
+            else:
+                server = smtplib.SMTP(smtp_host, smtp_port, timeout=20)
+            try:
                 server.login(smtp_username, smtp_password)
                 server.send_message(msg)
+            finally:
+                server.quit()
 
             log.status = "sent"
-            log.sent_at = datetime.utcnow()
+            log.sent_at = datetime.now()
             logger.info(f"Recovery email sent to {recipient} for alert {alert.id}")
 
         except Exception as e:
@@ -501,7 +484,7 @@ Resolved at: {resolved_at}
                 raise NotImplementedError(f"SMS provider {sms_provider} not implemented")
 
             log.status = "sent"
-            log.sent_at = datetime.utcnow()
+            log.sent_at = datetime.now()
             logger.info(f"Recovery SMS sent to {recipient} for alert {alert.id}")
 
         except Exception as e:
@@ -552,7 +535,7 @@ Resolved at: {resolved_at}
                 raise NotImplementedError(f"Phone provider {phone_provider} not implemented")
 
             log.status = "sent"
-            log.sent_at = datetime.utcnow()
+            log.sent_at = datetime.now()
             logger.info(f"Recovery phone call sent to {recipient} for alert {alert.id}")
 
         except Exception as e:
@@ -614,6 +597,22 @@ Resolved at: {resolved_at}
             async with aiohttp.ClientSession() as session:
                 if NotificationService._is_feishu_webhook(webhook_url):
                     payload = NotificationService._build_feishu_recovery_payload(alert, datasource)
+                elif NotificationService._is_dingtalk_webhook(webhook_url):
+                    signed_url = NotificationService._build_dingtalk_url(webhook_url, None)
+                    payload = NotificationService._build_dingtalk_recovery_payload(alert, datasource)
+                    async with session.post(signed_url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                        resp_text = await response.text()
+                        if response.status not in [200, 201, 202]:
+                            raise Exception(f"DingTalk webhook returned status {response.status}: {resp_text}")
+                        resp_json = json.loads(resp_text)
+                        if resp_json.get('errcode', 0) != 0:
+                            raise Exception(f"DingTalk error {resp_json.get('errcode')}: {resp_json.get('errmsg')}")
+                    log.status = "sent"
+                    log.sent_at = datetime.now()
+                    logger.info(f"DingTalk recovery webhook sent to {webhook_url} for alert {alert.id}")
+                    await db.commit()
+                    await db.refresh(log)
+                    return log
                 else:
                     payload = {
                         "alert_id": alert.id,
@@ -648,7 +647,7 @@ Resolved at: {resolved_at}
                             raise Exception(f"Feishu error {resp_json.get('code')}: {resp_json.get('msg')}")
 
             log.status = "sent"
-            log.sent_at = datetime.utcnow()
+            log.sent_at = datetime.now()
             logger.info(f"Recovery webhook sent to {webhook_url} for alert {alert.id}")
 
         except Exception as e:
@@ -661,9 +660,171 @@ Resolved at: {resolved_at}
         return log
 
     @staticmethod
+    async def _send_dingtalk(
+        db: AsyncSession,
+        alert: AlertMessage,
+        webhook_url: str,
+        secret: Optional[str],
+        subscription_id: int,
+        datasource: Optional[Any] = None
+    ) -> AlertDeliveryLog:
+        """Send DingTalk webhook notification"""
+        log = AlertDeliveryLog(
+            alert_id=alert.id,
+            subscription_id=subscription_id,
+            channel="dingtalk",
+            recipient=webhook_url,
+            status="pending"
+        )
+        db.add(log)
+
+        try:
+            signed_url = NotificationService._build_dingtalk_url(webhook_url, secret)
+            payload = NotificationService._build_dingtalk_payload(alert, datasource)
+            async with aiohttp.ClientSession() as session:
+                timeout = aiohttp.ClientTimeout(total=10)
+                async with session.post(signed_url, json=payload, timeout=timeout) as response:
+                    resp_text = await response.text()
+                    if response.status not in [200, 201, 202]:
+                        raise Exception(f"DingTalk webhook returned status {response.status}: {resp_text}")
+                    resp_json = json.loads(resp_text)
+                    if resp_json.get('errcode', 0) != 0:
+                        raise Exception(f"DingTalk error {resp_json.get('errcode')}: {resp_json.get('errmsg')}")
+
+            log.status = "sent"
+            log.sent_at = datetime.now()
+            logger.info(f"DingTalk notification sent for alert {alert.id}")
+
+        except Exception as e:
+            log.status = "failed"
+            log.error_message = str(e)
+            logger.error(f"Failed to send DingTalk notification: {e}")
+
+        await db.commit()
+        await db.refresh(log)
+        return log
+
+    @staticmethod
+    async def _send_recovery_dingtalk(
+        db: AsyncSession,
+        alert: AlertMessage,
+        webhook_url: str,
+        secret: Optional[str],
+        subscription_id: int,
+        datasource=None
+    ) -> AlertDeliveryLog:
+        """Send DingTalk recovery webhook notification"""
+        log = AlertDeliveryLog(
+            alert_id=alert.id,
+            subscription_id=subscription_id,
+            channel="recovery",
+            recipient=webhook_url,
+            status="pending"
+        )
+        db.add(log)
+
+        try:
+            signed_url = NotificationService._build_dingtalk_url(webhook_url, secret)
+            payload = NotificationService._build_dingtalk_recovery_payload(alert, datasource)
+            async with aiohttp.ClientSession() as session:
+                timeout = aiohttp.ClientTimeout(total=10)
+                async with session.post(signed_url, json=payload, timeout=timeout) as response:
+                    resp_text = await response.text()
+                    if response.status not in [200, 201, 202]:
+                        raise Exception(f"DingTalk webhook returned status {response.status}: {resp_text}")
+                    resp_json = json.loads(resp_text)
+                    if resp_json.get('errcode', 0) != 0:
+                        raise Exception(f"DingTalk error {resp_json.get('errcode')}: {resp_json.get('errmsg')}")
+
+            log.status = "sent"
+            log.sent_at = datetime.now()
+            logger.info(f"DingTalk recovery notification sent for alert {alert.id}")
+
+        except Exception as e:
+            log.status = "failed"
+            log.error_message = str(e)
+            logger.error(f"Failed to send DingTalk recovery notification: {e}")
+
+        await db.commit()
+        await db.refresh(log)
+        return log
+
+    @staticmethod
     def _is_feishu_webhook(url: str) -> bool:
         """Check if URL is a Feishu/Lark webhook"""
         return 'open.feishu.cn' in url or 'open.larksuite.com' in url
+
+    @staticmethod
+    def _is_dingtalk_webhook(url: str) -> bool:
+        """Check if URL is a DingTalk webhook"""
+        return 'oapi.dingtalk.com' in url
+
+    @staticmethod
+    def _build_dingtalk_url(webhook_url: str, secret: Optional[str]) -> str:
+        """Build signed DingTalk webhook URL if secret provided"""
+        if not secret:
+            return webhook_url
+        timestamp = str(round(time.time() * 1000))
+        string_to_sign = f'{timestamp}\n{secret}'
+        hmac_code = hmac.new(
+            secret.encode('utf-8'),
+            string_to_sign.encode('utf-8'),
+            digestmod=hashlib.sha256
+        ).digest()
+        sign = urllib.parse.quote_plus(base64.b64encode(hmac_code))
+        return f'{webhook_url}&timestamp={timestamp}&sign={sign}'
+
+    @staticmethod
+    def _build_dingtalk_payload(alert: AlertMessage, datasource=None) -> dict:
+        """Build DingTalk markdown message payload"""
+        severity_labels = {
+            'critical': '严重',
+            'high': '高',
+            'medium': '中',
+            'low': '低'
+        }
+        severity_label = severity_labels.get(alert.severity, alert.severity)
+        lines = [f'### [{severity_label}] {alert.title}']
+        if datasource:
+            lines.append(f'**数据库：** {datasource.name} ({datasource.db_type.upper()}) {datasource.host}:{datasource.port}')
+        lines.append(f'**告警类型：** {alert.alert_type}')
+        if alert.metric_name and alert.metric_value is not None:
+            lines.append(f'**指标：** {alert.metric_name} = {alert.metric_value:.2f}')
+        if alert.threshold_value is not None:
+            lines.append(f'**阈值：** {alert.threshold_value:.2f}')
+        if alert.trigger_reason:
+            lines.append(f'**触发原因：** {alert.trigger_reason}')
+        lines.append(f'**时间：** {alert.created_at.strftime("%Y-%m-%d %H:%M:%S")}')
+        return {
+            'msgtype': 'markdown',
+            'markdown': {
+                'title': f'[{severity_label}] {alert.title}',
+                'text': '\n\n'.join(lines)
+            }
+        }
+
+    @staticmethod
+    def _build_dingtalk_recovery_payload(alert: AlertMessage, datasource=None) -> dict:
+        """Build DingTalk markdown message payload for alert recovery"""
+        resolved_at = alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else 'N/A'
+        lines = [f'### [已恢复] {alert.title}']
+        if datasource:
+            lines.append(f'**数据库：** {datasource.name} ({datasource.db_type.upper()}) {datasource.host}:{datasource.port}')
+        lines.append(f'**告警类型：** {alert.alert_type}')
+        if alert.metric_name and alert.metric_value is not None:
+            recovery_val = alert.resolved_value if hasattr(alert, 'resolved_value') and alert.resolved_value is not None else alert.metric_value
+            lines.append(f'**恢复时指标：** {alert.metric_name} = {recovery_val:.2f}')
+        if alert.threshold_value is not None:
+            lines.append(f'**阈值：** {alert.threshold_value:.2f}')
+        lines.append(f'**告警时间：** {alert.created_at.strftime("%Y-%m-%d %H:%M:%S")}')
+        lines.append(f'**恢复时间：** {resolved_at}')
+        return {
+            'msgtype': 'markdown',
+            'markdown': {
+                'title': f'[已恢复] {alert.title}',
+                'text': '\n\n'.join(lines)
+            }
+        }
 
     @staticmethod
     def _build_feishu_payload(alert: AlertMessage, datasource=None) -> dict:
@@ -739,6 +900,23 @@ Resolved at: {resolved_at}
             async with aiohttp.ClientSession() as session:
                 if NotificationService._is_feishu_webhook(webhook_url):
                     payload = NotificationService._build_feishu_payload(alert, datasource)
+                elif NotificationService._is_dingtalk_webhook(webhook_url):
+                    signed_url = NotificationService._build_dingtalk_url(webhook_url, None)
+                    payload = NotificationService._build_dingtalk_payload(alert, datasource)
+                    timeout = aiohttp.ClientTimeout(total=10)
+                    async with session.post(signed_url, json=payload, timeout=timeout) as response:
+                        resp_text = await response.text()
+                        if response.status not in [200, 201, 202]:
+                            raise Exception(f"DingTalk webhook returned status {response.status}: {resp_text}")
+                        resp_json = json.loads(resp_text)
+                        if resp_json.get('errcode', 0) != 0:
+                            raise Exception(f"DingTalk error {resp_json.get('errcode')}: {resp_json.get('errmsg')}")
+                    log.status = "sent"
+                    log.sent_at = datetime.now()
+                    logger.info(f"DingTalk webhook sent to {webhook_url} for alert {alert.id}")
+                    await db.commit()
+                    await db.refresh(log)
+                    return log
                 else:
                     payload = {
                         "alert_id": alert.id,
@@ -774,7 +952,7 @@ Resolved at: {resolved_at}
                             raise Exception(f"Feishu error {resp_json.get('code')}: {resp_json.get('msg')}")
 
             log.status = "sent"
-            log.sent_at = datetime.utcnow()
+            log.sent_at = datetime.now()
             logger.info(f"Webhook sent to {webhook_url} for alert {alert.id}")
 
         except Exception as e:

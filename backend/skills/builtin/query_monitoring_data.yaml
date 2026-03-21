@@ -53,7 +53,7 @@ code: |
           query = query.where(MetricSnapshot.metric_type == metric_type)
       
       # Time range filter
-      time_threshold = datetime.utcnow() - timedelta(minutes=minutes)
+      time_threshold = datetime.now() - timedelta(minutes=minutes)
       query = query.where(MetricSnapshot.collected_at >= time_threshold)
       
       # Order and limit
@@ -70,17 +70,17 @@ code: |
               "id": metric.id,
               "datasource_id": metric.datasource_id,
               "metric_type": metric.metric_type,
-              "metric_data": metric.metric_data,
+              "metric_data": metric.data,
               "collected_at": metric.collected_at.isoformat() if metric.collected_at else None
           })
-      
-      # Calculate statistics from metric_data JSON field
+
+      # Calculate statistics from data JSON field
       statistics = {}
       for metric in metrics:
-          if not metric.metric_data:
+          if not metric.data:
               continue
-          
-          data = metric.metric_data
+
+          data = metric.data
           for key, value in data.items():
               if isinstance(value, (int, float)):
                   if key not in statistics:

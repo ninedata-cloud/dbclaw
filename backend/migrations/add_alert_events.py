@@ -145,7 +145,7 @@ async def aggregate_existing_alerts(session: AsyncSession, time_window_minutes: 
             matching_event['latest_alert_id'] = alert.id
             matching_event['alert_count'] += 1
             matching_event['event_end_time'] = alert.created_at
-            matching_event['last_updated'] = datetime.utcnow()
+            matching_event['last_updated'] = datetime.now()
             matching_event['status'] = alert.status
 
             severity_order = {'critical': 4, 'high': 3, 'medium': 2, 'low': 1}
@@ -163,7 +163,7 @@ async def aggregate_existing_alerts(session: AsyncSession, time_window_minutes: 
                 'alert_count': 1,
                 'event_start_time': alert.created_at,
                 'event_end_time': alert.created_at,
-                'last_updated': datetime.utcnow(),
+                'last_updated': datetime.now(),
                 'status': alert.status,
                 'severity': alert.severity,
                 'title': alert.title,

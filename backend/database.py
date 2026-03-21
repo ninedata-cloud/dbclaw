@@ -34,6 +34,7 @@ async def init_db():
     import backend.models.login_log  # noqa: F401
     import backend.models.report  # noqa: F401
     import backend.skills.models  # noqa: F401
+    import backend.models.integration  # noqa: F401
     # Inspection models
     try:
         import backend.models.inspection_config  # noqa: F401

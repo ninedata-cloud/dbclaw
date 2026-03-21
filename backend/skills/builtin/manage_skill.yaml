@@ -15,7 +15,7 @@ parameters:
   - name: skill_id
     type: string
     required: false
-    description: Skill ID (required for get/update/enable/disable actions)
+    description: Skill ID (required for create/get/update/enable/disable actions)
   - name: name
     type: string
     required: false

@@ -32,7 +32,7 @@ const DatasourcesPage = {
                 return;
             }
 
-            // Filters
+            // Filters + Refresh button
             const filterBar = DOM.el('div', { style: { marginBottom: '20px', display: 'flex', gap: '10px', alignItems: 'end', flexWrap: 'wrap' } });
 
             const nameFilter = DOM.el('div');
@@ -67,6 +67,13 @@ const DatasourcesPage = {
                     <option value="temporary">临时</option>
                 </select>
             `;
+
+            const refreshBtn = DOM.el('button', {
+                className: 'btn btn-sm btn-outline-primary',
+                innerHTML: '<i data-lucide="refresh-cw"></i> 刷新状态',
+                style: { marginLeft: 'auto' },
+                onclick: () => this._refreshStatus()
+            });
 
             filterBar.appendChild(nameFilter);
             filterBar.appendChild(typeFilter);
@@ -107,6 +114,19 @@ const DatasourcesPage = {
         this._renderTable();
     },
 
+    _getStatusCell(conn, statusConfig) {
+        const status = conn.connection_status || 'unknown';
+        const config = statusConfig[status] || statusConfig.unknown;
+        return `
+            <div style="display:flex;align-items:center;gap:6px;">
+                <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${config.color}"></span>
+                <span style="padding:2px 8px;border-radius:12px;font-size:12px;background:${config.bg};color:${config.color};font-weight:500;">
+                    ${config.label}
+                </span>
+            </div>
+        `;
+    },
+
     _renderTable() {
         const container = DOM.$('#datasource-table-container');
         if (!container) return;
@@ -118,12 +138,20 @@ const DatasourcesPage = {
             temporary: { label: '临时', color: '#6b7280' }
         };
 
+        const statusConfig = {
+            'normal': { label: '正常', color: '#10b981', bg: '#ecfdf5' },
+            'failed': { label: '连接失败', color: '#ef4444', bg: '#fef2f2' },
+            'warning': { label: '警告', color: '#f59e0b', bg: '#fffbeb' },
+            'unknown': { label: '未知', color: '#6b7280', bg: '#f3f4f6' }
+        };
+
         container.innerHTML = `
             <table class="data-table">
                 <thead>
                     <tr>
                         <th>名称</th>
                         <th>类型</th>
+                        <th>连接状态</th>
                         <th>主机</th>
                         <th>数据库</th>
                         <th>重要性</th>
@@ -138,30 +166,41 @@ const DatasourcesPage = {
                             <tr>
                                 <td><strong>${conn.name}</strong></td>
                                 <td><span class="badge badge-info">${conn.db_type}</span></td>
+                                <td>
+                                    ${this._getStatusCell(conn, statusConfig)}
+                                </td>
                                 <td>${conn.host}:${conn.port}</td>
                                 <td>${conn.database || '-'}</td>
                                 <td><span style="color:${importance.color};font-weight:500;">${importance.label}</span></td>
                                 <td>${conn.monitoring_interval || 60}s</td>
                                 <td>
-                                    <div style="display:flex;gap:4px;flex-wrap:wrap;">
-                                        <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._testDatasource(${conn.id})" title="测试连接">
-                                            <i data-lucide="plug"></i>
-                                        </button>
+                                    <div style="display:flex;gap:4px;align-items:center;">
                                         <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._editDatasource(${conn.id})" title="编辑">
                                             <i data-lucide="pencil"></i>
-                                        </button>
-                                        <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._showInspectionConfig(${conn.id})" title="巡检配置">
-                                            <i data-lucide="settings"></i>
                                         </button>
                                         <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._triggerInspection(${conn.id})" title="诊断">
                                             <i data-lucide="zap"></i>
                                         </button>
-                                        <button class="btn btn-sm btn-danger" onclick="DatasourcesPage._deleteDatasource(${conn.id})" title="删除">
-                                            <i data-lucide="trash-2"></i>
-                                        </button>
-                                        <button class="btn btn-sm btn-primary" onclick="DatasourcesPage._monitorDatasource(${conn.id})" title="监控">
-                                            <i data-lucide="activity"></i>
-                                        </button>
+                                        <div class="ds-action-more" style="position:relative;">
+                                            <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._toggleMoreMenu(event, ${conn.id})" title="更多">
+                                                <i data-lucide="more-horizontal"></i>
+                                            </button>
+                                            <div class="ds-more-menu" id="more-menu-${conn.id}" style="display:none;background:var(--bg-primary);border:1px solid var(--border-color);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:9999;min-width:140px;padding:4px 0;">
+                                                <div class="ds-more-menu-item" onclick="DatasourcesPage._testDatasource(${conn.id})" style="display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;font-size:13px;color:var(--text-primary);white-space:nowrap;">
+                                                    <i data-lucide="plug" style="width:14px;height:14px;"></i> 测试连接
+                                                </div>
+                                                <div class="ds-more-menu-item" onclick="DatasourcesPage._showInspectionConfig(${conn.id})" style="display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;font-size:13px;color:var(--text-primary);white-space:nowrap;">
+                                                    <i data-lucide="settings" style="width:14px;height:14px;"></i> 巡检配置
+                                                </div>
+                                                <div class="ds-more-menu-item" onclick="DatasourcesPage._monitorDatasource(${conn.id})" style="display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;font-size:13px;color:var(--text-primary);white-space:nowrap;">
+                                                    <i data-lucide="activity" style="width:14px;height:14px;"></i> 监控
+                                                </div>
+                                                <div style="border-top:1px solid var(--border-color);margin:4px 0;"></div>
+                                                <div class="ds-more-menu-item" onclick="DatasourcesPage._deleteDatasource(${conn.id})" style="display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;font-size:13px;color:#ef4444;white-space:nowrap;">
+                                                    <i data-lucide="trash-2" style="width:14px;height:14px;"></i> 删除
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </td>
                             </tr>
@@ -173,10 +212,35 @@ const DatasourcesPage = {
         DOM.createIcons();
     },
 
+    _toggleMoreMenu(event, id) {
+        event.stopPropagation();
+        const menu = document.getElementById(`more-menu-${id}`);
+        const isOpen = menu.style.display !== 'none';
+        // close all open menus first
+        document.querySelectorAll('.ds-more-menu').forEach(m => m.style.display = 'none');
+        if (!isOpen) {
+            // use fixed positioning to escape table overflow clipping
+            const btn = event.currentTarget;
+            const rect = btn.getBoundingClientRect();
+            menu.style.position = 'fixed';
+            menu.style.top = (rect.bottom + 4) + 'px';
+            menu.style.left = '';
+            menu.style.right = '';
+            menu.style.display = 'block';
+            // align right edge of menu to right edge of button
+            const menuWidth = 140;
+            menu.style.left = Math.max(0, rect.right - menuWidth) + 'px';
+            DOM.createIcons();
+            // close on next outside click
+            const handler = () => {
+                menu.style.display = 'none';
+                document.removeEventListener('click', handler, true);
+            };
+            document.addEventListener('click', handler, true);
+        }
+    },
+
     async _testDatasource(id) {
-        const btn = event.target.closest('button');
-        btn.innerHTML = '<div class="spinner"></div>';
-        btn.disabled = true;
         try {
             const result = await API.testDatasource(id);
             if (result.success) {
@@ -186,10 +250,6 @@ const DatasourcesPage = {
             }
         } catch (err) {
             Toast.error('测试失败: ' + err.message);
-        } finally {
-            btn.innerHTML = '<i data-lucide="plug"></i>';
-            btn.disabled = false;
-            DOM.createIcons();
         }
     },
 

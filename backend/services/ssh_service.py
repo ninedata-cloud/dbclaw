@@ -7,12 +7,13 @@ class SSHService:
     """SSH command execution service using paramiko."""
 
     def __init__(self, host: str, port: int = 22, username: str = "",
-                 password: str = None, private_key: str = None):
+                 password: str = None, private_key: str = None, use_agent: bool = False):
         self.host = host
         self.port = port
         self.username = username
         self.password = password
         self.private_key = private_key
+        self.use_agent = use_agent
 
     def _get_client(self) -> paramiko.SSHClient:
         client = paramiko.SSHClient()
@@ -25,7 +26,11 @@ class SSHService:
             "timeout": 10,
         }
 
-        if self.private_key:
+        if self.use_agent:
+            # Use SSH agent for authentication
+            connect_kwargs["allow_agent"] = True
+            connect_kwargs["look_for_keys"] = True
+        elif self.private_key:
             key_file = io.StringIO(self.private_key)
             try:
                 pkey = paramiko.RSAKey.from_private_key(key_file)
@@ -33,8 +38,12 @@ class SSHService:
                 key_file.seek(0)
                 pkey = paramiko.Ed25519Key.from_private_key(key_file)
             connect_kwargs["pkey"] = pkey
+            connect_kwargs["allow_agent"] = False
+            connect_kwargs["look_for_keys"] = False
         elif self.password:
             connect_kwargs["password"] = self.password
+            connect_kwargs["allow_agent"] = False
+            connect_kwargs["look_for_keys"] = False
 
         client.connect(**connect_kwargs)
         return client

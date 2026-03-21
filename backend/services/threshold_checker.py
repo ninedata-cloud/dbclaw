@@ -22,6 +22,8 @@ class ThresholdChecker:
         self._violation_start_times: Dict[int, Dict[str, datetime]] = defaultdict(dict)
         # Track last trigger times to avoid duplicate triggers: {datasource_id: {metric_name: trigger_time}}
         self._last_trigger_times: Dict[int, Dict[str, datetime]] = defaultdict(dict)
+        # Track consecutive confirmation counts: {datasource_id: {metric_name: count}}
+        self._violation_counts: Dict[int, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
         # Cooldown period after triggering (seconds) - avoid repeated triggers
         self._trigger_cooldown = 3600  # 1 hour
 
@@ -116,6 +118,18 @@ class ThresholdChecker:
                             )
                             continue
 
+                    # Check confirmation count
+                    required_confirmations = rule.get("confirmations", 2)
+                    self._violation_counts[datasource_id][metric_name] += 1
+                    current_count = self._violation_counts[datasource_id][metric_name]
+
+                    if current_count < required_confirmations:
+                        logger.debug(
+                            f"Confirmation {current_count}/{required_confirmations} for "
+                            f"{metric_name} on datasource {datasource_id}"
+                        )
+                        continue
+
                     # Trigger inspection
                     violations_to_trigger.append({
                         "metric_name": metric_name,
@@ -125,7 +139,8 @@ class ThresholdChecker:
                         "violation_duration": violation_duration
                     })
 
-                    # Update last trigger time
+                    # Reset confirmation count and update last trigger time
+                    self._violation_counts[datasource_id][metric_name] = 0
                     self._last_trigger_times[datasource_id][metric_name] = now
 
                     logger.warning(
@@ -144,6 +159,7 @@ class ThresholdChecker:
                         f"(was violated for {violation_duration:.0f}s)"
                     )
                     del self._violation_start_times[datasource_id][metric_name]
+                    self._violation_counts[datasource_id][metric_name] = 0
 
         return violations_to_trigger
 
@@ -205,6 +221,18 @@ class ThresholdChecker:
                         )
                         return []
 
+                # Check confirmation count
+                required_confirmations = custom_rule.get("confirmations", 2)
+                self._violation_counts[datasource_id][metric_name] += 1
+                current_count = self._violation_counts[datasource_id][metric_name]
+
+                if current_count < required_confirmations:
+                    logger.debug(
+                        f"Confirmation {current_count}/{required_confirmations} for "
+                        f"custom expression on datasource {datasource_id}"
+                    )
+                    return []
+
                 # Trigger inspection
                 violation = {
                     "metric_name": metric_name,
@@ -214,7 +242,8 @@ class ThresholdChecker:
                     "metrics": eval_context
                 }
 
-                # Update last trigger time
+                # Reset confirmation count and update last trigger time
+                self._violation_counts[datasource_id][metric_name] = 0
                 self._last_trigger_times[datasource_id][metric_name] = now
 
                 logger.warning(
@@ -234,6 +263,7 @@ class ThresholdChecker:
                     f"{expression} (was violated for {violation_duration:.0f}s)"
                 )
                 del self._violation_start_times[datasource_id][metric_name]
+                self._violation_counts[datasource_id][metric_name] = 0
 
         return []
 
@@ -340,6 +370,8 @@ class ThresholdChecker:
             del self._violation_start_times[datasource_id]
         if datasource_id in self._last_trigger_times:
             del self._last_trigger_times[datasource_id]
+        if datasource_id in self._violation_counts:
+            del self._violation_counts[datasource_id]
 
     def get_violation_status(self, datasource_id: int) -> Dict[str, Dict[str, Any]]:
         """Get current violation status for a datasource (for debugging/monitoring)"""
@@ -349,11 +381,13 @@ class ThresholdChecker:
         for metric_name, start_time in self._violation_start_times.get(datasource_id, {}).items():
             duration = (now - start_time).total_seconds()
             last_trigger = self._last_trigger_times.get(datasource_id, {}).get(metric_name)
+            confirmation_count = self._violation_counts.get(datasource_id, {}).get(metric_name, 0)
 
             status[metric_name] = {
                 "violation_start": start_time.isoformat(),
                 "violation_duration": duration,
-                "last_trigger": last_trigger.isoformat() if last_trigger else None
+                "last_trigger": last_trigger.isoformat() if last_trigger else None,
+                "confirmation_count": confirmation_count
             }
 
         return status

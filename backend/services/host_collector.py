@@ -6,8 +6,6 @@ from sqlalchemy import select
 from backend.database import async_session
 from backend.models.host import Host
 from backend.models.host_metric import HostMetric
-from backend.services.ssh_service import SSHService
-from backend.utils.encryption import decrypt_value
 
 logger = logging.getLogger(__name__)
 
@@ -34,43 +32,52 @@ async def collect_host_metrics():
 
 
 async def _collect_host_metrics(db: AsyncSession, host: Host):
-    """Collect metrics for a single SSH host"""
+    """Collect metrics for a single SSH host using connection pool + OSMetricsCollector"""
     try:
-        password = decrypt_value(host.password_encrypted) if host.password_encrypted else None
-        private_key = decrypt_value(host.private_key_encrypted) if host.private_key_encrypted else None
+        from backend.services.ssh_connection_pool import get_ssh_pool
+        from backend.services.os_metrics_collector import OSMetricsCollector
 
-        ssh = SSHService(
-            host=host.host,
-            port=host.port,
-            username=host.username,
-            password=password,
-            private_key=private_key
-        )
+        ssh_pool = get_ssh_pool()
 
-        # Execute commands to get metrics (SSHService.execute_multi is blocking, run in executor)
-        loop = asyncio.get_event_loop()
-        commands = [
-            "top -bn1 | grep 'Cpu(s)' | awk '{print $2}' | cut -d'%' -f1",
-            "free | grep Mem | awk '{print ($3/$2) * 100.0}'",
-            "df -h / | tail -1 | awk '{print $5}' | cut -d'%' -f1"
-        ]
+        try:
+            async with ssh_pool.get_connection(db, host.id) as ssh_client:
+                # 使用 OSMetricsCollector 采集完整指标
+                os_metrics = await asyncio.wait_for(
+                    OSMetricsCollector.collect_via_ssh(ssh_client, os_type='linux'),
+                    timeout=30.0
+                )
 
-        results = await loop.run_in_executor(None, ssh.execute_multi, commands)
+                # 提取核心指标，带安全的类型转换
+                cpu_usage = _safe_float(os_metrics.get('cpu_usage'))
+                memory_usage = _safe_float(os_metrics.get('memory_usage'))
+                disk_usage = _safe_float(os_metrics.get('disk_usage'))
 
-        # Parse results
-        values = list(results.values())
-        cpu_usage = float(values[0].strip() or 0)
-        memory_usage = float(values[1].strip() or 0)
-        disk_usage = float(values[2].strip() or 0)
+                # Save to host_metrics table
+                metric = HostMetric(
+                    host_id=host.id,
+                    cpu_usage=cpu_usage,
+                    memory_usage=memory_usage,
+                    disk_usage=disk_usage,
+                    data=os_metrics if os_metrics else None,
+                )
+                db.add(metric)
 
-        # Save to host_metrics table
-        metric = HostMetric(
-            host_id=host.id,
-            cpu_usage=cpu_usage,
-            memory_usage=memory_usage,
-            disk_usage=disk_usage
-        )
-        db.add(metric)
+        except asyncio.TimeoutError:
+            logger.warning(f"SSH metrics collection timeout for host {host.name} (id={host.id})")
+        except ConnectionError as e:
+            logger.warning(f"Failed to get SSH connection for host {host.name}: {e}")
+        except Exception as e:
+            logger.error(f"Failed to collect metrics for {host.name}: {e}")
 
     except Exception as e:
-        logger.error(f"Failed to collect metrics for {host.name}: {e}")
+        logger.error(f"Error in _collect_host_metrics: {e}")
+
+
+def _safe_float(value) -> float:
+    """安全地将值转换为 float，失败返回 None"""
+    if value is None:
+        return None
+    try:
+        return round(float(value), 2)
+    except (ValueError, TypeError):
+        return None

@@ -13,7 +13,7 @@ def test_simple_threshold_rules():
     
     # Test CPU threshold violation
     metrics = {"cpu_usage": 85.5}
-    rules = {"cpu_usage": {"threshold": 80, "duration": 60}}
+    rules = {"cpu_usage": {"threshold": 80, "duration": 60, "confirmations": 1}}
     
     violations = checker.check_thresholds(1, metrics, rules)
     assert len(violations) == 0, "Should not trigger immediately"
@@ -32,26 +32,27 @@ def test_simple_threshold_rules():
 def test_custom_expression_evaluation():
     """Test custom expression evaluation"""
     checker = ThresholdChecker()
-    
+
     # Test custom expression: cpu_usage > 50 and connections > 20
     metrics = {"cpu_usage": 60, "connections": 25}
     rules = {
         "custom_expression": {
             "expression": "cpu_usage > 50 and connections > 20",
-            "duration": 60
+            "duration": 60,
+            "confirmations": 1
         }
     }
-    
+
     violations = checker.check_thresholds(1, metrics, rules)
     assert len(violations) == 0, "Should not trigger immediately"
-    
+
     # Simulate duration passing
     checker._violation_start_times[1]["custom_expression"] = now() - timedelta(seconds=61)
     violations = checker.check_thresholds(1, metrics, rules)
     assert len(violations) == 1, "Should trigger after duration"
     assert violations[0]["metric_name"] == "custom_expression"
     assert violations[0]["expression"] == "cpu_usage > 50 and connections > 20"
-    
+
     print("✓ Custom expression evaluation works correctly")
 
 
@@ -100,11 +101,10 @@ def test_duration_tracking_custom_expression():
     rules = {
         "custom_expression": {
             "expression": "cpu_usage > 50 and connections > 20",
-            "duration": 120
+            "duration": 120,
+            "confirmations": 1
         }
     }
-    
-    # First check - violation starts
     violations = checker.check_thresholds(1, metrics, rules)
     assert len(violations) == 0, "Should not trigger immediately"
     assert "custom_expression" in checker._violation_start_times[1]
@@ -127,8 +127,8 @@ def test_cooldown_period():
     checker = ThresholdChecker()
     
     metrics = {"cpu_usage": 85}
-    rules = {"cpu_usage": {"threshold": 80, "duration": 60}}
-    
+    rules = {"cpu_usage": {"threshold": 80, "duration": 60, "confirmations": 1}}
+
     # First trigger
     checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
     violations = checker.check_thresholds(1, metrics, rules)
@@ -157,16 +157,15 @@ def test_backward_compatibility():
         "connections": 25
     }
     rules = {
-        "cpu_usage": {"threshold": 80, "duration": 60},
-        "disk_usage": {"threshold": 85, "duration": 300},
-        "connections": {"threshold": 20, "duration": 120}
+        "cpu_usage": {"threshold": 80, "duration": 60, "confirmations": 1},
+        "disk_usage": {"threshold": 85, "duration": 300, "confirmations": 1},
+        "connections": {"threshold": 20, "duration": 120, "confirmations": 1}
     }
     
     # Simulate all durations passed
-    current_time = now()
-    checker._violation_start_times[1]["cpu_usage"] = now - timedelta(seconds=61)
-    checker._violation_start_times[1]["disk_usage"] = now - timedelta(seconds=301)
-    checker._violation_start_times[1]["connections"] = now - timedelta(seconds=121)
+    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
+    checker._violation_start_times[1]["disk_usage"] = now() - timedelta(seconds=301)
+    checker._violation_start_times[1]["connections"] = now() - timedelta(seconds=121)
     
     violations = checker.check_thresholds(1, metrics, rules)
     assert len(violations) == 3, "Should trigger all three violations"
@@ -261,10 +260,182 @@ def test_complex_expressions():
     print("✓ Complex expressions work correctly")
 
 
+def test_confirmation_count_default():
+    """Test that confirmation counting defaults to 2 and requires 2 consecutive violations"""
+    checker = ThresholdChecker()
+
+    metrics = {"cpu_usage": 85}
+    rules = {"cpu_usage": {"threshold": 80, "duration": 60}}
+
+    # Simulate duration already passed
+    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
+
+    # First confirmation - should not trigger yet (need 2)
+    violations = checker.check_thresholds(1, metrics, rules)
+    assert len(violations) == 0, "Should not trigger on first confirmation (need 2)"
+
+    # Second confirmation - should trigger now
+    violations = checker.check_thresholds(1, metrics, rules)
+    assert len(violations) == 1, "Should trigger on second confirmation"
+    assert violations[0]["metric_name"] == "cpu_usage"
+
+    print("✓ Default confirmation count (2) works correctly")
+
+
+def test_confirmation_count_custom():
+    """Test that custom confirmations field is respected"""
+    checker = ThresholdChecker()
+
+    metrics = {"cpu_usage": 85}
+    rules = {"cpu_usage": {"threshold": 80, "duration": 60, "confirmations": 3}}
+
+    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
+
+    # First and second confirmations - should not trigger
+    violations = checker.check_thresholds(1, metrics, rules)
+    assert len(violations) == 0, "Should not trigger on first confirmation (need 3)"
+
+    violations = checker.check_thresholds(1, metrics, rules)
+    assert len(violations) == 0, "Should not trigger on second confirmation (need 3)"
+
+    # Third confirmation - should trigger
+    violations = checker.check_thresholds(1, metrics, rules)
+    assert len(violations) == 1, "Should trigger on third confirmation"
+
+    print("✓ Custom confirmation count (3) works correctly")
+
+
+def test_confirmation_count_one_immediate():
+    """Test confirmations=1 triggers immediately after duration (old behavior)"""
+    checker = ThresholdChecker()
+
+    metrics = {"cpu_usage": 85}
+    rules = {"cpu_usage": {"threshold": 80, "duration": 60, "confirmations": 1}}
+
+    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
+
+    violations = checker.check_thresholds(1, metrics, rules)
+    assert len(violations) == 1, "Should trigger immediately with confirmations=1"
+
+    print("✓ confirmations=1 triggers immediately after duration")
+
+
+def test_confirmation_count_resets_on_recovery():
+    """Test that confirmation count resets when metric recovers"""
+    checker = ThresholdChecker()
+
+    metrics = {"cpu_usage": 85}
+    rules = {"cpu_usage": {"threshold": 80, "duration": 60, "confirmations": 3}}
+
+    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
+
+    # Two confirmations
+    checker.check_thresholds(1, metrics, rules)
+    checker.check_thresholds(1, metrics, rules)
+    # Count should be 2 now
+
+    # Metric recovers
+    recovered_metrics = {"cpu_usage": 70}
+    checker.check_thresholds(1, recovered_metrics, rules)
+
+    # Violation starts again
+    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
+
+    # Should need 3 fresh confirmations, not just 1 more
+    violations = checker.check_thresholds(1, metrics, rules)
+    assert len(violations) == 0, "Count should have reset after recovery"
+
+    print("✓ Confirmation count resets on metric recovery")
+
+
+def test_confirmation_count_resets_after_trigger():
+    """Test that confirmation count resets to 0 after triggering"""
+    checker = ThresholdChecker()
+
+    metrics = {"cpu_usage": 85}
+    rules = {"cpu_usage": {"threshold": 80, "duration": 60, "confirmations": 2}}
+
+    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
+
+    # Trigger
+    checker.check_thresholds(1, metrics, rules)
+    violations = checker.check_thresholds(1, metrics, rules)
+    assert len(violations) == 1
+
+    # After trigger and cooldown reset, count should be 0
+    checker._last_trigger_times[1]["cpu_usage"] = now() - timedelta(seconds=3601)
+    violations = checker.check_thresholds(1, metrics, rules)
+    assert len(violations) == 0, "Count should be 0 after trigger, need another confirmation"
+
+    print("✓ Confirmation count resets to 0 after triggering")
+
+
+def test_confirmation_count_in_status():
+    """Test that get_violation_status includes confirmation count"""
+    checker = ThresholdChecker()
+
+    metrics = {"cpu_usage": 85}
+    rules = {"cpu_usage": {"threshold": 80, "duration": 60, "confirmations": 3}}
+
+    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
+    checker.check_thresholds(1, metrics, rules)  # 1st confirmation
+
+    status = checker.get_violation_status(1)
+    assert "cpu_usage" in status
+    assert "confirmation_count" in status["cpu_usage"], "Status should include confirmation_count"
+    assert status["cpu_usage"]["confirmation_count"] == 1
+
+    print("✓ get_violation_status includes confirmation_count")
+
+
+def test_confirmation_count_cleared_on_clear_datasource():
+    """Test that clear_datasource clears confirmation counts"""
+    checker = ThresholdChecker()
+
+    metrics = {"cpu_usage": 85}
+    rules = {"cpu_usage": {"threshold": 80, "duration": 60, "confirmations": 3}}
+
+    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
+    checker.check_thresholds(1, metrics, rules)
+
+    checker.clear_datasource(1)
+
+    # After clearing, count should be gone
+    assert 1 not in checker._violation_counts, "Confirmation counts should be cleared"
+
+    print("✓ clear_datasource clears confirmation counts")
+
+
+def test_custom_expression_confirmation_count():
+    """Test that custom expressions also require confirmation count"""
+    checker = ThresholdChecker()
+
+    metrics = {"cpu_usage": 60, "connections": 25}
+    rules = {
+        "custom_expression": {
+            "expression": "cpu_usage > 50 and connections > 20",
+            "duration": 60,
+            "confirmations": 2
+        }
+    }
+
+    checker._violation_start_times[1]["custom_expression"] = now() - timedelta(seconds=61)
+
+    # First confirmation - should not trigger
+    violations = checker.check_thresholds(1, metrics, rules)
+    assert len(violations) == 0, "Should not trigger on first confirmation"
+
+    # Second confirmation - should trigger
+    violations = checker.check_thresholds(1, metrics, rules)
+    assert len(violations) == 1, "Should trigger on second confirmation"
+
+    print("✓ Custom expression confirmation count works correctly")
+
+
 def run_all_tests():
     """Run all tests"""
     print("\n=== Running ThresholdChecker Tests ===\n")
-    
+
     test_simple_threshold_rules()
     test_custom_expression_evaluation()
     test_expression_returns_true_triggers()
@@ -275,7 +446,15 @@ def run_all_tests():
     test_empty_threshold_rules()
     test_prepare_eval_context()
     test_complex_expressions()
-    
+    test_confirmation_count_default()
+    test_confirmation_count_custom()
+    test_confirmation_count_one_immediate()
+    test_confirmation_count_resets_on_recovery()
+    test_confirmation_count_resets_after_trigger()
+    test_confirmation_count_in_status()
+    test_confirmation_count_cleared_on_clear_datasource()
+    test_custom_expression_confirmation_count()
+
     print("\n=== All Tests Passed ✓ ===\n")
 
 

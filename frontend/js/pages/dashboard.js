@@ -2,18 +2,34 @@
 const DashboardPage = {
     _timer: null,
     _datasources: [],
+    _hosts: [],
+    _healthStatuses: {},
+    _filters: {
+        health: '',
+        dbType: '',
+        hostId: '',
+        search: ''
+    },
 
     async render() {
         const content = DOM.$('#page-content');
-        Header.render('资源大盘', this._buildHeaderActions());
         content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
         this._stopTimer();
 
         try {
-            const datasources = await API.getDatasources();
+            // Load datasources and hosts first
+            const [datasources, hosts] = await Promise.all([
+                API.getDatasources(),
+                API.getHosts()
+            ]);
             Store.set('datasources', datasources);
             this._datasources = datasources;
+            this._hosts = hosts;
+
+            // Now render header with search filters (after data is loaded)
+            Header.render('资源大盘', this._buildHeaderActions());
+
             content.innerHTML = '';
 
             if (datasources.length === 0) {
@@ -43,28 +59,11 @@ const DashboardPage = {
             const heading = DOM.el('h2', { textContent: '数据源列表', style: { fontSize: '16px', marginBottom: '16px', color: 'var(--text-secondary)' } });
             content.appendChild(heading);
 
-            const grid = DOM.el('div', { className: 'dashboard-grid' });
-            for (const conn of datasources) {
-                const card = DOM.el('div', { className: 'dashboard-conn-card', onClick: () => {
-                    Store.set('currentConnection', conn);
-                    Router.navigate('monitor');
-                }});
-                card.innerHTML = `
-                    <div class="flex-between">
-                        <h3>${conn.name}</h3>
-                        <span class="datasource-card-type type-${conn.db_type}">${conn.db_type}</span>
-                    </div>
-                    <div class="type">${conn.host}:${conn.port}${conn.database ? ' / ' + conn.database : ''}</div>
-                    <div class="metrics" id="dash-metrics-${conn.id}">
-                        <div class="metric-item"><span class="metric-label">健康状态</span><span class="metric-val health-status" id="health-${conn.id}">--</span></div>
-                        <div class="metric-item"><span class="metric-label">活跃连接</span><span class="metric-val">--</span></div>
-                        <div class="metric-item"><span class="metric-label">CPU</span><span class="metric-val">--</span></div>
-                        <div class="metric-item"><span class="metric-label">QPS</span><span class="metric-val">--</span></div>
-                    </div>
-                `;
-                grid.appendChild(card);
-            }
+            const grid = DOM.el('div', { className: 'dashboard-grid', id: 'dashboard-grid' });
             content.appendChild(grid);
+
+            // Render filtered datasources
+            this._renderDatasources();
             DOM.createIcons();
 
             // Load metrics immediately then start auto-refresh
@@ -77,13 +76,58 @@ const DashboardPage = {
     },
 
     _buildHeaderActions() {
-        const btn = DOM.el('button', {
+        // Get unique db types
+        const dbTypes = [...new Set(this._datasources.map(d => d.db_type))];
+
+        // Create filters container
+        const filtersContainer = DOM.el('div', { className: 'dashboard-filters' });
+        filtersContainer.innerHTML = `
+            <select id="filter-health" class="filter-select">
+                <option value="">全部</option>
+                <option value="healthy">健康</option>
+                <option value="warning">警告</option>
+                <option value="critical">异常</option>
+                <option value="unknown">未知</option>
+            </select>
+            <select id="filter-dbtype" class="filter-select">
+                <option value="">全部</option>
+                ${dbTypes.map(type => `<option value="${type}">${type}</option>`).join('')}
+            </select>
+            <select id="filter-host" class="filter-select">
+                <option value="">全部</option>
+                ${this._hosts.map(h => `<option value="${h.id}">${h.name}</option>`).join('')}
+            </select>
+            <input type="text" id="filter-search" class="filter-input" placeholder="数据源名称、主机名称、IP地址...">
+            <button id="btn-search" class="btn btn-primary">
+                <i data-lucide="search"></i> 检索
+            </button>
+        `;
+
+        // Create refresh button
+        const refreshBtn = DOM.el('button', {
             className: 'btn btn-secondary',
             title: '手工刷新',
-            onClick: () => this._onManualRefresh(btn)
+            id: 'btn-refresh'
         });
-        btn.innerHTML = '<i data-lucide="refresh-cw"></i> 刷新';
-        return btn;
+        refreshBtn.innerHTML = '<i data-lucide="refresh-cw"></i> 刷新';
+
+        // Bind events after render
+        setTimeout(() => {
+            const btnSearch = DOM.$('#btn-search');
+            const btnRefresh = DOM.$('#btn-refresh');
+            const filterSearch = DOM.$('#filter-search');
+
+            if (btnSearch) btnSearch.addEventListener('click', () => this._applyFilters());
+            if (btnRefresh) btnRefresh.addEventListener('click', () => this._onManualRefresh(btnRefresh));
+            if (filterSearch) {
+                filterSearch.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this._applyFilters();
+                });
+            }
+            DOM.createIcons();
+        }, 0);
+
+        return [filtersContainer, refreshBtn];
     },
 
     async _onManualRefresh(btn) {
@@ -96,8 +140,97 @@ const DashboardPage = {
         DOM.createIcons();
     },
 
+    _applyFilters() {
+        this._filters.health = DOM.$('#filter-health').value;
+        this._filters.dbType = DOM.$('#filter-dbtype').value;
+        this._filters.hostId = DOM.$('#filter-host').value;
+        this._filters.search = DOM.$('#filter-search').value.trim().toLowerCase();
+        this._renderDatasources();
+    },
+
+    _filterDatasources() {
+        return this._datasources.filter(conn => {
+            // Health filter
+            if (this._filters.health) {
+                const healthStatus = this._healthStatuses[conn.id] || 'unknown';
+                if (healthStatus !== this._filters.health) return false;
+            }
+
+            // DB type filter
+            if (this._filters.dbType && conn.db_type !== this._filters.dbType) {
+                return false;
+            }
+
+            // Host filter
+            if (this._filters.hostId) {
+                const hostIdNum = parseInt(this._filters.hostId);
+                if (conn.host_id !== hostIdNum) return false;
+            }
+
+            // Search filter (fuzzy match on name, host, database, host name)
+            if (this._filters.search) {
+                const search = this._filters.search;
+                const matchName = conn.name.toLowerCase().includes(search);
+                const matchHost = conn.host.toLowerCase().includes(search);
+                const matchDb = conn.database && conn.database.toLowerCase().includes(search);
+
+                // Find host name if host_id exists
+                let matchHostName = false;
+                if (conn.host_id) {
+                    const host = this._hosts.find(h => h.id === conn.host_id);
+                    if (host) {
+                        matchHostName = host.name.toLowerCase().includes(search) ||
+                                       host.host.toLowerCase().includes(search);
+                    }
+                }
+
+                if (!matchName && !matchHost && !matchDb && !matchHostName) {
+                    return false;
+                }
+            }
+
+            return true;
+        });
+    },
+
+    _renderDatasources() {
+        const grid = DOM.$('#dashboard-grid');
+        if (!grid) return;
+
+        const filtered = this._filterDatasources();
+        grid.innerHTML = '';
+
+        if (filtered.length === 0) {
+            grid.innerHTML = '<div class="empty-state"><p>没有符合条件的数据源</p></div>';
+            return;
+        }
+
+        for (const conn of filtered) {
+            const card = DOM.el('div', { className: 'dashboard-conn-card', onClick: () => {
+                Store.set('currentConnection', conn);
+                Router.navigate('monitor');
+            }});
+            card.innerHTML = `
+                <div class="flex-between">
+                    <h3>${conn.name}</h3>
+                    <span class="datasource-card-type type-${conn.db_type}">${conn.db_type}</span>
+                </div>
+                <div class="type">${conn.host}:${conn.port}${conn.database ? ' / ' + conn.database : ''}</div>
+                <div class="metrics" id="dash-metrics-${conn.id}">
+                    <div class="metric-item"><span class="metric-label">健康状态</span><span class="metric-val health-status" id="health-${conn.id}">--</span></div>
+                    <div class="metric-item"><span class="metric-label">活跃连接</span><span class="metric-val">--</span></div>
+                    <div class="metric-item"><span class="metric-label">CPU</span><span class="metric-val">--</span></div>
+                    <div class="metric-item"><span class="metric-label">QPS</span><span class="metric-val">--</span></div>
+                </div>
+            `;
+            grid.appendChild(card);
+        }
+        DOM.createIcons();
+    },
+
     async _refreshMetrics() {
-        const ids = this._datasources.map(c => c.id);
+        const filtered = this._filterDatasources();
+        const ids = filtered.map(c => c.id);
         await Promise.all(ids.map(id => this._loadConnMetrics(id)));
     },
 
@@ -122,23 +255,31 @@ const DashboardPage = {
                 let statusText = '未知';
                 let statusColor = 'var(--text-muted)';
                 let statusIcon = '';
+                let statusValue = 'unknown';
 
                 if (health.status === 'healthy') {
                     statusText = '健康';
                     statusColor = 'var(--accent-green)';
                     statusIcon = '✓';
+                    statusValue = 'healthy';
                 } else if (health.status === 'critical') {
                     statusText = '异常';
                     statusColor = 'var(--accent-red)';
                     statusIcon = '✗';
+                    statusValue = 'critical';
                 } else if (health.status === 'warning') {
                     statusText = '警告';
                     statusColor = 'var(--accent-orange)';
                     statusIcon = '⚠';
+                    statusValue = 'warning';
                 } else {
                     statusText = health.message || '未知';
                     statusColor = 'var(--text-muted)';
+                    statusValue = 'unknown';
                 }
+
+                // Store health status for filtering
+                this._healthStatuses[connId] = statusValue;
 
                 healthEl.innerHTML = `<span style="color:${statusColor}">${statusIcon} ${statusText}</span>`;
                 healthEl.title = health.message || '';

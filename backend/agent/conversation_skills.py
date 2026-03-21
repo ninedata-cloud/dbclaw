@@ -16,6 +16,30 @@ logger = logging.getLogger(__name__)
 MAX_TOOL_ROUNDS = 30
 
 
+def is_dashscope_api(client) -> bool:
+    """Check if the client is using DashScope (Qwen) API"""
+    return client.base_url and "dashscope.aliyuncs.com" in str(client.base_url)
+
+
+def convert_messages_for_dashscope(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Convert messages to DashScope-compatible format.
+    DashScope doesn't support 'tool' role, convert to 'function' role instead.
+    """
+    converted = []
+    for msg in messages:
+        if msg.get("role") == "tool":
+            # Convert tool message to function message for DashScope
+            converted.append({
+                "role": "function",
+                "name": msg.get("tool_call_id", "unknown"),
+                "content": msg.get("content", "")
+            })
+        else:
+            converted.append(msg)
+    return converted
+
+
 async def execute_skill_call(
     skill_id: str, arguments: Dict[str, Any], db, user_id: int, session_id: Optional[int] = None
 ) -> tuple[str, int]:
@@ -83,6 +107,7 @@ async def run_conversation_with_skills(
     user_id: Optional[int] = None,
     session_id: Optional[int] = None,
     disabled_tools: Optional[List[str]] = None,
+    system_prompt_override: Optional[str] = None,
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """Run the AI conversation loop with dynamic skill calling and streaming."""
     from backend.models.ai_model import AIModel
@@ -127,8 +152,10 @@ async def run_conversation_with_skills(
         intent_text = first_user_message
     intent = detect_query_intent(intent_text)
 
-    # Select appropriate prompt based on intent
-    if intent == 'diagnostic':
+    # Select appropriate prompt based on intent (or use override)
+    if system_prompt_override:
+        system_msg = system_prompt_override
+    elif intent == 'diagnostic':
         system_msg = DIAGNOSTIC_PROMPT
     elif intent == 'administrative':
         system_msg = ADMINISTRATIVE_PROMPT
@@ -138,6 +165,7 @@ async def run_conversation_with_skills(
     if datasource_id and db:
         # Get datasource info to determine database type
         from backend.models.datasource import Datasource
+        from backend.models.host import Host
         from sqlalchemy import select
         result = await db.execute(select(Datasource).filter(Datasource.id == datasource_id))
         datasource = result.scalar_one_or_none()
@@ -153,6 +181,15 @@ async def run_conversation_with_skills(
 
             system_msg += f"\n\nThe user is currently working with datasource ID: {datasource_id} (Type: {datasource.db_type.upper()}, Name: {datasource.name}). Use this ID when calling tools unless they specify otherwise."
             system_msg += f"\n\nIMPORTANT: This is a {datasource.db_type.upper()} database. You MUST use {skill_prefix}_* skills (e.g., {skill_prefix}_get_db_status, {skill_prefix}_get_slow_queries, {skill_prefix}_get_table_stats, etc.). Do NOT use skills for other database types like mysql_*, pg_*, mssql_*, or oracle_* unless they match this database type."
+
+            # Pass host configuration status for OS-level diagnosis
+            if datasource.host_id:
+                host_result = await db.execute(select(Host).filter(Host.id == datasource.host_id))
+                host = host_result.scalar_one_or_none()
+                host_info = f" (Host: {host.name or host.host})" if host else ""
+                system_msg += f"\n\n**主机连接已配置**：该数据源已关联主机{host_info}，你可以使用 OS 层面的诊断技能（get_os_metrics、diagnose_high_cpu、diagnose_high_memory、diagnose_disk_space、diagnose_disk_io、diagnose_network）进行操作系统级别的深度分析。遇到性能问题时，应同时从数据库和操作系统两个层面进行诊断。"
+            else:
+                system_msg += "\n\n**注意**：该数据源未配置主机连接，无法进行操作系统层面的诊断（如 CPU、内存、磁盘、网络分析）。如需 OS 级别诊断，请建议用户在数据源配置中关联主机。"
         else:
             system_msg += f"\n\nThe user is currently working with datasource ID: {datasource_id}. Use this ID when calling tools unless they specify otherwise."
     elif datasource_id:
@@ -167,8 +204,12 @@ async def run_conversation_with_skills(
 
     full_messages = [{"role": "system", "content": system_msg}] + messages
 
+    # Detect if using DashScope (通义千问) API
+    is_dashscope = client.base_url and "dashscope.aliyuncs.com" in str(client.base_url)
+
     for round_num in range(MAX_TOOL_ROUNDS):
         try:
+
             response = await client.chat.completions.create(
                 model=client._model_name,
                 messages=full_messages,
@@ -324,10 +365,30 @@ async def generate_report_with_skills(
     skill_executions = []
     collected_content = ""
 
+    # Check if datasource has host configured for OS-level analysis
+    host_info_msg = ""
+    try:
+        from backend.models.datasource import Datasource
+        from backend.models.host import Host
+        from sqlalchemy import select
+        ds_result = await db.execute(select(Datasource).filter(Datasource.id == datasource_id))
+        ds = ds_result.scalar_one_or_none()
+        if ds and ds.host_id:
+            host_result = await db.execute(select(Host).filter(Host.id == ds.host_id))
+            host = host_result.scalar_one_or_none()
+            host_name = host.name or host.host if host else "unknown"
+            host_info_msg = f"""
+- 主机连接：已配置（主机：{host_name}）
+- **重要**：该数据源已关联主机，请务必使用 OS 诊断技能（get_os_metrics、diagnose_high_cpu、diagnose_high_memory、diagnose_disk_space、diagnose_disk_io、diagnose_network）收集操作系统层面数据，并在报告中包含完整的"操作系统资源分析"章节。"""
+        else:
+            host_info_msg = "\n- 主机连接：未配置（无法进行操作系统层面分析，请在报告中注明）"
+    except Exception as e:
+        logger.warning(f"Failed to check host config for report: {e}")
+
     initial_message = f"""请为以下数据库生成一份全面的巡检报告：
 - 数据库名称：{datasource_name} ({datasource_type})
 - 数据源 ID：{datasource_id}
-- 触发原因：{trigger_reason}
+- 触发原因：{trigger_reason}{host_info_msg}
 
 请使用技能收集数据，并按照专业 DBA 报告的标准格式撰写完整的中文报告。"""
 
@@ -340,7 +401,8 @@ async def generate_report_with_skills(
                 datasource_id=datasource_id,
                 model_id=model_id,
                 db=db,
-                user_id=user_id
+                user_id=user_id,
+                system_prompt_override=system_prompt,
             ):
                 if event["type"] == "content":
                     collected_content += event["content"]
@@ -354,8 +416,14 @@ async def generate_report_with_skills(
                     break
 
     except asyncio.TimeoutError:
-        collected_content += "\n\n⚠️ Report generation timed out - showing partial results"
+        if collected_content.strip():
+            collected_content += "\n\n⚠️ 报告生成超时，以上为部分结果"
+        else:
+            collected_content = "⚠️ 报告生成超时，未能获取到任何内容。请检查 AI 模型配置是否正确，或稍后重试。"
     except Exception as e:
-        collected_content += f"\n\n⚠️ Error during generation: {str(e)}"
+        if collected_content.strip():
+            collected_content += f"\n\n⚠️ 报告生成过程中出错: {str(e)}"
+        else:
+            collected_content = f"⚠️ 报告生成失败: {str(e)}"
 
-    return collected_content or "⚠️ No content generated", skill_executions
+    return collected_content or "⚠️ 未生成任何内容，请检查 AI 模型配置。", skill_executions

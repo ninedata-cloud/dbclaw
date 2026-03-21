@@ -22,8 +22,8 @@ const QueryPage = {
         }
 
         // Header
-        const headerActions = DOM.el('div', { className: 'flex gap-8' });
-        const connSelect = DOM.el('select', { className: 'form-select', id: 'query-conn-select', style: { minWidth: '400px' } });
+        const headerActions = DOM.el('div', { className: 'flex gap-8', style: { flex: '1', minWidth: '0' } });
+        const connSelect = DOM.el('select', { className: 'form-select', id: 'query-conn-select', style: { minWidth: '200px', maxWidth: '300px', flex: '1' } });
         connSelect.appendChild(DOM.el('option', { value: '', textContent: '选择数据源...' }));
 
         for (const c of datasources) {

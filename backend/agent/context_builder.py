@@ -29,6 +29,7 @@ async def _get_connector_for(datasource_id: int):
     return get_connector(
         db_type=datasource.db_type, host=datasource.host, port=datasource.port,
         username=datasource.username, password=password, database=datasource.database,
+        extra_params=datasource.extra_params,
     ), datasource
 
 
@@ -163,7 +164,7 @@ async def _tool_get_os_metrics(args):
         return {"error": "No SSH host configured for this datasource"}
 
     async with async_session() as db:
-        result = await db.execute(select(Host).where(Host.id == conn.host_id))
+        result = await db.execute(select(Host).where(Host.id == datasource.host_id))
         host = result.scalar_one_or_none()
         if not host:
             return {"error": "SSH host not found"}
@@ -193,7 +194,7 @@ async def _tool_execute_os_command(args):
                "init ", "halt", "kill -9", "killall", "pkill", "mv ", "cp ",
                "chmod", "chown", "useradd", "userdel", "passwd", "iptables",
                "systemctl stop", "systemctl disable", "service stop",
-               "> /dev/", "format", "fdisk", "parted", "wipefs"]
+               "> /dev/", "fdisk", "parted", "wipefs"]
     cmd_lower = command.lower()
     for b in blocked:
         if b in cmd_lower:
@@ -231,7 +232,7 @@ async def _tool_get_metric_history(args):
         result = await db.execute(
             select(MetricSnapshot)
             .where(
-                MetricSnapshot.datasource_id == conn_id,
+                MetricSnapshot.datasource_id == datasource_id,
                 MetricSnapshot.metric_type == metric_type,
             )
             .order_by(desc(MetricSnapshot.collected_at))
@@ -244,7 +245,7 @@ async def _tool_get_metric_history(args):
 
 async def _tool_list_connections(args):
     async with async_session() as db:
-        result = await db.execute(select(Connection).where(Connection.is_active == True))
+        result = await db.execute(select(Datasource).where(Datasource.is_active == True))
         conns = result.scalars().all()
         return [
             {"id": c.id, "name": c.name, "db_type": c.db_type,

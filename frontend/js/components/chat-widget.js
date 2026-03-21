@@ -214,7 +214,15 @@ const ChatWidget = {
                 ${attachmentHtml}
                 ${text ? this._escapeHtml(text) : ''}
             </div>
+            <button class="message-copy-btn" title="复制内容">
+                <i data-lucide="copy"></i>
+            </button>
         `;
+
+        // Add copy functionality
+        const copyBtn = msg.querySelector('.message-copy-btn');
+        copyBtn.addEventListener('click', () => this._copyMessageContent(msg));
+
         messages.appendChild(msg);
         DOM.createIcons();
         this._scrollToBottom();
@@ -260,6 +268,15 @@ const ChatWidget = {
         const streamingMsg = DOM.$('#streaming-message');
         if (streamingMsg) {
             streamingMsg.removeAttribute('id');
+            // Add copy button to finished message
+            const copyBtn = DOM.el('button', {
+                className: 'message-copy-btn',
+                title: '复制',
+                innerHTML: '<i data-lucide="copy"></i>'
+            });
+            streamingMsg.appendChild(copyBtn);
+            copyBtn.addEventListener('click', () => this._copyMessageContent(streamingMsg));
+            DOM.createIcons();
         }
         this._updateSendButton(false);
     },
@@ -490,11 +507,15 @@ const ChatWidget = {
         if (!container) return;
         container.innerHTML = '';
 
-        // Clear tool panel
+        // Clear tool panel but don't show empty state yet
         const toolPanel = DOM.$('#tool-panel-content');
         if (toolPanel) {
             toolPanel.innerHTML = '';
         }
+
+        // Reset restored tools map
+        this.restoredTools = new Map();
+        let hasToolMessages = false;
 
         for (const msg of messages) {
             if (msg.role === 'user') {
@@ -516,10 +537,44 @@ const ChatWidget = {
                     <div class="chat-avatar">AI</div>
                     <div class="chat-bubble">${renderedContent}</div>
                 `;
+
+                // Add copy button
+                const copyBtn = DOM.el('button', {
+                    className: 'message-copy-btn',
+                    title: '复制',
+                    innerHTML: '<i data-lucide="copy"></i>'
+                });
+                msgEl.appendChild(copyBtn);
+                copyBtn.addEventListener('click', () => this._copyMessageContent(msgEl));
+
                 container.appendChild(msgEl);
                 this._highlightCode(msgEl.querySelector('.chat-bubble'));
+            } else if (msg.role === 'tool_call') {
+                // Restore tool call from history
+                try {
+                    const data = JSON.parse(msg.content);
+                    this._restoreToolCall(data.tool_name, data.tool_args);
+                    hasToolMessages = true;
+                } catch (e) {
+                    console.error('Failed to parse tool_call message:', e);
+                }
+            } else if (msg.role === 'tool_result') {
+                // Restore tool result from history
+                try {
+                    const data = JSON.parse(msg.content);
+                    this._restoreToolResult(data.tool_name, data.result, data.execution_time_ms);
+                    hasToolMessages = true;
+                } catch (e) {
+                    console.error('Failed to parse tool_result message:', e);
+                }
             }
         }
+
+        // Show empty state if no tool messages
+        if (toolPanel && !hasToolMessages) {
+            toolPanel.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">暂无skill调用记录</div>';
+        }
+
         this._scrollToBottom();
     },
 
@@ -551,6 +606,178 @@ const ChatWidget = {
                 hljs.highlightElement(block);
             });
         }
+    },
+
+    _copyMessageContent(messageElement) {
+        const bubble = messageElement.querySelector('.chat-bubble');
+        if (!bubble) return;
+
+        // Get text content, preserving line breaks
+        const text = bubble.innerText || bubble.textContent;
+
+        navigator.clipboard.writeText(text).then(() => {
+            const copyBtn = messageElement.querySelector('.message-copy-btn');
+            if (copyBtn) {
+                const icon = copyBtn.querySelector('i');
+                if (icon) {
+                    icon.setAttribute('data-lucide', 'check');
+                    DOM.createIcons();
+                    setTimeout(() => {
+                        icon.setAttribute('data-lucide', 'copy');
+                        DOM.createIcons();
+                    }, 2000);
+                }
+            }
+            Toast.success('已复制到剪贴板');
+        }).catch(err => {
+            console.error('Failed to copy:', err);
+            Toast.error('复制失败');
+        });
+    },
+
+    _restoreToolCall(toolName, args) {
+        const toolPanel = DOM.$('#tool-panel-content');
+        if (!toolPanel) return;
+
+        // Clear empty state if exists
+        const emptyState = toolPanel.querySelector('div[style*="暂无skill调用记录"]');
+        if (emptyState) {
+            toolPanel.innerHTML = '';
+        }
+
+        const toolId = `tool-restored-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const argsStr = typeof args === 'string' ? args : JSON.stringify(args, null, 2);
+
+        const toolMsg = DOM.el('div', {
+            className: 'chat-tool-call',
+            id: toolId,
+            'data-tool-name': toolName
+        });
+
+        toolMsg.innerHTML = `
+            <div class="chat-tool-header" onclick="ChatWidget.toggleToolBody('${toolId}')">
+                <div class="chat-tool-icon">
+                    <i data-lucide="wrench"></i>
+                </div>
+                <span class="chat-tool-name">${this._escapeHtml(toolName)}</span>
+                <span class="chat-tool-status pending">
+                    <i data-lucide="clock"></i>
+                    Pending
+                </span>
+                <i data-lucide="chevron-right" class="chat-tool-expand"></i>
+            </div>
+            <div class="chat-tool-body">
+                <div class="chat-tool-section">
+                    <div class="chat-tool-section-title">
+                        <span>Arguments</span>
+                        <button class="chat-tool-copy-btn" onclick="ChatWidget.copyToClipboard('${toolId}-args', event)">
+                            <i data-lucide="copy"></i> Copy
+                        </button>
+                    </div>
+                    <div class="chat-tool-content" id="${toolId}-args">${this._escapeHtml(argsStr)}</div>
+                </div>
+                <div class="chat-tool-section" id="${toolId}-result" style="display: none;">
+                    <div class="chat-tool-section-title">
+                        <span>Result</span>
+                        <button class="chat-tool-copy-btn" onclick="ChatWidget.copyToClipboard('${toolId}-result-content', event)">
+                            <i data-lucide="copy"></i> Copy
+                        </button>
+                    </div>
+                    <div class="chat-tool-content" id="${toolId}-result-content"></div>
+                </div>
+            </div>
+        `;
+
+        toolPanel.appendChild(toolMsg);
+        DOM.createIcons();
+
+        // Store mapping for matching results later
+        if (!this.restoredTools) this.restoredTools = new Map();
+        this.restoredTools.set(toolName, toolId);
+    },
+
+    _restoreToolResult(toolName, result, executionTimeMs = null) {
+        if (!this.restoredTools) return;
+
+        const toolId = this.restoredTools.get(toolName);
+        if (!toolId) return;
+
+        const toolMsg = DOM.$(`#${toolId}`);
+        if (!toolMsg) return;
+
+        // Parse result if it's a string
+        let resultStr = result;
+        let isJson = false;
+        let isTruncated = false;
+
+        if (typeof result === 'string') {
+            // Check if truncated
+            if (result.length >= 1999) {
+                isTruncated = true;
+            }
+
+            // Try to parse as JSON for better formatting
+            try {
+                const parsed = JSON.parse(result);
+                resultStr = JSON.stringify(parsed, null, 2);
+                isJson = true;
+            } catch (e) {
+                resultStr = result;
+            }
+        } else {
+            resultStr = JSON.stringify(result, null, 2);
+            isJson = true;
+        }
+
+        // Check for errors
+        const isError = result && (
+            (typeof result === 'object' && result.error) ||
+            (typeof result === 'string' && (result.toLowerCase().includes('error') || result.includes('"error"')))
+        );
+
+        // Update status with execution time
+        const status = toolMsg.querySelector('.chat-tool-status');
+        if (status) {
+            status.className = `chat-tool-status ${isError ? 'error' : 'success'}`;
+            const timeStr = executionTimeMs !== null ? ` (${executionTimeMs}ms)` : '';
+            status.innerHTML = isError
+                ? `<i data-lucide="alert-circle"></i> Error${timeStr}`
+                : `<i data-lucide="check-circle"></i> Complete${timeStr}`;
+            DOM.createIcons();
+        }
+
+        // Add result
+        const resultSection = toolMsg.querySelector(`#${toolId}-result`);
+        if (resultSection) {
+            resultSection.style.display = 'block';
+            const resultContent = resultSection.querySelector('.chat-tool-content');
+            if (resultContent) {
+                resultContent.textContent = resultStr;
+
+                // Add truncation notice
+                if (isTruncated) {
+                    const notice = DOM.el('div', {
+                        style: {
+                            marginTop: '8px',
+                            padding: '6px 10px',
+                            background: 'rgba(255,193,7,0.1)',
+                            border: '1px solid rgba(255,193,7,0.3)',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            color: 'var(--text-muted)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                        }
+                    });
+                    notice.innerHTML = '<i data-lucide="info" style="width:14px;height:14px;"></i> Result truncated for display (showing first 2000 chars)';
+                    resultSection.appendChild(notice);
+                    DOM.createIcons();
+                }
+            }
+        }
+
+        this.restoredTools.delete(toolName);
     }
 };
 

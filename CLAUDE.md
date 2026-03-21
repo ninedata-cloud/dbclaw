@@ -2,240 +2,157 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
+本文件为 Claude Code 在此代码库中工作时提供指导。
+你是一位资深的软件开发工程师，精通AI、数据库、前后端全栈技术，负责本项目的代码研发。
+过程中使用中文对话交流。
 
-DbGuard is an AI-powered database operations platform that provides intelligent diagnostics, proactive monitoring, and automated maintenance for multiple database types (MySQL, PostgreSQL, Oracle, SQL Server, DM, MongoDB, Redis).
+## 项目概述
 
-**Architecture**: FastAPI backend + vanilla JavaScript frontend + SQLite metadata storage + ChromaDB vector store
+DbGuard 是一个 AI 驱动的数据库运维平台，为多种数据库类型（MySQL、PostgreSQL、Oracle、SQL Server、DM、MongoDB、Redis、TiDB、OceanBase、openGauss）提供智能诊断、主动监控、自动巡检和告警通知。
 
-## Development Commands
+**架构**：FastAPI 后端 + 原生 JavaScript 前端（无构建步骤） + PostgreSQL 元数据存储 + ChromaDB 向量库
 
-### Running the Application
+## 开发命令
 
 ```bash
-# Start the backend server (with auto-reload in debug mode)
+# 安装依赖
+pip install -r requirements.txt
+
+# 启动后端服务（调试模式下自动重载，端口 9939）
 python run.py
 
-# The server runs on http://0.0.0.0:9939 by default
-# Frontend is served from /frontend directory
-```
+# 前端从 /frontend 目录静态提供，无需构建
 
-### Testing
-
-```bash
-# Run individual test files
+# 运行测试（各功能独立测试文件，无统一测试框架）
 python test_skills.py
-python test_intent_detection.py
-python test_extended_validation.py
+python test_threshold_checker.py
+python test_auto_resolve_alerts.py
+python test_deduplication.py
 
-# Run specific test scripts
-python test_diagnosis_decision.py
-python test_enhanced_report.py
-```
+# 数据库迁移（启动时通过 SQLAlchemy create_all 自动执行）
+# 手动迁移脚本：python backend/migrations/<migration_name>.py
 
-### Database Migrations
-
-```bash
-# Migrations run automatically on startup via backend/app.py lifespan
-# Manual migration scripts are in backend/migrations/
-
-# Example: Add new fields
-python backend/migrations/add_diagnosis_decision_fields.py
-```
-
-### Environment Setup
-
-```bash
-# Copy example environment file
-cp .env.example .env
-
-# Generate encryption key for database passwords
+# 生成加密密钥
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-
-# Set required environment variables in .env:
-# - ENCRYPTION_KEY (for encrypting database credentials)
-# - OPENAI_API_KEY (for AI features)
-# - OPENAI_BASE_URL (optional, defaults to OpenAI)
-# - OPENAI_MODEL (optional, defaults to gpt-4o)
 ```
 
-## Architecture Overview
+**默认管理员账号**：`admin` / `admin1234`（首次启动自动创建）
 
-### Backend Structure
+**环境变量**（`.env` 文件，参考 `.env.example`）：
+- `ENCRYPTION_KEY`：Fernet 加密密钥（必需）
+- `DATABASE_URL`：PostgreSQL 连接串（默认 `postgresql+asyncpg://dbguard:dbguard@localhost:5432/dbguard`）
+- `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`：AI 配置
+- `BOCHA_API_KEY`：博查 AI 网络搜索（可选）
 
-**Core Application Flow**:
-1. `run.py` → `backend/app.py` → Creates FastAPI app with lifespan management
-2. Lifespan startup: Initializes database, starts metric collector, KB processor, AI Guardian, scheduled reports
-3. Routers handle API endpoints, services contain business logic, models define database schema
+## 架构概述
 
-**Key Architectural Patterns**:
+### 后端结构
 
-- **Skills System** (`backend/skills/`): Dynamic, extensible diagnostic skill execution framework
-  - Skills defined in YAML (`backend/skills/builtin/*.yaml`)
-  - Registry → Validator → Executor → Context pipeline
-  - Sandboxed execution with permission controls
-  - Skills automatically become AI agent tools
+**核心应用流程**：`run.py` → `backend/app.py` → 创建带 lifespan 管理的 FastAPI 应用
 
-- **Intent-Aware AI** (`backend/agent/`): System prompts adapt based on user query intent
-  - `intent_detector.py`: Detects diagnostic/informational/administrative intent
-  - `prompts.py`: Three prompt variants (DIAGNOSTIC_PROMPT, INFORMATIONAL_PROMPT, ADMINISTRATIVE_PROMPT)
-  - `conversation_skills.py`: Orchestrates AI conversations with skill selection
+**Lifespan 启动顺序**：
+1. 初始化数据库（PostgreSQL via SQLAlchemy async） + 运行迁移
+2. 写入默认系统配置（巡检去重、SMTP、阿里云）
+3. 启动 SSH 连接池
+4. 启动指标收集器（metric_collector）
+5. 初始化知识库处理器（KB processor + ChromaDB）
+6. 启动巡检服务（InspectionService）
+7. 启动主机指标收集器（host_collector）
+8. 启动通知分发器（notification_dispatcher）
+9. 加载集成模板 + 启动集成调度器（integration_scheduler）
 
-- **AI Guardian System** (`backend/services/`): Proactive anomaly detection and diagnosis
-  - `baseline_learner.py`: Learns normal metric patterns
-  - `importance_classifier.py`: Classifies anomaly severity (Critical/High/Medium/Low)
-  - `proactive_diagnosis.py`: Auto-triggers AI diagnosis for important anomalies
-  - Runs as background tasks started in app lifespan
+**已注册的 Router**：
+- `backend/routers/`：auth、users、datasources、hosts、metrics、monitor_ws、chat、query、ai_models、knowledge_bases、inspections、system_configs、alerts、integrations
+- `backend/api/skills.py`：技能管理 API
 
-- **Scheduled Reports** (`backend/services/scheduled_report_service.py`):
-  - APScheduler-based report generation
-  - Supports daily/weekly/monthly schedules
-  - AI-powered report analysis and summarization
+**核心架构模式**：
 
-### Database Schema
+- **技能系统** (`backend/skills/`)：动态可扩展的诊断技能执行框架
+  - 技能在 YAML 中定义（`backend/skills/builtin/*.yaml`）
+  - Registry → Validator → Executor → Context 管道
+  - 带权限控制的沙箱执行，技能自动成为 AI Agent 工具
 
-**SQLite with SQLAlchemy async**: `data/dbguard.db`
+- **意图感知 AI** (`backend/agent/`)：系统提示根据用户查询意图自适应
+  - `intent_detector.py`：检测诊断/信息查询/管理操作意图
+  - `prompts.py`：三种提示变体（DIAGNOSTIC / INFORMATIONAL / ADMINISTRATIVE）
+  - `conversation_skills.py`：编排带技能选择的 AI 对话
+  - `context_builder.py`：为 AI 构建上下文
+  - `skill_selector.py`：动态技能到工具的转换
 
-**Key tables**:
-- `datasources`: Database connections (encrypted credentials)
-- `ssh_hosts`: SSH connection info for OS metrics
-- `metric_snapshots`: Time-series performance metrics
-- `diagnostic_sessions`: AI chat history
-- `skills`: Dynamic skill definitions (JSON columns for metadata)
-- `skill_executions`: Audit trail of skill runs
-- `baselines`, `anomalies`, `importance_levels`: AI Guardian data
-- `scheduled_reports`: Report configurations and history
-- `knowledge_bases`: Vector store metadata
+- **巡检服务** (`backend/services/inspection_service.py`)：定时自动巡检，支持按数据源配置计划和阈值规则，触发去重窗口（默认 60 分钟）
 
-**Important**: Use JSON columns with SQLite LIKE patterns for array filtering (e.g., `tags LIKE '%"mysql"%'` for tag contains)
+- **告警系统**：`threshold_checker.py` → `alert_service.py` / `alert_event_service.py` → `notification_dispatcher.py` → `notification_service.py`（Webhook、钉钉等），告警在指标恢复正常后自动解除
 
-### Frontend Structure
+- **主机监控**：`host_collector.py` 通过 SSH 连接池（`ssh_connection_pool.py`）收集 OS 级指标
 
-**Vanilla JavaScript SPA** (`frontend/`):
-- `index.html`: Main entry point with navigation
-- `js/pages/`: Page-specific logic (diagnosis.js, guardian-dashboard.js, reports.js, etc.)
-- `js/components/`: Reusable components (chat-widget.js, query-editor.js)
-- `js/api.js`: Centralized API client
-- `css/`: Page-specific styles
-- `lib/`: Third-party libraries (CodeMirror, marked, highlight.js)
+- **适配器系统** (`backend/adapters/`)：可编程适配器对接第三方监控系统，用户在前端编写 Python 代码，以完整权限执行（无沙箱）。详见 `docs/PROGRAMMABLE_ADAPTER_GUIDE.md`
 
-**No build step required** - all files served statically
+### AI Agent 对话流程
 
-## Skills System
+用户消息 → `chat.py` → 意图检测 → 上下文构建 → 技能选择 → 技能执行 → AI 综合响应
 
-The Skills System is the core extensibility mechanism. When adding database diagnostic capabilities:
+### 前端结构
 
-1. **Create skill YAML** in `backend/skills/builtin/` with:
-   - Unique ID, name, version, category, tags
-   - Parameter definitions with type validation
-   - Required permissions (execute_query, execute_command, read_logs, etc.)
-   - Python async code using context API
+原生 JavaScript SPA（`frontend/`），无构建步骤：
+- `index.html`：主入口
+- `js/pages/`：页面逻辑，`js/components/`：可复用组件
+- `js/api.js`：集中式 API 客户端
+- `lib/`：第三方库（CodeMirror、marked、highlight.js）
 
-2. **Context API** available in skills:
-   ```python
-   await context.get_connection(connection_id)
-   await context.execute_query(query, connection_id)
-   await context.execute_command(command, connection_id)
-   await context.search_kb(query, kb_ids, top_k=5)
-   await context.get_metrics(connection_id, minutes=60)
-   await context.call_skill(skill_id, params)
-   ```
+## 技能系统
 
-3. **Security**: Skills are validated for forbidden imports/builtins and run in sandboxed environment with timeout limits (default 30s, max 300s)
+添加数据库诊断能力时，在 `backend/skills/builtin/` 中创建技能 YAML，包含唯一 ID、参数定义、所需权限、Python 异步代码。
 
-4. **Testing**: Skills auto-load on startup. Test via `/api/skills/{skill_id}/test` endpoint or through AI agent
-
-## AI Agent Integration
-
-**Conversation Flow**:
-1. User message → `backend/routers/chat.py`
-2. Intent detection → Select appropriate system prompt
-3. Context building → Gather relevant datasource info, metrics, KB results
-4. Skill selection → AI chooses from available skills based on query
-5. Skill execution → Run selected skills with parameters
-6. Response generation → AI synthesizes results
-
-**Key files**:
-- `backend/agent/conversation_skills.py`: Main conversation orchestration
-- `backend/agent/skill_selector.py`: Dynamic skill-to-tool conversion
-- `backend/agent/context_builder.py`: Builds context for AI
-- `backend/agent/tools.py`: Legacy tool definitions (being phased out)
-
-## Database Connection Handling
-
-**Multi-database support** via `backend/utils/db_connector.py`:
-- Detects database type from connection string
-- Returns appropriate async driver (aiomysql, asyncpg, oracledb, pymssql, dmPython, motor, redis)
-- Handles connection pooling and error handling
-- SSH tunneling support via `backend/utils/ssh_executor.py`
-
-**Adding new database type**:
-1. Add detection logic in `db_connector.py`
-2. Install required async driver
-3. Create database-specific skills in `backend/skills/builtin/`
-4. Update frontend datasource form if needed
-
-## Common Patterns
-
-### Adding a New API Endpoint
-
-1. Create router in `backend/routers/` or add to existing router
-2. Define Pydantic schemas in `backend/schemas/`
-3. Create/update models in `backend/models/`
-4. Implement business logic in `backend/services/`
-5. Register router in `backend/app.py` create_app()
-
-### Adding a New Background Task
-
-Add to `backend/app.py` lifespan startup:
+**技能中可用的 Context API**：
 ```python
-asyncio.create_task(your_background_function())
+await context.get_connection(connection_id)
+await context.execute_query(query, connection_id)
+await context.execute_command(command, connection_id)  # 需要主机配置
+await context.search_kb(query, kb_ids, top_k=5)
+await context.get_metrics(connection_id, minutes=60)
+await context.call_skill(skill_id, params)
 ```
 
-### Working with Encrypted Credentials
+**注意**：需要 OS 级访问的技能必须先检查数据源是否配置了 `host_id`，未配置时返回 `{"success": false, "error": "no_host_configured"}` 而非崩溃。
 
-Use `backend/utils/encryption.py`:
+## 常见模式
+
+### 添加新 API 端点
+
+1. `backend/schemas/` 定义 Pydantic Schema
+2. `backend/models/` 创建/更新 Model
+3. `backend/services/` 实现业务逻辑
+4. `backend/routers/` 创建 Router
+5. `backend/app.py` 的 `create_app()` 中注册 Router
+
+### 添加新后台任务
+
+在 `backend/app.py` lifespan 中：`asyncio.create_task(your_function())`
+
+### 加密凭据
+
 ```python
 from backend.utils.encryption import encrypt_password, decrypt_password
-encrypted = encrypt_password(plain_password)
-plain = decrypt_password(encrypted)
 ```
 
-### Parameter Validation in Skills
+### 数据库连接
 
-Skills support extended validation:
-- `min`/`max`: Range validation for integers
-- `pattern`: Regex validation for strings
-- `enum`: Allowed values list
-- `items`: Type validation for array elements
+多数据库支持 via `backend/services/db_connector.py`，各数据库专属 Service 在 `backend/services/` 下（mysql_service、postgres_service 等）。通过 `backend/utils/ssh_executor.py` + SSH 连接池支持 SSH 隧道。
 
-## Important Notes
+## 重要约定
 
-- **Async everywhere**: All database operations use async/await
-- **Session management**: Use `get_db()` dependency for database sessions
-- **Error handling**: Services should raise HTTPException with appropriate status codes
-- **Logging**: Use Python logging module, configured in app.py lifespan
-- **Security**: Database passwords encrypted with Fernet, JWT for authentication
-- **WebSocket**: Real-time metrics via `/ws/monitor` endpoint
-- **Alert Auto-Resolution**: Alerts are automatically resolved when metrics recover to normal levels or connections are restored (see AUTO_RESOLVE_ALERTS.md)
+- **全异步**：所有数据库操作使用 async/await
+- **Session 管理**：使用 `get_db()` 依赖注入获取 AsyncSession
+- **错误处理**：Service 抛出带适当状态码的 HTTPException
+- **安全性**：数据库密码用 Fernet 加密，JWT 用于认证
+- **元数据库**：PostgreSQL（非 SQLite），通过 `DATABASE_URL` 配置
+- **WebSocket**：`/ws/monitor` 端点提供实时指标
 
-## Configuration
+## 配置
 
-All settings in `backend/config.py` loaded from `.env`:
-- Database URL (SQLite by default)
-- OpenAI API configuration
-- Metric collection interval (default 15s)
-- JWT secret and expiration
-- ChromaDB and embedding model settings
-
-## Troubleshooting
-
-**Skills not loading**: Check `backend/skills/builtin/` YAML syntax and validation errors in logs
-
-**AI Guardian not detecting anomalies**: Ensure metric_collector is running and baseline_learner has collected enough data (needs historical metrics)
-
-**Frontend not loading**: Check that static file mounts in `app.py` match directory structure
-
-**Database connection fails**: Verify encryption key is set and credentials are properly encrypted
-
-**Tests failing**: Ensure test database is initialized and all dependencies are installed
+所有设置在 `backend/config.py` 中从 `.env` 加载。关键配置项：
+- `METRIC_INTERVAL`：指标收集间隔（默认 60s）
+- `JWT_SECRET_KEY` / `JWT_EXPIRE_MINUTES`（默认 1440）
+- `CHROMA_PERSIST_DIR` / `EMBEDDING_MODEL`：向量库配置
+- `INSPECTION_DEDUP_WINDOW_MINUTES`（默认 60）
+- `ALERT_AGGREGATION_TIME_WINDOW_MINUTES`（默认 5）

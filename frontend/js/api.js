@@ -26,8 +26,30 @@ const API = {
                     window.location.hash = 'login';
                     throw new Error('会话已过期，请重新登录');
                 }
+
+                // Parse error response
                 const err = await response.json().catch(() => ({ detail: response.statusText }));
-                throw new Error(err.detail || err.message || '请求失败');
+
+                // Extract error message, handling various formats
+                let errorMessage = '请求失败';
+
+                if (err.detail) {
+                    if (typeof err.detail === 'string') {
+                        errorMessage = err.detail;
+                    } else if (Array.isArray(err.detail)) {
+                        // Pydantic validation errors
+                        errorMessage = err.detail.map(e => {
+                            const loc = e.loc ? e.loc.join('.') : '';
+                            return `${loc}: ${e.msg}`;
+                        }).join('; ');
+                    } else if (typeof err.detail === 'object') {
+                        errorMessage = JSON.stringify(err.detail);
+                    }
+                } else if (err.message) {
+                    errorMessage = typeof err.message === 'string' ? err.message : JSON.stringify(err.message);
+                }
+
+                throw new Error(errorMessage);
             }
             const contentType = response.headers.get('content-type');
             if (contentType && contentType.includes('application/json')) {
@@ -63,8 +85,30 @@ const API = {
                 window.location.hash = 'login';
                 throw new Error('会话已过期，请重新登录');
             }
+
+            // Parse error response
             const err = await response.json().catch(() => ({ detail: response.statusText }));
-            throw new Error(err.detail || err.message || '请求失败');
+
+            // Extract error message, handling various formats
+            let errorMessage = '请求失败';
+
+            if (err.detail) {
+                if (typeof err.detail === 'string') {
+                    errorMessage = err.detail;
+                } else if (Array.isArray(err.detail)) {
+                    // Pydantic validation errors
+                    errorMessage = err.detail.map(e => {
+                        const loc = e.loc ? e.loc.join('.') : '';
+                        return `${loc}: ${e.msg}`;
+                    }).join('; ');
+                } else if (typeof err.detail === 'object') {
+                    errorMessage = JSON.stringify(err.detail);
+                }
+            } else if (err.message) {
+                errorMessage = typeof err.message === 'string' ? err.message : JSON.stringify(err.message);
+            }
+
+            throw new Error(errorMessage);
         }
         return await response.json();
     },
@@ -90,6 +134,15 @@ const API = {
     deleteDatasource(id) { return this.delete(`/api/datasources/${id}`); },
     testDatasource(id) { return this.post(`/api/datasources/${id}/test`); },
     testDatasourceConnection(data) { return this.post('/api/datasources/test', data); },
+    checkDatasourceStatus() { return this.post('/api/datasources/check-status'); },
+
+    // Datasource silence endpoints
+    setDatasourceSilence(id, data) { return this.post(`/api/datasources/${id}/silence`, data); },
+    cancelDatasourceSilence(id) { return this.delete(`/api/datasources/${id}/silence`); },
+    getDatasourceSilenceStatus(id) { return this.get(`/api/datasources/${id}/silence`); },
+
+    // Bulk status check for datasources
+    checkAllDatasourceStatus() { return this.post('/api/datasources/check-status'); },
 
     // Host endpoints
     getHosts() { return this.get('/api/hosts'); },

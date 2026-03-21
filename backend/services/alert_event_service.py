@@ -64,13 +64,14 @@ class AlertEventService:
         # Calculate time threshold
         time_threshold = alert.created_at - timedelta(minutes=time_window_minutes)
 
-        # Find matching event
+        # Find matching event (only match active/acknowledged events, not resolved)
         result = await db.execute(
             select(AlertEvent)
             .where(
                 and_(
                     AlertEvent.aggregation_key == aggregation_key,
-                    AlertEvent.event_end_time >= time_threshold
+                    AlertEvent.event_end_time >= time_threshold,
+                    AlertEvent.status.in_(["active", "acknowledged"])  # 只匹配未解决的事件
                 )
             )
             .order_by(AlertEvent.event_end_time.desc())
@@ -102,7 +103,7 @@ class AlertEventService:
             alert_count=1,
             event_start_time=alert.created_at,
             event_end_time=alert.created_at,
-            last_updated=datetime.utcnow(),
+            last_updated=datetime.now(),
             status=alert.status,
             severity=alert.severity,
             title=alert.title,
@@ -127,7 +128,7 @@ class AlertEventService:
         event.latest_alert_id = alert.id
         event.alert_count += 1
         event.event_end_time = alert.created_at
-        event.last_updated = datetime.utcnow()
+        event.last_updated = datetime.now()
         event.status = alert.status  # Inherit status from latest alert
 
         # Update severity (keep highest)
@@ -248,7 +249,7 @@ class AlertEventService:
 
         # Update event status
         event.status = "acknowledged"
-        event.last_updated = datetime.utcnow()
+        event.last_updated = datetime.now()
 
         # Update all alerts in event
         await db.execute(
@@ -266,7 +267,7 @@ class AlertEventService:
             if alert.status == "active":
                 alert.status = "acknowledged"
                 alert.acknowledged_by = user_id
-                alert.acknowledged_at = datetime.utcnow()
+                alert.acknowledged_at = datetime.now()
 
         await db.flush()
         await db.refresh(event)
@@ -288,9 +289,11 @@ class AlertEventService:
         if not event:
             raise ValueError(f"Event {event_id} not found")
 
-        # Update event status
+        # Update event status and end time
+        now = datetime.now()
         event.status = "resolved"
-        event.last_updated = datetime.utcnow()
+        event.event_end_time = now  # 更新恢复时间
+        event.last_updated = now
 
         # Update all alerts in event
         result = await db.execute(
@@ -301,7 +304,7 @@ class AlertEventService:
         for alert in alerts:
             if alert.status != "resolved":
                 alert.status = "resolved"
-                alert.resolved_at = datetime.utcnow()
+                alert.resolved_at = now
 
         await db.flush()
         await db.refresh(event)
@@ -346,8 +349,10 @@ class AlertEventService:
 
         if all_resolved:
             # Auto-resolve the event
+            now = datetime.now()
             event.status = "resolved"
-            event.last_updated = datetime.utcnow()
+            event.event_end_time = now  # 更新恢复时间
+            event.last_updated = now
             await db.flush()
             await db.refresh(event)
             return event

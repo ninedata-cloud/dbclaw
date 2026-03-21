@@ -40,6 +40,10 @@ apscheduler>=3.10.0
 aiohttp>=3.9.0
 requests>=2.31.0
 
+# Aliyun SDK
+aliyun-python-sdk-core>=2.13.0
+aliyun-python-sdk-rds>=2.7.0
+
 # SSH
 paramiko>=3.0.0
 

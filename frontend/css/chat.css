@@ -80,8 +80,8 @@
 }
 
 .chat-message.user .chat-bubble {
-    background: var(--accent-blue);
-    color: #fff;
+    background: #dddddd;
+    color: #000000;
     border-bottom-right-radius: 4px;
 }
 

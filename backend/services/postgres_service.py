@@ -37,15 +37,31 @@ class PostgreSQLConnector(DBConnector):
                 "SELECT count(*) as total, "
                 "count(*) FILTER (WHERE state = 'active') as active, "
                 "count(*) FILTER (WHERE state = 'idle') as idle, "
-                "count(*) FILTER (WHERE wait_event_type IS NOT NULL) as waiting "
+                "count(*) FILTER (WHERE wait_event_type IS NOT NULL "
+                "  AND wait_event_type NOT IN ('Client', 'Activity')) as waiting "
                 "FROM pg_stat_activity WHERE datname = current_database()"
             )
             size = await conn.fetchrow(
                 "SELECT pg_database_size(current_database()) as db_size"
             )
-            # Get database start time
+            # Get database start time and max_connections
             start_time = await conn.fetchrow(
                 "SELECT pg_postmaster_start_time() as start_time"
+            )
+            max_conn = await conn.fetchrow(
+                "SELECT setting::int as max_conn FROM pg_settings WHERE name = 'max_connections'"
+            )
+            # 锁等待数
+            lock_waiting = await conn.fetchrow(
+                "SELECT count(*) as cnt FROM pg_stat_activity "
+                "WHERE wait_event_type = 'Lock' AND datname = current_database()"
+            )
+            # 最长事务运行时间（秒）
+            longest_tx = await conn.fetchrow(
+                "SELECT EXTRACT(EPOCH FROM max(now() - xact_start))::int as seconds "
+                "FROM pg_stat_activity "
+                "WHERE xact_start IS NOT NULL AND state != 'idle' "
+                "AND datname = current_database()"
             )
 
             hit_rate = 0
@@ -61,14 +77,17 @@ class PostgreSQLConnector(DBConnector):
                 boot_time = start_time["start_time"]
                 if boot_time.tzinfo is None:
                     boot_time = boot_time.replace(tzinfo=timezone.utc)
-                now = datetime.now(timezone.utc)
-                uptime = int((now - boot_time).total_seconds())
+                now_utc = datetime.now(timezone.utc)
+                uptime = int((now_utc - boot_time).total_seconds())
 
             return {
                 "connections_active": activity["active"] if activity else 0,
                 "connections_total": activity["total"] if activity else 0,
                 "connections_idle": activity["idle"] if activity else 0,
                 "connections_waiting": activity["waiting"] if activity else 0,
+                "max_connections": max_conn["max_conn"] if max_conn else 0,
+                "lock_waiting": lock_waiting["cnt"] if lock_waiting else 0,
+                "longest_transaction_sec": longest_tx["seconds"] if longest_tx and longest_tx["seconds"] else 0,
                 "xact_commit": stats["xact_commit"] if stats else 0,
                 "xact_rollback": stats["xact_rollback"] if stats else 0,
                 "cache_hit_rate": hit_rate,
@@ -77,6 +96,8 @@ class PostgreSQLConnector(DBConnector):
                 "tup_inserted": stats["tup_inserted"] if stats else 0,
                 "tup_updated": stats["tup_updated"] if stats else 0,
                 "tup_deleted": stats["tup_deleted"] if stats else 0,
+                "blks_read": stats["blks_read"] if stats else 0,
+                "blks_hit": stats["blks_hit"] if stats else 0,
                 "deadlocks": stats["deadlocks"] if stats else 0,
                 "conflicts": stats["conflicts"] if stats else 0,
                 "db_size_bytes": size["db_size"] if size else 0,

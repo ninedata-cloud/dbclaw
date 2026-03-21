@@ -107,7 +107,20 @@ class SSHConnectionPool:
             # 在线程池中执行阻塞的 SSH 连接，避免阻塞事件循环
             loop = asyncio.get_event_loop()
 
-            if host.auth_type == 'password':
+            if host.auth_type == 'agent':
+                # SSH Agent 认证
+                await loop.run_in_executor(
+                    None,
+                    lambda: ssh_client.connect(
+                        hostname=host.host,
+                        port=host.port,
+                        username=host.username,
+                        allow_agent=True,
+                        look_for_keys=True,
+                        timeout=10
+                    )
+                )
+            elif host.auth_type == 'password':
                 password = decrypt_value(host.password_encrypted) if host.password_encrypted else None
                 await loop.run_in_executor(
                     None,
@@ -116,6 +129,8 @@ class SSHConnectionPool:
                         port=host.port,
                         username=host.username,
                         password=password,
+                        allow_agent=False,
+                        look_for_keys=False,
                         timeout=10
                     )
                 )
@@ -125,7 +140,15 @@ class SSHConnectionPool:
                 if private_key_str:
                     from io import StringIO
                     key_file = StringIO(private_key_str)
-                    private_key = paramiko.RSAKey.from_private_key(key_file)
+                    try:
+                        private_key = paramiko.RSAKey.from_private_key(key_file)
+                    except Exception:
+                        key_file.seek(0)
+                        try:
+                            private_key = paramiko.Ed25519Key.from_private_key(key_file)
+                        except Exception:
+                            key_file.seek(0)
+                            private_key = paramiko.ECDSAKey.from_private_key(key_file)
                     await loop.run_in_executor(
                         None,
                         lambda: ssh_client.connect(
@@ -133,6 +156,8 @@ class SSHConnectionPool:
                             port=host.port,
                             username=host.username,
                             pkey=private_key,
+                            allow_agent=False,
+                            look_for_keys=False,
                             timeout=10
                         )
                     )

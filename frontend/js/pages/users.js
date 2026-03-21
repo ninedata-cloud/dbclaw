@@ -22,8 +22,10 @@ const UsersPage = {
             table.innerHTML = `
                 <thead>
                     <tr>
-                        <th>用户name</th>
+                        <th>用户名</th>
                         <th>显示名称</th>
+                        <th>邮箱</th>
+                        <th>电话</th>
                         <th>角色</th>
                         <th>状态</th>
                         <th>创建时间</th>
@@ -38,8 +40,10 @@ const UsersPage = {
                 tr.innerHTML = `
                     <td><strong>${Utils.escapeHtml(user.username)}</strong></td>
                     <td>${Utils.escapeHtml(user.display_name || '-')}</td>
+                    <td>${Utils.escapeHtml(user.email || '-')}</td>
+                    <td>${Utils.escapeHtml(user.phone || '-')}</td>
                     <td><span class="badge ${user.is_admin ? 'badge-primary' : 'badge-secondary'}">${user.is_admin ? '管理员' : '用户'}</span></td>
-                    <td><span class="badge ${user.is_active ? 'badge-success' : 'badge-danger'}">${user.is_active ? '活跃' : 'Disabled'}</span></td>
+                    <td><span class="badge ${user.is_active ? 'badge-success' : 'badge-danger'}">${user.is_active ? '活跃' : '禁用'}</span></td>
                     <td>${Format.datetime(user.created_at)}</td>
                     <td class="actions-cell"></td>
                 `;
@@ -47,6 +51,15 @@ const UsersPage = {
                 const actionsCell = tr.querySelector('.actions-cell');
                 const currentUser = Store.get('currentUser');
                 const isSelf = currentUser && currentUser.id === user.id;
+
+                // Edit button
+                const editBtn = DOM.el('button', {
+                    className: 'btn btn-sm btn-secondary',
+                    innerHTML: '<i data-lucide="pencil"></i>',
+                    title: '编辑用户',
+                    onClick: () => this._showEditModal(user)
+                });
+                actionsCell.appendChild(editBtn);
 
                 // Toggle status button
                 if (!isSelf) {
@@ -105,16 +118,24 @@ const UsersPage = {
         const form = DOM.el('div');
         form.innerHTML = `
             <div class="form-group">
-                <label>用户name</label>
-                <input type="text" id="new-username" class="form-input" placeholder="用户name" required>
+                <label>用户名</label>
+                <input type="text" id="new-username" class="form-input" placeholder="用户名" required>
             </div>
             <div class="form-group">
-                <label>Password</label>
+                <label>密码</label>
                 <input type="password" id="new-password" class="form-input" placeholder="密码（至少 6 位）">
             </div>
             <div class="form-group">
                 <label>显示名称</label>
-                <input type="text" id="new-display-name" class="form-input" placeholder="显示名称 (optional)">
+                <input type="text" id="new-display-name" class="form-input" placeholder="显示名称（可选）">
+            </div>
+            <div class="form-group">
+                <label>邮箱</label>
+                <input type="email" id="new-email" class="form-input" placeholder="邮箱（可选）">
+            </div>
+            <div class="form-group">
+                <label>电话</label>
+                <input type="text" id="new-phone" class="form-input" placeholder="电话（可选）">
             </div>
             <div class="form-group" style="display:flex;align-items:center;gap:8px;">
                 <input type="checkbox" id="new-is-admin">
@@ -123,11 +144,11 @@ const UsersPage = {
         `;
 
         Modal.show({
-            title: 'Create 用户',
+            title: '新建用户',
             content: form,
             buttons: [
-                { text: 'Cancel', variant: 'secondary', onClick: () => Modal.hide() },
-                { text: 'Create', variant: 'primary', onClick: () => this._createUser() },
+                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
+                { text: '创建', variant: 'primary', onClick: () => this._createUser() },
             ]
         });
     },
@@ -136,21 +157,23 @@ const UsersPage = {
         const username = DOM.$('#new-username').value.trim();
         const password = DOM.$('#new-password').value;
         const display_name = DOM.$('#new-display-name').value.trim();
+        const email = DOM.$('#new-email').value.trim();
+        const phone = DOM.$('#new-phone').value.trim();
         const is_admin = DOM.$('#new-is-admin').checked;
 
         if (!username || !password) {
-            Toast.error('用户name and password are required');
+            Toast.error('用户名和密码不能为空');
             return;
         }
         if (password.length < 6) {
-            Toast.error('Password must be at least 6 characters');
+            Toast.error('密码不能少于 6 位');
             return;
         }
 
         try {
-            await API.createUser({ username, password, display_name: display_name || null, is_admin });
+            await API.createUser({ username, password, display_name: display_name || null, email: email || null, phone: phone || null, is_admin });
             Modal.hide();
-            Toast.success('用户 created successfully');
+            Toast.success('用户创建成功');
             this.render();
         } catch (err) {
             Toast.error(err.message);
@@ -165,6 +188,55 @@ const UsersPage = {
         } catch (err) {
             Toast.error(err.message);
         }
+    },
+
+    _showEditModal(user) {
+        const form = DOM.el('div');
+        form.innerHTML = `
+            <div class="form-group">
+                <label>显示名称</label>
+                <input type="text" id="edit-display-name" class="form-input" placeholder="显示名称（可选）" value="${Utils.escapeHtml(user.display_name || '')}">
+            </div>
+            <div class="form-group">
+                <label>邮箱</label>
+                <input type="email" id="edit-email" class="form-input" placeholder="邮箱（可选）" value="${Utils.escapeHtml(user.email || '')}">
+            </div>
+            <div class="form-group">
+                <label>电话</label>
+                <input type="text" id="edit-phone" class="form-input" placeholder="电话（可选）" value="${Utils.escapeHtml(user.phone || '')}">
+            </div>
+            <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" id="edit-is-admin" ${user.is_admin ? 'checked' : ''}>
+                <label for="edit-is-admin" style="margin:0">管理员</label>
+            </div>
+        `;
+
+        Modal.show({
+            title: `编辑用户 - ${Utils.escapeHtml(user.username)}`,
+            content: form,
+            buttons: [
+                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
+                { text: '保存', variant: 'primary', onClick: async () => {
+                    const display_name = DOM.$('#edit-display-name').value.trim();
+                    const email = DOM.$('#edit-email').value.trim();
+                    const phone = DOM.$('#edit-phone').value.trim();
+                    const is_admin = DOM.$('#edit-is-admin').checked;
+                    try {
+                        await API.updateUser(user.id, {
+                            display_name: display_name || null,
+                            email: email || null,
+                            phone: phone || null,
+                            is_admin
+                        });
+                        Modal.hide();
+                        Toast.success('用户信息已更新');
+                        this.render();
+                    } catch (err) {
+                        Toast.error(err.message);
+                    }
+                }},
+            ]
+        });
     },
 
     _showResetPasswordModal(user) {

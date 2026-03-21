@@ -2,14 +2,12 @@
 const HostsPage = {
     allHosts: [],
     filteredHosts: [],
+    _filters: {
+        name: '',
+        host: ''
+    },
 
     async render() {
-        Header.render('主机管理', DOM.el('button', {
-            className: 'btn btn-primary',
-            innerHTML: '<i data-lucide="plus"></i> New Host',
-            onClick: () => this._showForm(null)
-        }));
-
         const content = DOM.$('#page-content');
         content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
@@ -17,6 +15,8 @@ const HostsPage = {
             this.allHosts = await API.getHosts();
             this.filteredHosts = [...this.allHosts];
             Store.set('hosts', this.allHosts);
+
+            Header.render('主机管理', this._buildHeaderActions());
             content.innerHTML = '';
 
             if (this.allHosts.length === 0) {
@@ -31,26 +31,11 @@ const HostsPage = {
                 return;
             }
 
-            // Filters
-            const filterBar = DOM.el('div', { style: { marginBottom: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap' } });
-            filterBar.innerHTML = `
-                <div>
-                    <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">Name</label>
-                    <input type="text" id="filterName" class="form-input" placeholder="按名称搜索..." style="padding:8px;border-radius:4px;min-width:200px;">
-                </div>
-                <div>
-                    <label style="display:block;font-size:12px;margin-bottom:4px;color:var(--text-muted);">Host IP</label>
-                    <input type="text" id="filterHost" class="form-input" placeholder="按主机 IP 搜索..." style="padding:8px;border-radius:4px;min-width:200px;">
-                </div>
-            `;
-            content.appendChild(filterBar);
-
             // Table container
             const tableContainer = DOM.el('div', { id: 'host-table-container' });
             content.appendChild(tableContainer);
 
             this._renderTable();
-            this._setupFilterListeners();
             DOM.createIcons();
 
         } catch (err) {
@@ -58,18 +43,55 @@ const HostsPage = {
         }
     },
 
-    _setupFilterListeners() {
-        DOM.$('#filterName')?.addEventListener('input', () => this._applyFilters());
-        DOM.$('#filterHost')?.addEventListener('input', () => this._applyFilters());
+    _buildHeaderActions() {
+        const filtersContainer = DOM.el('div', { className: 'dashboard-filters' });
+        filtersContainer.innerHTML = `
+            <input type="text" id="filter-name" class="filter-input" placeholder="按名称搜索...">
+            <input type="text" id="filter-host" class="filter-input" placeholder="按主机 IP 搜索...">
+            <button id="btn-search" class="btn btn-primary">
+                <i data-lucide="search"></i> 检索
+            </button>
+        `;
+
+        const addBtn = DOM.el('button', {
+            className: 'btn btn-primary',
+            innerHTML: '<i data-lucide="plus"></i> New Host',
+            onClick: () => this._showForm(null)
+        });
+
+        setTimeout(() => {
+            const btnSearch = DOM.$('#btn-search');
+            const filterName = DOM.$('#filter-name');
+            const filterHost = DOM.$('#filter-host');
+
+            if (btnSearch) {
+                btnSearch.addEventListener('click', () => this._applyFilters());
+            }
+            if (filterName) {
+                filterName.addEventListener('input', () => this._applyFilters());
+                filterName.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this._applyFilters();
+                });
+            }
+            if (filterHost) {
+                filterHost.addEventListener('input', () => this._applyFilters());
+                filterHost.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this._applyFilters();
+                });
+            }
+            DOM.createIcons();
+        }, 0);
+
+        return [filtersContainer, addBtn];
     },
 
     _applyFilters() {
-        const nameFilter = DOM.$('#filterName')?.value.toLowerCase() || '';
-        const hostFilter = DOM.$('#filterHost')?.value.toLowerCase() || '';
+        this._filters.name = DOM.$('#filter-name')?.value.trim().toLowerCase() || '';
+        this._filters.host = DOM.$('#filter-host')?.value.trim().toLowerCase() || '';
 
         this.filteredHosts = this.allHosts.filter(h => {
-            const matchName = !nameFilter || h.name.toLowerCase().includes(nameFilter);
-            const matchHost = !hostFilter || h.host.toLowerCase().includes(hostFilter);
+            const matchName = !this._filters.name || h.name.toLowerCase().includes(this._filters.name);
+            const matchHost = !this._filters.host || h.host.toLowerCase().includes(this._filters.host);
             return matchName && matchHost;
         });
 
@@ -87,40 +109,74 @@ const HostsPage = {
                         <th>名称</th>
                         <th>主机</th>
                         <th>端口</th>
-                        <th>用户名</th>
-                        <th>认证方式</th>
-                        <th>CPU 使用率</th>
+                        <th>状态</th>
+                        <th>CPU</th>
+                        <th>内存</th>
+                        <th>磁盘</th>
                         <th>操作</th>
                     </tr>
                 </thead>
                 <tbody>
-                    ${this.filteredHosts.map(host => `
-                        <tr>
-                            <td><strong>${host.name}</strong></td>
-                            <td>${host.host}</td>
-                            <td>${host.port}</td>
-                            <td>${host.username}</td>
-                            <td><span class="badge badge-info">${host.auth_type}</span></td>
-                            <td>${host.cpu_usage != null ? host.cpu_usage.toFixed(1) + '%' : '-'}</td>
-                            <td>
-                                <div style="display:flex;gap:4px;">
-                                    <button class="btn btn-sm btn-secondary" onclick="HostsPage._testHost(${host.id})" title="Test">
-                                        <i data-lucide="plug"></i>
-                                    </button>
-                                    <button class="btn btn-sm btn-secondary" onclick="HostsPage._editHost(${host.id})" title="Edit">
-                                        <i data-lucide="pencil"></i>
-                                    </button>
-                                    <button class="btn btn-sm btn-danger" onclick="HostsPage._deleteHost(${host.id})" title="Delete">
-                                        <i data-lucide="trash-2"></i>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                    `).join('')}
+                    ${this.filteredHosts.map(host => this._renderHostRow(host)).join('')}
                 </tbody>
             </table>
         `;
         DOM.createIcons();
+    },
+
+    _renderHostRow(host) {
+        const statusBadge = this._getStatusBadge(host);
+        const cpuColor = this._getMetricColor(host.cpu_usage);
+        const memColor = this._getMetricColor(host.memory_usage);
+        const diskColor = this._getMetricColor(host.disk_usage);
+
+        return `
+            <tr>
+                <td><strong>${host.name}</strong></td>
+                <td>${host.host}</td>
+                <td>${host.port}</td>
+                <td>${statusBadge}</td>
+                <td class="${cpuColor}">${host.cpu_usage != null ? host.cpu_usage.toFixed(1) + '%' : '-'}</td>
+                <td class="${memColor}">${host.memory_usage != null ? host.memory_usage.toFixed(1) + '%' : '-'}</td>
+                <td class="${diskColor}">${host.disk_usage != null ? host.disk_usage.toFixed(1) + '%' : '-'}</td>
+                <td>
+                    <div style="display:flex;gap:4px;">
+                        <button class="btn btn-sm btn-secondary" onclick="HostsPage._testHost(${host.id})" title="Test">
+                            <i data-lucide="plug"></i>
+                        </button>
+                        <button class="btn btn-sm btn-secondary" onclick="HostsPage._editHost(${host.id})" title="Edit">
+                            <i data-lucide="pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="HostsPage._deleteHost(${host.id})" title="Delete">
+                            <i data-lucide="trash-2"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    },
+
+    _getStatusBadge(host) {
+        const status = host.status || 'offline';
+        const message = host.status_message || '';
+
+        const statusMap = {
+            normal: { icon: '✓', label: '正常', class: 'badge-success', title: message || '所有指标正常' },
+            warning: { icon: '⚠', label: '异常', class: 'badge-warning', title: message || '部分指标接近阈值' },
+            error: { icon: '✗', label: '严重', class: 'badge-danger', title: message || '部分指标超过阈值' },
+            offline: { icon: '○', label: '离线', class: 'badge-secondary', title: message || '暂无监控数据' },
+            unknown: { icon: '○', label: '未知', class: 'badge-secondary', title: message || '暂无监控数据' }
+        };
+
+        const s = statusMap[status] || statusMap.unknown;
+        return `<span class="badge ${s.class}" title="${s.title}" style="cursor:help">${s.icon} ${s.label}</span>`;
+    },
+
+    _getMetricColor(value) {
+        if (value == null) return '';
+        if (value >= 90) return 'text-danger';
+        if (value >= 80) return 'text-warning';
+        return '';
     },
 
     async _testHost(id) {
@@ -248,16 +304,5 @@ const HostsPage = {
             onClick: () => form.requestSubmit()
         }));
         Modal.show({ title: isEdit ? '编辑主机' : '新建主机', content: form, footer });
-    },
-
-    async _deleteHost(host) {
-        if (!confirm(`Delete host "${host.name}"? This cannot be undone.`)) return;
-        try {
-            await API.deleteHost(host.id);
-            Toast.success('Host deleted');
-            this.render();
-        } catch (err) {
-            Toast.error('Failed to delete: ' + err.message);
-        }
     },
 };

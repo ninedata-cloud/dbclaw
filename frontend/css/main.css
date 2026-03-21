@@ -105,6 +105,7 @@ a:hover { color: var(--accent-blue-hover); }
     cursor: pointer;
     transition: all var(--transition);
     white-space: nowrap;
+    flex: 0 0 auto; /* Prevent buttons from stretching in flex containers */
 }
 
 .btn svg { width: 16px; height: 16px; }
@@ -160,6 +161,7 @@ a:hover { color: var(--accent-blue-hover); }
     font-family: var(--font-sans);
     font-size: 13px;
     transition: border-color var(--transition);
+    flex-shrink: 0; /* Prevent form elements from shrinking in flex containers */
 }
 
 .form-input:focus, .form-select:focus, .form-textarea:focus {
@@ -194,6 +196,18 @@ a:hover { color: var(--accent-blue-hover); }
 .badge-danger { background: rgba(248,81,73,0.15); color: var(--accent-red); }
 .badge-info { background: rgba(47,129,247,0.15); color: var(--accent-blue); }
 .badge-purple { background: rgba(163,113,247,0.15); color: var(--accent-purple); }
+.badge-secondary { background: rgba(108,117,125,0.15); color: var(--text-muted); }
+
+/* === Dropdown menu items === */
+.ds-dropdown-item:hover { background: var(--bg-tertiary); }
+.ds-more-menu-item:hover { background: var(--bg-tertiary); }
+
+/* === Text colors === */
+.text-success { color: var(--accent-green) !important; }
+.text-warning { color: var(--accent-yellow) !important; }
+.text-danger { color: var(--accent-red) !important; }
+.text-info { color: var(--accent-blue) !important; }
+.text-muted { color: var(--text-muted) !important; }
 
 /* === Card === */
 .card {

@@ -42,6 +42,7 @@ async def _get_connector_for(datasource_id: int, db: AsyncSession):
     return get_connector(
         db_type=datasource.db_type, host=datasource.host, port=datasource.port,
         username=datasource.username, password=password, database=datasource.database,
+        extra_params=datasource.extra_params,
     ), datasource
 
 
@@ -118,7 +119,7 @@ async def get_tables(datasource_id: int, schema: Optional[str] = None, db: Async
         tables = await connector.get_tables(schema)
         return [TableInfo(**t) for t in tables]
     except Exception as e:
-        logger.error(f"Error fetching tables: {e}")
+        logger.error(f"Error fetching tables: {e}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e))
     finally:
         await connector.close()

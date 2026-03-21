@@ -35,10 +35,24 @@ async def get_metrics(
     - minutes: 最近N分钟 (优先级高于start_time/end_time)
     - limit: 最大返回数量
     """
+    # 检查数据源是否使用集成采集
+    from backend.models.datasource import Datasource
+    ds_result = await db.execute(
+        select(Datasource).where(Datasource.id == conn_id)
+    )
+    datasource = ds_result.scalar_one_or_none()
+
+    # 如果请求 db_status 但数据源使用集成采集，则查询 integration_metric
+    actual_metric_type = metric_type
+    need_conversion = False
+    if datasource and datasource.metric_source == 'integration' and metric_type == 'db_status':
+        actual_metric_type = 'integration_metric'
+        need_conversion = True
+
     query = select(MetricSnapshot).where(MetricSnapshot.datasource_id == conn_id)
 
-    if metric_type:
-        query = query.where(MetricSnapshot.metric_type == metric_type)
+    if actual_metric_type:
+        query = query.where(MetricSnapshot.metric_type == actual_metric_type)
 
     # 时间范围过滤
     if minutes:
@@ -52,9 +66,19 @@ async def get_metrics(
         if end_time:
             query = query.where(MetricSnapshot.collected_at <= end_time)
 
-    query = query.order_by(desc(MetricSnapshot.collected_at)).limit(limit)
+    # 如果需要转换，获取更多原始记录（每个时间戳约15个指标）
+    actual_limit = limit * 15 if need_conversion else limit
+    query = query.order_by(desc(MetricSnapshot.collected_at)).limit(actual_limit)
     result = await db.execute(query)
-    return result.scalars().all()
+    snapshots = result.scalars().all()
+
+    # 如果是集成指标，需要转换为前端期望的格式
+    if need_conversion:
+        snapshots = _convert_integration_metrics_to_db_status(snapshots)
+        # 转换后再限制数量
+        snapshots = snapshots[:limit]
+
+    return snapshots
 
 
 @router.get("/{conn_id}/latest", response_model=Optional[MetricResponse])
@@ -63,16 +87,37 @@ async def get_latest_metric(
     metric_type: str = "db_status",
     db: AsyncSession = Depends(get_db),
 ):
+    # 检查数据源是否使用集成采集
+    from backend.models.datasource import Datasource
+    ds_result = await db.execute(
+        select(Datasource).where(Datasource.id == conn_id)
+    )
+    datasource = ds_result.scalar_one_or_none()
+
+    # 如果请求 db_status 但数据源使用集成采集，则查询 integration_metric
+    actual_metric_type = metric_type
+    if datasource and datasource.metric_source == 'integration' and metric_type == 'db_status':
+        actual_metric_type = 'integration_metric'
+
     result = await db.execute(
         select(MetricSnapshot)
         .where(
             MetricSnapshot.datasource_id == conn_id,
-            MetricSnapshot.metric_type == metric_type,
+            MetricSnapshot.metric_type == actual_metric_type,
         )
         .order_by(desc(MetricSnapshot.collected_at))
-        .limit(1)
+        .limit(100 if actual_metric_type == 'integration_metric' else 1)
     )
-    return result.scalar_one_or_none()
+
+    if actual_metric_type == 'integration_metric':
+        # 获取最近的所有指标并转换
+        snapshots = result.scalars().all()
+        if snapshots:
+            converted = _convert_integration_metrics_to_db_status(snapshots)
+            return converted[0] if converted else None
+        return None
+    else:
+        return result.scalar_one_or_none()
 
 
 @router.get("/{conn_id}/health")
@@ -91,17 +136,39 @@ async def get_datasource_health(
         "message": "状态描述"
     }
     """
+    # 检查数据源是否使用集成采集
+    from backend.models.datasource import Datasource
+    ds_result = await db.execute(
+        select(Datasource).where(Datasource.id == conn_id)
+    )
+    datasource = ds_result.scalar_one_or_none()
+
+    # 确定实际的指标类型
+    actual_metric_type = "db_status"
+    if datasource and datasource.metric_source == 'integration':
+        actual_metric_type = 'integration_metric'
+
     # Get latest metric
     metric_result = await db.execute(
         select(MetricSnapshot)
         .where(
             MetricSnapshot.datasource_id == conn_id,
-            MetricSnapshot.metric_type == "db_status",
+            MetricSnapshot.metric_type == actual_metric_type,
         )
         .order_by(desc(MetricSnapshot.collected_at))
-        .limit(1)
+        .limit(100 if actual_metric_type == 'integration_metric' else 1)
     )
-    latest_metric = metric_result.scalar_one_or_none()
+
+    if actual_metric_type == 'integration_metric':
+        # 转换集成指标
+        snapshots = metric_result.scalars().all()
+        if snapshots:
+            converted = _convert_integration_metrics_to_db_status(snapshots)
+            latest_metric = converted[0] if converted else None
+        else:
+            latest_metric = None
+    else:
+        latest_metric = metric_result.scalar_one_or_none()
 
     if not latest_metric:
         return {
@@ -244,6 +311,59 @@ def _to_float(value: Any) -> Optional[float]:
         except ValueError:
             return None
     return None
+
+
+def _convert_integration_metrics_to_db_status(snapshots: List[MetricSnapshot]) -> List[MetricSnapshot]:
+    """
+    将集成采集的指标转换为 db_status 格式
+
+    集成指标格式: 每个 snapshot 包含一个指标
+    {
+        "metric_name": "cpu_usage",
+        "value": 0.82,
+        "labels": {...}
+    }
+
+    db_status 格式: 每个 snapshot 包含所有指标
+    {
+        "cpu_usage": 0.82,
+        "memory_usage": 45.2,
+        ...
+    }
+    """
+    # 按时间戳分组
+    grouped = {}
+    for snapshot in snapshots:
+        timestamp = snapshot.collected_at
+        if timestamp not in grouped:
+            grouped[timestamp] = {
+                'datasource_id': snapshot.datasource_id,
+                'metric_type': 'db_status',
+                'collected_at': timestamp,
+                'data': {}
+            }
+
+        # 提取指标名和值
+        metric_name = snapshot.data.get('metric_name')
+        metric_value = snapshot.data.get('value')
+        if metric_name and metric_value is not None:
+            grouped[timestamp]['data'][metric_name] = metric_value
+
+    # 转换为 MetricSnapshot 对象
+    result = []
+    for timestamp in sorted(grouped.keys(), reverse=True):
+        item = grouped[timestamp]
+        snapshot = MetricSnapshot(
+            datasource_id=item['datasource_id'],
+            metric_type=item['metric_type'],
+            collected_at=item['collected_at'],
+            data=item['data']
+        )
+        # 设置 ID（用于响应）
+        snapshot.id = hash(timestamp)
+        result.append(snapshot)
+
+    return result
 
 
 @router.post("/{conn_id}/refresh")

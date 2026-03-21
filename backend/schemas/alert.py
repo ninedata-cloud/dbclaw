@@ -58,8 +58,7 @@ class AlertSubscriptionBase(BaseModel):
     datasource_ids: List[int] = Field(default_factory=list)  # empty = all
     severity_levels: List[str] = Field(default_factory=list)  # empty = all
     time_ranges: List[TimeRange] = Field(default_factory=list)  # empty = 24/7
-    channels: List[str] = Field(..., min_length=1)  # at least one channel required
-    webhook_url: Optional[str] = Field(None, max_length=500)
+    channel_ids: List[int] = Field(..., min_length=1)  # Integration Channel IDs, at least one required
     enabled: bool = True
     aggregation_script: Optional[str] = None
 
@@ -71,14 +70,6 @@ class AlertSubscriptionBase(BaseModel):
             raise ValueError(f'Severity levels must be one of: {valid_severities}')
         return v
 
-    @field_validator('channels')
-    @classmethod
-    def validate_channels(cls, v):
-        valid_channels = {'email', 'sms', 'phone', 'webhook'}
-        if not all(c in valid_channels for c in v):
-            raise ValueError(f'Channels must be one of: {valid_channels}')
-        return v
-
 
 class AlertSubscriptionCreate(AlertSubscriptionBase):
     user_id: int
@@ -88,15 +79,20 @@ class AlertSubscriptionUpdate(BaseModel):
     datasource_ids: Optional[List[int]] = None
     severity_levels: Optional[List[str]] = None
     time_ranges: Optional[List[TimeRange]] = None
-    channels: Optional[List[str]] = None
-    webhook_url: Optional[str] = None
+    channel_ids: Optional[List[int]] = None
     enabled: Optional[bool] = None
     aggregation_script: Optional[str] = None
 
 
-class AlertSubscriptionResponse(AlertSubscriptionBase):
+class AlertSubscriptionResponse(BaseModel):
     id: int
     user_id: int
+    datasource_ids: List[int] = Field(default_factory=list)
+    severity_levels: List[str] = Field(default_factory=list)
+    time_ranges: List[TimeRange] = Field(default_factory=list)
+    channel_ids: List[int] = Field(default_factory=list)  # Allow empty for legacy data
+    enabled: bool = True
+    aggregation_script: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -108,7 +104,7 @@ class AlertSubscriptionResponse(AlertSubscriptionBase):
 class AlertDeliveryLogBase(BaseModel):
     alert_id: int
     subscription_id: int
-    channel: str = Field(..., pattern="^(email|sms|phone|webhook)$")
+    channel: str = Field(..., pattern="^(email|sms|phone|webhook|dingtalk|recovery)$")
     recipient: str = Field(..., max_length=255)
     status: str = Field(default="pending", pattern="^(pending|sent|failed)$")
     error_message: Optional[str] = None

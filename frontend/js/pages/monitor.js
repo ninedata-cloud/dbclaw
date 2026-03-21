@@ -31,10 +31,10 @@ const MonitorPage = {
         }
 
         // Header with connection selector and time range selector
-        const headerActions = DOM.el('div', { className: 'flex gap-8' });
+        const headerActions = DOM.el('div', { className: 'flex gap-8', style: { flex: '1', minWidth: '0' } });
 
         // Connection selector
-        const connSelect = DOM.el('select', { className: 'form-select', style: { minWidth: '400px' } });
+        const connSelect = DOM.el('select', { className: 'form-select', style: { minWidth: '200px', maxWidth: '300px', flex: '1' } });
         connSelect.appendChild(DOM.el('option', { value: '', textContent: '选择数据源...' }));
         for (const c of connections) {
             const opt = DOM.el('option', { value: c.id, textContent: `${c.name} (${c.db_type})` });
@@ -55,7 +55,7 @@ const MonitorPage = {
         // Time range selector
         const timeRangeSelect = DOM.el('select', {
             className: 'form-select',
-            style: { minWidth: '150px' },
+            style: { minWidth: '120px', maxWidth: '180px', flex: '0 1 auto' },
             id: 'time-range-select'
         });
         const timeRanges = [

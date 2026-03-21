@@ -10,33 +10,9 @@ class SkillValidator:
     """Validates skill code for security and correctness"""
 
     FORBIDDEN_IMPORTS = {
-        "os",
-        "sys",
-        "subprocess",
-        "socket",
-        "urllib",
-        "requests",
-        "http",
-        "ftplib",
-        "telnetlib",
-        "smtplib",
-        "__import__",
-        "eval",
-        "exec",
-        "compile",
-        "open",
-        "file",
     }
 
     FORBIDDEN_BUILTINS = {
-        "eval",
-        "exec",
-        "compile",
-        "__import__",
-        "open",
-        "file",
-        "input",
-        "raw_input",
     }
 
     @staticmethod

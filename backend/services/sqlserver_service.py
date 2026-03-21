@@ -47,20 +47,23 @@ class SQLServerConnector(DBConnector):
             try:
                 cursor = conn.cursor()
 
-                # Database metrics
+                # 1. 连接/会话指标
                 cursor.execute(
                     "SELECT "
+                    "(SELECT count(*) FROM sys.dm_exec_sessions) as total_sessions, "
                     "(SELECT count(*) FROM sys.dm_exec_sessions WHERE is_user_process = 1) as user_sessions, "
-                    "(SELECT count(*) FROM sys.dm_exec_requests) as active_requests, "
-                    "(SELECT cntr_value FROM sys.dm_os_performance_counters "
-                    " WHERE counter_name = 'Batch Requests/sec') as batch_requests, "
-                    "(SELECT cntr_value FROM sys.dm_os_performance_counters "
-                    " WHERE counter_name = 'Buffer cache hit ratio') as buffer_cache_hit, "
-                    "(SELECT cntr_value FROM sys.dm_os_performance_counters "
-                    " WHERE counter_name = 'Page life expectancy' AND object_name LIKE '%Buffer Manager%') as ple, "
+                    "(SELECT count(*) FROM sys.dm_exec_requests WHERE status = 'running') as active_requests, "
+                    "(SELECT count(*) FROM sys.dm_exec_sessions WHERE is_user_process = 1 AND status = 'sleeping') as idle_sessions, "
+                    "(SELECT count(*) FROM sys.dm_exec_requests WHERE blocking_session_id <> 0) as blocked_requests, "
                     "(SELECT sqlserver_start_time FROM sys.dm_os_sys_info) as start_time"
                 )
                 row = cursor.fetchone()
+
+                total_sessions = row[0] if row else 0
+                user_sessions = row[1] if row else 0
+                active_requests = row[2] if row else 0
+                idle_sessions = row[3] if row else 0
+                blocked_requests = row[4] if row else 0
 
                 # Calculate uptime
                 uptime = 0
@@ -70,15 +73,86 @@ class SQLServerConnector(DBConnector):
                     boot_time = row[5]
                     if boot_time.tzinfo is None:
                         boot_time = boot_time.replace(tzinfo=timezone.utc)
-                    now = datetime.now(timezone.utc)
-                    uptime = int((now - boot_time).total_seconds())
+                    now_utc = datetime.now(timezone.utc)
+                    uptime = int((now_utc - boot_time).total_seconds())
+
+                # 2. 性能计数器（一次查询获取所有需要的计数器）
+                cursor.execute(
+                    "SELECT counter_name, cntr_value, cntr_type "
+                    "FROM sys.dm_os_performance_counters "
+                    "WHERE (counter_name = 'Batch Requests/sec' AND object_name LIKE '%SQL Statistics%') "
+                    "   OR (counter_name = 'Transactions/sec' AND instance_name = '_Total' AND object_name LIKE '%Databases%') "
+                    "   OR (counter_name = 'Buffer cache hit ratio' AND object_name LIKE '%Buffer Manager%') "
+                    "   OR (counter_name = 'Buffer cache hit ratio base' AND object_name LIKE '%Buffer Manager%') "
+                    "   OR (counter_name = 'Page life expectancy' AND object_name LIKE '%Buffer Manager%') "
+                    "   OR (counter_name = 'Number of Deadlocks/sec' AND instance_name = '_Total' AND object_name LIKE '%Locks%') "
+                    "   OR (counter_name = 'Lock Waits/sec' AND instance_name = '_Total' AND object_name LIKE '%Locks%') "
+                    "   OR (counter_name = 'Page reads/sec' AND object_name LIKE '%Buffer Manager%') "
+                    "   OR (counter_name = 'Page writes/sec' AND object_name LIKE '%Buffer Manager%') "
+                    "   OR (counter_name = 'Network IO waits' AND object_name LIKE '%Wait Statistics%')"
+                )
+                counters = {}
+                for r in cursor.fetchall():
+                    counters[r[0].strip()] = int(r[1])
+
+                batch_requests_total = counters.get('Batch Requests/sec', 0)
+                transactions_total = counters.get('Transactions/sec', 0)
+                cache_hit = counters.get('Buffer cache hit ratio', 0)
+                cache_hit_base = counters.get('Buffer cache hit ratio base', 0)
+                ple = counters.get('Page life expectancy', 0)
+                deadlocks_total = counters.get('Number of Deadlocks/sec', 0)
+                lock_waits_total = counters.get('Lock Waits/sec', 0)
+                disk_reads_total = counters.get('Page reads/sec', 0)
+                disk_writes_total = counters.get('Page writes/sec', 0)
+
+                # 计算 buffer cache hit ratio（百分比）
+                buffer_cache_hit_ratio = 0.0
+                if cache_hit_base > 0:
+                    buffer_cache_hit_ratio = round((cache_hit / cache_hit_base) * 100, 2)
+
+                # 3. 数据库大小
+                cursor.execute(
+                    "SELECT SUM(size * 8 * 1024) FROM sys.database_files"
+                )
+                size_row = cursor.fetchone()
+                db_size_bytes = size_row[0] if size_row and size_row[0] else 0
+
+                # 4. 网络 IO（从 dm_exec_connections 获取累积字节数）
+                cursor.execute(
+                    "SELECT SUM(num_reads) as total_reads, "
+                    "SUM(num_writes) as total_writes "
+                    "FROM sys.dm_exec_connections"
+                )
+                net_row = cursor.fetchone()
+                network_reads_total = net_row[0] if net_row and net_row[0] else 0
+                network_writes_total = net_row[1] if net_row and net_row[1] else 0
 
                 result = {
-                    "user_sessions": row[0] if row else 0,
-                    "active_requests": row[1] if row else 0,
-                    "batch_requests_total": row[2] if row else 0,  # 累积值，需要计算增量
-                    "buffer_cache_hit_ratio": row[3] if row else 0,
-                    "page_life_expectancy": row[4] if row else 0,
+                    # 连接指标（兼容前端 fallback 链）
+                    "connections_active": active_requests,
+                    "user_sessions": user_sessions,
+                    "connections_total": total_sessions,
+                    "connections_idle": idle_sessions,
+                    "connections_waiting": blocked_requests,
+                    "active_requests": active_requests,
+                    # 吞吐量（累积值，由 normalizer 计算速率）
+                    "batch_requests_total": batch_requests_total,
+                    "transactions_total": transactions_total,
+                    # 缓存与内存
+                    "buffer_cache_hit_ratio": buffer_cache_hit_ratio,
+                    "page_life_expectancy": ple,
+                    # 锁与死锁（累积值）
+                    "deadlocks_total": deadlocks_total,
+                    "lock_waits_total": lock_waits_total,
+                    # 磁盘 IO（累积值，由 normalizer 计算速率）
+                    "disk_reads_total": disk_reads_total,
+                    "disk_writes_total": disk_writes_total,
+                    # 网络 IO（累积值）
+                    "network_reads_total": network_reads_total,
+                    "network_writes_total": network_writes_total,
+                    # 数据库大小
+                    "db_size_bytes": db_size_bytes,
+                    # 运行时间
                     "uptime": uptime,
                     "boot_time": boot_time.isoformat() if boot_time else None,
                 }

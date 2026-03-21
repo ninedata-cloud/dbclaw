@@ -6,13 +6,26 @@ from backend.services.db_connector import DBConnector
 class OracleConnector(DBConnector):
     """Oracle database connector using python-oracledb."""
 
+    def __init__(self, host: str, port: int, username: str = None,
+                 password: str = None, database: str = None,
+                 oracle_conn_mode: str = None, **kwargs):
+        super().__init__(host=host, port=port, username=username,
+                         password=password, database=database)
+        self.oracle_conn_mode = oracle_conn_mode or 'default'
+
     async def _connect(self):
         import oracledb
         dsn = f"{self.host}:{self.port}/{self.database or 'ORCL'}"
+        mode = 0  # oracledb.AUTH_MODE_DEFAULT
+        if self.oracle_conn_mode == 'sysdba':
+            mode = oracledb.AUTH_MODE_SYSDBA
+        elif self.oracle_conn_mode == 'sysoper':
+            mode = oracledb.AUTH_MODE_SYSOPER
         connection = await oracledb.connect_async(
             user=self.username,
             password=self.password or "",
-            dsn=dsn
+            dsn=dsn,
+            mode=mode
         )
         return connection
 
@@ -32,34 +45,52 @@ class OracleConnector(DBConnector):
         try:
             cursor = conn.cursor()
 
+            # 1. 会话统计
             await cursor.execute(
                 "SELECT COUNT(*) as total, "
-                "SUM(CASE WHEN status = 'ACTIVE' THEN 1 ELSE 0 END) as active "
+                "SUM(CASE WHEN status = 'ACTIVE' THEN 1 ELSE 0 END) as active, "
+                "SUM(CASE WHEN status = 'INACTIVE' THEN 1 ELSE 0 END) as inactive, "
+                "SUM(CASE WHEN wait_class != 'Idle' AND status = 'ACTIVE' THEN 1 ELSE 0 END) as waiting "
                 "FROM v$session WHERE type = 'USER'"
             )
             session_stats = await cursor.fetchone()
 
+            # 2. 系统统计（累积值，用于计算速率）
+            await cursor.execute(
+                "SELECT name, value FROM v$sysstat "
+                "WHERE name IN ("
+                "'user calls', 'user commits', 'user rollbacks', "
+                "'physical reads', 'physical writes', "
+                "'db block gets', 'consistent gets', "
+                "'redo writes', 'parse count (total)', "
+                "'execute count', 'bytes sent via SQL*Net to client', "
+                "'bytes received via SQL*Net from client')"
+            )
+            sysstat = {}
+            for row in await cursor.fetchall():
+                sysstat[row[0]] = int(row[1]) if row[1] is not None else 0
+
+            # 3. 数据库大小
             await cursor.execute(
                 "SELECT SUM(bytes) as total_size FROM dba_data_files"
             )
             size_row = await cursor.fetchone()
 
-            await cursor.execute(
-                "SELECT (1 - (phy.value / (db.value + cons.value))) * 100 as hit_ratio "
-                "FROM v$sysstat phy, v$sysstat db, v$sysstat cons "
-                "WHERE phy.name = 'physical reads' "
-                "AND db.name = 'db block gets' "
-                "AND cons.name = 'consistent gets'"
-            )
-            cache_row = await cursor.fetchone()
+            # 4. 缓存命中率
+            db_block_gets = sysstat.get('db block gets', 0)
+            consistent_gets = sysstat.get('consistent gets', 0)
+            physical_reads = sysstat.get('physical reads', 0)
+            logical_reads = db_block_gets + consistent_gets
+            cache_hit_rate = 0.0
+            if logical_reads > 0:
+                cache_hit_rate = round((1 - physical_reads / logical_reads) * 100, 2)
 
-            # Get database startup time
+            # 5. 启动时间
             await cursor.execute(
                 "SELECT startup_time FROM v$instance"
             )
             startup_row = await cursor.fetchone()
 
-            # Calculate uptime
             uptime = 0
             boot_time = None
             if startup_row and startup_row[0]:
@@ -67,16 +98,50 @@ class OracleConnector(DBConnector):
                 boot_time = startup_row[0]
                 if boot_time.tzinfo is None:
                     boot_time = boot_time.replace(tzinfo=timezone.utc)
-                now = datetime.now(timezone.utc)
-                uptime = int((now - boot_time).total_seconds())
+                now_utc = datetime.now(timezone.utc)
+                uptime = int((now_utc - boot_time).total_seconds())
+
+            # 6. 锁等待数
+            await cursor.execute(
+                "SELECT COUNT(*) FROM v$session WHERE blocking_session IS NOT NULL AND type = 'USER'"
+            )
+            lock_row = await cursor.fetchone()
+
+            # 7. 最长活跃事务时间（秒）
+            await cursor.execute(
+                "SELECT MAX((SYSDATE - start_date) * 86400) as seconds "
+                "FROM v$transaction"
+            )
+            longest_tx_row = await cursor.fetchone()
 
             cursor.close()
 
             return {
-                "connections_total": session_stats[0] if session_stats else 0,
+                # 连接指标
                 "connections_active": session_stats[1] if session_stats else 0,
+                "connections_total": session_stats[0] if session_stats else 0,
+                "connections_idle": session_stats[2] if session_stats else 0,
+                "connections_waiting": session_stats[3] if session_stats else 0,
+                "lock_waiting": lock_row[0] if lock_row else 0,
+                "longest_transaction_sec": int(longest_tx_row[0]) if longest_tx_row and longest_tx_row[0] else 0,
+                # 吞吐量（累积值，由 normalizer 计算速率）
+                "user_calls": sysstat.get('user calls', 0),
+                "user_commits": sysstat.get('user commits', 0),
+                "user_rollbacks": sysstat.get('user rollbacks', 0),
+                "execute_count": sysstat.get('execute count', 0),
+                "parse_count": sysstat.get('parse count (total)', 0),
+                # 磁盘 IO（累积值）
+                "physical_reads": sysstat.get('physical reads', 0),
+                "physical_writes": sysstat.get('physical writes', 0),
+                "redo_writes": sysstat.get('redo writes', 0),
+                # 网络 IO（累积字节数）
+                "network_bytes_sent": sysstat.get('bytes sent via SQL*Net to client', 0),
+                "network_bytes_received": sysstat.get('bytes received via SQL*Net from client', 0),
+                # 缓存
+                "cache_hit_rate": cache_hit_rate,
+                # 数据库大小
                 "db_size_bytes": size_row[0] if size_row and size_row[0] else 0,
-                "cache_hit_rate": round(cache_row[0], 2) if cache_row and cache_row[0] else 0,
+                # 运行时间
                 "uptime": uptime,
                 "boot_time": boot_time.isoformat() if boot_time else None,
             }

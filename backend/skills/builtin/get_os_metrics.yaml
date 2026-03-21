@@ -1,10 +1,10 @@
 id: get_os_metrics
 name: OS Metrics
-version: 1.0.0
+version: 1.1.0
 author: DbGuard
 category: system
-description: Get OS-level metrics (CPU, memory, disk, network, load) from the host server via host connection
-tags: [linux, system, monitoring, ssh, cpu, memory, disk]
+description: Get comprehensive OS-level metrics (CPU, memory, disk, network, I/O, load) from the host server via host connection
+tags: [linux, system, monitoring, ssh, cpu, memory, disk, network, io]
 timeout: 120
 
 parameters:
@@ -20,6 +20,29 @@ code: |
   async def execute(context, params):
       datasource_id = params['datasource_id']
 
+      # Check if datasource has host configured by querying database directly
+      from backend.models.datasource import Datasource
+      from sqlalchemy import select
+
+      result = await context.db.execute(
+          select(Datasource).where(Datasource.id == datasource_id)
+      )
+      datasource = result.scalar_one_or_none()
+
+      if not datasource:
+          return {
+              "success": False,
+              "error": "datasource_not_found",
+              "message": f"数据源 ID {datasource_id} 不存在"
+          }
+
+      if not datasource.host_id:
+          return {
+              "success": False,
+              "error": "no_host_configured",
+              "message": f"数据源 {datasource.name} (ID: {datasource_id}) 未配置主机连接，无法收集操作系统指标。如需收集OS指标，请在数据源配置中关联主机。"
+          }
+
       # Get various OS metrics
       metrics = {}
 
@@ -31,10 +54,23 @@ code: |
       if cpu_result.get("success"):
           metrics["cpu_usage"] = cpu_result.get("output", "").strip()
 
+      # CPU breakdown (user/system/iowait/idle)
+      cpu_detail = await context.execute_command(
+          "top -bn1 | grep 'Cpu(s)'",
+          datasource_id
+      )
+      if cpu_detail.get("success"):
+          metrics["cpu_breakdown"] = cpu_detail.get("output", "").strip()
+
       # Memory usage
       mem_result = await context.execute_command("free -m", datasource_id)
       if mem_result.get("success"):
           metrics["memory"] = mem_result.get("output", "")
+
+      # Swap usage
+      swap_result = await context.execute_command("swapon --show --bytes 2>/dev/null || cat /proc/swaps", datasource_id)
+      if swap_result.get("success"):
+          metrics["swap"] = swap_result.get("output", "").strip()
 
       # Disk usage
       disk_result = await context.execute_command("df -h", datasource_id)
@@ -45,6 +81,35 @@ code: |
       load_result = await context.execute_command("uptime", datasource_id)
       if load_result.get("success"):
           metrics["load_average"] = load_result.get("output", "")
+
+      # CPU core count
+      cores_result = await context.execute_command("nproc", datasource_id)
+      if cores_result.get("success"):
+          metrics["cpu_cores"] = cores_result.get("output", "").strip()
+
+      # Disk I/O stats
+      io_result = await context.execute_command(
+          "iostat -x 1 2 2>/dev/null | tail -n +4 || cat /proc/diskstats | head -20",
+          datasource_id
+      )
+      if io_result.get("success"):
+          metrics["disk_io"] = io_result.get("output", "").strip()
+
+      # Network interface stats
+      net_result = await context.execute_command(
+          "cat /proc/net/dev | grep -v 'lo:' | tail -n +3",
+          datasource_id
+      )
+      if net_result.get("success"):
+          metrics["network"] = net_result.get("output", "").strip()
+
+      # TCP connection states
+      tcp_result = await context.execute_command(
+          "ss -s 2>/dev/null || netstat -s 2>/dev/null | head -20",
+          datasource_id
+      )
+      if tcp_result.get("success"):
+          metrics["tcp_stats"] = tcp_result.get("output", "").strip()
 
       return {
           "success": True,
