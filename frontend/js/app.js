@@ -9,7 +9,7 @@
     Router.register('diagnosis', () => DiagnosisPage.render());
     Router.register('query', () => QueryPage.render());
     Router.register('ai-models', () => AIModelsPage.render());
-    Router.register('knowledge-bases', () => KnowledgeBasesPage.render());
+    Router.register('documents', () => DocumentsPage.render());
     Router.register('skills', () => SkillsPage.render());
     Router.register('system-configs', () => SystemConfigsPage.render());
     Router.register('users', () => UsersPage.render());
