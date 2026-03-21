@@ -5,7 +5,7 @@ from backend.models.user import User
 from backend.models.host import Host
 from backend.models.datasource import Datasource
 from backend.models.ai_model import AIModel
-from backend.models.knowledge_base import KnowledgeBase
+from backend.models.document import DocCategory, DocDocument
 from backend.models.diagnostic_session import DiagnosticSession, ChatMessage
 from backend.models.report import Report
 from backend.models.metric_snapshot import MetricSnapshot
@@ -19,7 +19,8 @@ __all__ = [
     "Host",
     "Datasource",
     "AIModel",
-    "KnowledgeBase",
+    "DocCategory",
+    "DocDocument",
     "DiagnosticSession",
     "ChatMessage",
     "Report",

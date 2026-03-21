@@ -88,66 +88,8 @@ class SkillContext:
     async def search_kb(
         self, query: str, kb_ids: Optional[List[int]] = None, top_k: int = 5
     ) -> List[Dict[str, Any]]:
-        """Search knowledge bases for relevant information"""
-        self._check_permission("access_kb")
-        from backend.models.knowledge_base import KnowledgeBase, KnowledgeChunk
-        from sqlalchemy import select
-
-        # If no kb_ids provided, use session's active KBs
-        if not kb_ids and self.session_id:
-            from backend.models.diagnostic_session import DiagnosticSession
-
-            result = await self.db.execute(
-                select(DiagnosticSession).where(DiagnosticSession.id == self.session_id)
-            )
-            session = result.scalar_one_or_none()
-            if session and session.kb_ids:
-                # kb_ids is already a list (JSON column auto-deserializes)
-                if isinstance(session.kb_ids, list):
-                    kb_ids = session.kb_ids
-                else:
-                    # Fallback: parse as JSON string if needed
-                    import json
-                    kb_ids = json.loads(session.kb_ids)
-
-        # If still no kb_ids, search all active knowledge bases
-        if not kb_ids:
-            result = await self.db.execute(
-                select(KnowledgeBase.id).where(KnowledgeBase.is_active == True)
-            )
-            kb_ids = [row[0] for row in result.all()]
-
-        if not kb_ids:
-            return []
-
-        # Get knowledge bases
-        result = await self.db.execute(
-            select(KnowledgeBase).where(KnowledgeBase.id.in_(kb_ids))
-        )
-        kbs = result.scalars().all()
-
-        # Search using embeddings
-        from backend.utils.embeddings import search_similar_chunks
-
-        results = []
-        for kb in kbs:
-            chunks = await search_similar_chunks(self.db, kb.id, query, top_k)
-            results.extend(
-                [
-                    {
-                        "kb_id": kb.id,
-                        "kb_name": kb.name,
-                        "content": chunk.content,
-                        "metadata": chunk.metadata,
-                        "similarity": chunk.similarity,
-                    }
-                    for chunk in chunks
-                ]
-            )
-
-        # Sort by similarity and return top_k
-        results.sort(key=lambda x: x.get("similarity", 0), reverse=True)
-        return results[:top_k]
+        """Search knowledge base documents (legacy method, returns empty list - use list_documents/read_document tools instead)"""
+        return []
 
     async def get_metrics(
         self, datasource_id: int, minutes: int = 60
