@@ -11,7 +11,7 @@ class SQLServerConnector(DBConnector):
         s = (f"DRIVER={driver};SERVER={self.host},{self.port};"
              f"DATABASE={self.database or 'master'};"
              f"UID={self.username};PWD={self.password};"
-             f"TrustServerCertificate=yes;Connection Timeout=10")
+             f"TrustServerCertificate=yes;Connection Timeout=5")
         return s
 
     def _connect(self):

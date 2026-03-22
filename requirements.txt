@@ -20,8 +20,6 @@ oracledb>=1.0.0           # Oracle
 openai>=1.0.0
 
 # Vector store & embeddings
-chromadb>=0.5.0
-sentence-transformers>=3.0.0
 
 # Authentication & security
 python-jose[cryptography]>=3.3.0

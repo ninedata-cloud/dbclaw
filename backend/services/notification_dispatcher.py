@@ -172,7 +172,7 @@ async def _send_via_integrations(db, alert, subscription):
             "severity": alert.severity,
             "datasource_name": datasource.name if datasource else "未知数据源",
             "alert_id": alert.id,
-            "timestamp": alert.created_at.isoformat() if alert.created_at else datetime.utcnow().isoformat()
+            "timestamp": alert.created_at.strftime('%Y-%m-%d %H:%M:%S') if alert.created_at else datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
         }
 
         # 执行 Integration
@@ -287,14 +287,19 @@ async def _send_recovery_via_integrations(db, alert, subscription):
             continue
 
         # 构建恢复通知 payload
-        resolved_at = alert.resolved_at.isoformat() if alert.resolved_at else datetime.utcnow().isoformat()
+        resolved_at_str = alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        recovery_metric_line = ""
+        if alert.metric_name and alert.resolved_value is not None:
+            recovery_metric_line = f"\nMetric: {alert.metric_name} = {alert.resolved_value:.2f}"
+        elif alert.metric_name and alert.metric_value is not None:
+            recovery_metric_line = f"\nMetric: {alert.metric_name} = {alert.metric_value:.2f}"
         payload = {
             "title": f"【已恢复】{datasource.name if datasource else '未知数据源'} 告警已恢复",
-            "content": f"{alert.content}\n\n告警时间：{alert.created_at.isoformat() if alert.created_at else '未知'}\n恢复时间：{resolved_at}",
+            "content": f"{alert.content}{recovery_metric_line}\n\n告警时间：{alert.created_at.strftime('%Y-%m-%d %H:%M:%S') if alert.created_at else '未知'}\n恢复时间：{resolved_at_str}",
             "severity": "info",  # 恢复通知使用 info 级别
             "datasource_name": datasource.name if datasource else "未知数据源",
             "alert_id": alert.id,
-            "timestamp": resolved_at,
+            "timestamp": resolved_at_str,
             "status": "resolved"
         }
 

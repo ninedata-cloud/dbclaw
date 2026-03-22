@@ -128,7 +128,10 @@ const API = {
     getUserLoginLogs(id) { return this.get(`/api/users/${id}/login-logs`); },
 
     // Datasource endpoints
-    getDatasources() { return this.get('/api/datasources'); },
+    getDatasources(params = null) {
+        const queryString = params ? `?${new URLSearchParams(params).toString()}` : '';
+        return this.get(`/api/datasources${queryString}`);
+    },
     createDatasource(data) { return this.post('/api/datasources', data); },
     updateDatasource(id, data) { return this.put(`/api/datasources/${id}`, data); },
     deleteDatasource(id) { return this.delete(`/api/datasources/${id}`); },
@@ -155,6 +158,7 @@ const API = {
     getMetrics(connId, params = '') { return this.get(`/api/metrics/${connId}${params ? '?' + params : ''}`); },
     getLatestMetric(connId, type = 'db_status') { return this.get(`/api/metrics/${connId}/latest?metric_type=${type}`); },
     getDatasourceHealth(connId) { return this.get(`/api/metrics/${connId}/health`); },
+    getBatchDashboard(connIds) { return this.post('/api/metrics/batch/dashboard', { conn_ids: connIds }); },
     refreshMetrics(connId) { return this.post(`/api/metrics/${connId}/refresh`); },
 
     // Chat endpoints
@@ -226,45 +230,41 @@ const API = {
     deleteAIModel(id) { return this.delete(`/api/ai-models/${id}`); },
     setDefaultAIModel(id) { return this.post(`/api/ai-models/${id}/set-default`); },
 
-    // Knowledge Base endpoints
-    getKnowledgeBases() { return this.get('/api/knowledge-bases'); },
-    createKnowledgeBase(data) { return this.post('/api/knowledge-bases', data); },
-    getKnowledgeBase(id) { return this.get(`/api/knowledge-bases/${id}`); },
-    updateKnowledgeBase(id, data) { return this.put(`/api/knowledge-bases/${id}`, data); },
-    deleteKnowledgeBase(id) { return this.delete(`/api/knowledge-bases/${id}`); },
-    getDocuments(kbId) { return this.get(`/api/knowledge-bases/${kbId}/documents`); },
-    async uploadDocument(kbId, file) {
-        const formData = new FormData();
-        formData.append('file', file);
-        const token = localStorage.getItem('auth_token');
-        const headers = {};
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-        const response = await fetch(`/api/knowledge-bases/${kbId}/documents`, {
-            method: 'POST',
-            headers,
-            body: formData,
-        });
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({ detail: response.statusText }));
-            throw new Error(err.detail || '上传失败');
-        }
-        return await response.json();
+    // Document API
+    getDocCategories(dbType = null) {
+        const qs = dbType ? `?db_type=${dbType}` : '';
+        return this.get(`/api/docs/categories${qs}`);
     },
-    deleteDocument(kbId, docId) { return this.delete(`/api/knowledge-bases/${kbId}/documents/${docId}`); },
-    async getDocumentContent(kbId, docId) {
+    getCategoryDocuments(categoryId) {
+        return this.get(`/api/docs/categories/${categoryId}/documents`);
+    },
+    getDocument(docId) {
+        return this.get(`/api/docs/${docId}`);
+    },
+    createDocument(data) {
+        return this.post('/api/docs', data);
+    },
+    updateDocument(docId, data) {
+        return this.put(`/api/docs/${docId}`, data);
+    },
+    deleteDocument(docId) {
+        return this.delete(`/api/docs/${docId}`);
+    },
+    exportDocument(docId) {
         const token = localStorage.getItem('auth_token');
-        const headers = {};
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-        const response = await fetch(`/api/knowledge-bases/${kbId}/documents/${docId}/content`, { headers });
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({ detail: response.statusText }));
-            throw new Error(err.detail || '获取文档内容失败');
-        }
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/pdf')) {
-            return { type: 'pdf', url: `/api/knowledge-bases/${kbId}/documents/${docId}/content` };
-        }
-        return await response.json();
+        const a = document.createElement('a');
+        a.href = `/api/docs/${docId}/export`;
+        a.setAttribute('download', '');
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    },
+    async importDocument(categoryId, title, markdownContent) {
+        return this.post('/api/docs', {
+            category_id: categoryId,
+            title: title,
+            content: markdownContent,
+        });
     },
 
     // Skills

@@ -148,6 +148,8 @@ const DiagnosisPage = {
             id: 'session-sidebar',
             style: {
                 width: '280px',
+                minWidth: '280px',
+                flexShrink: '0',
                 height: '100%',
                 borderRight: '1px solid var(--border-color)',
                 display: 'flex',
@@ -201,7 +203,7 @@ const DiagnosisPage = {
         // Right area: chat with tool panel
         const chatContainer = DOM.el('div', {
             className: 'chat-container',
-            style: { flex: '1', display: 'flex', flexDirection: 'row', gap: '0', height: '100%' }
+            style: { flex: '1', minWidth: '0', overflow: 'hidden', display: 'flex', flexDirection: 'row', gap: '0', height: '100%' }
         });
 
         // Main chat area
@@ -234,6 +236,8 @@ const DiagnosisPage = {
             id: 'tool-execution-panel',
             style: {
                 width: '400px',
+                minWidth: '400px',
+                flexShrink: '0',
                 height: '100%',
                 borderLeft: '1px solid var(--border-color)',
                 background: 'var(--bg-secondary)',
@@ -783,6 +787,7 @@ const DiagnosisPage = {
         if (isCollapsed) {
             // Expand
             sidebar.style.width = '280px';
+            sidebar.style.minWidth = '280px';
             btn.innerHTML = '<i data-lucide="panel-left-close"></i>';
             btn.title = '隐藏会话列表';
             if (header) {
@@ -794,6 +799,7 @@ const DiagnosisPage = {
         } else {
             // Collapse
             sidebar.style.width = '40px';
+            sidebar.style.minWidth = '40px';
             btn.innerHTML = '<i data-lucide="panel-left-open"></i>';
             btn.title = '显示会话列表';
             if (header) {
@@ -820,6 +826,7 @@ const DiagnosisPage = {
         if (isCollapsed) {
             // Expand
             panel.style.width = '400px';
+            panel.style.minWidth = '400px';
             btn.innerHTML = '<i data-lucide="panel-right-close"></i>';
             btn.title = '隐藏工具面板';
             if (header) {
@@ -831,6 +838,7 @@ const DiagnosisPage = {
         } else {
             // Collapse
             panel.style.width = '40px';
+            panel.style.minWidth = '40px';
             btn.innerHTML = '<i data-lucide="panel-right-open"></i>';
             btn.title = '显示工具面板';
             if (header) {

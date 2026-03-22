@@ -196,7 +196,7 @@ async def run_conversation_with_skills(
         system_msg += f"\n\nThe user is currently working with datasource ID: {datasource_id}. Use this ID when calling tools unless they specify otherwise."
 
     if kb_ids:
-        system_msg += f"\n\nKnowledge bases are enabled for this session (IDs: {kb_ids}). Use search_knowledge_base tool to find relevant documentation when needed."
+        system_msg += f"\n\nKnowledge bases are enabled for this session (IDs: {kb_ids}). Use list_documents tool to browse available documentation, then read_document to fetch full content."
 
     # Get dynamic skills as tools
     active_tools = await get_available_skills_as_tools(db, disabled_tools)

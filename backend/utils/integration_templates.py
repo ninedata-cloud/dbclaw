@@ -66,8 +66,8 @@ async def send_notification(context, params, payload):
                 {
                     "tag": "div",
                     "fields": [
-                        {"is_short": True, "text": {"tag": "lark_md", "content": f"**数据源**\\\\n{payload['datasource_name']}"}},
-                        {"is_short": True, "text": {"tag": "lark_md", "content": f"**时间**\\\\n{payload['timestamp']}"}}
+                        {"is_short": True, "text": {"tag": "lark_md", "content": f"**数据源**\\n{payload['datasource_name']}"}},
+                        {"is_short": True, "text": {"tag": "lark_md", "content": f"**时间**\\n{payload['timestamp']}"}}
                     ]
                 }
             ]
@@ -78,7 +78,7 @@ async def send_notification(context, params, payload):
     headers = {"Content-Type": "application/json"}
     if secret:
         timestamp = str(int(time.time()))
-        sign_string = f"{timestamp}\\\\n{secret}"
+        sign_string = f"{timestamp}\\n{secret}"
         sign = base64.b64encode(hmac.new(
             sign_string.encode("utf-8"),
             digestmod=hashlib.sha256
@@ -157,7 +157,7 @@ async def send_notification(context, params, payload):
 
     # 签名
     timestamp = str(int(time.time() * 1000))
-    sign_string = f"{timestamp}\\\\n{secret}"
+    sign_string = f"{timestamp}\\n{secret}"
     sign = base64.b64encode(hmac.new(
         secret.encode("utf-8"),
         sign_string.encode("utf-8"),

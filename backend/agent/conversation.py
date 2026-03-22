@@ -56,7 +56,7 @@ async def run_conversation(
         system_msg += f"\n\nThe user is currently working with database datasource ID: {datasource_id}. Use this ID when calling tools unless they specify otherwise."
 
     if kb_ids:
-        system_msg += f"\n\nKnowledge bases are enabled for this session (IDs: {kb_ids}). Use search_knowledge_base tool to find relevant documentation when needed."
+        system_msg += f"\n\nKnowledge bases are enabled for this session (IDs: {kb_ids}). Use list_documents tool to browse available documentation, then read_document to fetch full content."
 
     # Filter tools based on session's disabled list
     active_tools = get_filtered_tools(disabled_tools)

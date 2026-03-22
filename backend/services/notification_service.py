@@ -41,7 +41,8 @@ class NotificationService:
         3. Current time is within time ranges (or subscription has no time filter)
         """
         # Check datasource filter
-        if subscription.datasource_ids:
+        # datasource_id=0 means system-level alert (e.g. network probe), bypass datasource filter
+        if subscription.datasource_ids and alert.datasource_id != 0:
             if alert.datasource_id not in subscription.datasource_ids:
                 return False
 
@@ -167,7 +168,7 @@ class NotificationService:
 {ds_info}
 {alert.content}
 
-创建时间：{alert.created_at}
+创建时间：{alert.created_at.strftime('%Y-%m-%d %H:%M:%S')}
 """
             msg.attach(MIMEText(body, 'plain'))
             if smtp_use_tls:
@@ -418,7 +419,7 @@ class NotificationService:
 {ds_info}
 {alert.content}
 
-告警时间：{alert.created_at}
+告警时间：{alert.created_at.strftime('%Y-%m-%d %H:%M:%S')}
 恢复时间：{resolved_at}
 """
             msg.attach(MIMEText(body, 'plain'))
@@ -554,6 +555,7 @@ class NotificationService:
         content_lines = [f"**告警标题：** {alert.title}"]
         content_lines.append(f"**告警类型：** {alert.alert_type}")
         if datasource:
+            content_lines.append(f"**数据库名称：** {datasource.name}")
             content_lines.append(f"**数据库类型：** {datasource.db_type.upper()}")
             content_lines.append(f"**数据库地址：** {datasource.host}:{datasource.port}")
         if alert.metric_name and alert.metric_value is not None:
@@ -568,7 +570,7 @@ class NotificationService:
             "card": {
                 "config": {"wide_screen_mode": True},
                 "header": {
-                    "title": {"tag": "plain_text", "content": f"[数据库智能卫士，告警已恢复] {datasource.name}"},
+                    "title": {"tag": "plain_text", "content": f"[数据库智能卫士，告警已恢复] {datasource.name if datasource else '系统告警'}"},
                     "template": "green"
                 },
                 "elements": [{"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(content_lines)}}]
@@ -812,7 +814,7 @@ class NotificationService:
             lines.append(f'**数据库：** {datasource.name} ({datasource.db_type.upper()}) {datasource.host}:{datasource.port}')
         lines.append(f'**告警类型：** {alert.alert_type}')
         if alert.metric_name and alert.metric_value is not None:
-            recovery_val = alert.resolved_value if hasattr(alert, 'resolved_value') and alert.resolved_value is not None else alert.metric_value
+            recovery_val = alert.resolved_value if alert.resolved_value is not None else alert.metric_value
             lines.append(f'**恢复时指标：** {alert.metric_name} = {recovery_val:.2f}')
         if alert.threshold_value is not None:
             lines.append(f'**阈值：** {alert.threshold_value:.2f}')

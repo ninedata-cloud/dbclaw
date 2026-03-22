@@ -10,9 +10,6 @@ from backend.database import init_db
 
 logger = logging.getLogger(__name__)
 
-# Global KB processor instance
-kb_processor = None
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -40,6 +37,12 @@ async def lifespan(app: FastAPI):
         await migrate_alert_notified()
     except Exception as e:
         logger.warning(f"Alert notified_at migration: {e}")
+
+    try:
+        from backend.migrations.replace_knowledge_base_with_documents import migrate as migrate_docs
+        await migrate_docs()
+    except Exception as e:
+        logger.warning(f"Document migration: {e}")
 
     # Seed default system configs
     from backend.database import async_session as _async_session
@@ -92,6 +95,18 @@ async def lifespan(app: FastAPI):
                     value_type=val_type, description=desc,
                     category="integration"
                 )
+
+        # Seed network probe config
+        _probe_exists = await _db.execute(_select(_SystemConfig).where(_SystemConfig.key == "network_probe_host"))
+        if not _probe_exists.scalar_one_or_none():
+            await _config_service.set_config(
+                _db,
+                key="network_probe_host",
+                value="127.0.0.1",
+                value_type="string",
+                description="网络探针目标地址，采集前用于检测网络连通性（默认 127.0.0.1，可改为网关 IP）",
+                category="monitoring"
+            )
     logger.info("Default system configs seeded")
 
     # Start SSH connection pool
@@ -102,21 +117,6 @@ async def lifespan(app: FastAPI):
     # Start metric collector
     from backend.services.metric_collector import start_scheduler
     start_scheduler(settings.metric_interval)
-
-    # Initialize KB processor
-    from backend.services.vector_store import VectorStore
-    from backend.services.kb_processor import KBProcessor
-
-    global kb_processor
-    vector_store = VectorStore(
-        persist_dir=settings.chroma_persist_dir,
-        embedding_model=settings.embedding_model,
-    )
-    kb_processor = KBProcessor(vector_store)
-
-    # Start background processing
-    asyncio.create_task(kb_processor.start_background_processing())
-    logger.info("KB processor initialized")
 
     # Start Inspection Service
     from backend.services.inspection_service import InspectionService
@@ -158,8 +158,6 @@ async def lifespan(app: FastAPI):
 
     stop_scheduler()
     stop_integration_scheduler()
-    if kb_processor:
-        kb_processor.stop()
     await inspection_service.stop()
     await stop_ssh_pool()
     logger.info("Application shutdown complete")
@@ -206,7 +204,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     # Register routers
-    from backend.routers import datasources, hosts, metrics, monitor_ws, chat, query, ai_models, knowledge_bases, auth, users, inspections, system_configs, alerts, integrations
+    from backend.routers import datasources, hosts, metrics, monitor_ws, chat, query, ai_models, auth, users, inspections, system_configs, alerts, integrations, documents
     from backend.api import skills
     app.include_router(auth.router)
     app.include_router(users.router)
@@ -217,7 +215,7 @@ def create_app() -> FastAPI:
     app.include_router(chat.router)
     app.include_router(query.router)
     app.include_router(ai_models.router)
-    app.include_router(knowledge_bases.router)
+    app.include_router(documents.router)
     app.include_router(skills.router)
     app.include_router(inspections.router)
     app.include_router(system_configs.router)

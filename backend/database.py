@@ -29,7 +29,7 @@ async def init_db():
     import backend.models.metric_snapshot  # noqa: F401
     import backend.models.diagnostic_session  # noqa: F401
     import backend.models.ai_model  # noqa: F401
-    import backend.models.knowledge_base  # noqa: F401
+    import backend.models.document  # noqa: F401
     import backend.models.user  # noqa: F401
     import backend.models.login_log  # noqa: F401
     import backend.models.report  # noqa: F401
@@ -68,3 +68,7 @@ async def init_db():
 
     async with async_session() as session:
         await load_builtin_skills(session)
+
+    from backend.services.builtin_docs.seeder import seed_builtin_docs
+    async with async_session() as session:
+        await seed_builtin_docs(session)

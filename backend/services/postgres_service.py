@@ -1,3 +1,4 @@
+import asyncio
 import time
 from typing import Any, Dict, List, Optional
 from backend.services.db_connector import DBConnector
@@ -8,13 +9,25 @@ class PostgreSQLConnector(DBConnector):
 
     async def _connect(self):
         import asyncpg
-        return await asyncpg.connect(
-            host=self.host, port=self.port,
-            user=self.username, password=self.password or "",
-            database=self.database or "postgres",
-            timeout=10,
-            ssl=False,
-        )
+
+        last_error = None
+        for attempt in range(2):
+            try:
+                return await asyncpg.connect(
+                    host=self.host, port=self.port,
+                    user=self.username, password=self.password or "",
+                    database=self.database or "postgres",
+                    timeout=10,
+                    ssl=False,
+                )
+            except TimeoutError as e:
+                last_error = e
+                if attempt == 0:
+                    await asyncio.sleep(0.2)
+                    continue
+                raise
+
+        raise last_error
 
     async def test_connection(self) -> str:
         conn = await self._connect()

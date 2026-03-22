@@ -14,7 +14,7 @@ class MongoDBConnector(DBConnector):
         uri += f"{self.host}:{self.port}"
         if self.database:
             uri += f"/{self.database}"
-        return AsyncIOMotorClient(uri, serverSelectionTimeoutMS=10000)
+        return AsyncIOMotorClient(uri, serverSelectionTimeoutMS=5000, connectTimeoutMS=5000)
 
     async def test_connection(self) -> str:
         client = self._get_client()

@@ -204,20 +204,33 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
-            "name": "search_knowledge_base",
-            "description": "Search knowledge bases for relevant documentation. Use when user questions relate to custom configurations, internal procedures, or topics that might be documented in uploaded files.",
+            "name": "list_documents",
+            "description": "列出知识库中的诊断文档目录（含摘要），AI 根据目录决定需要读取哪些文档。可按数据库类型过滤。",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "Search query"},
-                    "kb_ids": {
-                        "type": "array",
-                        "items": {"type": "integer"},
-                        "description": "Optional KB IDs to search (if not provided, searches all active KBs in session)"
-                    },
-                    "top_k": {"type": "integer", "description": "Number of results (default: 5)", "default": 5}
+                    "db_type": {
+                        "type": "string",
+                        "description": "数据库类型过滤，可选值: mysql, postgresql, oracle, sqlserver，不传则返回所有类型"
+                    }
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_document",
+            "description": "读取指定文档的完整 Markdown 内容。根据 list_documents 返回的文档目录选择合适的文档 id 后调用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "doc_id": {
+                        "type": "integer",
+                        "description": "文档 ID，从 list_documents 返回的列表中获取"
+                    }
                 },
-                "required": ["query"]
+                "required": ["doc_id"]
             }
         }
     },
