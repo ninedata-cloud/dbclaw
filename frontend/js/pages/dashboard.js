@@ -374,7 +374,7 @@ const DashboardPage = {
             if (!metric) return;
             const data = metric.data || {};
             const active = data.connections_active ?? data.connected_clients ?? data.user_sessions ?? data.connections_current ?? 0;
-            const cpuVal = data.cpu_usage != null ? data.cpu_usage : data.os_cpu_usage;
+            const cpuVal = data.cpu_usage != null ? data.cpu_usage : null;
             const cpu    = cpuVal != null ? cpuVal.toFixed(1) : null;
             const qps    = data.qps != null ? data.qps.toFixed(1) : null;
 
