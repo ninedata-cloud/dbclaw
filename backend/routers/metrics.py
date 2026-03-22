@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Body
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, or_
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 
@@ -118,6 +118,142 @@ async def get_latest_metric(
         return None
     else:
         return result.scalar_one_or_none()
+
+
+@router.post("/batch/dashboard")
+async def get_batch_dashboard(
+    conn_ids: List[int] = Body(..., embed=True),
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    批量获取多个数据源的健康状态和最新指标，减少前端请求数量。
+    返回: { conn_id: { health: {...}, metric: {...} } }
+    """
+    if not conn_ids:
+        return {}
+
+    from backend.models.datasource import Datasource
+
+    # 批量查询数据源配置（metric_source 字段）
+    ds_result = await db.execute(
+        select(Datasource).where(Datasource.id.in_(conn_ids))
+    )
+    datasources = {ds.id: ds for ds in ds_result.scalars().all()}
+
+    # 批量查询巡检配置
+    config_result = await db.execute(
+        select(InspectionConfig).where(InspectionConfig.datasource_id.in_(conn_ids))
+    )
+    configs = {c.datasource_id: c for c in config_result.scalars().all()}
+
+    # 分类：哪些用集成采集、哪些用 db_status
+    integration_ids = [cid for cid in conn_ids if datasources.get(cid) and datasources[cid].metric_source == 'integration']
+    normal_ids = [cid for cid in conn_ids if cid not in integration_ids]
+
+    latest_metrics: Dict[int, Any] = {}  # conn_id -> MetricSnapshot or None
+
+    # 批量查询普通数据源最新 db_status（每个数据源取1条）
+    if normal_ids:
+        # 用子查询取每个 datasource_id 的最新一条
+        from sqlalchemy import func
+        subq = (
+            select(
+                MetricSnapshot.datasource_id,
+                func.max(MetricSnapshot.collected_at).label('max_ts')
+            )
+            .where(
+                MetricSnapshot.datasource_id.in_(normal_ids),
+                MetricSnapshot.metric_type == 'db_status'
+            )
+            .group_by(MetricSnapshot.datasource_id)
+            .subquery()
+        )
+        rows = await db.execute(
+            select(MetricSnapshot).join(
+                subq,
+                (MetricSnapshot.datasource_id == subq.c.datasource_id) &
+                (MetricSnapshot.collected_at == subq.c.max_ts)
+            )
+        )
+        for snap in rows.scalars().all():
+            latest_metrics[snap.datasource_id] = snap
+
+    # 批量查询集成数据源最新 integration_metric（每个取最近100条用于转换）
+    if integration_ids:
+        int_rows = await db.execute(
+            select(MetricSnapshot)
+            .where(
+                MetricSnapshot.datasource_id.in_(integration_ids),
+                MetricSnapshot.metric_type == 'integration_metric'
+            )
+            .order_by(desc(MetricSnapshot.collected_at))
+        )
+        int_snaps: Dict[int, List] = {}
+        for snap in int_rows.scalars().all():
+            int_snaps.setdefault(snap.datasource_id, []).append(snap)
+            if len(int_snaps[snap.datasource_id]) >= 100:
+                continue
+        for cid, snaps in int_snaps.items():
+            converted = _convert_integration_metrics_to_db_status(snaps)
+            latest_metrics[cid] = converted[0] if converted else None
+
+    # 组装结果
+    result = {}
+    stale_threshold = 300  # 5分钟
+    for cid in conn_ids:
+        snap = latest_metrics.get(cid)
+
+        # --- 构建 metric 部分 ---
+        if snap:
+            metric_data = {
+                "id": snap.id,
+                "datasource_id": snap.datasource_id,
+                "metric_type": snap.metric_type,
+                "data": snap.data,
+                "collected_at": snap.collected_at.isoformat(),
+            }
+        else:
+            metric_data = None
+
+        # --- 构建 health 部分 ---
+        if not snap:
+            health = {"healthy": False, "status": "unknown", "violations": [], "message": "无监控数据"}
+        else:
+            metric_age = (now() - snap.collected_at).total_seconds()
+            if metric_age > stale_threshold:
+                health = {"healthy": False, "status": "unknown", "violations": [], "message": f"监控数据过期 ({int(metric_age/60)}分钟前)"}
+            else:
+                config = configs.get(cid)
+                if not config or not config.threshold_rules:
+                    health = {"healthy": True, "status": "healthy", "violations": [], "message": "正常（未配置阈值）"}
+                else:
+                    metrics_data = snap.data or {}
+                    violations = []
+                    if "custom_expression" in config.threshold_rules:
+                        custom_rule = config.threshold_rules["custom_expression"]
+                        expression = custom_rule.get("expression", "")
+                        eval_context = _prepare_eval_context(metrics_data)
+                        try:
+                            if eval(expression, {"__builtins__": {}}, eval_context):
+                                violations.append({"type": "custom_expression", "expression": expression, "metrics": eval_context})
+                        except Exception:
+                            pass
+                    else:
+                        for metric_name, rule in config.threshold_rules.items():
+                            threshold = rule.get("threshold")
+                            if threshold is None:
+                                continue
+                            current_value = _extract_metric_value(metrics_data, metric_name)
+                            if current_value is not None and current_value > threshold:
+                                violations.append({"type": "threshold", "metric": metric_name, "value": current_value, "threshold": threshold})
+                    if not violations:
+                        health = {"healthy": True, "status": "healthy", "violations": [], "message": "正常"}
+                    else:
+                        health = {"healthy": False, "status": "critical", "violations": violations, "message": f"检测到 {len(violations)} 个指标异常"}
+
+        result[str(cid)] = {"health": health, "metric": metric_data}
+
+    return result
 
 
 @router.get("/{conn_id}/health")

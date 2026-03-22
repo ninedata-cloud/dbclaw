@@ -128,7 +128,10 @@ const API = {
     getUserLoginLogs(id) { return this.get(`/api/users/${id}/login-logs`); },
 
     // Datasource endpoints
-    getDatasources() { return this.get('/api/datasources'); },
+    getDatasources(params = null) {
+        const queryString = params ? `?${new URLSearchParams(params).toString()}` : '';
+        return this.get(`/api/datasources${queryString}`);
+    },
     createDatasource(data) { return this.post('/api/datasources', data); },
     updateDatasource(id, data) { return this.put(`/api/datasources/${id}`, data); },
     deleteDatasource(id) { return this.delete(`/api/datasources/${id}`); },
@@ -155,6 +158,7 @@ const API = {
     getMetrics(connId, params = '') { return this.get(`/api/metrics/${connId}${params ? '?' + params : ''}`); },
     getLatestMetric(connId, type = 'db_status') { return this.get(`/api/metrics/${connId}/latest?metric_type=${type}`); },
     getDatasourceHealth(connId) { return this.get(`/api/metrics/${connId}/health`); },
+    getBatchDashboard(connIds) { return this.post('/api/metrics/batch/dashboard', { conn_ids: connIds }); },
     refreshMetrics(connId) { return this.post(`/api/metrics/${connId}/refresh`); },
 
     // Chat endpoints

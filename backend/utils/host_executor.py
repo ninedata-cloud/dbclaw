@@ -1,12 +1,12 @@
 """
 SSH command execution utility
 """
+import asyncio
 from typing import Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from backend.models.host import Host
-from backend.services.ssh_service import SSHService
-from backend.utils.encryption import decrypt_value
+from backend.services.ssh_connection_pool import get_ssh_pool
 
 
 async def execute_host_command(db: AsyncSession, host_id: int, command: str, allow_write: bool = False, timeout: int = None) -> Dict[str, Any]:
@@ -59,28 +59,22 @@ async def execute_host_command(db: AsyncSession, host_id: int, command: str, all
         if not host:
             return {"success": False, "error": f"Host {host_id} not found"}
 
-        # Decrypt credentials based on auth type
-        password = decrypt_value(host.password_encrypted) if host.password_encrypted else None
-        private_key = decrypt_value(host.private_key_encrypted) if host.private_key_encrypted else None
-        use_agent = (host.auth_type == 'agent')
-
-        # Create SSH service with proper auth
-        ssh_service = SSHService(
-            host=host.host,
-            port=host.port,
-            username=host.username,
-            password=password,
-            private_key=private_key,
-            use_agent=use_agent,
-        )
-
-        # Execute command (SSHService.execute is synchronous, run in executor)
-        import asyncio
-        loop = asyncio.get_event_loop()
-
-        # Use provided timeout or default to 30s
+        # Execute command through SSH connection pool
+        ssh_pool = get_ssh_pool()
         exec_timeout = timeout if timeout is not None else 30
-        output = await loop.run_in_executor(None, ssh_service.execute, command, exec_timeout)
+
+        async with ssh_pool.get_connection(db, host_id) as ssh_client:
+            loop = asyncio.get_event_loop()
+
+            def _run():
+                stdin, stdout, stderr = ssh_client.exec_command(command, timeout=exec_timeout)
+                output = stdout.read().decode("utf-8", errors="replace")
+                err = stderr.read().decode("utf-8", errors="replace")
+                if err and not output:
+                    return err
+                return output
+
+            output = await loop.run_in_executor(None, _run)
 
         return {
             "success": True,

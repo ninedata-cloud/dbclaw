@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from typing import List
 import asyncio
 import logging
@@ -20,8 +20,20 @@ router = APIRouter(prefix="/api/datasources", tags=["datasources"], dependencies
 
 
 @router.get("", response_model=List[DatasourceResponse])
-async def list_datasources(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Datasource).order_by(Datasource.id.desc()))
+async def list_datasources(q: str | None = None, db: AsyncSession = Depends(get_db)):
+    query = select(Datasource)
+
+    if q and q.strip():
+        search = f"%{q.strip()}%"
+        query = query.where(
+            or_(
+                Datasource.name.ilike(search),
+                Datasource.host.ilike(search),
+                Datasource.database.ilike(search)
+            )
+        )
+
+    result = await db.execute(query.order_by(Datasource.id.desc()))
     return result.scalars().all()
 
 
