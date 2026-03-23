@@ -19,12 +19,10 @@ const DashboardPage = {
         const x1 = cx + r * Math.cos(startAngle);
         const y1 = cy + r * Math.sin(startAngle);
         const label = Math.round(pct * 100) + '%';
-        const sub = `${online}/${total}`;
         return `<svg width="${r*2+16}" height="${r*2+16}" viewBox="0 0 ${r*2+16} ${r*2+16}">
   <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="${sw}"/>
   <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${pct > 0.8 ? '#3fb950' : pct > 0.5 ? '#d29922' : '#f85149'}" stroke-width="${sw}" stroke-dasharray="${dash} ${gap}" stroke-dashoffset="${circ * 0.25}" stroke-linecap="round" style="transition:stroke-dasharray 0.6s ease"/>
-  <text class="donut-center-text" x="${cx}" y="${cy - 8}">${label}</text>
-  <text class="donut-center-sub"  x="${cx}" y="${cy + 10}">${sub}</text>
+  <text class="donut-center-text" x="${cx}" y="${cy}">${label}</text>
 </svg>`;
     },
 

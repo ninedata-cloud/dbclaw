@@ -44,6 +44,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Document migration: {e}")
 
+    try:
+        from backend.migrations.add_ai_model_protocol import migrate as migrate_ai_model_protocol
+        await migrate_ai_model_protocol()
+    except Exception as e:
+        logger.warning(f"AI model protocol migration: {e}")
+
     # Seed default system configs
     from backend.database import async_session as _async_session
     from backend.services import config_service as _config_service

@@ -229,6 +229,7 @@ const API = {
     updateAIModel(id, data) { return this.put(`/api/ai-models/${id}`, data); },
     deleteAIModel(id) { return this.delete(`/api/ai-models/${id}`); },
     setDefaultAIModel(id) { return this.post(`/api/ai-models/${id}/set-default`); },
+    testAIModelChat(id, data) { return this.post(`/api/ai-models/${id}/test-chat`, data); },
 
     // Document API
     getDocCategories(dbType = null) {

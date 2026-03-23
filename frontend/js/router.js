@@ -16,7 +16,7 @@ const Router = {
         window.location.hash = path;
     },
 
-    _handleRoute() {
+    async _handleRoute() {
         const hash = window.location.hash.slice(1) || 'dashboard';
         const [page, ...params] = hash.split('/');
 
@@ -37,7 +37,7 @@ const Router = {
 
         const handler = this.routes[page];
         if (handler) {
-            const cleanup = handler(params.join('/'));
+            const cleanup = await handler(params.join('/'));
             if (typeof cleanup === 'function') {
                 this.currentCleanup = cleanup;
             }

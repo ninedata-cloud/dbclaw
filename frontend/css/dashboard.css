@@ -45,11 +45,6 @@
     dominant-baseline: middle; text-anchor: middle;
 }
 
-.donut-center-sub {
-    font-size: 12px; fill: rgba(255,255,255,0.35);
-    dominant-baseline: middle; text-anchor: middle;
-}
-
 .donut-legend { flex: 1; min-width: 0; }
 
 .donut-legend-item {
