@@ -369,15 +369,6 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
                 "timestamp": now().isoformat()
             }
 
-            # Trigger inspection asynchronously
-            await _inspection_service.trigger_inspection(
-                db=db,
-                datasource_id=datasource_id,
-                trigger_type="anomaly",
-                reason=reason,
-                metric_snapshot=metric_snapshot
-            )
-
             # Create alert for the violation
             from backend.services.alert_service import AlertService
 
@@ -385,7 +376,7 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
             percent_over = ((violation['current_value'] - violation['threshold']) / violation['threshold']) * 100
             severity = AlertService.calculate_severity(percent_over)
 
-            await AlertService.create_alert(
+            alert = await AlertService.create_alert(
                 db=db,
                 datasource_id=datasource_id,
                 alert_type="threshold_violation",
@@ -394,6 +385,16 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
                 metric_value=violation['current_value'],
                 threshold_value=violation['threshold'],
                 trigger_reason=reason
+            )
+
+            # Trigger inspection asynchronously
+            await _inspection_service.trigger_inspection(
+                db=db,
+                datasource_id=datasource_id,
+                trigger_type="anomaly",
+                reason=reason,
+                metric_snapshot=metric_snapshot,
+                alert_id=alert.id
             )
 
     except Exception as e:
@@ -464,7 +465,8 @@ async def _handle_connection_failure(db, datasource_id: int, datasource, error_m
                 datasource_id=datasource_id,
                 trigger_type="connection_failure",
                 reason=reason,
-                metric_snapshot=metric_snapshot
+                metric_snapshot=metric_snapshot,
+                alert_id=alert.id
             )
 
             logger.info(f"Triggered AI diagnosis for connection failure: datasource {datasource_id}")

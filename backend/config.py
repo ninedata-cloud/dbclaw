@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "change-me-to-a-random-secret-key"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440
+    public_share_expire_minutes: int = 1440
 
     # Bocha AI Web Search API
     bocha_api_key: str = "sk-66d203942a6c404b89eff2adb494febc"

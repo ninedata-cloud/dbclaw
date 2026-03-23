@@ -142,20 +142,44 @@ async def run_conversation_with_skills(
                 'oracle': 'oracle'
             }
             skill_prefix = skill_prefix_map.get(datasource.db_type, datasource.db_type)
+            host_id = datasource.host_id
+            host_configured = host_id is not None
 
+            system_msg += (
+                "\n\nCurrent conversation datasource context (stable unless the user explicitly asks to switch):"
+                f"\n- datasource_id: {datasource_id}"
+                f"\n- datasource_type: {datasource.db_type}"
+                f"\n- datasource_name: {datasource.name}"
+                f"\n- host_id: {host_id if host_id is not None else 'None'}"
+                f"\n- host_configured: {str(host_configured).lower()}"
+            )
             system_msg += f"\n\nThe user is currently working with datasource ID: {datasource_id} (Type: {datasource.db_type.upper()}, Name: {datasource.name}). Use this ID when calling tools unless they specify otherwise."
-            system_msg += f"\n\nIMPORTANT: This is a {datasource.db_type.upper()} database. You MUST use {skill_prefix}_* skills (e.g., {skill_prefix}_get_db_status, {skill_prefix}_get_slow_queries, {skill_prefix}_get_table_stats, etc.). Do NOT use skills for other database types like mysql_*, pg_*, mssql_*, or oracle_* unless they match this database type."
+            system_msg += f"\n\nIMPORTANT: This is a {datasource.db_type.upper()} database. You MUST use {skill_prefix}_* skills (e.g., {skill_prefix}_get_db_status, {skill_prefix}_get_slow_queries, {skill_prefix}_get_table_stats, etc.). Do NOT use skills for other database types like mysql_*, pg_*, mssql_*, or oracle_* unless they match this database type. Unless the user explicitly asks to switch datasources, keep all diagnosis and tool calls scoped to this datasource."
 
-            if datasource.host_id:
-                host_result = await db.execute(select(Host).filter(Host.id == datasource.host_id))
+            if host_id:
+                host_result = await db.execute(select(Host).filter(Host.id == host_id))
                 host = host_result.scalar_one_or_none()
                 host_info = f" (Host: {host.name or host.host})" if host else ""
-                system_msg += f"\n\n**主机连接已配置**：该数据源已关联主机{host_info}，你可以使用 OS 层面的诊断技能（get_os_metrics、diagnose_high_cpu、diagnose_high_memory、diagnose_disk_space、diagnose_disk_io、diagnose_network）进行操作系统级别的深度分析。遇到性能问题时，应同时从数据库和操作系统两个层面进行诊断。"
+                system_msg += f"\n\n**主机连接已配置**：该数据源已关联主机{host_info}，host_id={host_id}。你可以使用 OS 层面的诊断技能（get_os_metrics、diagnose_high_cpu、diagnose_high_memory、diagnose_disk_space、diagnose_disk_io、diagnose_network）进行操作系统级别的深度分析。遇到性能问题时，应同时从数据库和操作系统两个层面进行诊断。"
             else:
-                system_msg += "\n\n**注意**：该数据源未配置主机连接，无法进行操作系统层面的诊断（如 CPU、内存、磁盘、网络分析）。如需 OS 级别诊断，请建议用户在数据源配置中关联主机。"
+                system_msg += "\n\n**注意**：该数据源未配置主机连接，host_id=None，无法进行操作系统层面的诊断（如 CPU、内存、磁盘、网络分析）。如需 OS 级别诊断，请建议用户在数据源配置中关联主机。"
         else:
+            system_msg += (
+                f"\n\nCurrent conversation datasource context (stable unless the user explicitly asks to switch):"
+                f"\n- datasource_id: {datasource_id}"
+                f"\n- datasource_type: unknown"
+                f"\n- host_id: unknown"
+                f"\n- host_configured: unknown"
+            )
             system_msg += f"\n\nThe user is currently working with datasource ID: {datasource_id}. Use this ID when calling tools unless they specify otherwise."
     elif datasource_id:
+        system_msg += (
+            f"\n\nCurrent conversation datasource context (stable unless the user explicitly asks to switch):"
+            f"\n- datasource_id: {datasource_id}"
+            f"\n- datasource_type: unknown"
+            f"\n- host_id: unknown"
+            f"\n- host_configured: unknown"
+        )
         system_msg += f"\n\nThe user is currently working with datasource ID: {datasource_id}. Use this ID when calling tools unless they specify otherwise."
 
     if kb_ids:
@@ -169,6 +193,7 @@ async def run_conversation_with_skills(
         try:
             collected_content = ""
             collected_tool_calls = []
+            round_usage = None
 
             async for event in stream_assistant_turn(
                 client,
@@ -181,6 +206,9 @@ async def run_conversation_with_skills(
                     yield {"type": "content", "content": event["content"]}
                 elif event["type"] == "message_complete":
                     collected_tool_calls = event.get("tool_calls", [])
+                    round_usage = event.get("usage")
+                    if round_usage:
+                        yield {"type": "usage", "usage": round_usage}
                     if event.get("stop_reason") == "end_turn" and not collected_tool_calls:
                         yield {"type": "done", "content": collected_content}
                         return

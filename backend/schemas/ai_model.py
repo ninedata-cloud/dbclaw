@@ -13,6 +13,7 @@ class AIModelCreate(BaseModel):
     api_key: str
     base_url: str
     model_name: str
+    context_window: Optional[int] = Field(default=None, ge=1)
 
 
 class AIModelUpdate(BaseModel):
@@ -22,6 +23,7 @@ class AIModelUpdate(BaseModel):
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     model_name: Optional[str] = None
+    context_window: Optional[int] = Field(default=None, ge=1)
 
 
 class AIModelResponse(BaseModel):
@@ -32,6 +34,7 @@ class AIModelResponse(BaseModel):
     api_key_masked: str
     base_url: str
     model_name: str
+    context_window: Optional[int] = None
     is_default: bool
     is_active: bool
     created_at: datetime

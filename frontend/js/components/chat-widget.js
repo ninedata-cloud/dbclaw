@@ -281,6 +281,49 @@ const ChatWidget = {
         this._updateSendButton(false);
     },
 
+    updateTokenUsage(stats) {
+        const panel = DOM.$('#chat-token-usage');
+        if (!panel) return;
+
+        const usage = stats?.usage || { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
+        const contextWindow = stats?.contextWindow || null;
+        const usageRate = contextWindow ? Math.min((usage.total_tokens / contextWindow) * 100, 999) : null;
+        const level = stats?.warningLevel || 'normal';
+        const warningText = stats?.warningText || '';
+
+        const toneMap = {
+            normal: { bg: 'rgba(47,129,247,0.08)', border: 'rgba(47,129,247,0.25)', text: 'var(--text-secondary)' },
+            warning: { bg: 'rgba(255,193,7,0.10)', border: 'rgba(255,193,7,0.28)', text: '#d29922' },
+            danger: { bg: 'rgba(248,81,73,0.10)', border: 'rgba(248,81,73,0.28)', text: '#f85149' },
+            critical: { bg: 'rgba(248,81,73,0.16)', border: 'rgba(248,81,73,0.4)', text: '#ff7b72' },
+        };
+        const tone = toneMap[level] || toneMap.normal;
+
+        panel.style.display = 'block';
+        panel.style.background = tone.bg;
+        panel.style.border = `1px solid ${tone.border}`;
+        panel.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+                <div style="display:flex;gap:16px;flex-wrap:wrap;">
+                    <span><strong>本次会话已用</strong> ${usage.total_tokens.toLocaleString()} tokens</span>
+                    <span>输入 ${usage.input_tokens.toLocaleString()}</span>
+                    <span>输出 ${usage.output_tokens.toLocaleString()}</span>
+                    <span>${contextWindow ? `上限 ${contextWindow.toLocaleString()}` : '未配置上下文上限'}</span>
+                    <span>${usageRate !== null ? `使用率 ${usageRate.toFixed(1)}%` : ''}</span>
+                </div>
+                ${warningText ? `<div style="color:${tone.text};font-weight:600;">${this._escapeHtml(warningText)}</div>` : ''}
+            </div>
+        `;
+    },
+
+    resetTokenUsage() {
+        const panel = DOM.$('#chat-token-usage');
+        if (panel) {
+            panel.style.display = 'none';
+            panel.innerHTML = '';
+        }
+    },
+
     addToolCall(toolName, args) {
         // Add to tool panel instead of messages
         const toolPanel = DOM.$('#tool-panel-content');
@@ -301,7 +344,7 @@ const ChatWidget = {
         });
 
         toolMsg.innerHTML = `
-            <div class="chat-tool-header" onclick="ChatWidget.toggleToolBody('${toolId}')">
+            <div class="chat-tool-header" onclick="ChatWidget.toggleToolBody('${toolId}')" aria-expanded="false">
                 <div class="chat-tool-icon">
                     <i data-lucide="wrench"></i>
                 </div>
@@ -312,7 +355,7 @@ const ChatWidget = {
                 </span>
                 <i data-lucide="chevron-right" class="chat-tool-expand"></i>
             </div>
-            <div class="chat-tool-body">
+            <div class="chat-tool-body" style="display: none;">
                 <div class="chat-tool-section">
                     <div class="chat-tool-section-title">
                         <span>Arguments</span>
@@ -434,6 +477,7 @@ const ChatWidget = {
         const toolMsg = DOM.$(`#${toolId}`);
         if (!toolMsg) return;
 
+        const header = toolMsg.querySelector('.chat-tool-header');
         const body = toolMsg.querySelector('.chat-tool-body');
         const expand = toolMsg.querySelector('.chat-tool-expand');
 
@@ -441,10 +485,14 @@ const ChatWidget = {
             const isExpanded = body.classList.contains('expanded');
             if (isExpanded) {
                 body.classList.remove('expanded');
+                body.style.display = 'none';
                 expand.classList.remove('expanded');
+                if (header) header.setAttribute('aria-expanded', 'false');
             } else {
+                body.style.display = 'block';
                 body.classList.add('expanded');
                 expand.classList.add('expanded');
+                if (header) header.setAttribute('aria-expanded', 'true');
             }
         }
     },
@@ -655,7 +703,7 @@ const ChatWidget = {
         });
 
         toolMsg.innerHTML = `
-            <div class="chat-tool-header" onclick="ChatWidget.toggleToolBody('${toolId}')">
+            <div class="chat-tool-header" onclick="ChatWidget.toggleToolBody('${toolId}')" aria-expanded="false">
                 <div class="chat-tool-icon">
                     <i data-lucide="wrench"></i>
                 </div>
@@ -666,7 +714,7 @@ const ChatWidget = {
                 </span>
                 <i data-lucide="chevron-right" class="chat-tool-expand"></i>
             </div>
-            <div class="chat-tool-body">
+            <div class="chat-tool-body" style="display: none;">
                 <div class="chat-tool-section">
                     <div class="chat-tool-section-title">
                         <span>Arguments</span>

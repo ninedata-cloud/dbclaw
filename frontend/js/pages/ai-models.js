@@ -53,6 +53,7 @@ const AIModelsPage = {
             <div class="datasource-card-info">
                 <span><i data-lucide="cpu"></i> ${this._escapeHtml(model.model_name)}</span>
                 <span><i data-lucide="plug-zap"></i> ${this._escapeHtml(this._protocolLabel(model.protocol))}</span>
+                <span><i data-lucide="database"></i> ${model.context_window ? `${Number(model.context_window).toLocaleString()} tokens` : '未配置上下文上限'}</span>
                 <span><i data-lucide="link"></i> ${this._escapeHtml(model.base_url)}</span>
                 <span><i data-lucide="key-round"></i> ${this._escapeHtml(model.api_key_masked)}</span>
             </div>
@@ -108,6 +109,7 @@ const AIModelsPage = {
                 </div>
             </div>
             <div class="form-group"><label>模型名称</label><input type="text" class="form-input" name="model_name" required placeholder="claude-opus-4-6" value="${this._escapeAttr(model?.model_name || '')}"></div>
+            <div class="form-group"><label>上下文上限（tokens）</label><input type="number" min="1" step="1" class="form-input" name="context_window" placeholder="例如 200000" value="${this._escapeAttr(model?.context_window || '')}"></div>
             <div class="form-group"><label>基础 URL</label><input type="text" class="form-input" name="base_url" required placeholder="https://api.anthropic.com" value="${this._escapeAttr(model?.base_url || '')}"></div>
             <div class="form-group"><label>API 密钥</label><input type="password" class="form-input" name="api_key" ${isEdit ? '' : 'required'} placeholder="${isEdit ? '留空保持不变' : 'sk-ant-...'}"></div>
             <div class="text-muted text-sm">选择 Anthropic 原生协议时，请填写 Anthropic Messages API 对应的 Base URL 与模型名。</div>
@@ -143,6 +145,7 @@ const AIModelsPage = {
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const data = Object.fromEntries(new FormData(form).entries());
+            data.context_window = data.context_window ? parseInt(data.context_window, 10) : null;
             try {
                 if (isEdit) {
                     if (!data.api_key) delete data.api_key;
@@ -184,6 +187,7 @@ const AIModelsPage = {
                     <div><strong>提供商：</strong>${this._escapeHtml(this._providerLabel(model.provider))}</div>
                     <div><strong>协议：</strong>${this._escapeHtml(this._protocolLabel(model.protocol))}</div>
                     <div><strong>模型名：</strong>${this._escapeHtml(model.model_name)}</div>
+                    <div><strong>上下文上限：</strong>${model.context_window ? `${Number(model.context_window).toLocaleString()} tokens` : '未配置'}</div>
                     <div><strong>基础 URL：</strong>${this._escapeHtml(model.base_url)}</div>
                 </div>
             </div>

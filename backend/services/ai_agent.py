@@ -12,6 +12,17 @@ from backend.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+
+def _normalize_usage(input_tokens: Optional[int] = None, output_tokens: Optional[int] = None) -> Dict[str, int]:
+    input_value = int(input_tokens or 0)
+    output_value = int(output_tokens or 0)
+    return {
+        "input_tokens": input_value,
+        "output_tokens": output_value,
+        "total_tokens": input_value + output_value,
+    }
+
+
 OPENAI_PROTOCOL = "openai"
 ANTHROPIC_PROTOCOL = "anthropic"
 DEFAULT_MODEL = "claude-opus-4-6"
@@ -272,6 +283,7 @@ async def _stream_openai_turn(
         "tools": tools,
         "tool_choice": tool_choice,
         "stream": True,
+        "stream_options": {"include_usage": True},
         "max_tokens": max_tokens,
     }
     if temperature is not None:
@@ -282,8 +294,16 @@ async def _stream_openai_turn(
     collected_content = ""
     collected_tool_calls: Dict[int, Dict[str, Any]] = {}
     final_stop_reason = "end_turn"
+    usage = _normalize_usage()
 
     async for chunk in response:
+        chunk_usage = getattr(chunk, "usage", None)
+        if chunk_usage:
+            usage = _normalize_usage(
+                getattr(chunk_usage, "prompt_tokens", None),
+                getattr(chunk_usage, "completion_tokens", None),
+            )
+
         delta = chunk.choices[0].delta if chunk.choices else None
         if not delta:
             continue
@@ -321,6 +341,7 @@ async def _stream_openai_turn(
         "content": collected_content,
         "tool_calls": tool_calls,
         "stop_reason": final_stop_reason if tool_calls else "end_turn",
+        "usage": usage,
     }
 
 
@@ -351,6 +372,7 @@ async def _stream_anthropic_turn(
     collected_tool_calls: Dict[int, Dict[str, Any]] = {}
     current_tool_index: Optional[int] = None
     final_stop_reason = "end_turn"
+    usage = _normalize_usage()
 
     async with ai_client.client.messages.stream(**request_kwargs) as stream:
         async for event in stream:
@@ -388,10 +410,18 @@ async def _stream_anthropic_turn(
         elif getattr(final_message, "stop_reason", None) == "end_turn":
             final_stop_reason = "end_turn"
 
+        final_usage = getattr(final_message, "usage", None)
+        if final_usage:
+            usage = _normalize_usage(
+                getattr(final_usage, "input_tokens", None),
+                getattr(final_usage, "output_tokens", None),
+            )
+
     tool_calls = [collected_tool_calls[idx] for idx in sorted(collected_tool_calls.keys())]
     yield {
         "type": "message_complete",
         "content": collected_content,
         "tool_calls": tool_calls,
         "stop_reason": final_stop_reason if tool_calls else "end_turn",
+        "usage": usage,
     }

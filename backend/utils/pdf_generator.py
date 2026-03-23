@@ -7,22 +7,39 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT, TA_CENTER
 from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 import re
+
+
+PDF_FONT_NAME = 'STSong-Light'
+
+
+def _ensure_cjk_font_registered():
+    if PDF_FONT_NAME not in pdfmetrics.getRegisteredFontNames():
+        pdfmetrics.registerFont(UnicodeCIDFont(PDF_FONT_NAME))
 
 
 def markdown_to_pdf(markdown_text: str, title: str = "Inspection Report") -> bytes:
     """Convert markdown text to PDF"""
+    _ensure_cjk_font_registered()
+
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=0.75*inch, bottomMargin=0.75*inch)
-    
+
     styles = getSampleStyleSheet()
+    styles['Heading1'].fontName = PDF_FONT_NAME
+    styles['Heading2'].fontName = PDF_FONT_NAME
+    styles['Heading3'].fontName = PDF_FONT_NAME
+    styles['Normal'].fontName = PDF_FONT_NAME
+    styles['Code'].fontName = PDF_FONT_NAME
+
     story = []
-    
+
     # Title
     title_style = ParagraphStyle(
         'CustomTitle',
         parent=styles['Heading1'],
+        fontName=PDF_FONT_NAME,
         fontSize=24,
         textColor=colors.HexColor('#1a1a1a'),
         spaceAfter=30,
@@ -59,7 +76,7 @@ def markdown_to_pdf(markdown_text: str, title: str = "Inspection Report") -> byt
         # Lists
         elif line.startswith('- ') or line.startswith('* '):
             text = line[2:].strip()
-            bullet_style = ParagraphStyle('Bullet', parent=styles['Normal'], leftIndent=20, bulletIndent=10)
+            bullet_style = ParagraphStyle('Bullet', parent=styles['Normal'], fontName=PDF_FONT_NAME, leftIndent=20, bulletIndent=10)
             story.append(Paragraph(f"• {text}", bullet_style))
         
         # Tables (simple markdown tables)
@@ -80,7 +97,7 @@ def markdown_to_pdf(markdown_text: str, title: str = "Inspection Report") -> byt
                     ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#007bff')),
                     ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                     ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTNAME', (0, 0), (-1, -1), PDF_FONT_NAME),
                     ('FONTSIZE', (0, 0), (-1, 0), 10),
                     ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
                     ('BACKGROUND', (0, 1), (-1, -1), colors.white),
@@ -103,6 +120,7 @@ def markdown_to_pdf(markdown_text: str, title: str = "Inspection Report") -> byt
             code_style = ParagraphStyle(
                 'Code',
                 parent=styles['Code'],
+                fontName=PDF_FONT_NAME,
                 fontSize=9,
                 leftIndent=20,
                 backgroundColor=colors.HexColor('#f4f4f4'),

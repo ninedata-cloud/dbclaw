@@ -134,10 +134,12 @@ async def _mark_alert_notified(db, alert):
 
 async def _send_via_integrations(db, alert, subscription):
     """通过 Integration 系统发送通知"""
+    from backend.config import get_settings
     from backend.models.integration import AlertChannel, Integration, IntegrationExecutionLog
     from backend.models.alert_delivery_log import AlertDeliveryLog
     from backend.models.datasource import Datasource
     from backend.services.integration_executor import IntegrationExecutor
+    from backend.services.public_share_service import PublicShareService
     from sqlalchemy import select
     from datetime import datetime
 
@@ -150,6 +152,19 @@ async def _send_via_integrations(db, alert, subscription):
             select(Datasource).where(Datasource.id == alert.datasource_id)
         )
         datasource = ds_result.scalar_one_or_none()
+
+    settings = get_settings()
+    alert_url = None
+    report_url = None
+    base_url = await PublicShareService.get_external_base_url(db)
+    if base_url:
+        alert_token = PublicShareService.create_alert_share_token(alert.id, settings.public_share_expire_minutes)
+        alert_url = f"{base_url}/api/alerts/public/{alert.id}/page?token={alert_token}"
+
+        linked_report = await PublicShareService.get_report_by_alert_id(db, alert.id)
+        if linked_report:
+            report_token = PublicShareService.create_report_share_token(linked_report.id, settings.public_share_expire_minutes)
+            report_url = f"{base_url}/api/inspections/reports/public/{linked_report.id}/page?token={report_token}"
 
     # 遍历所有 Channel
     for channel_id in subscription.channel_ids:
@@ -172,6 +187,8 @@ async def _send_via_integrations(db, alert, subscription):
             "severity": alert.severity,
             "datasource_name": datasource.name if datasource else "未知数据源",
             "alert_id": alert.id,
+            "alert_url": alert_url,
+            "report_url": report_url,
             "timestamp": alert.created_at.strftime('%Y-%m-%d %H:%M:%S') if alert.created_at else datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
         }
 

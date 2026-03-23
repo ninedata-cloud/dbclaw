@@ -65,7 +65,8 @@ async def create_model(data: AIModelCreate, db: AsyncSession = Depends(get_db)):
         protocol=data.protocol,
         api_key_encrypted=encrypt_api_key(data.api_key),
         base_url=data.base_url,
-        model_name=data.model_name
+        model_name=data.model_name,
+        context_window=data.context_window,
     )
     db.add(model)
     await db.commit()
@@ -95,6 +96,8 @@ async def update_model(model_id: int, data: AIModelUpdate, db: AsyncSession = De
         model.base_url = data.base_url
     if data.model_name:
         model.model_name = data.model_name
+    if "context_window" in data.model_fields_set:
+        model.context_window = data.context_window
 
     await db.commit()
     await db.refresh(model)

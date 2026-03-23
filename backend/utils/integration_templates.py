@@ -74,6 +74,43 @@ async def send_notification(context, params, payload):
         }
     }
 
+    actions = []
+    if payload.get("alert_url"):
+        actions.append({
+            "tag": "button",
+            "text": {
+                "tag": "plain_text",
+                "content": "查看告警详情"
+            },
+            "type": "primary",
+            "multi_url": {
+                "url": payload["alert_url"],
+                "pc_url": payload["alert_url"],
+                "android_url": payload["alert_url"],
+                "ios_url": payload["alert_url"]
+            }
+        })
+    if payload.get("report_url"):
+        actions.append({
+            "tag": "button",
+            "text": {
+                "tag": "plain_text",
+                "content": "查看诊断报告"
+            },
+            "type": "default",
+            "multi_url": {
+                "url": payload["report_url"],
+                "pc_url": payload["report_url"],
+                "android_url": payload["report_url"],
+                "ios_url": payload["report_url"]
+            }
+        })
+    if actions:
+        card["card"]["elements"].append({
+            "tag": "action",
+            "actions": actions
+        })
+
     # 签名（如果提供了 secret）
     headers = {"Content-Type": "application/json"}
     if secret:

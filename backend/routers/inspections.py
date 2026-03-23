@@ -1,6 +1,6 @@
 """API endpoints for database intelligent inspection"""
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import Response
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response, HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, desc
 from typing import List, Optional
@@ -12,6 +12,7 @@ from backend.models.inspection_config import InspectionConfig
 from backend.models.inspection_trigger import InspectionTrigger
 from backend.models.report import Report
 from backend.services.inspection_service import InspectionService
+from backend.services.public_share_service import PublicShareService
 
 logger = logging.getLogger(__name__)
 
@@ -302,6 +303,67 @@ async def get_report_detail(report_id: int, db: AsyncSession = Depends(get_db)):
         "created_at": report.created_at.isoformat() if report.created_at else None,
         "completed_at": report.completed_at.isoformat() if report.completed_at else None
     }
+
+
+@router.get("/reports/public/{report_id}")
+async def get_public_report_detail(
+    report_id: int,
+    token: str = Query(...),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get report details with public share token"""
+    PublicShareService.verify_report_share_token(token, report_id)
+    report = await PublicShareService.get_report_or_404(db, report_id)
+    return {
+        "id": report.id,
+        "title": report.title,
+        "trigger_type": report.trigger_type,
+        "trigger_reason": report.trigger_reason,
+        "content_md": report.content_md,
+        "status": report.status,
+        "created_at": report.created_at.isoformat() if report.created_at else None,
+        "completed_at": report.completed_at.isoformat() if report.completed_at else None
+    }
+
+
+@router.get("/reports/public/{report_id}/page", response_class=HTMLResponse)
+async def public_report_page(
+    report_id: int,
+    token: str = Query(...),
+    db: AsyncSession = Depends(get_db)
+):
+    """Render public report detail page"""
+    PublicShareService.verify_report_share_token(token, report_id)
+    report = await PublicShareService.get_report_or_404(db, report_id)
+    report_html = report.content_html or f"<pre>{report.content_md or '暂无内容'}</pre>"
+    return f"""
+    <!DOCTYPE html>
+    <html lang=\"zh-CN\">
+    <head>
+        <meta charset=\"UTF-8\">
+        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+        <title>{report.title}</title>
+        <style>
+            body {{ font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#f5f7fa; margin:0; padding:24px; color:#1f2937; }}
+            .card {{ max-width:1200px; margin:0 auto; background:#fff; border-radius:12px; padding:24px; box-shadow:0 8px 24px rgba(0,0,0,.08); }}
+            .meta {{ display:flex; gap:16px; flex-wrap:wrap; color:#6b7280; margin-bottom:20px; }}
+            .trigger {{ background:#eff6ff; color:#1d4ed8; padding:12px 14px; border-radius:8px; margin-bottom:20px; }}
+        </style>
+    </head>
+    <body>
+        <div class=\"card\">
+            <h1>{report.title}</h1>
+            <div class=\"meta\">
+                <span>状态：{report.status}</span>
+                <span>触发类型：{report.trigger_type or '-'}</span>
+                <span>创建时间：{report.created_at}</span>
+            </div>
+            <div class=\"trigger\">触发原因：{report.trigger_reason or '-'}</div>
+            {report_html}
+        </div>
+    </body>
+    </html>
+    """
 
 
 @router.get("/reports/export/{report_id}/markdown")

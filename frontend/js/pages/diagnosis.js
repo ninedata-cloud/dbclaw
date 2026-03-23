@@ -6,6 +6,8 @@ const DiagnosisPage = {
     selectedKBIds: [],
     disabledTools: [],
     highRiskTools: [],
+    availableModels: [],
+    sessionTokenUsage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
 
     async render() {
         const content = DOM.$('#page-content');
@@ -45,6 +47,7 @@ const DiagnosisPage = {
 
         try {
             const models = await API.getAIModels();
+            this.availableModels = models;
             for (const m of models) {
                 const opt = DOM.el('option', { value: m.id, textContent: m.name });
                 if (m.is_default) opt.selected = true;
@@ -54,6 +57,7 @@ const DiagnosisPage = {
 
         modelSelect.addEventListener('change', () => {
             this.selectedModelId = modelSelect.value ? parseInt(modelSelect.value) : null;
+            this._updateTokenUsageDisplay();
         });
 
         // Knowledge Base multi-select (custom dropdown)
@@ -211,7 +215,20 @@ const DiagnosisPage = {
             style: { flex: '1', display: 'flex', flexDirection: 'column', minWidth: '0', position: 'relative', height: '100%' }
         });
 
+        const tokenUsageBar = DOM.el('div', {
+            id: 'chat-token-usage',
+            style: {
+                display: 'none',
+                margin: '10px 12px 0 12px',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                color: 'var(--text-secondary)'
+            }
+        });
+
         chatMain.appendChild(ChatWidget.createMessagesContainer());
+        chatMain.appendChild(tokenUsageBar);
         chatMain.appendChild(ChatWidget.createInputBar(
             (text, attachments) => this._sendMessage(text, attachments),
             () => this.currentSessionId
@@ -534,6 +551,16 @@ const DiagnosisPage = {
         }
     },
 
+    _getSessionTokenUsage(sessionId) {
+        const sessions = Store.get('chatSessions') || [];
+        const session = sessions.find(item => item.id === sessionId);
+        return {
+            input_tokens: session?.input_tokens || 0,
+            output_tokens: session?.output_tokens || 0,
+            total_tokens: session?.total_tokens || 0,
+        };
+    },
+
     async _switchSession(sessionId) {
         this.currentSessionId = sessionId;
         this._connectWebSocket(sessionId);
@@ -557,6 +584,8 @@ const DiagnosisPage = {
         // Load messages
         try {
             const messages = await API.getSessionMessages(sessionId);
+            this.sessionTokenUsage = this._getSessionTokenUsage(sessionId);
+            this._updateTokenUsageDisplay();
             console.log(`Loaded ${messages.length} messages for session ${sessionId}`, messages);
 
             if (messages && messages.length > 0) {
@@ -669,6 +698,47 @@ const DiagnosisPage = {
         });
     },
 
+    _getSelectedModel() {
+        if (!this.availableModels || this.availableModels.length === 0) return null;
+        if (this.selectedModelId) {
+            return this.availableModels.find(model => model.id === this.selectedModelId) || null;
+        }
+        return this.availableModels.find(model => model.is_default) || this.availableModels[0] || null;
+    },
+
+    _buildTokenStatus() {
+        const model = this._getSelectedModel();
+        const contextWindow = model?.context_window || null;
+        const totalTokens = this.sessionTokenUsage.total_tokens || 0;
+        let warningLevel = 'normal';
+        let warningText = '';
+
+        if (contextWindow) {
+            const usageRate = totalTokens / contextWindow;
+            if (usageRate >= 0.95) {
+                warningLevel = 'critical';
+                warningText = '上下文已接近上限，后续对话很可能失败，建议立即新建会话';
+            } else if (usageRate >= 0.85) {
+                warningLevel = 'danger';
+                warningText = '上下文已非常接近上限，建议缩小问题范围或新建会话';
+            } else if (usageRate >= 0.7) {
+                warningLevel = 'warning';
+                warningText = '上下文使用量较高，建议减少追问轮次或缩小查询范围';
+            }
+        }
+
+        return {
+            usage: this.sessionTokenUsage,
+            contextWindow,
+            warningLevel,
+            warningText,
+        };
+    },
+
+    _updateTokenUsageDisplay() {
+        ChatWidget.updateTokenUsage(this._buildTokenStatus());
+    },
+
     _handleWSMessage(data) {
         switch (data.type) {
             case 'content':
@@ -679,6 +749,12 @@ const DiagnosisPage = {
                 break;
             case 'tool_result':
                 ChatWidget.addToolResult(data.tool_name, data.result, data.execution_time_ms);
+                break;
+            case 'usage':
+                this.sessionTokenUsage.input_tokens += data.usage?.input_tokens || 0;
+                this.sessionTokenUsage.output_tokens += data.usage?.output_tokens || 0;
+                this.sessionTokenUsage.total_tokens += data.usage?.total_tokens || 0;
+                this._updateTokenUsageDisplay();
                 break;
             case 'done':
                 ChatWidget.finishAssistantMessage();
@@ -699,6 +775,8 @@ const DiagnosisPage = {
         if (!confirm('Clear all messages in this session? This cannot be undone.')) return;
         try {
             await API.clearSessionMessages(this.currentSessionId);
+            this.sessionTokenUsage = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
+            ChatWidget.resetTokenUsage();
             const container = DOM.$('#chat-messages');
             if (container) {
                 container.innerHTML = `
