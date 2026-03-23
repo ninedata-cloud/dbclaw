@@ -152,12 +152,16 @@ async def chat_websocket(websocket: WebSocket, session_id: int, token: str = Que
         while True:
             data = await websocket.receive_json()
             user_message = data.get("message", "")
-            datasource_id = data.get("datasource_id")
+            payload_datasource_id = data.get("datasource_id")
             model_id = data.get("model_id")
             attachments = data.get("attachments", [])  # List of attachment IDs
 
             if not user_message and not attachments:
                 continue
+
+            effective_datasource_id = payload_datasource_id
+            kb_ids = None
+            disabled_tools = None
 
             # Save user message
             async with async_session() as db:
@@ -169,18 +173,33 @@ async def chat_websocket(websocket: WebSocket, session_id: int, token: str = Que
                 )
                 db.add(msg)
 
-                # Update session title and model_id from first message
+                # Update session title/model_id and lock datasource_id from first turn
                 session_result = await db.execute(
                     select(DiagnosticSession).where(DiagnosticSession.id == session_id)
                 )
                 session = session_result.scalar_one_or_none()
                 if session:
+                    if session.datasource_id is not None:
+                        effective_datasource_id = session.datasource_id
+                        if payload_datasource_id is not None and payload_datasource_id != session.datasource_id:
+                            logger.warning(
+                                "Ignoring mismatched datasource_id %s for chat session %s; using bound datasource_id %s",
+                                payload_datasource_id,
+                                session_id,
+                                session.datasource_id,
+                            )
+                    elif payload_datasource_id is not None:
+                        session.datasource_id = payload_datasource_id
+                        effective_datasource_id = payload_datasource_id
+
                     # Update title if it's still the default (support both Chinese and English)
                     if session.title in ("New Session", "新建会话"):
                         session.title = user_message[:80] if user_message else "[Attachment]"
                     if model_id and not session.ai_model_id:
                         session.ai_model_id = model_id
                     session.updated_at = datetime.utcnow()
+                    kb_ids = session.kb_ids
+                    disabled_tools = session.disabled_tools
 
                 await db.commit()
 
@@ -262,15 +281,6 @@ async def chat_websocket(websocket: WebSocket, session_id: int, token: str = Que
                     msg_dict["tool_call_id"] = m.tool_call_id
                 messages.append(msg_dict)
 
-            # Get session kb_ids and disabled_tools
-            async with async_session() as db:
-                session_result = await db.execute(
-                    select(DiagnosticSession).where(DiagnosticSession.id == session_id)
-                )
-                session = session_result.scalar_one_or_none()
-                kb_ids = session.kb_ids if session else None
-                disabled_tools = session.disabled_tools if session else None
-
             # Stream AI response using skill-based system
             full_response = ""
             usage_totals = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
@@ -284,7 +294,7 @@ async def chat_websocket(websocket: WebSocket, session_id: int, token: str = Que
 
                 async for event in run_conversation_with_skills(
                     messages,
-                    datasource_id,
+                    effective_datasource_id,
                     model_id,
                     kb_ids,
                     db,

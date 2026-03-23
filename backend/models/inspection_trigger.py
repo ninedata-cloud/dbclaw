@@ -15,3 +15,4 @@ class InspectionTrigger(Base):
     triggered_at = Column(DateTime, server_default=func.now(), nullable=False, index=True)
     processed = Column(Boolean, default=False, nullable=False)
     report_id = Column(Integer, nullable=True)
+    alert_id = Column(Integer, nullable=True, index=True)

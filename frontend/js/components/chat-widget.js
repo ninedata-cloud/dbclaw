@@ -344,7 +344,7 @@ const ChatWidget = {
         });
 
         toolMsg.innerHTML = `
-            <div class="chat-tool-header" onclick="ChatWidget.toggleToolBody('${toolId}')">
+            <div class="chat-tool-header" onclick="ChatWidget.toggleToolBody('${toolId}')" aria-expanded="false">
                 <div class="chat-tool-icon">
                     <i data-lucide="wrench"></i>
                 </div>
@@ -355,7 +355,7 @@ const ChatWidget = {
                 </span>
                 <i data-lucide="chevron-right" class="chat-tool-expand"></i>
             </div>
-            <div class="chat-tool-body">
+            <div class="chat-tool-body" style="display: none;">
                 <div class="chat-tool-section">
                     <div class="chat-tool-section-title">
                         <span>Arguments</span>
@@ -477,6 +477,7 @@ const ChatWidget = {
         const toolMsg = DOM.$(`#${toolId}`);
         if (!toolMsg) return;
 
+        const header = toolMsg.querySelector('.chat-tool-header');
         const body = toolMsg.querySelector('.chat-tool-body');
         const expand = toolMsg.querySelector('.chat-tool-expand');
 
@@ -484,10 +485,14 @@ const ChatWidget = {
             const isExpanded = body.classList.contains('expanded');
             if (isExpanded) {
                 body.classList.remove('expanded');
+                body.style.display = 'none';
                 expand.classList.remove('expanded');
+                if (header) header.setAttribute('aria-expanded', 'false');
             } else {
+                body.style.display = 'block';
                 body.classList.add('expanded');
                 expand.classList.add('expanded');
+                if (header) header.setAttribute('aria-expanded', 'true');
             }
         }
     },
@@ -698,7 +703,7 @@ const ChatWidget = {
         });
 
         toolMsg.innerHTML = `
-            <div class="chat-tool-header" onclick="ChatWidget.toggleToolBody('${toolId}')">
+            <div class="chat-tool-header" onclick="ChatWidget.toggleToolBody('${toolId}')" aria-expanded="false">
                 <div class="chat-tool-icon">
                     <i data-lucide="wrench"></i>
                 </div>
@@ -709,7 +714,7 @@ const ChatWidget = {
                 </span>
                 <i data-lucide="chevron-right" class="chat-tool-expand"></i>
             </div>
-            <div class="chat-tool-body">
+            <div class="chat-tool-body" style="display: none;">
                 <div class="chat-tool-section">
                     <div class="chat-tool-section-title">
                         <span>Arguments</span>

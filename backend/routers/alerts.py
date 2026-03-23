@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from datetime import datetime
@@ -7,6 +8,10 @@ from backend.database import get_db
 from backend.services.alert_service import AlertService
 from backend.services.alert_event_service import AlertEventService
 from backend.services.notification_service import NotificationService
+from backend.services.public_share_service import PublicShareService
+from backend.config import get_settings
+from backend.models.report import Report
+from sqlalchemy import select
 from backend.schemas.alert import (
     AlertMessageResponse,
     AlertQueryParams,
@@ -171,6 +176,97 @@ async def get_alert(
         raise HTTPException(status_code=404, detail="Alert not found")
 
     return AlertMessageResponse.model_validate(alert)
+
+
+@router.get("/public/{alert_id}")
+async def get_public_alert(
+    alert_id: int,
+    token: str = Query(...),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get alert details with public share token"""
+    PublicShareService.verify_alert_share_token(token, alert_id)
+    alert = await PublicShareService.get_alert_or_404(db, alert_id)
+
+    result = await db.execute(
+        select(Report).where(Report.alert_id == alert_id).order_by(Report.created_at.desc()).limit(1)
+    )
+    report = result.scalar_one_or_none()
+
+    payload = AlertMessageResponse.model_validate(alert).model_dump()
+    payload["linked_report"] = None
+    if report:
+        report_token = PublicShareService.create_report_share_token(report.id, get_settings().public_share_expire_minutes)
+        payload["linked_report"] = {
+            "report_id": report.id,
+            "title": report.title,
+            "status": report.status,
+            "share_url": f"/api/inspections/reports/public/{report.id}?token={report_token}",
+            "page_url": f"/api/inspections/reports/public/{report.id}/page?token={report_token}"
+        }
+
+    return payload
+
+
+@router.get("/public/{alert_id}/page", response_class=HTMLResponse)
+async def public_alert_page(
+    alert_id: int,
+    token: str = Query(...),
+    db: AsyncSession = Depends(get_db)
+):
+    """Render public alert detail page"""
+    PublicShareService.verify_alert_share_token(token, alert_id)
+    alert = await PublicShareService.get_alert_or_404(db, alert_id)
+
+    result = await db.execute(
+        select(Report).where(Report.alert_id == alert_id).order_by(Report.created_at.desc()).limit(1)
+    )
+    report = result.scalar_one_or_none()
+    report_link_html = ""
+    if report:
+        report_token = PublicShareService.create_report_share_token(report.id, get_settings().public_share_expire_minutes)
+        report_link_html = f'<a class="button secondary" href="/api/inspections/reports/public/{report.id}/page?token={report_token}">查看诊断报告</a>'
+
+    return f"""
+    <!DOCTYPE html>
+    <html lang=\"zh-CN\">
+    <head>
+        <meta charset=\"UTF-8\">
+        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+        <title>告警详情</title>
+        <style>
+            body {{ font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#f5f7fa; margin:0; padding:24px; color:#1f2937; }}
+            .card {{ max-width:960px; margin:0 auto; background:#fff; border-radius:12px; padding:24px; box-shadow:0 8px 24px rgba(0,0,0,.08); }}
+            .grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; margin:20px 0; }}
+            .field {{ background:#f9fafb; border-radius:8px; padding:12px; }}
+            .label {{ font-size:12px; color:#6b7280; margin-bottom:6px; }}
+            .value {{ font-size:14px; white-space:pre-wrap; word-break:break-word; }}
+            .content {{ background:#111827; color:#f9fafb; border-radius:8px; padding:16px; white-space:pre-wrap; }}
+            .actions {{ margin-top:20px; display:flex; gap:12px; }}
+            .button {{ display:inline-block; padding:10px 16px; border-radius:8px; text-decoration:none; background:#2563eb; color:#fff; }}
+            .button.secondary {{ background:#374151; }}
+        </style>
+    </head>
+    <body>
+        <div class=\"card\">
+            <h1>{alert.title}</h1>
+            <div class=\"grid\">
+                <div class=\"field\"><div class=\"label\">严重程度</div><div class=\"value\">{alert.severity}</div></div>
+                <div class=\"field\"><div class=\"label\">状态</div><div class=\"value\">{alert.status}</div></div>
+                <div class=\"field\"><div class=\"label\">数据源ID</div><div class=\"value\">{alert.datasource_id}</div></div>
+                <div class=\"field\"><div class=\"label\">告警类型</div><div class=\"value\">{alert.alert_type}</div></div>
+                <div class=\"field\"><div class=\"label\">指标名称</div><div class=\"value\">{alert.metric_name or '-'}</div></div>
+                <div class=\"field\"><div class=\"label\">创建时间</div><div class=\"value\">{alert.created_at}</div></div>
+                <div class=\"field\"><div class=\"label\">阈值</div><div class=\"value\">{alert.threshold_value if alert.threshold_value is not None else '-'}</div></div>
+                <div class=\"field\"><div class=\"label\">当前值</div><div class=\"value\">{alert.metric_value if alert.metric_value is not None else '-'}</div></div>
+            </div>
+            <h3>详细内容</h3>
+            <div class=\"content\">{alert.content}</div>
+            <div class=\"actions\">{report_link_html}</div>
+        </div>
+    </body>
+    </html>
+    """
 
 
 @router.post("/{alert_id}/acknowledge", response_model=AlertMessageResponse)
