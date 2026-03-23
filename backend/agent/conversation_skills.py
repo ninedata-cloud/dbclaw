@@ -169,6 +169,7 @@ async def run_conversation_with_skills(
         try:
             collected_content = ""
             collected_tool_calls = []
+            round_usage = None
 
             async for event in stream_assistant_turn(
                 client,
@@ -181,6 +182,9 @@ async def run_conversation_with_skills(
                     yield {"type": "content", "content": event["content"]}
                 elif event["type"] == "message_complete":
                     collected_tool_calls = event.get("tool_calls", [])
+                    round_usage = event.get("usage")
+                    if round_usage:
+                        yield {"type": "usage", "usage": round_usage}
                     if event.get("stop_reason") == "end_turn" and not collected_tool_calls:
                         yield {"type": "done", "content": collected_content}
                         return

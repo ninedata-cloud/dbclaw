@@ -13,6 +13,7 @@ class AIModel(Base):
     api_key_encrypted = Column(String, nullable=False)
     base_url = Column(String, nullable=False)
     model_name = Column(String, nullable=False)
+    context_window = Column(Integer, nullable=True)
     is_default = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

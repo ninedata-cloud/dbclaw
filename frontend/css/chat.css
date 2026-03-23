@@ -27,7 +27,7 @@
 .chat-message {
     display: flex;
     gap: 12px;
-    max-width: 85%;
+    max-width: 94%;
     min-width: 0;
     animation: fadeIn 0.3s ease;
 }

@@ -45,10 +45,16 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Document migration: {e}")
 
     try:
-        from backend.migrations.add_ai_model_protocol import migrate as migrate_ai_model_protocol
-        await migrate_ai_model_protocol()
+        from backend.migrations.add_ai_model_context_window import migrate as migrate_ai_model_context_window
+        await migrate_ai_model_context_window()
     except Exception as e:
-        logger.warning(f"AI model protocol migration: {e}")
+        logger.warning(f"AI model context_window migration: {e}")
+
+    try:
+        from backend.migrations.add_diagnostic_session_token_usage import migrate as migrate_diagnostic_session_token_usage
+        await migrate_diagnostic_session_token_usage()
+    except Exception as e:
+        logger.warning(f"Diagnostic session token usage migration: {e}")
 
     # Seed default system configs
     from backend.database import async_session as _async_session

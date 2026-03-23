@@ -121,6 +121,9 @@ async def clear_session_messages(session_id: int, db: AsyncSession = Depends(get
     session = result.scalar_one_or_none()
     if session:
         session.title = "新建会话"
+        session.input_tokens = 0
+        session.output_tokens = 0
+        session.total_tokens = 0
         session.updated_at = datetime.utcnow()
     await db.commit()
     return {"message": "Messages cleared"}
@@ -270,6 +273,7 @@ async def chat_websocket(websocket: WebSocket, session_id: int, token: str = Que
 
             # Stream AI response using skill-based system
             full_response = ""
+            usage_totals = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
             async with async_session() as db:
                 # Get user_id from token (sub contains username, not user_id)
                 username = payload.get("sub")
@@ -339,6 +343,27 @@ async def chat_websocket(websocket: WebSocket, session_id: int, token: str = Que
                             "tool_name": event["tool_name"],
                             "result": event["result"],
                             "execution_time_ms": event.get("execution_time_ms"),
+                        })
+                    elif event_type == "usage":
+                        usage = event.get("usage", {}) or {}
+                        usage_totals["input_tokens"] += int(usage.get("input_tokens") or 0)
+                        usage_totals["output_tokens"] += int(usage.get("output_tokens") or 0)
+                        usage_totals["total_tokens"] += int(usage.get("total_tokens") or 0)
+
+                        session_result = await db.execute(
+                            select(DiagnosticSession).where(DiagnosticSession.id == session_id)
+                        )
+                        session = session_result.scalar_one_or_none()
+                        if session:
+                            session.input_tokens += int(usage.get("input_tokens") or 0)
+                            session.output_tokens += int(usage.get("output_tokens") or 0)
+                            session.total_tokens += int(usage.get("total_tokens") or 0)
+                            session.updated_at = datetime.utcnow()
+                            await db.commit()
+
+                        await websocket.send_json({
+                            "type": "usage",
+                            "usage": usage,
                         })
                     elif event_type == "done":
                         full_response = event.get("content", full_response)

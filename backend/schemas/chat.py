@@ -18,6 +18,9 @@ class ChatSessionResponse(BaseModel):
     title: str
     kb_ids: Optional[List[int]] = None
     disabled_tools: Optional[List[str]] = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

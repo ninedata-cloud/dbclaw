@@ -12,6 +12,9 @@ class DiagnosticSession(Base):
     title = Column(String(200), default="New Session")
     kb_ids = Column(JSON, nullable=True)
     disabled_tools = Column(JSON, nullable=True)
+    input_tokens = Column(Integer, nullable=False, default=0)
+    output_tokens = Column(Integer, nullable=False, default=0)
+    total_tokens = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
