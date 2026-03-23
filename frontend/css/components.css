@@ -73,6 +73,26 @@
     border-top: 1px solid var(--border-color);
 }
 
+.ai-model-card .datasource-card-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.ai-model-card .datasource-card-actions .btn {
+    padding: 4px 8px;
+    font-size: 11px;
+    gap: 4px;
+}
+
+.ai-model-card .datasource-card-actions .btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.ai-model-card .datasource-card-actions .delete-btn {
+    padding-inline: 6px;
+}
+
 /* === Knowledge Base Cards === */
 .kb-grid {
     display: grid;

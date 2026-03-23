@@ -9,6 +9,7 @@ class AIModel(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
     provider = Column(String, nullable=False)
+    protocol = Column(String, nullable=False, default="openai")
     api_key_encrypted = Column(String, nullable=False)
     base_url = Column(String, nullable=False)
     model_name = Column(String, nullable=False)
