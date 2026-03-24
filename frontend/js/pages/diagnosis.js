@@ -647,11 +647,10 @@ const DiagnosisPage = {
             });
 
             if (event && event.code === 1008) {
-                // Authentication error
                 Toast.error('Session expired. Please log in again.');
                 setTimeout(() => {
-                    localStorage.removeItem('auth_token');
-                    window.location.href = '#/login';
+                    Store.set('currentUser', null);
+                    window.location.hash = 'login';
                 }, 2000);
             } else if (event && event.code === 1000) {
                 // Normal closure - no error needed

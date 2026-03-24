@@ -422,7 +422,7 @@ def _extract_metric_value(metrics: Dict[str, Any], metric_name: str) -> Optional
         "cpu_usage": ["cpu_usage_percent", "cpu_percent"],
         "memory_usage": ["memory_usage_percent", "mem_percent"],
         "disk_usage": ["disk_usage_percent", "disk_percent"],
-        "connections": ["connections_active", "active_connections", "connection_count", "threads_connected"],
+        "connections": ["connections_active", "threads_running", "active_connections", "connection_count"],
     }
 
     if metric_name in mappings:

@@ -1,4 +1,7 @@
 from datetime import datetime, timedelta, timezone
+import hashlib
+import secrets
+import uuid
 from passlib.context import CryptContext
 from jose import jwt, JWTError
 from backend.config import get_settings
@@ -14,35 +17,34 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
-    settings = get_settings()
-    to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=settings.jwt_expire_minutes))
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+def generate_session_id() -> str:
+    return secrets.token_urlsafe(32)
 
 
-def decode_access_token(token: str) -> dict:
-    settings = get_settings()
-    return jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+def hash_session_id(raw_session_id: str) -> str:
+    return hashlib.sha256(raw_session_id.encode("utf-8")).hexdigest()
 
 
 def create_public_share_token(resource_type: str, resource_id: int, expires_delta: timedelta | None = None) -> str:
     settings = get_settings()
-    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=settings.public_share_expire_minutes))
+    now = datetime.now(timezone.utc)
+    expire = now + (expires_delta or timedelta(minutes=settings.public_share_expire_minutes))
     payload = {
-        "type": "public_share",
+        "typ": "public_share",
+        "aud": "public",
+        "jti": str(uuid.uuid4()),
+        "iat": now,
         "resource_type": resource_type,
         "resource_id": resource_id,
         "exp": expire,
     }
-    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, settings.public_share_secret_key, algorithm=settings.jwt_algorithm)
 
 
 def decode_public_share_token(token: str, resource_type: str, resource_id: int) -> dict:
     settings = get_settings()
-    payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
-    if payload.get("type") != "public_share":
+    payload = jwt.decode(token, settings.public_share_secret_key, algorithms=[settings.jwt_algorithm], audience="public")
+    if payload.get("typ") != "public_share":
         raise JWTError("Invalid token type")
     if payload.get("resource_type") != resource_type:
         raise JWTError("Invalid resource type")

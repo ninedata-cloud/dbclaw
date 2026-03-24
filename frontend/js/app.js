@@ -1,5 +1,5 @@
 /* App initialization */
-(function() {
+(async function() {
     // Register routes
     Router.register('login', () => LoginPage.render());
     Router.register('dashboard', () => { DashboardPage.render(); return () => DashboardPage._stopTimer(); });
@@ -17,20 +17,15 @@
     Router.register('alerts', () => AlertsPage.init());
     Router.register('integrations', () => integrationsPage.init());
 
-    // Check auth
-    const token = localStorage.getItem('auth_token');
-    const userJson = localStorage.getItem('auth_user');
-    if (token && userJson) {
-        try {
-            Store.set('currentUser', JSON.parse(userJson));
-            Sidebar.render();
-            API.getDatasources().then(datasources => {
-                Store.set('datasources', datasources);
-            }).catch(() => {});
-        } catch (e) {
-            localStorage.removeItem('auth_token');
-            localStorage.removeItem('auth_user');
-        }
+    try {
+        const currentUser = await API.getMe();
+        Store.set('currentUser', currentUser);
+        Sidebar.render();
+        API.getDatasources().then(datasources => {
+            Store.set('datasources', datasources);
+        }).catch(() => {});
+    } catch (e) {
+        Store.set('currentUser', null);
     }
 
     // Initialize router

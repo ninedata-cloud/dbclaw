@@ -68,6 +68,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Trigger alert link migration: {e}")
 
+    try:
+        from backend.migrations.add_user_session_security import migrate as migrate_user_session_security
+        await migrate_user_session_security()
+    except Exception as e:
+        logger.warning(f"User session security migration: {e}")
+
     # Seed default system configs
     from backend.database import async_session as _async_session
     from backend.services import config_service as _config_service
@@ -205,26 +211,19 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Global exception handler for detailed logging
     @app.exception_handler(Exception)
     async def global_exception_handler(request, exc):
         from fastapi.responses import JSONResponse
         import traceback
 
-        # Log detailed error information
-        logger.error(f"Unhandled exception in {request.method} {request.url.path}")
-        logger.error(f"Exception type: {type(exc).__name__}")
-        logger.error(f"Exception message: {str(exc)}")
-        logger.error(f"Traceback:\n{traceback.format_exc()}")
-
-        # Log request details
-        logger.error(f"Request headers: {dict(request.headers)}")
-        try:
-            body = await request.body()
-            if body:
-                logger.error(f"Request body: {body.decode('utf-8')}")
-        except:
-            pass
+        logger.error(
+            "Unhandled exception in %s %s [%s]: %s\n%s",
+            request.method,
+            request.url.path,
+            type(exc).__name__,
+            str(exc),
+            traceback.format_exc(),
+        )
 
         return JSONResponse(
             status_code=500,

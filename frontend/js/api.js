@@ -3,41 +3,31 @@ const API = {
     async request(url, options = {}) {
         const defaultOpts = {
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
         };
         const merged = { ...defaultOpts, ...options };
+        merged.headers = { ...defaultOpts.headers, ...(options.headers || {}) };
 
-        // Inject auth token
-        const token = localStorage.getItem('auth_token');
-        if (token) {
-            merged.headers['Authorization'] = `Bearer ${token}`;
-        }
-
-        if (merged.body && typeof merged.body === 'object') {
+        if (merged.body && typeof merged.body === 'object' && !(merged.body instanceof FormData)) {
             merged.body = JSON.stringify(merged.body);
         }
         try {
             const response = await fetch(url, merged);
             if (!response.ok) {
-                // Handle 401 - redirect to login
                 if (response.status === 401) {
-                    localStorage.removeItem('auth_token');
-                    localStorage.removeItem('auth_user');
                     Store.set('currentUser', null);
                     window.location.hash = 'login';
                     throw new Error('会话已过期，请重新登录');
                 }
 
-                // Parse error response
                 const err = await response.json().catch(() => ({ detail: response.statusText }));
 
-                // Extract error message, handling various formats
                 let errorMessage = '请求失败';
 
                 if (err.detail) {
                     if (typeof err.detail === 'string') {
                         errorMessage = err.detail;
                     } else if (Array.isArray(err.detail)) {
-                        // Pydantic validation errors
                         errorMessage = err.detail.map(e => {
                             const loc = e.loc ? e.loc.join('.') : '';
                             return `${loc}: ${e.msg}`;
@@ -67,36 +57,26 @@ const API = {
     delete(url) { return this.request(url, { method: 'DELETE' }); },
 
     async postFormData(url, formData) {
-        const token = localStorage.getItem('auth_token');
-        const headers = {};
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
         const response = await fetch(url, {
             method: 'POST',
-            headers,
+            credentials: 'same-origin',
             body: formData
         });
         if (!response.ok) {
             if (response.status === 401) {
-                localStorage.removeItem('auth_token');
-                localStorage.removeItem('auth_user');
                 Store.set('currentUser', null);
                 window.location.hash = 'login';
                 throw new Error('会话已过期，请重新登录');
             }
 
-            // Parse error response
             const err = await response.json().catch(() => ({ detail: response.statusText }));
 
-            // Extract error message, handling various formats
             let errorMessage = '请求失败';
 
             if (err.detail) {
                 if (typeof err.detail === 'string') {
                     errorMessage = err.detail;
                 } else if (Array.isArray(err.detail)) {
-                    // Pydantic validation errors
                     errorMessage = err.detail.map(e => {
                         const loc = e.loc ? e.loc.join('.') : '';
                         return `${loc}: ${e.msg}`;
@@ -113,9 +93,10 @@ const API = {
         return await response.json();
     },
 
-    // Auth endpoints
     login(username, password) { return this.post('/api/auth/login', { username, password }); },
     getMe() { return this.get('/api/auth/me'); },
+    logout() { return this.post('/api/auth/logout', {}); },
+    logoutAll() { return this.post('/api/auth/logout-all', {}); },
     changePassword(old_password, new_password) { return this.post('/api/auth/change-password', { old_password, new_password }); },
 
     // User endpoints
@@ -197,13 +178,9 @@ const API = {
     getReport(id) { return this.get(`/api/reports/${id}`); },
     getReportDownloadUrl(id, format) { return `/api/reports/${id}/download?format=${format}`; },
     async downloadReport(id, format) {
-        const token = localStorage.getItem('auth_token');
-        const headers = {};
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-
         const response = await fetch(`/api/reports/${id}/download?format=${format}`, {
             method: 'GET',
-            headers
+            credentials: 'same-origin'
         });
 
         if (!response.ok) {
@@ -252,7 +229,6 @@ const API = {
         return this.delete(`/api/docs/${docId}`);
     },
     exportDocument(docId) {
-        const token = localStorage.getItem('auth_token');
         const a = document.createElement('a');
         a.href = `/api/docs/${docId}/export`;
         a.setAttribute('download', '');
@@ -266,6 +242,29 @@ const API = {
             title: title,
             content: markdownContent,
         });
+    },
+    async getKnowledgeBases() {
+        const categories = await this.getDocCategories();
+        const items = [];
+
+        const appendCategory = (category) => {
+            items.push({
+                id: category.id,
+                name: category.name,
+                db_type: category.db_type,
+                is_active: true,
+                document_count: category.document_count ?? 0,
+            });
+            for (const child of (category.children || [])) {
+                appendCategory(child);
+            }
+        };
+
+        for (const category of categories) {
+            appendCategory(category);
+        }
+
+        return items;
     },
 
     // Skills

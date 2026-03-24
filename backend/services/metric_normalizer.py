@@ -92,9 +92,11 @@ class MetricNormalizer:
         """MySQL 指标标准化"""
         normalized = {}
 
-        # 连接数
-        if 'threads_connected' in metrics:
-            normalized['connections'] = metrics['threads_connected']
+        # 活跃连接数（MySQL: Threads_running）
+        if 'threads_running' in metrics:
+            normalized['connections'] = metrics['threads_running']
+        elif 'connections_active' in metrics:
+            normalized['connections'] = metrics['connections_active']
 
         # QPS — 基于 questions 累积值计算实时速率
         if 'questions' in metrics:

@@ -585,7 +585,7 @@ const MonitorPage = {
         const cards = DOM.$$('#monitor-metrics .metric-card');
         if (cards.length < 4) return;
 
-        const active = data.connections_active || data.connected_clients || data.user_sessions || data.connections_current || 0;
+        const active = data.connections ?? (data.connections_active || data.connected_clients || data.user_sessions || data.connections_current || 0);
         const qps = data.qps || data.ops_per_sec || data.batch_requests_sec || 0;
         const hitRate = data.buffer_pool_hit_rate || data.cache_hit_rate || data.hit_rate || 0;
 
@@ -618,7 +618,7 @@ const MonitorPage = {
     },
 
     _updateCharts(data, time, timestamp) {
-        const active = data.connections_active || data.connected_clients || data.user_sessions || data.connections_current || 0;
+        const active = data.connections ?? (data.connections_active || data.connected_clients || data.user_sessions || data.connections_current || 0);
         const qps = data.qps || data.ops_per_sec || data.batch_requests_sec || 0;
         const hitRate = data.buffer_pool_hit_rate || data.cache_hit_rate || data.hit_rate || 100;
         const tps = data.tps || 0;
@@ -710,7 +710,7 @@ const MonitorPage = {
             batchData.labels.push(time);
 
             // Database metrics
-            batchData.connections.push(data.connections_active || data.connected_clients || data.user_sessions || data.connections_current || 0);
+            batchData.connections.push(data.connections ?? (data.connections_active || data.connected_clients || data.user_sessions || data.connections_current || 0));
             batchData.qps.push(parseFloat(data.qps || data.ops_per_sec || data.batch_requests_sec || 0));
             batchData.cache_hit.push(parseFloat(data.buffer_pool_hit_rate || data.cache_hit_rate || data.hit_rate || 100));
             batchData.tps.push(parseFloat(data.tps || 0));

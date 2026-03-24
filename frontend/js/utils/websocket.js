@@ -14,9 +14,7 @@ class WSManager {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
 
         const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const token = localStorage.getItem('auth_token');
-        const separator = this.url.includes('?') ? '&' : '?';
-        const wsUrl = `${protocol}//${location.host}${this.url}${token ? separator + 'token=' + token : ''}`;
+        const wsUrl = `${protocol}//${location.host}${this.url}`;
         this.ws = new WebSocket(wsUrl);
 
         this.ws.onopen = () => {
