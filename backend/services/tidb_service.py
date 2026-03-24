@@ -37,20 +37,24 @@ class TiDBConnector(DBConnector):
                 await cur.execute("SELECT * FROM INFORMATION_SCHEMA.CLUSTER_INFO")
                 cluster_rows = await cur.fetchall()
 
-                # Get active connections
+                # Get process count for reference
                 await cur.execute("SELECT COUNT(*) FROM information_schema.PROCESSLIST")
-                proc_count = (await cur.fetchone())[0]
+                process_count = (await cur.fetchone())[0]
 
                 # Get global status
                 await cur.execute("SHOW GLOBAL STATUS")
                 rows = await cur.fetchall()
                 status = {r[0]: r[1] for r in rows}
+                threads_running = int(status.get("Threads_running", 0))
+                threads_connected = int(status.get("Threads_connected", 0))
 
                 return {
                     "cluster_nodes": len(cluster_rows),
-                    "connections_active": proc_count,
-                    "threads_running": int(status.get("Threads_running", 0)),
-                    "threads_connected": int(status.get("Threads_connected", 0)),
+                    "connections_active": threads_running,
+                    "connections_total": threads_connected,
+                    "process_count": process_count,
+                    "threads_running": threads_running,
+                    "threads_connected": threads_connected,
                     "queries_per_second": float(status.get("Queries", 0)),
                     "uptime": int(status.get("Uptime", 0)),
                     "slow_queries": int(status.get("Slow_queries", 0)),

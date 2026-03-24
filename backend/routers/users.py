@@ -9,8 +9,11 @@ from backend.models.login_log import LoginLog
 from backend.schemas.auth import (
     UserCreate, UserUpdate, UserResponse, ResetPasswordRequest, LoginLogResponse,
 )
+from datetime import datetime, timezone
+
 from backend.utils.security import hash_password
 from backend.dependencies import get_current_admin
+from backend.services.session_service import SessionService
 
 router = APIRouter(prefix="/api/users", tags=["users"], dependencies=[Depends(get_current_admin)])
 
@@ -84,6 +87,9 @@ async def reset_password(user_id: int, data: ResetPasswordRequest, db: AsyncSess
         raise HTTPException(status_code=404, detail="用户不存在")
 
     user.password_hash = hash_password(data.new_password)
+    user.password_changed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    user.session_version += 1
+    await SessionService.revoke_user_sessions(db, user.id, "password_reset")
     await db.commit()
     return {"message": "Password reset successfully"}
 
@@ -103,6 +109,9 @@ async def toggle_status(
         raise HTTPException(status_code=404, detail="用户不存在")
 
     user.is_active = not user.is_active
+    if not user.is_active:
+        user.session_version += 1
+        await SessionService.revoke_user_sessions(db, user.id, "user_disabled")
     await db.commit()
     await db.refresh(user)
     return {"message": f"User {'enabled' if user.is_active else 'disabled'}", "is_active": user.is_active}

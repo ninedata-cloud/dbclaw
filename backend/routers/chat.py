@@ -2,22 +2,76 @@ import json
 import asyncio
 import logging
 from datetime import datetime
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query, UploadFile, File, HTTPException
+from urllib.parse import urlparse
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from typing import List
 
 from backend.database import get_db, async_session
+from backend.config import get_settings
 from backend.models.diagnostic_session import DiagnosticSession, ChatMessage
+from backend.models.user import User
 from backend.schemas.chat import ChatSessionCreate, ChatSessionResponse, ChatMessageResponse
 from backend.agent.conversation import run_conversation
 from backend.agent.conversation_skills import run_conversation_with_skills
 from backend.agent.tools import HIGH_RISK_TOOLS
 
 from backend.dependencies import get_current_user
+from backend.services.config_service import get_config
+from backend.services.session_service import SessionService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
+
+
+async def _get_owned_session(db: AsyncSession, session_id: int, user: User) -> DiagnosticSession:
+    result = await db.execute(
+        select(DiagnosticSession).where(DiagnosticSession.id == session_id, DiagnosticSession.user_id == user.id)
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return session
+
+
+async def _validate_websocket_origin(websocket: WebSocket) -> bool:
+    origin = websocket.headers.get("origin")
+    if not origin:
+        return True
+
+    allowed_hosts = {websocket.headers.get("host", "")}
+    async with async_session() as db:
+        external_base_url = await get_config(db, "app_external_base_url", default="")
+
+    if external_base_url:
+        parsed = urlparse(external_base_url)
+        if parsed.netloc:
+            allowed_hosts.add(parsed.netloc)
+
+    parsed_origin = urlparse(origin)
+    return bool(parsed_origin.scheme in {"http", "https"} and parsed_origin.netloc in allowed_hosts)
+
+
+async def _authenticate_websocket_session(websocket: WebSocket, session_id: int) -> tuple[User, DiagnosticSession] | tuple[None, None]:
+    session_cookie = websocket.cookies.get(get_settings().session_cookie_name)
+    async with async_session() as db:
+        user_session = await SessionService.get_active_session(db, session_cookie)
+        if not user_session:
+            return None, None
+        user_result = await db.execute(select(User).where(User.id == user_session.user_id))
+        user = user_result.scalar_one_or_none()
+        if not user or not user.is_active:
+            return None, None
+        chat_session_result = await db.execute(
+            select(DiagnosticSession).where(DiagnosticSession.id == session_id, DiagnosticSession.user_id == user.id)
+        )
+        chat_session = chat_session_result.scalar_one_or_none()
+        if not chat_session:
+            return None, None
+        await SessionService.touch_session(db, user_session)
+        await db.commit()
+        return user, chat_session
 
 
 @router.get("/api/chat/high-risk-tools")
@@ -29,7 +83,9 @@ async def get_high_risk_tools(user=Depends(get_current_user)):
 @router.get("/api/chat/sessions", response_model=List[ChatSessionResponse])
 async def list_sessions(db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     result = await db.execute(
-        select(DiagnosticSession).order_by(desc(DiagnosticSession.updated_at))
+        select(DiagnosticSession)
+        .where(DiagnosticSession.user_id == user.id)
+        .order_by(desc(DiagnosticSession.updated_at))
     )
     return result.scalars().all()
 
@@ -37,6 +93,7 @@ async def list_sessions(db: AsyncSession = Depends(get_db), user=Depends(get_cur
 @router.post("/api/chat/sessions", response_model=ChatSessionResponse)
 async def create_session(data: ChatSessionCreate, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     session = DiagnosticSession(
+        user_id=user.id,
         datasource_id=data.datasource_id,
         title=data.title or "New Session",
         ai_model_id=data.ai_model_id,
@@ -59,6 +116,8 @@ async def upload_attachment(
     """Upload file attachment for chat session"""
     from backend.utils.attachment_handler import AttachmentHandler
 
+    await _get_owned_session(db, session_id, user)
+
     # Check file size
     file_content = await file.read()
     if len(file_content) > AttachmentHandler.MAX_FILE_SIZE:
@@ -78,6 +137,7 @@ async def upload_attachment(
 
 @router.get("/api/chat/sessions/{session_id}/messages", response_model=List[ChatMessageResponse])
 async def get_messages(session_id: int, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
+    await _get_owned_session(db, session_id, user)
     result = await db.execute(
         select(ChatMessage)
         .where(ChatMessage.session_id == session_id)
@@ -89,7 +149,7 @@ async def get_messages(session_id: int, db: AsyncSession = Depends(get_db), user
 @router.delete("/api/chat/sessions/{session_id}")
 async def delete_session(session_id: int, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     """Delete a chat session and all its messages."""
-    # Delete messages first
+    await _get_owned_session(db, session_id, user)
     result = await db.execute(
         select(ChatMessage).where(ChatMessage.session_id == session_id)
     )
@@ -97,7 +157,7 @@ async def delete_session(session_id: int, db: AsyncSession = Depends(get_db), us
         await db.delete(msg)
     # Delete session
     result = await db.execute(
-        select(DiagnosticSession).where(DiagnosticSession.id == session_id)
+        select(DiagnosticSession).where(DiagnosticSession.id == session_id, DiagnosticSession.user_id == user.id)
     )
     session = result.scalar_one_or_none()
     if session:
@@ -109,6 +169,7 @@ async def delete_session(session_id: int, db: AsyncSession = Depends(get_db), us
 @router.delete("/api/chat/sessions/{session_id}/messages")
 async def clear_session_messages(session_id: int, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     """Clear all messages in a session but keep the session itself."""
+    await _get_owned_session(db, session_id, user)
     result = await db.execute(
         select(ChatMessage).where(ChatMessage.session_id == session_id)
     )
@@ -116,7 +177,7 @@ async def clear_session_messages(session_id: int, db: AsyncSession = Depends(get
         await db.delete(msg)
     # Reset session title
     result = await db.execute(
-        select(DiagnosticSession).where(DiagnosticSession.id == session_id)
+        select(DiagnosticSession).where(DiagnosticSession.id == session_id, DiagnosticSession.user_id == user.id)
     )
     session = result.scalar_one_or_none()
     if session:
@@ -130,27 +191,27 @@ async def clear_session_messages(session_id: int, db: AsyncSession = Depends(get
 
 
 @router.websocket("/ws/chat/{session_id}")
-async def chat_websocket(websocket: WebSocket, session_id: int, token: str = Query(default=None)):
-    # Validate token for WebSocket connections
-    if not token:
-        await websocket.close(code=1008, reason="Missing token")
+async def chat_websocket(websocket: WebSocket, session_id: int):
+    if not await _validate_websocket_origin(websocket):
+        await websocket.close(code=1008, reason="Invalid origin")
         return
-    try:
-        from backend.utils.security import decode_access_token
-        payload = decode_access_token(token)
-        if not payload.get("sub"):
-            await websocket.close(code=1008, reason="Invalid token")
-            return
-    except Exception:
-        await websocket.close(code=1008, reason="Invalid or expired token")
+
+    user, owned_session = await _authenticate_websocket_session(websocket, session_id)
+    if not user or not owned_session:
+        await websocket.close(code=1008, reason="Invalid or expired session")
         return
 
     await websocket.accept()
-    logger.info(f"Chat WebSocket connected for session {session_id}")
+    logger.info(f"Chat WebSocket connected for session {session_id}, user {user.id}")
 
     try:
         while True:
             data = await websocket.receive_json()
+            refreshed_user, refreshed_session = await _authenticate_websocket_session(websocket, session_id)
+            if not refreshed_user or not refreshed_session:
+                await websocket.close(code=1008, reason="Session expired")
+                return
+            user = refreshed_user
             user_message = data.get("message", "")
             payload_datasource_id = data.get("datasource_id")
             model_id = data.get("model_id")
@@ -175,7 +236,7 @@ async def chat_websocket(websocket: WebSocket, session_id: int, token: str = Que
 
                 # Update session title/model_id and lock datasource_id from first turn
                 session_result = await db.execute(
-                    select(DiagnosticSession).where(DiagnosticSession.id == session_id)
+                    select(DiagnosticSession).where(DiagnosticSession.id == session_id, DiagnosticSession.user_id == user.id)
                 )
                 session = session_result.scalar_one_or_none()
                 if session:
@@ -285,20 +346,13 @@ async def chat_websocket(websocket: WebSocket, session_id: int, token: str = Que
             full_response = ""
             usage_totals = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
             async with async_session() as db:
-                # Get user_id from token (sub contains username, not user_id)
-                username = payload.get("sub")
-                from backend.models.user import User
-                user_result = await db.execute(select(User).where(User.username == username))
-                user = user_result.scalar_one_or_none()
-                user_id = user.id if user else None
-
                 async for event in run_conversation_with_skills(
                     messages,
                     effective_datasource_id,
                     model_id,
                     kb_ids,
                     db,
-                    user_id=user_id,
+                    user_id=user.id,
                     session_id=session_id,
                     disabled_tools=disabled_tools
                 ):
@@ -361,7 +415,7 @@ async def chat_websocket(websocket: WebSocket, session_id: int, token: str = Que
                         usage_totals["total_tokens"] += int(usage.get("total_tokens") or 0)
 
                         session_result = await db.execute(
-                            select(DiagnosticSession).where(DiagnosticSession.id == session_id)
+                            select(DiagnosticSession).where(DiagnosticSession.id == session_id, DiagnosticSession.user_id == user.id)
                         )
                         session = session_result.scalar_one_or_none()
                         if session:

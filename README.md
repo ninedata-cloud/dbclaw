@@ -41,32 +41,65 @@ FastAPI Backend
 >
 > Architecture screenshots and UI previews can be added later under `docs/`.
 
-## 🚀 快速开始 / Quick Start
+## 🚀 部署安装 / Production Deployment
 
 ### 环境要求 / Requirements
 
 - Python 3.10+
-- PostgreSQL
-- 可选：ChromaDB 持久化目录
+- PostgreSQL 13+
+- Linux/macOS 服务器
 - 可选：OpenAI 兼容模型服务、博查搜索 API
+- 可选：目标数据库访问权限、SSH 主机访问权限
 
-### 安装 / Installation
+### 1. 获取代码 / Get the Code
 
 ```bash
+git clone <your-repository-url>
+cd smartdba
+```
+
+### 2. 安装 Python 依赖 / Install Python Dependencies
+
+建议先创建虚拟环境：
+
+It is recommended to create a virtual environment first:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 配置环境变量 / Configure Environment
+> `requirements.txt` 已按生产部署场景整理。若你暂时不接入某些数据库，可保留未使用驱动；仅 `pyodbc`、`oracledb`、`dmPython` 等驱动可能需要额外系统库或厂商客户端。
+>
+> `requirements.txt` is organized for production deployment. You can keep unused drivers installed, but drivers such as `pyodbc`, `oracledb`, and `dmPython` may require extra system libraries or vendor clients.
 
-复制 `.env.example` 为 `.env`，并至少配置以下项目：
+### 3. 配置环境变量 / Configure Environment
 
-Copy `.env.example` to `.env` and configure at least the following values:
+复制 `.env.example` 为 `.env`：
+
+Copy `.env.example` to `.env`:
+
+```bash
+cp .env.example .env
+```
+
+至少需要修改以下配置：
+
+At minimum, update the following values:
 
 ```env
-ENCRYPTION_KEY=your_fernet_key
-DATABASE_URL=postgresql+asyncpg://dbguard:dbguard@localhost:5432/dbguard
-JWT_SECRET_KEY=change_me
-OPENAI_API_KEY=your_api_key
+DEBUG=false
+APP_HOST=0.0.0.0
+APP_PORT=9939
+ENCRYPTION_KEY=<generate-a-random-fernet-key>
+DATABASE_URL=postgresql+asyncpg://dbguard:<strong-password>@<db-host>:5432/dbguard
+PUBLIC_SHARE_SECRET_KEY=<random-secret>
+INITIAL_ADMIN_PASSWORD=<strong-admin-password>
+OPENAI_API_KEY=<your-api-key>
+OPENAI_BASE_URL=<your-openai-compatible-base-url>
+OPENAI_MODEL=<your-model-name>
 ```
 
 生成 Fernet 密钥：
@@ -77,24 +110,50 @@ Generate a Fernet key:
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
-### 启动服务 / Start the Service
+### 4. 准备 PostgreSQL / Prepare PostgreSQL
+
+先创建数据库和账号，并确保 `DATABASE_URL` 对应的用户具备建表权限。
+
+Create the database and user first, and make sure the user in `DATABASE_URL` has permission to create tables.
+
+示例：
+
+Example:
+
+```sql
+CREATE DATABASE dbguard;
+CREATE USER dbguard WITH PASSWORD '<strong-password>';
+GRANT ALL PRIVILEGES ON DATABASE dbguard TO dbguard;
+```
+
+### 5. 启动服务 / Start the Service
 
 ```bash
 python run.py
 ```
 
-默认调试端口为 `9939`，前端静态资源由后端直接提供。
+首次启动会自动完成：
 
-The default development port is `9939`, and the frontend static assets are served directly by the backend.
+On first startup, DBGuard will automatically:
 
-### 默认管理员账号 / Default Admin Account
+- 初始化元数据库表结构 / initialize metadata tables
+- 执行内置迁移脚本 / run built-in migrations
+- 创建默认管理员账号 / create the default admin account
+- 启动指标采集、巡检、通知等后台任务 / start collectors, inspections, and notification workers
 
+### 6. 访问系统 / Access the UI
+
+- 地址 / URL: `http://<server-ip>:9939`
 - 用户名 / Username: `admin`
-- 密码 / Password: `admin1234`
+- 密码 / Password: `INITIAL_ADMIN_PASSWORD` 对应的值
 
-首次启动时会自动创建默认管理员账号。
+### 生产环境建议 / Production Notes
 
-The default administrator account is created automatically on first startup.
+- 将 `DEBUG` 设置为 `false`
+- 使用强随机值配置 `ENCRYPTION_KEY`、`PUBLIC_SHARE_SECRET_KEY`、`INITIAL_ADMIN_PASSWORD`
+- 通过 systemd、supervisor 或容器编排守护 `python run.py`
+- 确保 PostgreSQL、目标数据库、SSH 网络访问策略已放通
+- 若需通过 HTTPS 对外提供，建议在 Nginx / Caddy 后挂载运行
 
 ## ⚙️ 配置 / Configuration
 
@@ -102,8 +161,8 @@ The default administrator account is created automatically on first startup.
 | --- | --- |
 | `ENCRYPTION_KEY` | 必填。用于加密数据库密码等敏感信息 / Required. Used to encrypt sensitive credentials |
 | `DATABASE_URL` | PostgreSQL 元数据库连接串 / PostgreSQL metadata database URL |
-| `JWT_SECRET_KEY` | JWT 签名密钥 / JWT signing secret |
-| `JWT_EXPIRE_MINUTES` | JWT 过期时间（分钟）/ JWT expiration in minutes |
+| `PUBLIC_SHARE_SECRET_KEY` | 公开分享链接签名密钥 / Signing secret for public share links |
+| `INITIAL_ADMIN_PASSWORD` | 首次启动初始化管理员密码 / Initial admin password for first bootstrap |
 | `OPENAI_API_KEY` | AI 模型服务密钥 / API key for AI model service |
 | `OPENAI_BASE_URL` | AI 服务基础地址 / Base URL for AI service |
 | `OPENAI_MODEL` | 默认模型名称 / Default model name |

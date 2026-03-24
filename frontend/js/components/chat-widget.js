@@ -130,10 +130,9 @@ const ChatWidget = {
             const formData = new FormData();
             formData.append('file', file);
 
-            const token = localStorage.getItem('auth_token');
             const response = await fetch(`/api/chat/sessions/${sessionId}/upload`, {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` },
+                credentials: 'same-origin',
                 body: formData
             });
 

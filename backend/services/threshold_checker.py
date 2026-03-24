@@ -160,6 +160,7 @@ class ThresholdChecker:
                     )
                     del self._violation_start_times[datasource_id][metric_name]
                     self._violation_counts[datasource_id][metric_name] = 0
+                    self._last_trigger_times[datasource_id].pop(metric_name, None)
 
         return violations_to_trigger
 
@@ -264,6 +265,7 @@ class ThresholdChecker:
                 )
                 del self._violation_start_times[datasource_id][metric_name]
                 self._violation_counts[datasource_id][metric_name] = 0
+                self._last_trigger_times[datasource_id].pop(metric_name, None)
 
         return []
 
@@ -337,7 +339,7 @@ class ThresholdChecker:
             "cpu_usage": ["cpu_usage_percent", "cpu.usage_percent", "cpu_percent"],
             "memory_usage": ["memory_usage_percent", "memory.usage_percent", "mem_percent"],
             "disk_usage": ["disk_usage_percent", "disk.usage_percent", "disk_percent"],
-            "connections": ["active_connections", "connection_count", "threads_connected"],
+            "connections": ["threads_running", "connections_active", "active_connections", "connection_count"],
         }
 
         if metric_name in mappings:

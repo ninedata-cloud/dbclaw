@@ -1,68 +1,75 @@
-# DbGuard - AI-powered Database Operations Platform
-# Single container with PostgreSQL 18 + Application
+# DbGuard - 单容器部署（内置 PostgreSQL + FastAPI + 静态前端）
 FROM python:3.11-slim
 
-# Install system dependencies + PostgreSQL 18 from PGDG
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    APP_HOST=0.0.0.0 \
+    APP_PORT=9939 \
+    DEBUG=false \
+    POSTGRES_DB=dbguard \
+    POSTGRES_USER=dbguard \
+    POSTGRES_PASSWORD=DbGuard2026 \
+    DATABASE_URL=postgresql+asyncpg://dbguard:DbGuard2026@localhost:5432/dbguard
+
+WORKDIR /app
+
+# 安装系统依赖、数据库驱动编译依赖、PostgreSQL 18 和 supervisor
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
     gcc \
     g++ \
+    curl \
+    gnupg \
+    lsb-release \
+    supervisor \
     libpq-dev \
     libffi-dev \
     libssl-dev \
     libkrb5-dev \
-    curl \
-    freetds-dev \
-    freetds-bin \
+    unixodbc \
     unixodbc-dev \
-    supervisor \
-    gnupg \
-    lsb-release \
+    freetds-bin \
+    freetds-dev \
     && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
-    && apt-get update && apt-get install -y --no-install-recommends postgresql-18 \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    postgresql-18 \
+    postgresql-client-18 \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+# 先安装 Python 依赖，提升缓存命中率
+COPY requirements.txt ./
+RUN pip install -r requirements.txt
 
-# Install Python dependencies first (better layer caching)
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# 复制项目运行所需文件
+COPY backend ./backend
+COPY frontend ./frontend
+COPY docker ./docker
+COPY run.py ./
+COPY .env.example ./
 
-# Pre-download sentence-transformers embedding model
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
-
-# Copy application code
-COPY backend/ ./backend/
-COPY frontend/ ./frontend/
-COPY run.py .
-
-# Create data directories (can be overridden by volumes)
-RUN mkdir -p data/chroma uploads/chat_attachments data/knowledge_bases
-
-# Copy docker helper scripts
-COPY docker/ ./docker/
-RUN chmod +x /app/docker/entrypoint.sh /app/docker/init-db.sh
-
-# Set up supervisord config
-RUN mkdir -p /etc/supervisor/conf.d /var/log/supervisor
-COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-
-# Create non-root app user and fix permissions
-RUN useradd -m -u 1000 dbguard \
+# 创建运行目录并设置权限
+RUN mkdir -p \
+    /app/data/chroma \
+    /app/data/knowledge_bases \
+    /app/uploads/chat_attachments \
+    /var/log/supervisor \
+    /etc/supervisor/conf.d \
+    && chmod +x /app/docker/entrypoint.sh /app/docker/init-db.sh \
+    && useradd -m -u 1000 dbguard \
     && chown -R dbguard:dbguard /app \
     && chown -R postgres:postgres /var/lib/postgresql
 
-# PostgreSQL default data directory
+# supervisor 配置
+COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# 数据卷：PostgreSQL 数据、知识库/向量数据、上传附件
 VOLUME ["/var/lib/postgresql/data", "/app/data", "/app/uploads"]
 
-# Expose application port
 EXPOSE 9939
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
-    CMD curl -f http://localhost:9939/health || exit 1
-
-# Default environment pointing to local PG
-ENV DATABASE_URL=postgresql+asyncpg://dbguard:DbGuard2026@localhost:5432/dbguard?ssl=disable
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:9939/health || exit 1
 
 ENTRYPOINT ["/app/docker/entrypoint.sh"]

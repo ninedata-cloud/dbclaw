@@ -38,14 +38,18 @@ class MySQLConnector(DBConnector):
                 status = {r[0]: r[1] for r in rows}
 
                 await cur.execute("SELECT COUNT(*) FROM information_schema.PROCESSLIST")
-                proc_count = (await cur.fetchone())[0]
+                process_count = (await cur.fetchone())[0]
 
                 uptime = max(int(status.get("Uptime", 1)), 1)
+                threads_running = int(status.get("Threads_running", 0))
+                threads_connected = int(status.get("Threads_connected", 0))
 
                 return {
-                    "connections_active": proc_count,
-                    "threads_running": int(status.get("Threads_running", 0)),
-                    "threads_connected": int(status.get("Threads_connected", 0)),
+                    "connections_active": threads_running,
+                    "connections_total": threads_connected,
+                    "process_count": process_count,
+                    "threads_running": threads_running,
+                    "threads_connected": threads_connected,
                     "uptime": int(status.get("Uptime", 0)),
                     "slow_queries": int(status.get("Slow_queries", 0)),
                     "open_tables": int(status.get("Open_tables", 0)),

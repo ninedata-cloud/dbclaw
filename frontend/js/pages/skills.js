@@ -404,13 +404,9 @@ const SkillsPage = {
             formData.append('file', file);
 
             try {
-                const token = localStorage.getItem('auth_token');
-                const headers = {};
-                if (token) headers['Authorization'] = `Bearer ${token}`;
-
                 const response = await fetch('/api/skills/import', {
                     method: 'POST',
-                    headers,
+                    credentials: 'same-origin',
                     body: formData
                 });
 

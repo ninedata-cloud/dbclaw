@@ -100,9 +100,12 @@ const Sidebar = {
         }
     },
 
-    _logout() {
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('auth_user');
+    async _logout() {
+        try {
+            await API.logout();
+        } catch (e) {
+            // ignore logout errors and clear local state anyway
+        }
         Store.set('currentUser', null);
         Router.navigate('login');
     }

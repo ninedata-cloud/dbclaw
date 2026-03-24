@@ -20,9 +20,8 @@ const Router = {
         const hash = window.location.hash.slice(1) || 'dashboard';
         const [page, ...params] = hash.split('/');
 
-        // Auth guard
-        const token = localStorage.getItem('auth_token');
-        if (page !== 'login' && !token) {
+        const currentUser = Store.get('currentUser');
+        if (page !== 'login' && !currentUser) {
             window.location.hash = 'login';
             return;
         }

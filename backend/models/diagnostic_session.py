@@ -7,6 +7,7 @@ class DiagnosticSession(Base):
     __tablename__ = "diagnostic_sessions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, nullable=True, index=True)
     datasource_id = Column(Integer, nullable=True)
     ai_model_id = Column(Integer, nullable=True)
     title = Column(String(200), default="New Session")
