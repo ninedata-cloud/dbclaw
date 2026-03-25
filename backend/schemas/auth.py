@@ -32,6 +32,12 @@ class ChangePasswordRequest(BaseModel):
     new_password: str = Field(..., min_length=6)
 
 
+class CurrentUserUpdateRequest(BaseModel):
+    display_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+
+
 class UserCreate(BaseModel):
     username: str = Field(..., min_length=1, max_length=50)
     password: str = Field(..., min_length=6)

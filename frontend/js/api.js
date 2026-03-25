@@ -14,7 +14,7 @@ const API = {
         try {
             const response = await fetch(url, merged);
             if (!response.ok) {
-                if (response.status === 401) {
+                if (response.status === 401 && url !== '/api/auth/login') {
                     Store.set('currentUser', null);
                     window.location.hash = 'login';
                     throw new Error('会话已过期，请重新登录');
@@ -95,6 +95,7 @@ const API = {
 
     login(username, password) { return this.post('/api/auth/login', { username, password }); },
     getMe() { return this.get('/api/auth/me'); },
+    updateMe(data) { return this.put('/api/auth/me', data); },
     logout() { return this.post('/api/auth/logout', {}); },
     logoutAll() { return this.post('/api/auth/logout-all', {}); },
     changePassword(old_password, new_password) { return this.post('/api/auth/change-password', { old_password, new_password }); },

@@ -41,21 +41,42 @@ class OceanBaseConnector(DBConnector):
                 except Exception:
                     server_count = 0
 
+                await cur.execute("SELECT CONNECTION_ID()")
+                current_connection_id = (await cur.fetchone())[0]
+
                 # Get process count for reference
-                await cur.execute("SELECT COUNT(*) FROM information_schema.PROCESSLIST")
-                process_count = (await cur.fetchone())[0]
+                await cur.execute(
+                    "SELECT "
+                    "COUNT(*) as total, "
+                    "SUM(CASE WHEN COMMAND != 'Sleep' THEN 1 ELSE 0 END) as active "
+                    "FROM information_schema.PROCESSLIST "
+                    "WHERE ID != %s",
+                    (current_connection_id,)
+                )
+                process_stats = await cur.fetchone()
+                process_count = process_stats[0] if process_stats else 0
 
                 # Get global status
                 await cur.execute("SHOW GLOBAL STATUS")
                 rows = await cur.fetchall()
                 status = {r[0]: r[1] for r in rows}
-                threads_running = int(status.get("Threads_running", 0))
-                threads_connected = int(status.get("Threads_connected", 0))
+
+                await cur.execute("SHOW GLOBAL VARIABLES LIKE 'max_connections'")
+                max_conn_row = await cur.fetchone()
+                max_connections = int(max_conn_row[1]) if max_conn_row and max_conn_row[1] is not None else 0
+
+                visible_threads_running = int(process_stats[1] or 0) if process_stats else 0
+                visible_threads_connected = int(process_stats[0] or 0) if process_stats else 0
+                global_threads_running = int(status.get("Threads_running", 0))
+                global_threads_connected = int(status.get("Threads_connected", 0))
+                threads_running = max(visible_threads_running, max(global_threads_running - 1, 0))
+                threads_connected = max(visible_threads_connected, global_threads_connected)
 
                 return {
                     "server_count": server_count,
                     "connections_active": threads_running,
                     "connections_total": threads_connected,
+                    "max_connections": max_connections,
                     "process_count": process_count,
                     "threads_running": threads_running,
                     "threads_connected": threads_connected,
