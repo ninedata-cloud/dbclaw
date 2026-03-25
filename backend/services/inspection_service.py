@@ -70,13 +70,15 @@ class InspectionService:
 
     async def trigger_inspection(self, db: AsyncSession, datasource_id: int,
                                 trigger_type: str, reason: str = None,
-                                metric_snapshot: Dict[str, Any] = None) -> int:
+                                metric_snapshot: Dict[str, Any] = None,
+                                alert_id: Optional[int] = None) -> int:
         """Manually or programmatically trigger an inspection"""
         trigger = InspectionTrigger(
             datasource_id=datasource_id,
             trigger_type=trigger_type,
             trigger_reason=reason,
             metric_snapshot=metric_snapshot,
+            alert_id=alert_id,
             processed=False
         )
         db.add(trigger)
@@ -145,6 +147,11 @@ class InspectionService:
 
         trigger.processed = True
         trigger.report_id = report_id
+
+        report = await db.get(Report, report_id)
+        if report and trigger.alert_id:
+            report.alert_id = trigger.alert_id
+
         await db.commit()
 
         logger.info(f"Generated report {report_id} for trigger {trigger_id}")

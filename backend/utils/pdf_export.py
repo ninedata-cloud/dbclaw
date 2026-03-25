@@ -8,9 +8,16 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT, TA_CENTER
 from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 
 logger = logging.getLogger(__name__)
+
+PDF_FONT_NAME = 'STSong-Light'
+
+
+def _ensure_cjk_font_registered():
+    if PDF_FONT_NAME not in pdfmetrics.getRegisteredFontNames():
+        pdfmetrics.registerFont(UnicodeCIDFont(PDF_FONT_NAME))
 
 
 class HTMLToPDFParser(HTMLParser):
@@ -86,6 +93,8 @@ class HTMLToPDFParser(HTMLParser):
 def html_to_pdf(html_content: str) -> bytes:
     """Convert HTML content to PDF using reportlab (pure Python, no system dependencies)"""
     try:
+        _ensure_cjk_font_registered()
+
         # Parse HTML
         parser = HTMLToPDFParser()
         parser.feed(html_content)
@@ -96,11 +105,15 @@ def html_to_pdf(html_content: str) -> bytes:
 
         # Styles
         styles = getSampleStyleSheet()
-        styles.add(ParagraphStyle(name='CustomHeading1', parent=styles['Heading1'], fontSize=24, spaceAfter=12))
-        styles.add(ParagraphStyle(name='CustomHeading2', parent=styles['Heading2'], fontSize=18, spaceAfter=10))
-        styles.add(ParagraphStyle(name='CustomHeading3', parent=styles['Heading3'], fontSize=14, spaceAfter=8))
-        styles.add(ParagraphStyle(name='CustomBody', parent=styles['BodyText'], fontSize=10, spaceAfter=6))
-        styles.add(ParagraphStyle(name='ListItem', parent=styles['BodyText'], fontSize=10, leftIndent=20, spaceAfter=4))
+        styles['Heading1'].fontName = PDF_FONT_NAME
+        styles['Heading2'].fontName = PDF_FONT_NAME
+        styles['Heading3'].fontName = PDF_FONT_NAME
+        styles['BodyText'].fontName = PDF_FONT_NAME
+        styles.add(ParagraphStyle(name='CustomHeading1', parent=styles['Heading1'], fontName=PDF_FONT_NAME, fontSize=24, spaceAfter=12))
+        styles.add(ParagraphStyle(name='CustomHeading2', parent=styles['Heading2'], fontName=PDF_FONT_NAME, fontSize=18, spaceAfter=10))
+        styles.add(ParagraphStyle(name='CustomHeading3', parent=styles['Heading3'], fontName=PDF_FONT_NAME, fontSize=14, spaceAfter=8))
+        styles.add(ParagraphStyle(name='CustomBody', parent=styles['BodyText'], fontName=PDF_FONT_NAME, fontSize=10, spaceAfter=6))
+        styles.add(ParagraphStyle(name='ListItem', parent=styles['BodyText'], fontName=PDF_FONT_NAME, fontSize=10, leftIndent=20, spaceAfter=4))
 
         # Build PDF content
         story = []
@@ -126,7 +139,7 @@ def html_to_pdf(html_content: str) -> bytes:
                         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#007bff')),
                         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                         ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                        ('FONTNAME', (0, 0), (-1, -1), PDF_FONT_NAME),
                         ('FONTSIZE', (0, 0), (-1, 0), 10),
                         ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
                         ('BACKGROUND', (0, 1), (-1, -1), colors.beige),

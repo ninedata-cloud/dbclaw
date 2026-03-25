@@ -831,11 +831,12 @@ class NotificationService:
     @staticmethod
     def _build_feishu_payload(alert: AlertMessage, datasource=None) -> dict:
         """Build Feishu-compatible card message payload"""
+        severity = (alert.severity or '').lower()
         severity_colors = {
             'critical': 'red',
-            'high': 'orange',
-            'medium': 'yellow',
-            'low': 'blue'
+            'high': 'red',
+            'medium': 'orange',
+            'low': 'orange'
         }
         severity_labels = {
             'critical': '严重',
@@ -843,8 +844,8 @@ class NotificationService:
             'medium': '中',
             'low': '低'
         }
-        color = severity_colors.get(alert.severity, 'blue')
-        severity_label = severity_labels.get(alert.severity, alert.severity)
+        color = severity_colors.get(severity, 'blue')
+        severity_label = severity_labels.get(severity, alert.severity)
 
         content_lines = [f"**告警标题：** {alert.title}"]
         content_lines.append(f"**严重程度：** {severity_label}")

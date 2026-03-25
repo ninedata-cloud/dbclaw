@@ -55,7 +55,8 @@ class SQLServerConnector(DBConnector):
                     "(SELECT count(*) FROM sys.dm_exec_requests WHERE status = 'running') as active_requests, "
                     "(SELECT count(*) FROM sys.dm_exec_sessions WHERE is_user_process = 1 AND status = 'sleeping') as idle_sessions, "
                     "(SELECT count(*) FROM sys.dm_exec_requests WHERE blocking_session_id <> 0) as blocked_requests, "
-                    "(SELECT sqlserver_start_time FROM sys.dm_os_sys_info) as start_time"
+                    "(SELECT sqlserver_start_time FROM sys.dm_os_sys_info) as start_time, "
+                    "@@SPID as current_session_id"
                 )
                 row = cursor.fetchone()
 
@@ -64,6 +65,28 @@ class SQLServerConnector(DBConnector):
                 active_requests = row[2] if row else 0
                 idle_sessions = row[3] if row else 0
                 blocked_requests = row[4] if row else 0
+                current_session_id = row[6] if row else None
+
+                if current_session_id is not None:
+                    cursor.execute(
+                        "SELECT "
+                        "SUM(CASE WHEN is_user_process = 1 AND session_id <> ? THEN 1 ELSE 0 END) as total_user_sessions, "
+                        "SUM(CASE WHEN is_user_process = 1 AND status = 'sleeping' AND session_id <> ? THEN 1 ELSE 0 END) as idle_user_sessions "
+                        "FROM sys.dm_exec_sessions",
+                        current_session_id, current_session_id
+                    )
+                    visible_row = cursor.fetchone()
+                    visible_user_sessions = visible_row[0] if visible_row and visible_row[0] is not None else 0
+                    visible_idle_sessions = visible_row[1] if visible_row and visible_row[1] is not None else 0
+                else:
+                    visible_user_sessions = user_sessions
+                    visible_idle_sessions = idle_sessions
+
+                cursor.execute(
+                    "SELECT CAST(value_in_use AS BIGINT) FROM sys.configurations WHERE name = 'user connections'"
+                )
+                max_conn_row = cursor.fetchone()
+                max_connections = max_conn_row[0] if max_conn_row and max_conn_row[0] is not None else 0
 
                 # Calculate uptime
                 uptime = 0
@@ -130,9 +153,10 @@ class SQLServerConnector(DBConnector):
                 result = {
                     # 连接指标（兼容前端 fallback 链）
                     "connections_active": active_requests,
-                    "user_sessions": user_sessions,
-                    "connections_total": total_sessions,
-                    "connections_idle": idle_sessions,
+                    "user_sessions": visible_user_sessions,
+                    "connections_total": visible_user_sessions,
+                    "max_connections": max_connections,
+                    "connections_idle": visible_idle_sessions,
                     "connections_waiting": blocked_requests,
                     "active_requests": active_requests,
                     # 吞吐量（累积值，由 normalizer 计算速率）

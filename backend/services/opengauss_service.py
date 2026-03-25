@@ -37,7 +37,10 @@ class OpenGaussConnector(DBConnector):
                 "count(*) FILTER (WHERE state = 'active') as active, "
                 "count(*) FILTER (WHERE state = 'idle') as idle, "
                 "count(*) FILTER (WHERE wait_event_type IS NOT NULL) as waiting "
-                "FROM pg_stat_activity WHERE datname = current_database()"
+                "FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()"
+            )
+            max_conn = await conn.fetchrow(
+                "SELECT setting::int as max_connections FROM pg_settings WHERE name = 'max_connections'"
             )
             size = await conn.fetchrow(
                 "SELECT pg_database_size(current_database()) as db_size"
@@ -66,6 +69,7 @@ class OpenGaussConnector(DBConnector):
             return {
                 "connections_active": activity["active"] if activity else 0,
                 "connections_total": activity["total"] if activity else 0,
+                "max_connections": max_conn["max_connections"] if max_conn else 0,
                 "connections_idle": activity["idle"] if activity else 0,
                 "connections_waiting": activity["waiting"] if activity else 0,
                 "xact_commit": stats["xact_commit"] if stats else 0,

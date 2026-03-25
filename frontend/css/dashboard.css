@@ -2,7 +2,7 @@
 
 .dashboard-overview {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1.2fr;
     background: rgba(255,255,255,0.03);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
@@ -12,8 +12,14 @@
     overflow: hidden;
 }
 
-.overview-panel { padding: 16px; }
+.overview-panel { padding: 20px 22px; }
 .overview-panel + .overview-panel { border-left: 1px solid rgba(255,255,255,0.06); }
+
+/* 活跃告警面板在右侧，背景略深 */
+.overview-panel.panel-alerts {
+    background: rgba(248,81,73,0.03);
+    border-left: 1px solid rgba(248,81,73,0.12) !important;
+}
 
 .overview-panel-title {
     font-size: 11px;
@@ -21,7 +27,7 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: rgba(255,255,255,0.35);
-    margin-bottom: 12px;
+    margin-bottom: 16px;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -30,17 +36,12 @@
 .alert-title-critical { color: #f85149 !important; }
 
 /* Donut Chart */
-.donut-container { display: flex; align-items: center; gap: 20px; margin-bottom: 14px; }
+.donut-container { display: flex; align-items: center; gap: 24px; margin-bottom: 16px; }
 
 .donut-center-text {
-    font-size: 26px; font-weight: 700;
+    font-size: 30px; font-weight: 700;
     font-variant-numeric: tabular-nums;
     fill: #f0f6ff;
-    dominant-baseline: middle; text-anchor: middle;
-}
-
-.donut-center-sub {
-    font-size: 11px; fill: rgba(255,255,255,0.35);
     dominant-baseline: middle; text-anchor: middle;
 }
 
@@ -49,11 +50,11 @@
 .donut-legend-item {
     display: flex; align-items: center; gap: 8px;
     font-size: 13px; color: rgba(255,255,255,0.65);
-    margin-bottom: 6px;
+    margin-bottom: 8px;
     font-variant-numeric: tabular-nums;
 }
 
-.donut-legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.donut-legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 
 /* Host anomaly list */
 .anomaly-host-list { display: flex; flex-direction: column; gap: 5px; }
@@ -79,7 +80,7 @@
 /* Alert list */
 .alert-list {
     display: flex; flex-direction: column; gap: 8px;
-    max-height: 130px; overflow-y: auto;
+    max-height: 180px; overflow-y: auto;
 }
 .alert-list::-webkit-scrollbar { width: 3px; }
 .alert-list::-webkit-scrollbar-track { background: transparent; }
@@ -88,7 +89,7 @@
 .alert-list-item { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.4; }
 
 .alert-severity-bar {
-    width: 3px; min-height: 32px; border-radius: 2px;
+    width: 3px; min-height: 36px; border-radius: 2px;
     flex-shrink: 0; margin-top: 2px; align-self: stretch;
 }
 .alert-severity-bar.critical, .alert-severity-bar.high { background: #f85149; }
@@ -96,8 +97,17 @@
 .alert-severity-bar.low    { background: #58a6ff; }
 
 .alert-content { flex: 1; min-width: 0; }
-.alert-title { color: rgba(255,255,255,0.82); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.alert-time  { color: rgba(255,255,255,0.3); font-size: 11px; margin-top: 2px; }
+.alert-title { color: rgba(255,255,255,0.82); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 3px; }
+.alert-meta  { display: flex; align-items: center; gap: 8px; }
+.alert-ds-tag {
+    font-size: 10px; font-weight: 600;
+    color: rgba(88,166,255,0.8);
+    background: rgba(88,166,255,0.1);
+    border: 1px solid rgba(88,166,255,0.2);
+    border-radius: 3px; padding: 1px 5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px;
+}
+.alert-time  { color: rgba(255,255,255,0.3); font-size: 11px; flex-shrink: 0; }
 
 .alert-count-badge {
     display: inline-flex; align-items: center; justify-content: center;
@@ -327,6 +337,10 @@
     .overview-panel + .overview-panel {
         border-left: none;
         border-top: 1px solid rgba(255,255,255,0.06);
+    }
+    .overview-panel.panel-alerts {
+        border-left: none !important;
+        border-top: 1px solid rgba(248,81,73,0.12) !important;
     }
     .dashboard-grid { grid-template-columns: 1fr; }
     .filter-select, .filter-input { min-width: unset; flex: 1; }

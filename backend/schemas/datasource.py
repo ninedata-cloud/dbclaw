@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Literal
+from typing import Optional, Literal, List, Dict, Any
 from datetime import datetime
 
 
@@ -84,10 +84,41 @@ class DatasourceTestRequest(BaseModel):
     extra_params: Optional[str] = None
 
 
+class DatasourceDiagnosticClassification(BaseModel):
+    layer: str
+    category: str
+    code: str
+    severity: str = 'error'
+    retryable: bool = False
+
+
+class DatasourceDiagnosticCheck(BaseModel):
+    layer: str
+    name: str
+    success: bool
+    details: Optional[str] = None
+    error: Optional[str] = None
+    latency_ms: Optional[float] = None
+    skipped: bool = False
+    reason: Optional[str] = None
+
+
+class DatasourceDiagnosticHints(BaseModel):
+    probable_causes: List[str] = []
+    recommendations: List[str] = []
+
+
 class DatasourceTestResult(BaseModel):
     success: bool
     message: str
     version: Optional[str] = None
+    summary: Optional[str] = None
+    classification: Optional[DatasourceDiagnosticClassification] = None
+    checks: List[DatasourceDiagnosticCheck] = []
+    diagnosis: Optional[DatasourceDiagnosticHints] = None
+    raw_error: Optional[str] = None
+    target: Optional[Dict[str, Any]] = None
+    timing: Optional[Dict[str, Any]] = None
 
 
 class DatasourceSilenceRequest(BaseModel):

@@ -24,14 +24,18 @@ class UserResponse(BaseModel):
 
 
 class LoginResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
     user: UserResponse
 
 
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str = Field(..., min_length=6)
+
+
+class CurrentUserUpdateRequest(BaseModel):
+    display_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
 
 
 class UserCreate(BaseModel):

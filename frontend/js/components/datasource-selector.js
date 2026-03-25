@@ -1,69 +1,24 @@
 /* Datasource Selector Component - 强大的数据源下拉选择组件 */
 
-/**
- * 数据源选择器组件
- *
- * 功能特性：
- * - 支持搜索过滤
- * - 按数据库类型分组
- * - 显示连接状态
- * - 支持多选模式
- * - 显示数据源详细信息（主机、端口、描述）
- * - 支持禁用特定数据源
- * - 支持自定义过滤条件
- * - 响应式设计
- *
- * 使用示例：
- *
- * // 单选模式
- * const selector = new DatasourceSelector({
- *     container: document.getElementById('my-container'),
- *     placeholder: '请选择数据源',
- *     onChange: (datasource) => console.log('Selected:', datasource),
- *     showStatus: true,
- *     showDetails: true
- * });
- *
- * // 多选模式
- * const multiSelector = new DatasourceSelector({
- *     container: document.getElementById('my-container'),
- *     multiple: true,
- *     onChange: (datasources) => console.log('Selected:', datasources),
- *     filter: (ds) => ds.db_type === 'mysql' // 只显示 MySQL
- * });
- *
- * // 获取选中值
- * const selected = selector.getValue();
- *
- * // 设置选中值
- * selector.setValue(datasourceId);
- *
- * // 刷新数据源列表
- * await selector.refresh();
- *
- * // 销毁组件
- * selector.destroy();
- */
-
 class DatasourceSelector {
     constructor(options = {}) {
         this.options = {
-            container: null,              // 容器元素（必需）
-            placeholder: '选择数据源',    // 占位符文本
-            multiple: false,              // 是否多选
-            searchable: true,             // 是否可搜索
-            groupByType: true,            // 是否按数据库类型分组
-            showStatus: true,             // 是否显示连接状态
-            showDetails: true,            // 是否显示详细信息（主机、端口）
-            showDescription: false,       // 是否显示描述
-            allowEmpty: true,             // 是否允许不选择
-            emptyText: '所有数据源',      // 空选项文本
-            disabled: false,              // 是否禁用
-            filter: null,                 // 自定义过滤函数 (datasource) => boolean
-            onChange: null,               // 选择变化回调
-            onLoad: null,                 // 数据加载完成回调
-            minWidth: '400px',            // 最小宽度
-            maxWidth: '400px',            // 最大宽度
+            container: null,
+            placeholder: '选择数据源',
+            multiple: false,
+            searchable: true,
+            groupByType: true,
+            showStatus: true,
+            showDetails: true,
+            showDescription: false,
+            allowEmpty: true,
+            emptyText: '所有数据源',
+            disabled: false,
+            filter: null,
+            onChange: null,
+            onLoad: null,
+            minWidth: '400px',
+            maxWidth: '400px',
             ...options
         };
 
@@ -75,6 +30,10 @@ class DatasourceSelector {
         this.selectedIds = new Set();
         this.isOpen = false;
         this.searchQuery = '';
+        this.button = null;
+        this.dropdown = null;
+        this.searchInput = null;
+        this.itemsContainer = null;
 
         this.init();
     }
@@ -89,22 +48,21 @@ class DatasourceSelector {
         const { container, minWidth, maxWidth, disabled } = this.options;
 
         container.innerHTML = '';
-        container.className = 'datasource-selector';
-        container.style.cssText = `
-            position: relative;
-            min-width: ${minWidth};
-            max-width: ${maxWidth};
-            ${disabled ? 'opacity: 0.6; pointer-events: none;' : ''}
-        `;
+        container.classList.add('datasource-selector');
+        container.style.position = 'relative';
+        container.style.minWidth = minWidth;
+        container.style.maxWidth = maxWidth;
+        container.style.opacity = disabled ? '0.6' : '1';
+        container.style.pointerEvents = disabled ? 'none' : 'auto';
 
-        // 选择器按钮
         this.button = DOM.el('button', {
             type: 'button',
             className: 'datasource-selector-button',
-            innerHTML: this.getButtonContent()
+            'aria-haspopup': 'listbox',
+            'aria-expanded': 'false'
         });
+        this.renderButtonContent();
 
-        // 下拉面板
         this.dropdown = DOM.el('div', {
             className: 'datasource-selector-dropdown',
             style: { display: 'none' }
@@ -114,53 +72,62 @@ class DatasourceSelector {
         container.appendChild(this.dropdown);
     }
 
-    getButtonContent() {
-        const { placeholder, multiple, allowEmpty, emptyText } = this.options;
-
-        if (this.selectedIds.size === 0) {
-            const text = allowEmpty ? emptyText : placeholder;
-            return `
-                <span class="datasource-selector-text">${text}</span>
-                <i data-lucide="chevron-down" style="width:16px;height:16px;"></i>
-            `;
-        }
-
-        if (multiple) {
-            const count = this.selectedIds.size;
-            return `
-                <span class="datasource-selector-text">已选择 ${count} 项</span>
-                <i data-lucide="chevron-down" style="width:16px;height:16px;"></i>
-            `;
-        }
-
-        const selected = this.datasources.find(ds => this.selectedIds.has(ds.id));
-        if (selected) {
-            return `
-                <span class="datasource-selector-text">${this.formatDatasourceName(selected)}</span>
-                <i data-lucide="chevron-down" style="width:16px;height:16px;"></i>
-            `;
-        }
-
-        return `
-            <span class="datasource-selector-text">${placeholder}</span>
-            <i data-lucide="chevron-down" style="width:16px;height:16px;"></i>
-        `;
+    getSelectedDatasource() {
+        if (this.selectedIds.size === 0) return null;
+        const [selectedId] = this.selectedIds;
+        return this.datasources.find(ds => ds.id === selectedId) || null;
     }
 
     formatDatasourceName(ds) {
-        return `${ds.name} (${ds.db_type.toUpperCase()})`;
+        return ds?.name || this.options.placeholder;
+    }
+
+    getStatusMeta(status) {
+        if (status === 'connected' || status === 'success' || status === 'healthy' || status === 'normal') {
+            return { className: 'success', label: '连接正常' };
+        }
+
+        if (status === 'error' || status === 'failed' || status === 'disconnected') {
+            return { className: 'error', label: '连接异常' };
+        }
+
+        if (status === 'warning') {
+            return { className: 'warning', label: '连接警告' };
+        }
+
+        return { className: 'unknown', label: '状态未知' };
+    }
+
+    renderButtonContent() {
+        const { placeholder, multiple, allowEmpty, emptyText } = this.options;
+        const textWrap = DOM.el('span', { className: 'datasource-selector-button-content' });
+        const mainText = DOM.el('span', { className: 'datasource-selector-text' });
+
+        if (this.selectedIds.size === 0) {
+            mainText.textContent = allowEmpty ? emptyText : placeholder;
+            textWrap.appendChild(mainText);
+        } else if (multiple) {
+            mainText.textContent = `已选择 ${this.selectedIds.size} 项`;
+            textWrap.appendChild(mainText);
+        } else {
+            const selected = this.getSelectedDatasource();
+            mainText.textContent = selected ? this.formatDatasourceName(selected) : placeholder;
+            textWrap.appendChild(mainText);
+        }
+
+        const icon = DOM.el('i', {
+            'data-lucide': 'chevron-down',
+            style: 'width:16px;height:16px;'
+        });
+
+        this.button.replaceChildren(textWrap, icon);
+        DOM.createIcons();
     }
 
     async loadDatasources() {
         try {
             const data = await API.getDatasources();
-            this.datasources = data;
-
-            // 应用自定义过滤
-            if (this.options.filter) {
-                this.datasources = this.datasources.filter(this.options.filter);
-            }
-
+            this.datasources = this.options.filter ? data.filter(this.options.filter) : data;
             this.renderDropdown();
 
             if (this.options.onLoad) {
@@ -177,14 +144,14 @@ class DatasourceSelector {
 
         this.dropdown.innerHTML = '';
 
-        // 搜索框
         if (searchable) {
             const searchBox = DOM.el('div', { className: 'datasource-selector-search' });
             this.searchInput = DOM.el('input', {
                 type: 'text',
                 placeholder: '搜索数据源...',
                 className: 'datasource-selector-search-input',
-                value: this.searchQuery
+                value: this.searchQuery,
+                'aria-label': '搜索数据源'
             });
             this.searchInput.addEventListener('input', (e) => {
                 this.searchQuery = e.target.value.toLowerCase();
@@ -192,40 +159,38 @@ class DatasourceSelector {
             });
             searchBox.appendChild(this.searchInput);
             this.dropdown.appendChild(searchBox);
+        } else {
+            this.searchInput = null;
         }
 
-        // 创建数据源列表容器
-        this.itemsContainer = DOM.el('div', { className: 'datasource-selector-items' });
+        this.itemsContainer = DOM.el('div', {
+            className: 'datasource-selector-items',
+            role: 'listbox'
+        });
         this.dropdown.appendChild(this.itemsContainer);
 
-        // 渲染数据源列表
         this.renderItems();
     }
 
     renderItems() {
-        const { groupByType, allowEmpty, emptyText } = this.options;
+        const { groupByType, allowEmpty, emptyText, multiple } = this.options;
 
         this.itemsContainer.innerHTML = '';
 
-        // 空选项
-        if (allowEmpty && !this.options.multiple) {
-            const emptyItem = this.createDatasourceItem(null, emptyText);
-            this.itemsContainer.appendChild(emptyItem);
+        if (allowEmpty && !multiple) {
+            this.itemsContainer.appendChild(this.createDatasourceItem(null, emptyText));
         }
 
-        // 过滤数据源
         const filtered = this.filterDatasources();
 
         if (filtered.length === 0) {
-            const empty = DOM.el('div', {
+            this.itemsContainer.appendChild(DOM.el('div', {
                 className: 'datasource-selector-empty',
                 textContent: this.searchQuery ? '未找到匹配的数据源' : '暂无数据源'
-            });
-            this.itemsContainer.appendChild(empty);
+            }));
             return;
         }
 
-        // 分组或列表显示
         if (groupByType) {
             this.renderGrouped(filtered);
         } else {
@@ -236,104 +201,150 @@ class DatasourceSelector {
     filterDatasources() {
         if (!this.searchQuery) return this.datasources;
 
+        const terms = this.searchQuery.split(/\s+/).filter(Boolean);
         return this.datasources.filter(ds => {
-            const searchText = `${ds.name} ${ds.db_type} ${ds.host || ''} ${ds.description || ''}`.toLowerCase();
-            return searchText.includes(this.searchQuery);
+            const searchText = [
+                ds.name,
+                ds.db_type,
+                ds.host,
+                ds.port,
+                ds.description,
+                ds.database
+            ].filter(Boolean).join(' ').toLowerCase();
+
+            return terms.every(term => searchText.includes(term));
         });
     }
 
     renderGrouped(datasources) {
-        // 按数据库类型分组
         const groups = {};
         datasources.forEach(ds => {
-            const type = ds.db_type.toUpperCase();
+            const type = (ds.db_type || 'unknown').toUpperCase();
             if (!groups[type]) groups[type] = [];
             groups[type].push(ds);
         });
 
-        // 渲染每个分组
         Object.keys(groups).sort().forEach(type => {
-            const groupHeader = DOM.el('div', {
-                className: 'datasource-selector-group-header',
-                textContent: type
-            });
+            const groupHeader = DOM.el('div', { className: 'datasource-selector-group-header' });
+            groupHeader.append(
+                DOM.el('span', { textContent: type }),
+                DOM.el('span', {
+                    className: 'datasource-selector-group-count',
+                    textContent: String(groups[type].length)
+                })
+            );
             this.itemsContainer.appendChild(groupHeader);
 
             groups[type].forEach(ds => {
-                const item = this.createDatasourceItem(ds);
-                this.itemsContainer.appendChild(item);
+                this.itemsContainer.appendChild(this.createDatasourceItem(ds));
             });
         });
     }
 
     renderList(datasources) {
         datasources.forEach(ds => {
-            const item = this.createDatasourceItem(ds);
-            this.itemsContainer.appendChild(item);
+            this.itemsContainer.appendChild(this.createDatasourceItem(ds));
         });
     }
 
     createDatasourceItem(datasource, customText = null) {
         const { multiple, showStatus, showDetails, showDescription } = this.options;
+        const isEmptyOption = datasource === null;
+        const isSelected = isEmptyOption ? this.selectedIds.size === 0 : this.selectedIds.has(datasource.id);
 
         const item = DOM.el('div', {
-            className: 'datasource-selector-item'
+            className: `datasource-selector-item${isSelected ? ' selected' : ''}${isEmptyOption ? ' datasource-selector-item-empty' : ''}`,
+            role: 'option',
+            'aria-selected': isSelected ? 'true' : 'false'
         });
 
-        if (datasource === null) {
-            // 空选项
-            item.innerHTML = `<span>${customText}</span>`;
+        if (isEmptyOption) {
+            const content = DOM.el('div', { className: 'datasource-selector-item-main' },
+                DOM.el('div', { className: 'datasource-selector-item-name', textContent: customText }),
+                DOM.el('div', {
+                    className: 'datasource-selector-item-details datasource-selector-item-empty-hint',
+                    textContent: '不过滤数据源'
+                })
+            );
+
+            item.appendChild(content);
+            if (isSelected) {
+                item.appendChild(DOM.el('span', {
+                    className: 'datasource-selector-item-check',
+                    textContent: '当前'
+                }));
+            }
             item.addEventListener('click', () => this.selectDatasource(null));
             return item;
         }
 
-        const isSelected = this.selectedIds.has(datasource.id);
-        if (isSelected) {
-            item.classList.add('selected');
-        }
-
-        // 构建内容
-        let content = '';
-
-        // 多选复选框
         if (multiple) {
-            content += `<input type="checkbox" ${isSelected ? 'checked' : ''} style="margin-right: 8px;">`;
+            const checkbox = DOM.el('input', {
+                type: 'checkbox',
+                disabled: 'disabled',
+                tabindex: '-1',
+                className: 'datasource-selector-item-checkbox'
+            });
+            checkbox.checked = isSelected;
+            item.appendChild(checkbox);
         }
 
-        // 主要信息
-        content += `<div class="datasource-selector-item-main">`;
-        content += `<div class="datasource-selector-item-name">${datasource.name}</div>`;
+        const main = DOM.el('div', { className: 'datasource-selector-item-main' });
+        const name = DOM.el('div', {
+            className: 'datasource-selector-item-name',
+            textContent: datasource.name,
+            title: datasource.name
+        });
+        main.appendChild(name);
 
-        // 详细信息
         if (showDetails || showDescription) {
-            content += `<div class="datasource-selector-item-details">`;
+            const details = DOM.el('div', { className: 'datasource-selector-item-details' });
 
             if (showDetails && datasource.host) {
-                content += `<span class="datasource-selector-item-host">${datasource.host}:${datasource.port || ''}</span>`;
+                const hostText = datasource.port ? `${datasource.host}:${datasource.port}` : datasource.host;
+                details.appendChild(DOM.el('span', {
+                    className: 'datasource-selector-item-host',
+                    textContent: hostText,
+                    title: hostText
+                }));
             }
 
             if (showDescription && datasource.description) {
-                content += `<span class="datasource-selector-item-desc">${datasource.description}</span>`;
+                details.appendChild(DOM.el('span', {
+                    className: 'datasource-selector-item-desc',
+                    textContent: datasource.description,
+                    title: datasource.description
+                }));
             }
 
-            content += `</div>`;
+            if (details.childNodes.length > 0) {
+                main.appendChild(details);
+            }
         }
 
-        content += `</div>`;
+        item.appendChild(main);
+        item.appendChild(DOM.el('span', {
+            className: 'datasource-selector-item-type',
+            textContent: (datasource.db_type || 'unknown').toUpperCase()
+        }));
 
-        // 数据库类型标签
-        content += `<span class="datasource-selector-item-type">${datasource.db_type.toUpperCase()}</span>`;
-
-        // 连接状态
         if (showStatus) {
-            const statusClass = datasource.status === 'connected' ? 'success' :
-                              datasource.status === 'error' ? 'error' : 'warning';
-            content += `<span class="datasource-selector-item-status status-${statusClass}"></span>`;
+            const statusMeta = this.getStatusMeta(datasource.connection_status || datasource.status);
+            item.appendChild(DOM.el('span', {
+                className: `datasource-selector-item-status status-${statusMeta.className}`,
+                title: statusMeta.label,
+                'aria-label': statusMeta.label
+            }));
         }
 
-        item.innerHTML = content;
-        item.addEventListener('click', () => this.selectDatasource(datasource));
+        if (isSelected) {
+            item.appendChild(DOM.el('span', {
+                className: 'datasource-selector-item-check',
+                textContent: '已选'
+            }));
+        }
 
+        item.addEventListener('click', () => this.selectDatasource(datasource));
         return item;
     }
 
@@ -341,16 +352,15 @@ class DatasourceSelector {
         const { multiple, onChange } = this.options;
 
         if (datasource === null) {
-            // 清空选择
             this.selectedIds.clear();
             this.close();
             this.updateButton();
+            this.renderItems();
             if (onChange) onChange(null);
             return;
         }
 
         if (multiple) {
-            // 多选模式
             if (this.selectedIds.has(datasource.id)) {
                 this.selectedIds.delete(datasource.id);
             } else {
@@ -360,35 +370,30 @@ class DatasourceSelector {
             this.updateButton();
 
             if (onChange) {
-                const selected = this.datasources.filter(ds => this.selectedIds.has(ds.id));
-                onChange(selected);
+                onChange(this.datasources.filter(ds => this.selectedIds.has(ds.id)));
             }
-        } else {
-            // 单选模式
-            this.selectedIds.clear();
-            this.selectedIds.add(datasource.id);
-            this.close();
-            this.updateButton();
-
-            if (onChange) onChange(datasource);
+            return;
         }
+
+        this.selectedIds.clear();
+        this.selectedIds.add(datasource.id);
+        this.close();
+        this.updateButton();
+        this.renderItems();
+
+        if (onChange) onChange(datasource);
     }
 
     updateButton() {
-        this.button.innerHTML = this.getButtonContent();
-        if (window.lucide) {
-            window.lucide.createIcons();
-        }
+        this.renderButtonContent();
     }
 
     setupEventListeners() {
-        // 按钮点击
         this.button.addEventListener('click', (e) => {
             e.stopPropagation();
             this.toggle();
         });
 
-        // 点击外部关闭
         this.outsideClickHandler = (e) => {
             if (!this.options.container.contains(e.target)) {
                 this.close();
@@ -407,18 +412,43 @@ class DatasourceSelector {
 
     open() {
         this.isOpen = true;
-        this.dropdown.style.display = 'block';
+        this.dropdown.style.display = 'flex';
         this.button.classList.add('open');
+        this.button.setAttribute('aria-expanded', 'true');
+        this.renderItems();
+
+        if (this.searchInput) {
+            requestAnimationFrame(() => {
+                this.searchInput.focus();
+                this.searchInput.select();
+            });
+        }
+
+        requestAnimationFrame(() => this.scrollSelectedItemIntoView());
     }
 
     close() {
         this.isOpen = false;
         this.dropdown.style.display = 'none';
         this.button.classList.remove('open');
+        this.button.setAttribute('aria-expanded', 'false');
         this.searchQuery = '';
+
+        if (this.searchInput) {
+            this.searchInput.value = '';
+        }
+
+        if (this.itemsContainer) {
+            this.renderItems();
+        }
     }
 
-    // 公共 API
+    scrollSelectedItemIntoView() {
+        const selectedItem = this.itemsContainer?.querySelector('.datasource-selector-item.selected');
+        if (selectedItem) {
+            selectedItem.scrollIntoView({ block: 'nearest' });
+        }
+    }
 
     getValue() {
         const { multiple } = this.options;
@@ -427,27 +457,20 @@ class DatasourceSelector {
             return this.datasources.filter(ds => this.selectedIds.has(ds.id));
         }
 
-        if (this.selectedIds.size === 0) return null;
-        return this.datasources.find(ds => this.selectedIds.has([...this.selectedIds][0]));
+        return this.getSelectedDatasource();
     }
 
     setValue(value) {
         this.selectedIds.clear();
 
-        if (value === null || value === undefined) {
-            this.updateButton();
-            return;
-        }
-
-        const { multiple } = this.options;
-
-        if (multiple) {
-            // 多选：接受数组
-            const ids = Array.isArray(value) ? value : [value];
-            ids.forEach(id => this.selectedIds.add(id));
-        } else {
-            // 单选：接受单个 ID
-            this.selectedIds.add(value);
+        if (value !== null && value !== undefined) {
+            const { multiple } = this.options;
+            if (multiple) {
+                const ids = Array.isArray(value) ? value : [value];
+                ids.forEach(id => this.selectedIds.add(id));
+            } else {
+                this.selectedIds.add(value);
+            }
         }
 
         this.updateButton();
@@ -474,5 +497,4 @@ class DatasourceSelector {
     }
 }
 
-// 导出
 window.DatasourceSelector = DatasourceSelector;

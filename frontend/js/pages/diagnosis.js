@@ -1,11 +1,40 @@
 /* AI Diagnosis page */
 const DiagnosisPage = {
     ws: null,
+    datasourceSelector: null,
+    datasourceClickOutsideHandler: null,
     currentSessionId: null,
     selectedModelId: null,
     selectedKBIds: [],
     disabledTools: [],
     highRiskTools: [],
+    availableModels: [],
+    sessionTokenUsage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+
+    _getApprovalPreferences() {
+        try {
+            return JSON.parse(localStorage.getItem('chatApprovalPreferences') || '{}');
+        } catch (e) {
+            return {};
+        }
+    },
+
+    _saveApprovalPreference(key, enabled) {
+        if (!key) return;
+        const prefs = this._getApprovalPreferences();
+        prefs[key] = !!enabled;
+        localStorage.setItem('chatApprovalPreferences', JSON.stringify(prefs));
+    },
+
+    _shouldAutoApprove(data) {
+        if (!data?.suppressible || !data?.confirmation_key) return false;
+        const prefs = this._getApprovalPreferences();
+        return prefs[data.confirmation_key] === true;
+    },
+
+    _getSelectedDatasource() {
+        return this.datasourceSelector?.getValue() || Store.get('currentDatasource') || null;
+    },
 
     async render() {
         const content = DOM.$('#page-content');
@@ -17,25 +46,34 @@ const DiagnosisPage = {
 
         // Header with connection, model, KB selectors, and tool safety toggle
         const headerActions = DOM.el('div', { className: 'flex gap-8', style: { flex: '1', minWidth: '0' } });
-        const connSelect = DOM.el('select', { className: 'form-select', style: { minWidth: '200px', maxWidth: '300px', flex: '1' } });
-        connSelect.appendChild(DOM.el('option', { value: '', textContent: '选择数据源...' }));
+        const datasourceContainer = DOM.el('div', {
+            id: 'diagnosis-datasource-selector',
+            style: { minWidth: '280px', maxWidth: '380px', flex: '1' }
+        });
 
         try {
             const datasources = await API.getDatasources();
             Store.set('datasources', datasources);
-            const current = Store.get('currentDatasource');
-            for (const c of datasources) {
-                const opt = DOM.el('option', { value: c.id, textContent: `${c.name} (${c.db_type})` });
-                if (current && c.id === current.id) opt.selected = true;
-                connSelect.appendChild(opt);
-            }
         } catch (e) { /* ignore */ }
 
-        connSelect.addEventListener('change', () => {
-            const id = parseInt(connSelect.value);
-            if (id) {
-                const conns = Store.get('datasources') || [];
-                Store.set('currentDatasource', conns.find(c => c.id === id));
+        this.datasourceSelector?.destroy();
+        this.datasourceSelector = new DatasourceSelector({
+            container: datasourceContainer,
+            allowEmpty: true,
+            emptyText: '选择数据源...',
+            placeholder: '选择数据源',
+            showStatus: true,
+            showDetails: true,
+            onLoad: () => {
+                const current = Store.get('currentDatasource');
+                if (current?.id) {
+                    this.datasourceSelector.setValue(current.id);
+                } else {
+                    this.datasourceSelector.setValue(null);
+                }
+            },
+            onChange: (datasource) => {
+                Store.set('currentDatasource', datasource || null);
             }
         });
 
@@ -45,6 +83,7 @@ const DiagnosisPage = {
 
         try {
             const models = await API.getAIModels();
+            this.availableModels = models;
             for (const m of models) {
                 const opt = DOM.el('option', { value: m.id, textContent: m.name });
                 if (m.is_default) opt.selected = true;
@@ -54,6 +93,7 @@ const DiagnosisPage = {
 
         modelSelect.addEventListener('change', () => {
             this.selectedModelId = modelSelect.value ? parseInt(modelSelect.value) : null;
+            this._updateTokenUsageDisplay();
         });
 
         // Knowledge Base multi-select (custom dropdown)
@@ -116,11 +156,15 @@ const DiagnosisPage = {
         });
 
         // Close dropdown when clicking outside
-        document.addEventListener('click', (e) => {
+        if (this.datasourceClickOutsideHandler) {
+            document.removeEventListener('click', this.datasourceClickOutsideHandler);
+        }
+        this.datasourceClickOutsideHandler = (e) => {
             if (!kbContainer.contains(e.target)) {
                 kbDropdown.style.display = 'none';
             }
-        });
+        };
+        document.addEventListener('click', this.datasourceClickOutsideHandler);
 
         kbContainer.appendChild(kbButton);
         kbContainer.appendChild(kbDropdown);
@@ -133,7 +177,7 @@ const DiagnosisPage = {
             onClick: () => this._showToolSafetyModal()
         });
 
-        headerActions.appendChild(connSelect);
+        headerActions.appendChild(datasourceContainer);
         headerActions.appendChild(modelSelect);
         headerActions.appendChild(kbContainer);
         headerActions.appendChild(toolSafetyBtn);
@@ -148,6 +192,8 @@ const DiagnosisPage = {
             id: 'session-sidebar',
             style: {
                 width: '280px',
+                minWidth: '280px',
+                flexShrink: '0',
                 height: '100%',
                 borderRight: '1px solid var(--border-color)',
                 display: 'flex',
@@ -198,18 +244,29 @@ const DiagnosisPage = {
         sidebar.appendChild(sidebarHeader);
         sidebar.appendChild(sessionList);
 
-        // Right area: chat with tool panel
+        // Main chat area
         const chatContainer = DOM.el('div', {
             className: 'chat-container',
-            style: { flex: '1', display: 'flex', flexDirection: 'row', gap: '0', height: '100%' }
+            style: { flex: '1', minWidth: '0', overflow: 'hidden', display: 'flex', flexDirection: 'row', height: '100%' }
         });
 
-        // Main chat area
         const chatMain = DOM.el('div', {
             style: { flex: '1', display: 'flex', flexDirection: 'column', minWidth: '0', position: 'relative', height: '100%' }
         });
 
+        const tokenUsageBar = DOM.el('div', {
+            id: 'chat-token-usage',
+            style: {
+                display: 'none',
+                margin: '0px',
+                padding: '10px 12px',
+                fontSize: '12px',
+                color: 'var(--text-secondary)'
+            }
+        });
+
         chatMain.appendChild(ChatWidget.createMessagesContainer());
+        chatMain.appendChild(tokenUsageBar);
         chatMain.appendChild(ChatWidget.createInputBar(
             (text, attachments) => this._sendMessage(text, attachments),
             () => this.currentSessionId
@@ -229,88 +286,13 @@ const DiagnosisPage = {
         disclaimer.textContent = '内容由AI生成，仅供参考';
         chatMain.appendChild(disclaimer);
 
-        // Tool execution panel (right side)
-        const toolPanel = DOM.el('div', {
-            id: 'tool-execution-panel',
-            style: {
-                width: '400px',
-                height: '100%',
-                borderLeft: '1px solid var(--border-color)',
-                background: 'var(--bg-secondary)',
-                display: 'flex',
-                flexDirection: 'column',
-                overflow: 'hidden',
-                transition: 'width 0.3s ease'
-            }
-        });
-
-        const toolPanelHeader = DOM.el('div', {
-            id: 'tool-panel-header',
-            style: {
-                padding: '12px',
-                borderBottom: '1px solid var(--border-color)',
-                display: 'flex',
-                gap: '8px',
-                alignItems: 'center'
-            }
-        });
-
-        const toolHeaderLeft = DOM.el('div', {
-            id: 'tool-panel-title',
-            style: { flex: '1', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '600', fontSize: '13px' }
-        });
-        toolHeaderLeft.innerHTML = '<i data-lucide="activity"></i> skill调用';
-
-        const clearToolsBtn = DOM.el('button', {
-            className: 'btn-icon-only',
-            innerHTML: '<i data-lucide="trash-2"></i>',
-            title: '清空记录',
-            onClick: () => {
-                const toolPanelContent = DOM.$('#tool-panel-content');
-                if (toolPanelContent) {
-                    toolPanelContent.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">暂无skill调用记录</div>';
-                    DOM.createIcons();
-                }
-                // Clear restored tools mapping
-                if (ChatWidget.restoredTools) {
-                    ChatWidget.restoredTools.clear();
-                }
-                if (ChatWidget.pendingTools) {
-                    ChatWidget.pendingTools.clear();
-                }
-            }
-        });
-
-        const toggleToolPanelBtn = DOM.el('button', {
-            id: 'toggle-tool-panel-btn',
-            className: 'btn-icon-only',
-            innerHTML: '<i data-lucide="panel-right-close"></i>',
-            title: '隐藏工具面板',
-            onClick: () => this._toggleToolPanel()
-        });
-
-        toolPanelHeader.appendChild(toolHeaderLeft);
-        toolPanelHeader.appendChild(clearToolsBtn);
-        toolPanelHeader.appendChild(toggleToolPanelBtn);
-
-        const toolPanelContent = DOM.el('div', {
-            id: 'tool-panel-content',
-            style: {
-                flex: '1',
-                overflowY: 'auto',
-                padding: '12px'
-            }
-        });
-        toolPanelContent.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">暂无skill调用记录</div>';
-
-        toolPanel.appendChild(toolPanelHeader);
-        toolPanel.appendChild(toolPanelContent);
-
         chatContainer.appendChild(chatMain);
-        chatContainer.appendChild(toolPanel);
+        chatContainer.appendChild(ChatWidget.createToolPanel());
 
         ChatWidget.onStop = () => this._stopGeneration();
         ChatWidget.onClear = () => this._clearSession();
+        ChatWidget.onApprovalAction = async (approvalId, action) => this._resolveApproval(approvalId, action);
+        ChatWidget.onApprovalRequest = (data) => this._showApprovalModal(data);
 
         layout.appendChild(sidebar);
         layout.appendChild(chatContainer);
@@ -513,7 +495,7 @@ const DiagnosisPage = {
     },
 
     async _createSession() {
-        const conn = Store.get('currentDatasource');
+        const conn = this._getSelectedDatasource();
         try {
             const session = await API.createChatSession({
                 datasource_id: conn?.id || null,
@@ -530,9 +512,21 @@ const DiagnosisPage = {
         }
     },
 
+    _getSessionTokenUsage(sessionId) {
+        const sessions = Store.get('chatSessions') || [];
+        const session = sessions.find(item => item.id === sessionId);
+        return {
+            input_tokens: session?.input_tokens || 0,
+            output_tokens: session?.output_tokens || 0,
+            total_tokens: session?.total_tokens || 0,
+        };
+    },
+
     async _switchSession(sessionId) {
         this.currentSessionId = sessionId;
         this._connectWebSocket(sessionId);
+        ChatWidget.loadMessages([]);
+        ChatWidget.showToolPanelLoading();
 
         // Update sidebar highlight
         const list = DOM.$('#session-list');
@@ -553,6 +547,8 @@ const DiagnosisPage = {
         // Load messages
         try {
             const messages = await API.getSessionMessages(sessionId);
+            this.sessionTokenUsage = this._getSessionTokenUsage(sessionId);
+            this._updateTokenUsageDisplay();
             console.log(`Loaded ${messages.length} messages for session ${sessionId}`, messages);
 
             if (messages && messages.length > 0) {
@@ -614,11 +610,10 @@ const DiagnosisPage = {
             });
 
             if (event && event.code === 1008) {
-                // Authentication error
                 Toast.error('Session expired. Please log in again.');
                 setTimeout(() => {
-                    localStorage.removeItem('auth_token');
-                    window.location.href = '#/login';
+                    Store.set('currentUser', null);
+                    window.location.hash = 'login';
                 }, 2000);
             } else if (event && event.code === 1000) {
                 // Normal closure - no error needed
@@ -642,7 +637,7 @@ const DiagnosisPage = {
         ws.connect();
     },
 
-    _sendMessage(text) {
+    async _sendMessage(text) {
         if (!text && (!ChatWidget.attachments || ChatWidget.attachments.length === 0)) return;
         if (ChatWidget.isStreaming) return;
         if (!this.ws || !this.currentSessionId) {
@@ -650,7 +645,7 @@ const DiagnosisPage = {
             return;
         }
 
-        const conn = Store.get('currentDatasource');
+        const conn = this._getSelectedDatasource();
         const attachments = ChatWidget.attachments || [];
 
         ChatWidget.addUserMessage(text, attachments);
@@ -665,16 +660,72 @@ const DiagnosisPage = {
         });
     },
 
+    _getSelectedModel() {
+        if (!this.availableModels || this.availableModels.length === 0) return null;
+        if (this.selectedModelId) {
+            return this.availableModels.find(model => model.id === this.selectedModelId) || null;
+        }
+        return this.availableModels.find(model => model.is_default) || this.availableModels[0] || null;
+    },
+
+    _buildTokenStatus() {
+        const model = this._getSelectedModel();
+        const contextWindow = model?.context_window || null;
+        const totalTokens = this.sessionTokenUsage.total_tokens || 0;
+        let warningLevel = 'normal';
+        let warningText = '';
+
+        if (contextWindow) {
+            const usageRate = totalTokens / contextWindow;
+            if (usageRate >= 0.95) {
+                warningLevel = 'critical';
+                warningText = '上下文已接近上限，后续对话很可能失败，建议立即新建会话';
+            } else if (usageRate >= 0.85) {
+                warningLevel = 'danger';
+                warningText = '上下文已非常接近上限，建议缩小问题范围或新建会话';
+            } else if (usageRate >= 0.7) {
+                warningLevel = 'warning';
+                warningText = '上下文使用量较高，建议减少追问轮次或缩小查询范围';
+            }
+        }
+
+        return {
+            usage: this.sessionTokenUsage,
+            contextWindow,
+            warningLevel,
+            warningText,
+        };
+    },
+
+    _updateTokenUsageDisplay() {
+        ChatWidget.updateTokenUsage(this._buildTokenStatus());
+    },
+
     _handleWSMessage(data) {
         switch (data.type) {
             case 'content':
                 ChatWidget.appendContent(data.content);
                 break;
             case 'tool_call':
-                ChatWidget.addToolCall(data.tool_name, data.tool_args);
+                ChatWidget.addToolCall(data.tool_name, data.tool_args, data.tool_call_id);
                 break;
             case 'tool_result':
-                ChatWidget.addToolResult(data.tool_name, data.result, data.execution_time_ms);
+                ChatWidget.addToolResult(data.tool_name, data.result, data.execution_time_ms, data.tool_call_id);
+                break;
+            case 'confirmation_required':
+                ChatWidget.addApprovalRequest(data);
+                if (this._shouldAutoApprove(data)) {
+                    this._resolveApproval(data.approval_id, 'approved');
+                }
+                break;
+            case 'confirmation_resolved':
+                ChatWidget.updateApprovalStatus(data.approval_id, data.action);
+                break;
+            case 'usage':
+                this.sessionTokenUsage.input_tokens += data.usage?.input_tokens || 0;
+                this.sessionTokenUsage.output_tokens += data.usage?.output_tokens || 0;
+                this.sessionTokenUsage.total_tokens += data.usage?.total_tokens || 0;
+                this._updateTokenUsageDisplay();
                 break;
             case 'done':
                 ChatWidget.finishAssistantMessage();
@@ -687,31 +738,82 @@ const DiagnosisPage = {
         }
     },
 
+    async _resolveApproval(approvalId, action) {
+        if (!this.currentSessionId) {
+            Toast.warning('No active session');
+            return;
+        }
+        try {
+            await API.resolveChatApproval(this.currentSessionId, approvalId, { action, comment: '' });
+        } catch (e) {
+            Toast.error('确认失败: ' + e.message);
+        }
+    },
+
+    _showApprovalModal(data) {
+        if (this._shouldAutoApprove(data)) {
+            return;
+        }
+        Modal.show({
+            title: '确认执行可能变更系统的步骤',
+            content: `
+                <div style="display:flex;flex-direction:column;gap:12px;">
+                    <div><strong>技能：</strong>${data.tool_name}</div>
+                    <div><strong>风险等级：</strong>${data.risk_level || 'high'}</div>
+                    <div><strong>风险原因：</strong>${(data.risk_reason || data.summary || '该操作可能带来状态变更').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+                    ${(data.plan_markdown || data.summary) ? `<pre style="margin:0;background:var(--bg-input);padding:12px;border-radius:8px;white-space:pre-wrap;">${(data.plan_markdown || data.summary || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>` : ''}
+                    ${data.suppressible ? `<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary);"><input type="checkbox" id="approval-skip-future"> 本设备对此类操作不再提示</label>` : ''}
+                </div>
+            `,
+            buttons: [
+                { text: '取消', variant: 'secondary', onClick: () => { Modal.hide(); this._resolveApproval(data.approval_id, 'rejected'); } },
+                { text: '确认执行', variant: 'danger', onClick: () => {
+                    const skip = document.querySelector('#approval-skip-future');
+                    if (skip?.checked && data.confirmation_key) {
+                        this._saveApprovalPreference(data.confirmation_key, true);
+                    }
+                    Modal.hide();
+                    this._resolveApproval(data.approval_id, 'approved');
+                } }
+            ]
+        });
+    },
+
     async _clearSession() {
         if (!this.currentSessionId) {
             Toast.warning('No active session');
             return;
         }
-        if (!confirm('Clear all messages in this session? This cannot be undone.')) return;
-        try {
-            await API.clearSessionMessages(this.currentSessionId);
-            const container = DOM.$('#chat-messages');
-            if (container) {
-                container.innerHTML = `
-                    <div class="empty-state" style="padding:40px">
-                        <i data-lucide="bot"></i>
-                        <h3>数据库智能卫士</h3>
-                        <p>关于您的数据库，有任何问题都可以问我。我可以分析性能、诊断问题、审查配置并提出优化建议。</p>
-                    </div>
-                `;
-                DOM.createIcons();
-            }
-            // Update session tab title
-            await this._loadSessions();
-            Toast.success('Session cleared');
-        } catch (e) {
-            Toast.error('Failed to clear session: ' + e.message);
-        }
+        Modal.show({
+            title: '清空当前会话',
+            content: '将删除当前会话中的所有消息，此操作不可撤销。',
+            buttons: [
+                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
+                { text: '确认清空', variant: 'danger', onClick: async () => {
+                    Modal.hide();
+                    try {
+                        await API.clearSessionMessages(this.currentSessionId);
+                        this.sessionTokenUsage = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
+                        ChatWidget.resetTokenUsage();
+                        const container = DOM.$('#chat-messages');
+                        if (container) {
+                            container.innerHTML = `
+                                <div class="empty-state" style="padding:40px">
+                                    <i data-lucide="bot"></i>
+                                    <h3>数据库智能卫士</h3>
+                                    <p>关于您的数据库，有任何问题都可以问我。我可以分析性能、诊断问题、审查配置并提出优化建议。</p>
+                                </div>
+                            `;
+                            DOM.createIcons();
+                        }
+                        await this._loadSessions();
+                        Toast.success('Session cleared');
+                    } catch (e) {
+                        Toast.error('Failed to clear session: ' + e.message);
+                    }
+                } }
+            ]
+        });
     },
 
     _stopGeneration() {
@@ -730,31 +832,49 @@ const DiagnosisPage = {
         }
         const sessions = Store.get('chatSessions') || [];
         const session = sessions.find(s => s.id === this.currentSessionId);
-        if (!confirm(`Delete session "${session?.title || '会话 ' + this.currentSessionId}"?`)) return;
-        try {
-            await API.deleteChatSession(this.currentSessionId);
-            this.currentSessionId = null;
-            await this._loadSessions();
-            Toast.success('Session deleted');
-        } catch (e) {
-            Toast.error('Failed to delete session: ' + e.message);
-        }
+        Modal.show({
+            title: '删除会话',
+            content: `确认删除会话 "${session?.title || '会话 ' + this.currentSessionId}" 吗？`,
+            buttons: [
+                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
+                { text: '删除', variant: 'danger', onClick: async () => {
+                    Modal.hide();
+                    try {
+                        await API.deleteChatSession(this.currentSessionId);
+                        this.currentSessionId = null;
+                        await this._loadSessions();
+                        Toast.success('Session deleted');
+                    } catch (e) {
+                        Toast.error('Failed to delete session: ' + e.message);
+                    }
+                } }
+            ]
+        });
     },
 
     async _deleteSessionById(sessionId) {
         const sessions = Store.get('chatSessions') || [];
         const session = sessions.find(s => s.id === sessionId);
-        if (!confirm(`Delete session "${session?.title || '会话 ' + sessionId}"?`)) return;
-        try {
-            await API.deleteChatSession(sessionId);
-            if (this.currentSessionId === sessionId) {
-                this.currentSessionId = null;
-            }
-            await this._loadSessions();
-            Toast.success('Session deleted');
-        } catch (e) {
-            Toast.error('Failed to delete session: ' + e.message);
-        }
+        Modal.show({
+            title: '删除会话',
+            content: `确认删除会话 "${session?.title || '会话 ' + sessionId}" 吗？`,
+            buttons: [
+                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
+                { text: '删除', variant: 'danger', onClick: async () => {
+                    Modal.hide();
+                    try {
+                        await API.deleteChatSession(sessionId);
+                        if (this.currentSessionId === sessionId) {
+                            this.currentSessionId = null;
+                        }
+                        await this._loadSessions();
+                        Toast.success('Session deleted');
+                    } catch (e) {
+                        Toast.error('Failed to delete session: ' + e.message);
+                    }
+                } }
+            ]
+        });
     },
 
     _updateKBButtonText(button, availableKBs) {
@@ -783,6 +903,7 @@ const DiagnosisPage = {
         if (isCollapsed) {
             // Expand
             sidebar.style.width = '280px';
+            sidebar.style.minWidth = '280px';
             btn.innerHTML = '<i data-lucide="panel-left-close"></i>';
             btn.title = '隐藏会话列表';
             if (header) {
@@ -794,6 +915,7 @@ const DiagnosisPage = {
         } else {
             // Collapse
             sidebar.style.width = '40px';
+            sidebar.style.minWidth = '40px';
             btn.innerHTML = '<i data-lucide="panel-left-open"></i>';
             btn.title = '显示会话列表';
             if (header) {
@@ -807,48 +929,19 @@ const DiagnosisPage = {
         requestAnimationFrame(() => DOM.createIcons());
     },
 
-    _toggleToolPanel() {
-        const panel = DOM.$('#tool-execution-panel');
-        const btn = DOM.$('#toggle-tool-panel-btn');
-        const header = DOM.$('#tool-panel-header');
-        const content = DOM.$('#tool-panel-content');
-
-        if (!panel || !btn) return;
-
-        const isCollapsed = panel.style.width === '40px';
-
-        if (isCollapsed) {
-            // Expand
-            panel.style.width = '400px';
-            btn.innerHTML = '<i data-lucide="panel-right-close"></i>';
-            btn.title = '隐藏工具面板';
-            if (header) {
-                header.style.justifyContent = 'space-between';
-            }
-            if (content) {
-                content.style.display = 'block';
-            }
-        } else {
-            // Collapse
-            panel.style.width = '40px';
-            btn.innerHTML = '<i data-lucide="panel-right-open"></i>';
-            btn.title = '显示工具面板';
-            if (header) {
-                header.style.justifyContent = 'center';
-            }
-            if (content) {
-                content.style.display = 'none';
-            }
-        }
-
-        requestAnimationFrame(() => DOM.createIcons());
-    },
-
     _cleanup() {
+        if (this.datasourceClickOutsideHandler) {
+            document.removeEventListener('click', this.datasourceClickOutsideHandler);
+            this.datasourceClickOutsideHandler = null;
+        }
+        this.datasourceSelector?.destroy();
+        this.datasourceSelector = null;
         if (this.ws) {
             this.ws.disconnect();
             this.ws = null;
         }
+        ChatWidget.onApprovalAction = null;
+        ChatWidget.onApprovalRequest = null;
         this.currentSessionId = null;
     }
 };

@@ -43,7 +43,7 @@ const DatasourcesPage = {
     _buildHeaderActions() {
         const filtersContainer = DOM.el('div', { className: 'dashboard-filters' });
         filtersContainer.innerHTML = `
-            <input type="text" id="filterName" class="filter-input" placeholder="按名称搜索...">
+            <input type="text" id="filterName" class="filter-input" placeholder="搜索名称/IP/主机名/数据库名...">
             <select id="filterType" class="filter-select">
                 <option value="">所有类型</option>
                 <option value="mysql">MySQL</option>
@@ -82,12 +82,13 @@ const DatasourcesPage = {
     },
 
     _applyFilters() {
-        const nameFilter = DOM.$('#filterName')?.value.toLowerCase() || '';
+        const nameFilter = DOM.$('#filterName')?.value.toLowerCase().trim() || '';
         const typeFilter = DOM.$('#filterType')?.value || '';
         const importanceFilter = DOM.$('#filter重要性')?.value || '';
 
         this.filteredDatasources = this.allDatasources.filter(ds => {
-            const matchName = !nameFilter || ds.name.toLowerCase().includes(nameFilter);
+            const matchName = !nameFilter || [ds.name, ds.host, ds.database]
+                .some(value => (value || '').toLowerCase().includes(nameFilter));
             const matchType = !typeFilter || ds.db_type === typeFilter;
             const match重要性 = !importanceFilter || ds.importance_level === importanceFilter;
             return matchName && matchType && match重要性;

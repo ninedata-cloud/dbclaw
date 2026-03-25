@@ -44,6 +44,42 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Document migration: {e}")
 
+    try:
+        from backend.migrations.add_ai_model_context_window import migrate as migrate_ai_model_context_window
+        await migrate_ai_model_context_window()
+    except Exception as e:
+        logger.warning(f"AI model context_window migration: {e}")
+
+    try:
+        from backend.migrations.add_diagnostic_session_token_usage import migrate as migrate_diagnostic_session_token_usage
+        await migrate_diagnostic_session_token_usage()
+    except Exception as e:
+        logger.warning(f"Diagnostic session token usage migration: {e}")
+
+    try:
+        from backend.migrations.add_chat_message_token_usage import migrate as migrate_chat_message_token_usage
+        await migrate_chat_message_token_usage()
+    except Exception as e:
+        logger.warning(f"Chat message token usage migration: {e}")
+
+    try:
+        from backend.migrations.add_report_alert_link import migrate as migrate_report_alert_link
+        await migrate_report_alert_link()
+    except Exception as e:
+        logger.warning(f"Report alert link migration: {e}")
+
+    try:
+        from backend.migrations.add_trigger_alert_link import migrate as migrate_trigger_alert_link
+        await migrate_trigger_alert_link()
+    except Exception as e:
+        logger.warning(f"Trigger alert link migration: {e}")
+
+    try:
+        from backend.migrations.add_user_session_security import migrate as migrate_user_session_security
+        await migrate_user_session_security()
+    except Exception as e:
+        logger.warning(f"User session security migration: {e}")
+
     # Seed default system configs
     from backend.database import async_session as _async_session
     from backend.services import config_service as _config_service
@@ -106,6 +142,17 @@ async def lifespan(app: FastAPI):
                 value_type="string",
                 description="网络探针目标地址，采集前用于检测网络连通性（默认 127.0.0.1，可改为网关 IP）",
                 category="monitoring"
+            )
+
+        _external_base_exists = await _db.execute(_select(_SystemConfig).where(_SystemConfig.key == "app_external_base_url"))
+        if not _external_base_exists.scalar_one_or_none():
+            await _config_service.set_config(
+                _db,
+                key="app_external_base_url",
+                value="",
+                value_type="string",
+                description="外部访问基础地址，用于生成飞书等通知中的免登录详情链接，例如 https://dbguard.example.com",
+                category="notification"
             )
     logger.info("Default system configs seeded")
 
@@ -170,26 +217,19 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Global exception handler for detailed logging
     @app.exception_handler(Exception)
     async def global_exception_handler(request, exc):
         from fastapi.responses import JSONResponse
         import traceback
 
-        # Log detailed error information
-        logger.error(f"Unhandled exception in {request.method} {request.url.path}")
-        logger.error(f"Exception type: {type(exc).__name__}")
-        logger.error(f"Exception message: {str(exc)}")
-        logger.error(f"Traceback:\n{traceback.format_exc()}")
-
-        # Log request details
-        logger.error(f"Request headers: {dict(request.headers)}")
-        try:
-            body = await request.body()
-            if body:
-                logger.error(f"Request body: {body.decode('utf-8')}")
-        except:
-            pass
+        logger.error(
+            "Unhandled exception in %s %s [%s]: %s\n%s",
+            request.method,
+            request.url.path,
+            type(exc).__name__,
+            str(exc),
+            traceback.format_exc(),
+        )
 
         return JSONResponse(
             status_code=500,
@@ -230,6 +270,14 @@ def create_app() -> FastAPI:
 
     @app.get("/")
     async def serve_index():
+        return FileResponse("frontend/index.html")
+
+    @app.get("/public/alerts/{alert_id}")
+    async def serve_public_alert_entry(alert_id: int):
+        return FileResponse("frontend/index.html")
+
+    @app.get("/public/reports/{report_id}")
+    async def serve_public_report_entry(report_id: int):
         return FileResponse("frontend/index.html")
 
     return app

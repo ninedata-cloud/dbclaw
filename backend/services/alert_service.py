@@ -1,8 +1,10 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, desc
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import timedelta
 import logging
+
+from backend.utils.datetime_helper import now
 
 from backend.models.alert_message import AlertMessage
 from backend.models.alert_subscription import AlertSubscription
@@ -95,7 +97,9 @@ class AlertService:
             metric_value=metric_value,
             threshold_value=threshold_value,
             trigger_reason=trigger_reason,
-            status="active"
+            status="active",
+            created_at=now(),
+            updated_at=now()
         )
 
         db.add(alert)
@@ -207,8 +211,8 @@ class AlertService:
 
         alert.status = "acknowledged"
         alert.acknowledged_by = user_id
-        alert.acknowledged_at = datetime.now()
-        alert.updated_at = datetime.now()
+        alert.acknowledged_at = now()
+        alert.updated_at = now()
 
         await db.commit()
         await db.refresh(alert)
@@ -238,8 +242,8 @@ class AlertService:
             return None
 
         alert.status = "resolved"
-        alert.resolved_at = datetime.now()
-        alert.updated_at = datetime.now()
+        alert.resolved_at = now()
+        alert.updated_at = now()
         if resolved_value is not None:
             alert.resolved_value = resolved_value
 
@@ -329,7 +333,7 @@ class AlertService:
             if value is not None:
                 setattr(subscription, key, value)
 
-        subscription.updated_at = datetime.now()
+        subscription.updated_at = now()
 
         await db.commit()
         await db.refresh(subscription)
@@ -407,7 +411,7 @@ class AlertService:
         Returns:
             List of resolved alerts within the time window
         """
-        cutoff_time = datetime.now() - timedelta(minutes=minutes)
+        cutoff_time = now() - timedelta(minutes=minutes)
 
         # Get recently resolved alerts
         result = await db.execute(

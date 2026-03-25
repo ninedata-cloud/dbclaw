@@ -340,24 +340,24 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
                 f"{violation['threshold']} for {violation['violation_duration']:.0f}s"
             )
 
-            # Check if there's a recent anomaly trigger for the same metric
-            # to avoid duplicate triggers for ongoing issues
-            from backend.services.config_service import get_config as _get_config
-            dedup_minutes = await _get_config(db, "inspection_dedup_window_minutes", default=get_settings().inspection_dedup_window_minutes)
-            recent_trigger = await db.execute(
-                select(InspectionTrigger).where(
+            # Skip duplicate alerts only when the same metric still has an active issue
+            active_alert_result = await db.execute(
+                select(AlertMessage).where(
                     and_(
-                        InspectionTrigger.datasource_id == datasource_id,
-                        InspectionTrigger.trigger_type == "anomaly",
-                        InspectionTrigger.trigger_reason.like(f"{metric_name}=%"),
-                        InspectionTrigger.triggered_at >= now() - timedelta(minutes=dedup_minutes)
+                        AlertMessage.datasource_id == datasource_id,
+                        AlertMessage.alert_type == "threshold_violation",
+                        AlertMessage.metric_name == metric_name,
+                        AlertMessage.status.in_(["active", "acknowledged"])
                     )
-                ).order_by(desc(InspectionTrigger.triggered_at)).limit(1)
+                ).limit(1)
             )
-            existing_trigger = recent_trigger.scalar_one_or_none()
+            active_alert = active_alert_result.scalar_one_or_none()
 
-            if existing_trigger:
-                logger.debug(f"Skipping duplicate anomaly trigger for datasource {datasource_id} metric {metric_name} - recent trigger {existing_trigger.id} exists")
+            if active_alert:
+                logger.debug(
+                    f"Skipping duplicate anomaly trigger for datasource {datasource_id} metric {metric_name} - "
+                    f"active alert {active_alert.id} exists"
+                )
                 continue
 
             logger.info(f"Triggering anomaly inspection for datasource {datasource_id}: {reason}")
@@ -369,15 +369,6 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
                 "timestamp": now().isoformat()
             }
 
-            # Trigger inspection asynchronously
-            await _inspection_service.trigger_inspection(
-                db=db,
-                datasource_id=datasource_id,
-                trigger_type="anomaly",
-                reason=reason,
-                metric_snapshot=metric_snapshot
-            )
-
             # Create alert for the violation
             from backend.services.alert_service import AlertService
 
@@ -385,7 +376,7 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
             percent_over = ((violation['current_value'] - violation['threshold']) / violation['threshold']) * 100
             severity = AlertService.calculate_severity(percent_over)
 
-            await AlertService.create_alert(
+            alert = await AlertService.create_alert(
                 db=db,
                 datasource_id=datasource_id,
                 alert_type="threshold_violation",
@@ -394,6 +385,16 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
                 metric_value=violation['current_value'],
                 threshold_value=violation['threshold'],
                 trigger_reason=reason
+            )
+
+            # Trigger inspection asynchronously
+            await _inspection_service.trigger_inspection(
+                db=db,
+                datasource_id=datasource_id,
+                trigger_type="anomaly",
+                reason=reason,
+                metric_snapshot=metric_snapshot,
+                alert_id=alert.id
             )
 
     except Exception as e:
@@ -414,23 +415,24 @@ async def _handle_connection_failure(db, datasource_id: int, datasource, error_m
 
         from backend.services.alert_service import AlertService
 
-        # Check if there's a recent unprocessed connection_failure trigger
-        # to avoid duplicate triggers for the same ongoing issue
-        from backend.services.config_service import get_config as _get_config
-        dedup_minutes = await _get_config(db, "inspection_dedup_window_minutes", default=get_settings().inspection_dedup_window_minutes)
-        recent_trigger = await db.execute(
-            select(InspectionTrigger).where(
+        # Skip duplicate alerts only when the connection failure is still active
+        active_alert_result = await db.execute(
+            select(AlertMessage).where(
                 and_(
-                    InspectionTrigger.datasource_id == datasource_id,
-                    InspectionTrigger.trigger_type == "connection_failure",
-                    InspectionTrigger.triggered_at >= now() - timedelta(minutes=dedup_minutes)
+                    AlertMessage.datasource_id == datasource_id,
+                    AlertMessage.alert_type == "system_error",
+                    AlertMessage.metric_name == "connection_status",
+                    AlertMessage.status.in_(["active", "acknowledged"])
                 )
-            ).order_by(desc(InspectionTrigger.triggered_at)).limit(1)
+            ).limit(1)
         )
-        existing_trigger = recent_trigger.scalar_one_or_none()
+        active_alert = active_alert_result.scalar_one_or_none()
 
-        if existing_trigger:
-            logger.debug(f"Skipping duplicate connection_failure trigger for datasource {datasource_id} - recent trigger {existing_trigger.id} exists")
+        if active_alert:
+            logger.debug(
+                f"Skipping duplicate connection_failure trigger for datasource {datasource_id} - "
+                f"active alert {active_alert.id} exists"
+            )
             return
 
         # Create critical alert for connection failure
@@ -464,7 +466,8 @@ async def _handle_connection_failure(db, datasource_id: int, datasource, error_m
                 datasource_id=datasource_id,
                 trigger_type="connection_failure",
                 reason=reason,
-                metric_snapshot=metric_snapshot
+                metric_snapshot=metric_snapshot,
+                alert_id=alert.id
             )
 
             logger.info(f"Triggered AI diagnosis for connection failure: datasource {datasource_id}")

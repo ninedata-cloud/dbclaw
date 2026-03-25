@@ -1,38 +1,70 @@
 import asyncio
-import json
 import logging
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from urllib.parse import urlparse
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from sqlalchemy import select
+
+from backend.config import get_settings
+from backend.database import async_session
+from backend.models.user import User
+from backend.services.config_service import get_config
 from backend.services.metric_collector import subscribe, unsubscribe
-from backend.utils.security import decode_access_token
+from backend.services.session_service import SessionService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+async def _validate_websocket_origin(websocket: WebSocket) -> bool:
+    origin = websocket.headers.get("origin")
+    if not origin:
+        return True
+
+    allowed_hosts = {websocket.headers.get("host", "")}
+    async with async_session() as db:
+        external_base_url = await get_config(db, "app_external_base_url", default="")
+
+    if external_base_url:
+        parsed = urlparse(external_base_url)
+        if parsed.netloc:
+            allowed_hosts.add(parsed.netloc)
+
+    parsed_origin = urlparse(origin)
+    return bool(parsed_origin.scheme in {"http", "https"} and parsed_origin.netloc in allowed_hosts)
+
+
+async def _authenticate_websocket(websocket: WebSocket) -> User | None:
+    session_id = websocket.cookies.get(get_settings().session_cookie_name)
+    async with async_session() as db:
+        session = await SessionService.get_active_session(db, session_id)
+        if not session:
+            return None
+        result = await db.execute(select(User).where(User.id == session.user_id))
+        user = result.scalar_one_or_none()
+        if not user or not user.is_active:
+            return None
+        await SessionService.touch_session(db, session)
+        await db.commit()
+        return user
+
+
 @router.websocket("/ws/monitor/{conn_id}")
-async def monitor_websocket(websocket: WebSocket, conn_id: int, token: str = Query(default=None)):
-    # Validate token for WebSocket connections
-    if not token:
-        await websocket.close(code=1008, reason="Missing token")
+async def monitor_websocket(websocket: WebSocket, conn_id: int):
+    if not await _validate_websocket_origin(websocket):
+        await websocket.close(code=1008, reason="Invalid origin")
         return
-    try:
-        payload = decode_access_token(token)
-        if not payload.get("sub"):
-            await websocket.close(code=1008, reason="Invalid token")
-            return
-    except Exception:
-        await websocket.close(code=1008, reason="Invalid or expired token")
+
+    user = await _authenticate_websocket(websocket)
+    if not user:
+        await websocket.close(code=1008, reason="Invalid or expired session")
         return
 
     await websocket.accept()
     queue = subscribe(conn_id)
-    logger.info(f"WebSocket client connected for connection {conn_id}")
+    logger.info(f"WebSocket client connected for connection {conn_id}, user {user.id}")
 
-    # Immediately send the latest metric snapshot to avoid waiting for next collection cycle
     try:
-        from backend.database import async_session
         from backend.models.metric_snapshot import MetricSnapshot
-        from sqlalchemy import select
 
         async with async_session() as db:
             result = await db.execute(
@@ -60,7 +92,10 @@ async def monitor_websocket(websocket: WebSocket, conn_id: int, token: str = Que
                 data = await asyncio.wait_for(queue.get(), timeout=30)
                 await websocket.send_json(data)
             except asyncio.TimeoutError:
-                # Send heartbeat
+                user = await _authenticate_websocket(websocket)
+                if not user:
+                    await websocket.close(code=1008, reason="Session expired")
+                    break
                 await websocket.send_json({"type": "heartbeat"})
             except Exception as e:
                 logger.error(f"Error sending metric: {e}")

@@ -33,6 +33,7 @@ class Report(Base):
     # Inspection trigger columns
     trigger_type = Column(String(20), nullable=True)  # 'scheduled', 'manual', 'anomaly'
     trigger_id = Column(Integer, nullable=True)
+    alert_id = Column(Integer, nullable=True, index=True)
     trigger_reason = Column(String(500), nullable=True)  # e.g., "CPU 95% > 80% for 60s"
 
     # AI inspection columns

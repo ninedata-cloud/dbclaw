@@ -55,9 +55,16 @@ class OracleConnector(DBConnector):
                 "SUM(CASE WHEN status = 'ACTIVE' THEN 1 ELSE 0 END) as active, "
                 "SUM(CASE WHEN status = 'INACTIVE' THEN 1 ELSE 0 END) as inactive, "
                 "SUM(CASE WHEN wait_class != 'Idle' AND status = 'ACTIVE' THEN 1 ELSE 0 END) as waiting "
-                "FROM v$session WHERE type = 'USER'"
+                "FROM v$session "
+                "WHERE type = 'USER' AND audsid != SYS_CONTEXT('USERENV', 'SESSIONID')"
             )
             session_stats = await cursor.fetchone()
+
+            await cursor.execute(
+                "SELECT value FROM v$parameter WHERE name = 'sessions'"
+            )
+            max_conn_row = await cursor.fetchone()
+            max_connections = int(max_conn_row[0]) if max_conn_row and max_conn_row[0] is not None else 0
 
             # 2. 系统统计（累积值，用于计算速率）
             await cursor.execute(
@@ -124,6 +131,7 @@ class OracleConnector(DBConnector):
                 # 连接指标
                 "connections_active": session_stats[1] if session_stats else 0,
                 "connections_total": session_stats[0] if session_stats else 0,
+                "max_connections": max_connections,
                 "connections_idle": session_stats[2] if session_stats else 0,
                 "connections_waiting": session_stats[3] if session_stats else 0,
                 "lock_waiting": lock_row[0] if lock_row else 0,

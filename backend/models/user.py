@@ -14,5 +14,7 @@ class User(Base):
     phone = Column(String(50), nullable=True)
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
+    session_version = Column(Integer, nullable=False, default=1)
+    password_changed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

@@ -1,5 +1,6 @@
 /* Alert Management Page */
 const AlertsPage = {
+    datasourceSelector: null,
     datasources: [],
     alerts: [],
     events: [],
@@ -204,6 +205,11 @@ const AlertsPage = {
         this.updateAlertsList();
     },
 
+    _cleanup() {
+        this.datasourceSelector?.destroy();
+        this.datasourceSelector = null;
+    },
+
     render() {
         Header.render('告警管理', this._buildHeaderActions());
 
@@ -258,24 +264,35 @@ const AlertsPage = {
     _buildHeaderActions() {
         const filtersContainer = DOM.el('div', { className: 'dashboard-filters' });
 
-        // Datasource select
-        const datasourceSelect = DOM.el('select', {
-            className: 'filter-select',
-            onChange: (e) => {
-                this.filters.datasource_id = e.target.value ? parseInt(e.target.value) : null;
-                this.resetPagination();
-                Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
-            }
+        const datasourceContainer = DOM.el('div', {
+            id: 'alerts-datasource-selector',
+            style: { minWidth: '280px', maxWidth: '380px', flex: '1' }
         });
-        datasourceSelect.appendChild(DOM.el('option', { value: '', textContent: '全部数据源' }));
-        for (const ds of this.datasources) {
-            datasourceSelect.appendChild(DOM.el('option', {
-                value: ds.id,
-                textContent: ds.name,
-                selected: this.filters.datasource_id === ds.id
-            }));
-        }
-        filtersContainer.appendChild(datasourceSelect);
+        filtersContainer.appendChild(datasourceContainer);
+
+        setTimeout(() => {
+            const container = DOM.$('#alerts-datasource-selector');
+            if (!container) return;
+
+            this.datasourceSelector?.destroy();
+            this.datasourceSelector = new DatasourceSelector({
+                container,
+                allowEmpty: true,
+                emptyText: '全部数据源',
+                showStatus: true,
+                showDetails: true,
+                onLoad: () => {
+                    if (this.filters.datasource_id) {
+                        this.datasourceSelector.setValue(this.filters.datasource_id);
+                    }
+                },
+                onChange: (datasource) => {
+                    this.filters.datasource_id = datasource ? datasource.id : null;
+                    this.resetPagination();
+                    Promise.all([this.loadEvents(), this.loadAlerts()]).then(() => this.updateAlertsList());
+                }
+            });
+        }, 0);
 
         // Status select
         const statusSelect = DOM.el('select', {

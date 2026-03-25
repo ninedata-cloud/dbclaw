@@ -146,10 +146,64 @@ def test_cooldown_period():
     print("✓ Cooldown period works correctly")
 
 
+def test_retrigger_after_recovery_clears_cooldown():
+    """Test that recovery clears cooldown so the same metric can trigger again"""
+    checker = ThresholdChecker()
+
+    metrics = {"cpu_usage": 85}
+    rules = {"cpu_usage": {"threshold": 80, "duration": 60, "confirmations": 1}}
+
+    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
+    violations = checker.check_thresholds(1, metrics, rules)
+    assert len(violations) == 1, "Should trigger first time"
+    assert "cpu_usage" in checker._last_trigger_times[1]
+
+    recovered_metrics = {"cpu_usage": 70}
+    violations = checker.check_thresholds(1, recovered_metrics, rules)
+    assert len(violations) == 0, "Recovered metric should not trigger"
+    assert "cpu_usage" not in checker._last_trigger_times[1], "Recovery should clear cooldown state"
+
+    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
+    violations = checker.check_thresholds(1, metrics, rules)
+    assert len(violations) == 1, "Should trigger again after recovery"
+
+    print("✓ Recovery clears cooldown for simple threshold")
+
+
+def test_custom_expression_retrigger_after_recovery():
+    """Test that custom expression cooldown is cleared after recovery"""
+    checker = ThresholdChecker()
+
+    metrics = {"cpu_usage": 60, "connections": 25}
+    recovered_metrics = {"cpu_usage": 40, "connections": 10}
+    rules = {
+        "custom_expression": {
+            "expression": "cpu_usage > 50 and connections > 20",
+            "duration": 60,
+            "confirmations": 1
+        }
+    }
+
+    checker._violation_start_times[1]["custom_expression"] = now() - timedelta(seconds=61)
+    violations = checker.check_thresholds(1, metrics, rules)
+    assert len(violations) == 1, "Should trigger first custom expression violation"
+    assert "custom_expression" in checker._last_trigger_times[1]
+
+    violations = checker.check_thresholds(1, recovered_metrics, rules)
+    assert len(violations) == 0, "Recovered expression should not trigger"
+    assert "custom_expression" not in checker._last_trigger_times[1], "Recovery should clear custom expression cooldown"
+
+    checker._violation_start_times[1]["custom_expression"] = now() - timedelta(seconds=61)
+    violations = checker.check_thresholds(1, metrics, rules)
+    assert len(violations) == 1, "Should trigger custom expression again after recovery"
+
+    print("✓ Recovery clears cooldown for custom expression")
+
+
 def test_backward_compatibility():
     """Test that existing configs with simple rules still work"""
     checker = ThresholdChecker()
-    
+
     # Old format with multiple simple rules
     metrics = {
         "cpu_usage": 85,
@@ -161,20 +215,20 @@ def test_backward_compatibility():
         "disk_usage": {"threshold": 85, "duration": 300, "confirmations": 1},
         "connections": {"threshold": 20, "duration": 120, "confirmations": 1}
     }
-    
+
     # Simulate all durations passed
     checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
     checker._violation_start_times[1]["disk_usage"] = now() - timedelta(seconds=301)
     checker._violation_start_times[1]["connections"] = now() - timedelta(seconds=121)
-    
+
     violations = checker.check_thresholds(1, metrics, rules)
     assert len(violations) == 3, "Should trigger all three violations"
-    
+
     metric_names = [v["metric_name"] for v in violations]
     assert "cpu_usage" in metric_names
     assert "disk_usage" in metric_names
     assert "connections" in metric_names
-    
+
     print("✓ Backward compatibility maintained")
 
 
@@ -442,6 +496,8 @@ def run_all_tests():
     test_expression_syntax_error()
     test_duration_tracking_custom_expression()
     test_cooldown_period()
+    test_retrigger_after_recovery_clears_cooldown()
+    test_custom_expression_retrigger_after_recovery()
     test_backward_compatibility()
     test_empty_threshold_rules()
     test_prepare_eval_context()

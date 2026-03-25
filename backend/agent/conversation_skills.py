@@ -3,41 +3,186 @@ Updated conversation module to use dynamic skill system
 """
 import json
 import logging
+import re
+import uuid
 from typing import AsyncGenerator, List, Dict, Any, Optional
 
 from backend.agent.prompts import DIAGNOSTIC_PROMPT, INFORMATIONAL_PROMPT, ADMINISTRATIVE_PROMPT
 from backend.agent.intent_detector import detect_query_intent
 from backend.agent.skill_selector import get_available_skills_as_tools
-from backend.services.ai_agent import get_ai_client
+from backend.services.ai_agent import get_ai_client, stream_assistant_turn
 from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
 
 MAX_TOOL_ROUNDS = 30
 
+READ_ONLY_SQL_KEYWORDS = {'SELECT', 'SHOW', 'EXPLAIN', 'EXEC', 'EXECUTE', 'DESCRIBE', 'DESC', 'WITH'}
+DANGEROUS_SQL_KEYWORDS = {'INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'TRUNCATE', 'CREATE', 'GRANT', 'REVOKE', 'CALL'}
+DANGEROUS_COMMAND_PATTERNS = [
+    'rm ', 'rmdir', 'del ', 'delete',
+    'mv ', 'move',
+    'chmod', 'chown', 'chgrp',
+    'kill', 'pkill', 'killall',
+    'shutdown', 'reboot', 'halt', 'poweroff',
+    'mkfs', 'fdisk', 'parted',
+    'dd ', 'format',
+    'iptables', 'firewall',
+    'useradd', 'userdel', 'usermod',
+    'groupadd', 'groupdel',
+    '>>', 'tee',
+    'wget', 'curl -o', 'curl -O',
+    'apt install', 'yum install', 'dnf install',
+    'systemctl stop', 'systemctl start', 'systemctl restart',
+    'service stop', 'service start', 'service restart',
+]
+READ_ONLY_COMMAND_HINTS = [
+    'df', 'du', 'free', 'ps', 'top', 'htop', 'iostat', 'vmstat', 'sar', 'ss', 'netstat',
+    'journalctl', 'tail', 'cat', 'uptime', 'hostname', 'lsblk', 'mount', 'dmesg', 'sysctl',
+]
 
-def is_dashscope_api(client) -> bool:
-    """Check if the client is using DashScope (Qwen) API"""
-    return client.base_url and "dashscope.aliyuncs.com" in str(client.base_url)
+
+def _normalize_sql_keyword(sql: str) -> str:
+    query = (sql or '').strip().lstrip('(')
+    match = re.match(r'([A-Za-z]+)', query)
+    return match.group(1).upper() if match else ''
 
 
-def convert_messages_for_dashscope(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Convert messages to DashScope-compatible format.
-    DashScope doesn't support 'tool' role, convert to 'function' role instead.
-    """
-    converted = []
-    for msg in messages:
-        if msg.get("role") == "tool":
-            # Convert tool message to function message for DashScope
-            converted.append({
-                "role": "function",
-                "name": msg.get("tool_call_id", "unknown"),
-                "content": msg.get("content", "")
-            })
+def _get_command_arg(arguments: Dict[str, Any]) -> str:
+    return str(arguments.get('command') or arguments.get('cmd') or arguments.get('shell_command') or '').strip()
+
+
+def build_tool_summary(tool_name: str, arguments: Dict[str, Any]) -> str:
+    parts = []
+    for key, value in list(arguments.items())[:3]:
+        if isinstance(value, (dict, list)):
+            rendered = json.dumps(value, ensure_ascii=False)
         else:
-            converted.append(msg)
-    return converted
+            rendered = str(value)
+        if len(rendered) > 40:
+            rendered = rendered[:37] + "..."
+        parts.append(f"{key}={rendered}")
+    if not parts:
+        return f"准备执行 {tool_name}"
+    return f"准备执行 {tool_name}（{', '.join(parts)}）"
+
+
+def build_tool_plan_markdown(tool_name: str, arguments: Dict[str, Any]) -> str:
+    rendered_args = json.dumps(arguments, ensure_ascii=False, indent=2, default=str)
+    return (
+        f"将执行技能 `{tool_name}`。\n\n"
+        f"**执行参数**\n```json\n{rendered_args}\n```\n\n"
+        "请确认是否继续执行。"
+    )
+
+
+def build_confirmation_reason(tool_name: str, arguments: Dict[str, Any], risk_level: str) -> str:
+    command = _get_command_arg(arguments)
+    sql = str(arguments.get('sql') or '').strip()
+
+    if command:
+        if risk_level == 'destructive':
+            return f"该命令可能直接修改主机状态或中断服务：`{command}`"
+        return f"该命令具备修改主机状态的风险，需要确认后再执行：`{command}`"
+    if sql:
+        if risk_level == 'destructive':
+            return f"该 SQL 可能直接修改或破坏数据库对象/数据：`{sql[:120]}`"
+        return f"该 SQL 可能修改数据库状态，需要确认后再执行：`{sql[:120]}`"
+    return f"技能 `{tool_name}` 具备潜在变更能力，需要确认后再执行。"
+
+
+def assess_tool_risk(tool_name: str, arguments: Dict[str, Any], permissions: Optional[List[str]] = None) -> Dict[str, Any]:
+    permissions = permissions or []
+    command = _get_command_arg(arguments)
+    sql = str(arguments.get('sql') or '').strip()
+    keyword = _normalize_sql_keyword(sql)
+
+    if command:
+        command_lower = command.lower()
+        for pattern in DANGEROUS_COMMAND_PATTERNS:
+            if pattern in command_lower:
+                destructive_patterns = {'rm ', 'rmdir', 'del ', 'delete', 'shutdown', 'reboot', 'halt', 'poweroff', 'mkfs', 'fdisk', 'parted', 'dd '}
+                level = 'destructive' if pattern in destructive_patterns else 'high'
+                return {
+                    'level': level,
+                    'requires_confirmation': True,
+                    'risk_reason': build_confirmation_reason(tool_name, arguments, level),
+                    'suppressible': level != 'destructive',
+                    'confirmation_key': 'os_destructive' if level == 'destructive' else 'os_write',
+                }
+
+        is_read_only_permission = 'execute_any_os_command' not in permissions
+        looks_read_only = any(command_lower.startswith(f'{hint} ') or command_lower == hint or f'| {hint}' in command_lower for hint in READ_ONLY_COMMAND_HINTS)
+        if is_read_only_permission or looks_read_only:
+            return {
+                'level': 'safe',
+                'requires_confirmation': False,
+                'risk_reason': '这是只读 OS 诊断命令，不会修改主机状态。',
+                'suppressible': False,
+                'confirmation_key': 'os_readonly',
+            }
+
+        return {
+            'level': 'high',
+            'requires_confirmation': True,
+            'risk_reason': build_confirmation_reason(tool_name, arguments, 'high'),
+            'suppressible': True,
+            'confirmation_key': 'os_write',
+        }
+
+    if sql:
+        if keyword in DANGEROUS_SQL_KEYWORDS:
+            level = 'destructive' if keyword in {'DROP', 'TRUNCATE'} else 'high'
+            return {
+                'level': level,
+                'requires_confirmation': True,
+                'risk_reason': build_confirmation_reason(tool_name, arguments, level),
+                'suppressible': level != 'destructive',
+                'confirmation_key': 'sql_destructive' if level == 'destructive' else 'sql_write',
+            }
+
+        is_read_only_permission = 'execute_any_sql' not in permissions
+        if keyword in READ_ONLY_SQL_KEYWORDS or is_read_only_permission:
+            return {
+                'level': 'safe',
+                'requires_confirmation': False,
+                'risk_reason': '这是只读 SQL 诊断查询，不会修改数据库状态。',
+                'suppressible': False,
+                'confirmation_key': 'sql_readonly',
+            }
+
+        return {
+            'level': 'high',
+            'requires_confirmation': True,
+            'risk_reason': build_confirmation_reason(tool_name, arguments, 'high'),
+            'suppressible': True,
+            'confirmation_key': 'sql_write',
+        }
+
+    if 'execute_any_sql' in permissions:
+        return {
+            'level': 'high',
+            'requires_confirmation': True,
+            'risk_reason': build_confirmation_reason(tool_name, arguments, 'high'),
+            'suppressible': True,
+            'confirmation_key': 'sql_write',
+        }
+    if 'execute_any_os_command' in permissions:
+        return {
+            'level': 'high',
+            'requires_confirmation': True,
+            'risk_reason': build_confirmation_reason(tool_name, arguments, 'high'),
+            'suppressible': True,
+            'confirmation_key': 'os_write',
+        }
+
+    return {
+        'level': 'safe',
+        'requires_confirmation': False,
+        'risk_reason': '这是只读诊断步骤。',
+        'suppressible': False,
+        'confirmation_key': 'generic_readonly',
+    }
 
 
 async def execute_skill_call(
@@ -52,10 +197,9 @@ async def execute_skill_call(
     start_time = time.time()
 
     try:
-        # Extract timeout from arguments if provided
         timeout = arguments.pop('timeout', None)
         if timeout:
-            timeout = max(30, min(int(timeout), 3600))  # Clamp between 30s and 1h
+            timeout = max(30, min(int(timeout), 3600))
 
         registry = SkillRegistry(db)
         skill = await registry.get_skill(skill_id)
@@ -68,15 +212,11 @@ async def execute_skill_call(
             execution_time = int((time.time() - start_time) * 1000)
             return json.dumps({"error": f"Skill '{skill_id}' is disabled"}), execution_time
 
-        # Determine final timeout (same logic as SkillExecutor)
-        # Priority: dynamic timeout > skill timeout > default timeout
         from backend.skills.executor import SkillExecutor
         if timeout is None:
             timeout = skill.timeout if skill.timeout else SkillExecutor.DEFAULT_TIMEOUT
-        # Cap at MAX_TIMEOUT for safety
         timeout = min(timeout, SkillExecutor.MAX_TIMEOUT)
 
-        # Create execution context with skill's required permissions and timeout
         context = SkillContext(
             db=db,
             user_id=user_id,
@@ -85,7 +225,6 @@ async def execute_skill_call(
             timeout=timeout,
         )
 
-        # Execute skill
         executor = SkillExecutor()
         result = await executor.execute(skill, arguments, context, timeout=timeout)
 
@@ -113,7 +252,6 @@ async def run_conversation_with_skills(
     from backend.models.ai_model import AIModel
     from backend.routers.ai_models import decrypt_api_key
 
-    # Get model config
     from sqlalchemy import select
     client = None
     if model_id and db:
@@ -123,9 +261,9 @@ async def run_conversation_with_skills(
             client = get_ai_client(
                 api_key=decrypt_api_key(model.api_key_encrypted),
                 base_url=model.base_url,
-                model_name=model.model_name
+                model_name=model.model_name,
+                protocol=getattr(model, "protocol", "openai"),
             )
-    # Fallback: use first active model from DB
     if not client and db:
         result = await db.execute(select(AIModel).filter(AIModel.is_active == True))
         model = result.scalars().first()
@@ -133,9 +271,9 @@ async def run_conversation_with_skills(
             client = get_ai_client(
                 api_key=decrypt_api_key(model.api_key_encrypted),
                 base_url=model.base_url,
-                model_name=model.model_name
+                model_name=model.model_name,
+                protocol=getattr(model, "protocol", "openai"),
             )
-    # Last resort: env var
     if not client:
         client = get_ai_client()
 
@@ -143,34 +281,29 @@ async def run_conversation_with_skills(
         yield {"type": "error", "message": "AI model not configured. Please add an AI model in the AI Model Management page."}
         return
 
-    # Detect intent from first user message
     first_user_message = next((msg['content'] for msg in messages if msg['role'] == 'user'), '')
-    # first_user_message.content may be a list (multimodal with attachments)
     if isinstance(first_user_message, list):
         intent_text = " ".join(p.get("text", "") for p in first_user_message if isinstance(p, dict) and p.get("type") == "text")
     else:
         intent_text = first_user_message
     intent = detect_query_intent(intent_text)
 
-    # Select appropriate prompt based on intent (or use override)
     if system_prompt_override:
         system_msg = system_prompt_override
     elif intent == 'diagnostic':
         system_msg = DIAGNOSTIC_PROMPT
     elif intent == 'administrative':
         system_msg = ADMINISTRATIVE_PROMPT
-    else:  # informational
+    else:
         system_msg = INFORMATIONAL_PROMPT
 
     if datasource_id and db:
-        # Get datasource info to determine database type
         from backend.models.datasource import Datasource
         from backend.models.host import Host
         from sqlalchemy import select
         result = await db.execute(select(Datasource).filter(Datasource.id == datasource_id))
         datasource = result.scalar_one_or_none()
         if datasource:
-            # Map db_type to skill prefix
             skill_prefix_map = {
                 'mysql': 'mysql',
                 'postgresql': 'pg',
@@ -178,114 +311,91 @@ async def run_conversation_with_skills(
                 'oracle': 'oracle'
             }
             skill_prefix = skill_prefix_map.get(datasource.db_type, datasource.db_type)
+            host_id = datasource.host_id
+            host_configured = host_id is not None
 
+            system_msg += (
+                "\n\nCurrent conversation datasource context (stable unless the user explicitly asks to switch):"
+                f"\n- datasource_id: {datasource_id}"
+                f"\n- datasource_type: {datasource.db_type}"
+                f"\n- datasource_name: {datasource.name}"
+                f"\n- host_id: {host_id if host_id is not None else 'None'}"
+                f"\n- host_configured: {str(host_configured).lower()}"
+            )
             system_msg += f"\n\nThe user is currently working with datasource ID: {datasource_id} (Type: {datasource.db_type.upper()}, Name: {datasource.name}). Use this ID when calling tools unless they specify otherwise."
-            system_msg += f"\n\nIMPORTANT: This is a {datasource.db_type.upper()} database. You MUST use {skill_prefix}_* skills (e.g., {skill_prefix}_get_db_status, {skill_prefix}_get_slow_queries, {skill_prefix}_get_table_stats, etc.). Do NOT use skills for other database types like mysql_*, pg_*, mssql_*, or oracle_* unless they match this database type."
+            system_msg += f"\n\nIMPORTANT: This is a {datasource.db_type.upper()} database. You MUST use {skill_prefix}_* skills (e.g., {skill_prefix}_get_db_status, {skill_prefix}_get_slow_queries, {skill_prefix}_get_table_stats, etc.). Do NOT use skills for other database types like mysql_*, pg_*, mssql_*, or oracle_* unless they match this database type. Unless the user explicitly asks to switch datasources, keep all diagnosis and tool calls scoped to this datasource."
 
-            # Pass host configuration status for OS-level diagnosis
-            if datasource.host_id:
-                host_result = await db.execute(select(Host).filter(Host.id == datasource.host_id))
+            if host_id:
+                host_result = await db.execute(select(Host).filter(Host.id == host_id))
                 host = host_result.scalar_one_or_none()
                 host_info = f" (Host: {host.name or host.host})" if host else ""
-                system_msg += f"\n\n**主机连接已配置**：该数据源已关联主机{host_info}，你可以使用 OS 层面的诊断技能（get_os_metrics、diagnose_high_cpu、diagnose_high_memory、diagnose_disk_space、diagnose_disk_io、diagnose_network）进行操作系统级别的深度分析。遇到性能问题时，应同时从数据库和操作系统两个层面进行诊断。"
+                system_msg += f"\n\n**主机连接已配置**：该数据源已关联主机{host_info}，host_id={host_id}。你可以使用 OS 层面的诊断技能（get_os_metrics、diagnose_high_cpu、diagnose_high_memory、diagnose_disk_space、diagnose_disk_io、diagnose_network）进行操作系统级别的深度分析。遇到性能问题时，应同时从数据库和操作系统两个层面进行诊断。"
             else:
-                system_msg += "\n\n**注意**：该数据源未配置主机连接，无法进行操作系统层面的诊断（如 CPU、内存、磁盘、网络分析）。如需 OS 级别诊断，请建议用户在数据源配置中关联主机。"
+                system_msg += "\n\n**注意**：该数据源未配置主机连接，host_id=None，无法进行操作系统层面的诊断（如 CPU、内存、磁盘、网络分析）。如需 OS 级别诊断，请建议用户在数据源配置中关联主机。"
         else:
+            system_msg += (
+                f"\n\nCurrent conversation datasource context (stable unless the user explicitly asks to switch):"
+                f"\n- datasource_id: {datasource_id}"
+                f"\n- datasource_type: unknown"
+                f"\n- host_id: unknown"
+                f"\n- host_configured: unknown"
+            )
             system_msg += f"\n\nThe user is currently working with datasource ID: {datasource_id}. Use this ID when calling tools unless they specify otherwise."
     elif datasource_id:
+        system_msg += (
+            f"\n\nCurrent conversation datasource context (stable unless the user explicitly asks to switch):"
+            f"\n- datasource_id: {datasource_id}"
+            f"\n- datasource_type: unknown"
+            f"\n- host_id: unknown"
+            f"\n- host_configured: unknown"
+        )
         system_msg += f"\n\nThe user is currently working with datasource ID: {datasource_id}. Use this ID when calling tools unless they specify otherwise."
 
     if kb_ids:
         system_msg += f"\n\nKnowledge bases are enabled for this session (IDs: {kb_ids}). Use list_documents tool to browse available documentation, then read_document to fetch full content."
 
-    # Get dynamic skills as tools
     active_tools = await get_available_skills_as_tools(db, disabled_tools)
     disabled_set = set(disabled_tools) if disabled_tools else set()
-
     full_messages = [{"role": "system", "content": system_msg}] + messages
-
-    # Detect if using DashScope (通义千问) API
-    is_dashscope = client.base_url and "dashscope.aliyuncs.com" in str(client.base_url)
 
     for round_num in range(MAX_TOOL_ROUNDS):
         try:
+            collected_content = ""
+            collected_tool_calls = []
+            round_usage = None
 
-            response = await client.chat.completions.create(
-                model=client._model_name,
-                messages=full_messages,
+            async for event in stream_assistant_turn(
+                client,
+                full_messages,
                 tools=active_tools,
                 tool_choice="auto",
-                stream=True,
-            )
+            ):
+                if event["type"] == "content":
+                    collected_content += event["content"]
+                    yield {"type": "content", "content": event["content"]}
+                elif event["type"] == "message_complete":
+                    collected_tool_calls = event.get("tool_calls", [])
+                    round_usage = event.get("usage")
+                    if round_usage:
+                        yield {"type": "usage", "usage": round_usage}
+                    if event.get("stop_reason") == "end_turn" and not collected_tool_calls:
+                        yield {"type": "done", "content": collected_content}
+                        return
 
-            collected_content = ""
-            collected_tool_calls = {}
-
-            async for chunk in response:
-                delta = chunk.choices[0].delta if chunk.choices else None
-                if not delta:
-                    continue
-
-                # Stream text content
-                if delta.content:
-                    collected_content += delta.content
-                    yield {"type": "content", "content": delta.content}
-
-                # Collect tool calls
-                if delta.tool_calls:
-                    for tc in delta.tool_calls:
-                        idx = tc.index
-                        if idx not in collected_tool_calls:
-                            collected_tool_calls[idx] = {
-                                "id": tc.id or "",
-                                "function": {"name": "", "arguments": ""},
-                            }
-                        if tc.id:
-                            collected_tool_calls[idx]["id"] = tc.id
-                        if tc.function:
-                            if tc.function.name:
-                                collected_tool_calls[idx]["function"]["name"] = tc.function.name
-                            if tc.function.arguments:
-                                collected_tool_calls[idx]["function"]["arguments"] += tc.function.arguments
-
-                # Check finish reason
-                finish_reason = chunk.choices[0].finish_reason if chunk.choices else None
-                if finish_reason == "stop":
-                    yield {"type": "done", "content": collected_content}
-                    return
-                elif finish_reason == "tool_calls":
-                    break
-
-            # Process tool calls
             if not collected_tool_calls:
                 yield {"type": "done", "content": collected_content}
                 return
 
-            # Build assistant message with tool calls
-            assistant_msg = {"role": "assistant", "content": collected_content or None}
-            tool_calls_list = []
-            for idx in sorted(collected_tool_calls.keys()):
-                tc = collected_tool_calls[idx]
-                tool_calls_list.append({
-                    "id": tc["id"],
-                    "type": "function",
-                    "function": {
-                        "name": tc["function"]["name"],
-                        "arguments": tc["function"]["arguments"],
-                    }
-                })
-            assistant_msg["tool_calls"] = tool_calls_list
+            assistant_msg = {"role": "assistant", "content": collected_content or None, "tool_calls": collected_tool_calls}
             full_messages.append(assistant_msg)
 
-            # Execute each tool call
-            for tc in tool_calls_list:
+            for tc in collected_tool_calls:
                 tool_name = tc["function"]["name"]
                 try:
                     tool_args = json.loads(tc["function"]["arguments"])
                 except json.JSONDecodeError:
                     tool_args = {}
 
-                # Server-side guard: block disabled tools
                 if tool_name in disabled_set:
                     tool_result = json.dumps({"error": f"Tool '{tool_name}' is disabled for this session by the user."})
                     yield {
@@ -308,6 +418,26 @@ async def run_conversation_with_skills(
                     })
                     continue
 
+                from backend.skills.registry import SkillRegistry
+                skill = await SkillRegistry(db).get_skill(tool_name) if db else None
+                risk = assess_tool_risk(tool_name, tool_args, getattr(skill, 'permissions', None))
+
+                if risk["requires_confirmation"]:
+                    yield {
+                        "type": "confirmation_required",
+                        "approval_id": f"approval_{uuid.uuid4().hex}",
+                        "tool_name": tool_name,
+                        "tool_args": tool_args,
+                        "tool_call_id": tc["id"],
+                        "summary": build_tool_summary(tool_name, tool_args),
+                        "plan_markdown": build_tool_plan_markdown(tool_name, tool_args),
+                        "risk_level": risk["level"],
+                        "risk_reason": risk["risk_reason"],
+                        "suppressible": risk["suppressible"],
+                        "confirmation_key": risk["confirmation_key"],
+                    }
+                    return
+
                 yield {
                     "type": "tool_call",
                     "tool_name": tool_name,
@@ -315,7 +445,6 @@ async def run_conversation_with_skills(
                     "tool_call_id": tc["id"],
                 }
 
-                # Execute the skill
                 tool_result, execution_time_ms = await execute_skill_call(
                     tool_name, tool_args, db, user_id, session_id
                 )
@@ -324,7 +453,7 @@ async def run_conversation_with_skills(
                     "type": "tool_result",
                     "tool_name": tool_name,
                     "tool_call_id": tc["id"],
-                    "result": tool_result[:10000],  # Truncate for display
+                    "result": tool_result[:10000],
                     "execution_time_ms": execution_time_ms,
                 }
 
@@ -333,8 +462,6 @@ async def run_conversation_with_skills(
                     "tool_call_id": tc["id"],
                     "content": tool_result,
                 })
-
-            # Loop back to get LLM response after tool results
 
         except Exception as e:
             logger.error(f"Conversation error at round {round_num}: {e}")

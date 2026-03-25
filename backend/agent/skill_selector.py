@@ -18,6 +18,26 @@ def skill_to_openai_function(skill: Skill) -> Dict[str, Any]:
 
         if param.get("default") is not None:
             param_def["default"] = param["default"]
+        if param.get("enum") is not None:
+            param_def["enum"] = param["enum"]
+        if param.get("pattern") is not None:
+            param_def["pattern"] = param["pattern"]
+        if param.get("min") is not None:
+            if param["type"] in {"integer", "number"}:
+                param_def["minimum"] = param["min"]
+            elif param["type"] == "string":
+                param_def["minLength"] = int(param["min"])
+            elif param["type"] == "array":
+                param_def["minItems"] = int(param["min"])
+        if param.get("max") is not None:
+            if param["type"] in {"integer", "number"}:
+                param_def["maximum"] = param["max"]
+            elif param["type"] == "string":
+                param_def["maxLength"] = int(param["max"])
+            elif param["type"] == "array":
+                param_def["maxItems"] = int(param["max"])
+        if param["type"] == "array":
+            param_def["items"] = param.get("items") or {"type": "string"}
 
         properties[param["name"]] = param_def
 
@@ -28,6 +48,8 @@ def skill_to_openai_function(skill: Skill) -> Dict[str, Any]:
     properties["timeout"] = {
         "type": "integer",
         "description": "Execution timeout in seconds (30-3600). Estimate based on task complexity: simple queries 30-60s, complex analysis 300-600s, deep diagnostics 600-3600s.",
+        "minimum": 30,
+        "maximum": 3600,
     }
 
     return {

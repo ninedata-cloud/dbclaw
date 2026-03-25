@@ -4,6 +4,7 @@ const DashboardPage = {
     _datasources: [],
     _hosts: [],
     _healthStatuses: {},
+    _metricCache: {},
     _filters: { health: '', dbType: '', hostId: '', search: '' },
 
     // ── Helpers ──────────────────────────────────────────────
@@ -18,12 +19,10 @@ const DashboardPage = {
         const x1 = cx + r * Math.cos(startAngle);
         const y1 = cy + r * Math.sin(startAngle);
         const label = Math.round(pct * 100) + '%';
-        const sub = `${online}/${total}`;
         return `<svg width="${r*2+16}" height="${r*2+16}" viewBox="0 0 ${r*2+16} ${r*2+16}">
   <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="${sw}"/>
   <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${pct > 0.8 ? '#3fb950' : pct > 0.5 ? '#d29922' : '#f85149'}" stroke-width="${sw}" stroke-dasharray="${dash} ${gap}" stroke-dashoffset="${circ * 0.25}" stroke-linecap="round" style="transition:stroke-dasharray 0.6s ease"/>
-  <text class="donut-center-text" x="${cx}" y="${cy - 8}">${label}</text>
-  <text class="donut-center-sub"  x="${cx}" y="${cy + 10}">${sub}</text>
+  <text class="donut-center-text" x="${cx}" y="${cy}">${label}</text>
 </svg>`;
     },
 
@@ -134,7 +133,7 @@ const DashboardPage = {
     _renderHostPanel(hosts) {
         const anomaly = hosts.filter(h => h.status === 'offline' || h.status === 'error');
         const online  = hosts.length - anomaly.length;
-        const donutSvg = this._donut(online, hosts.length, 36);
+        const donutSvg = this._donut(online, hosts.length, 52);
         const listHtml = anomaly.length === 0
             ? `<div class="all-healthy-text">✓ 全部在线</div>`
             : `<div class="anomaly-host-list">${anomaly.slice(0,3).map(h =>
@@ -166,14 +165,18 @@ const DashboardPage = {
             const viewAllHtml = total > 0 ? `<div class="alert-view-all"><span class="alert-view-all-link" onclick="Router.navigate('alerts')">查看全部 ${total} 条 →</span></div>` : '';
             const listHtml = alerts.length === 0
                 ? `<div class="no-alerts-text">✓ 系统运行正常</div>`
-                : `<div class="alert-list">${alerts.map(a => `
+                : `<div class="alert-list">${alerts.map(a => {
+                    const ds = this._datasources.find(d => d.id === a.datasource_id);
+                    const dsName = ds ? (ds.name || ds.host || `#${a.datasource_id}`) : `#${a.datasource_id}`;
+                    return `
                     <div class="alert-list-item">
                         <div class="alert-severity-bar ${a.severity}"></div>
                         <div class="alert-content">
                             <div class="alert-title">${a.title}</div>
-                            <div class="alert-time">${this._relTime(a.created_at)}</div>
+                            <div class="alert-meta"><span class="alert-ds-tag">${dsName}</span><span class="alert-time">${this._relTime(a.created_at)}</span></div>
                         </div>
-                    </div>`).join('')}</div>`;
+                    </div>`;
+                }).join('')}</div>`;
             const titleCls = total > 10 ? ' alert-title-critical' : '';
             panel.innerHTML = `<div class="overview-panel-title${titleCls}">⚡ 活跃告警${titleBadge}</div>${listHtml}${viewAllHtml}`;
         } catch {
@@ -184,7 +187,7 @@ const DashboardPage = {
     _renderDbPanel(datasources, healthStatuses) {
         const total   = datasources.length;
         const healthy = datasources.filter(d => (healthStatuses[d.id] || 'unknown') === 'healthy').length;
-        const donutSvg = this._donut(healthy, total, 36);
+        const donutSvg = this._donut(healthy, total, 52);
 
         // DB type distribution
         const typeCounts = {};
@@ -211,15 +214,15 @@ const DashboardPage = {
         return `
         <div class="overview-panel" id="panel-hosts">
             <div class="overview-panel-title">主机健康</div>
-            <div class="donut-container"><div style="width:88px;height:88px;background:rgba(255,255,255,0.04);border-radius:50%;"></div></div>
-        </div>
-        <div class="overview-panel" id="panel-alerts">
-            <div class="overview-panel-title">⚡ 活跃告警</div>
-            <div style="color:rgba(255,255,255,0.3);font-size:13px">加载中...</div>
+            <div class="donut-container"><div style="width:120px;height:120px;background:rgba(255,255,255,0.04);border-radius:50%;"></div></div>
         </div>
         <div class="overview-panel" id="panel-dbs">
             <div class="overview-panel-title">数据库健康</div>
-            <div class="donut-container"><div style="width:88px;height:88px;background:rgba(255,255,255,0.04);border-radius:50%;"></div></div>
+            <div class="donut-container"><div style="width:120px;height:120px;background:rgba(255,255,255,0.04);border-radius:50%;"></div></div>
+        </div>
+        <div class="overview-panel panel-alerts" id="panel-alerts">
+            <div class="overview-panel-title">⚡ 活跃告警</div>
+            <div style="color:rgba(255,255,255,0.3);font-size:13px">加载中...</div>
         </div>`;
     },
 
@@ -286,6 +289,7 @@ const DashboardPage = {
         for (const conn of list) {
             const status = this._healthStatuses[conn.id] || 'unknown';
             const statusCls = this._statusClass(status);
+            const m = this._metricCache[conn.id] || null;
             const card = DOM.el('div', {
                 className: `dash-card status-${statusCls}`,
                 onClick: () => { Store.set('currentConnection', conn); Router.navigate('monitor'); }
@@ -304,13 +308,13 @@ const DashboardPage = {
                 <div class="dash-card-host">${conn.host}:${conn.port}${conn.database ? ' / ' + conn.database : ''}</div>
                 <div class="dash-card-divider"></div>
                 <div class="dash-card-metrics" id="dash-metrics-${conn.id}">
-                    <div><div class="dash-metric-label">活跃连接</div><div class="dash-metric-value" id="conn-${conn.id}">--</div></div>
+                    <div><div class="dash-metric-label">活跃连接</div><div class="dash-metric-value" id="conn-${conn.id}">${m ? m.active : '--'}</div></div>
                     <div>
                         <div class="dash-metric-label">CPU</div>
-                        <div class="dash-metric-value" id="cpu-${conn.id}">--</div>
-                        <div class="dash-metric-bar"><div class="dash-metric-bar-fill" id="cpu-bar-${conn.id}" style="width:0%"></div></div>
+                        <div class="dash-metric-value" id="cpu-${conn.id}">${m && m.cpu != null ? m.cpu + '%' : '--'}</div>
+                        <div class="dash-metric-bar"><div class="dash-metric-bar-fill${m && m.cpu != null && parseFloat(m.cpu) >= 80 ? ' level-high' : m && m.cpu != null && parseFloat(m.cpu) >= 60 ? ' level-medium' : ''}" id="cpu-bar-${conn.id}" style="width:${m && m.cpu != null ? Math.min(100, parseFloat(m.cpu)) + '%' : '0%'}"></div></div>
                     </div>
-                    <div><div class="dash-metric-label">QPS</div><div class="dash-metric-value" id="qps-${conn.id}">--</div></div>
+                    <div><div class="dash-metric-label">QPS</div><div class="dash-metric-value" id="qps-${conn.id}">${m && m.qps != null ? m.qps : '--'}</div></div>
                 </div>`;
             grid.appendChild(card);
         }
@@ -347,51 +351,56 @@ const DashboardPage = {
 
     async _refreshMetrics() {
         const filtered = this._filterDatasources();
-        await Promise.all(filtered.map(c => this._loadMetric(c.id)));
-        this._renderDbPanel(this._datasources, this._healthStatuses);
-        this._renderCards();
-    },
-
-    async _loadMetric(connId) {
+        if (filtered.length === 0) {
+            this._renderDbPanel(this._datasources, this._healthStatuses);
+            this._renderCards();
+            return;
+        }
         try {
-            // Health
-            const health = await API.getDatasourceHealth(connId);
-            if (health) {
-                let status = 'unknown';
-                if (health.status === 'healthy') { status = 'healthy'; }
-                else if (health.status === 'warning') { status = 'warning'; }
-                else if (health.status === 'error' || health.status === 'critical') { status = 'critical'; }
-                this._healthStatuses[connId] = status;
-                const hEl = DOM.$(`#health-${connId}`);
-                if (hEl) {
-                    hEl.textContent = this._healthLabelShort(status);
-                    hEl.className = `dash-card-health health-badge-${this._statusClass(status)}`;
+            const connIds = filtered.map(c => c.id);
+            const batchResult = await API.getBatchDashboard(connIds);
+            for (const c of filtered) {
+                const entry = batchResult[String(c.id)];
+                if (!entry) continue;
+                // Health
+                if (entry.health) {
+                    const h = entry.health;
+                    let status = 'unknown';
+                    if (h.status === 'healthy') status = 'healthy';
+                    else if (h.status === 'warning') status = 'warning';
+                    else if (h.status === 'error' || h.status === 'critical') status = 'critical';
+                    this._healthStatuses[c.id] = status;
+                    const hEl = DOM.$(`#health-${c.id}`);
+                    if (hEl) {
+                        hEl.textContent = this._healthLabelShort(status);
+                        hEl.className = `dash-card-health health-badge-${this._statusClass(status)}`;
+                    }
+                }
+                // Metric
+                const metricData = entry.metric ? (entry.metric.data || {}) : null;
+                if (metricData) {
+                    const active = metricData.connections ?? metricData.connections_active ?? metricData.connected_clients ?? metricData.user_sessions ?? metricData.connections_current ?? 0;
+                    const cpuVal = metricData.cpu_usage != null ? metricData.cpu_usage : metricData.os_cpu_usage;
+                    const cpu = cpuVal != null ? cpuVal.toFixed(1) : null;
+                    const qps = metricData.qps != null ? metricData.qps.toFixed(1) : null;
+                    this._metricCache[c.id] = { active, cpu, qps };
+                    const connEl = DOM.$(`#conn-${c.id}`);
+                    const cpuEl  = DOM.$(`#cpu-${c.id}`);
+                    const barEl  = DOM.$(`#cpu-bar-${c.id}`);
+                    const qpsEl  = DOM.$(`#qps-${c.id}`);
+                    if (connEl) connEl.textContent = active;
+                    if (cpuEl)  cpuEl.textContent  = cpu != null ? cpu + '%' : '--';
+                    if (qpsEl)  qpsEl.textContent  = qps != null ? qps : '--';
+                    if (barEl && cpu != null) {
+                        const pct = Math.min(100, parseFloat(cpu));
+                        barEl.style.width = pct + '%';
+                        barEl.className = 'dash-metric-bar-fill' + (pct >= 80 ? ' level-high' : pct >= 60 ? ' level-medium' : '');
+                    }
                 }
             }
-
-            // Metrics
-            const metric = await API.getLatestMetric(connId);
-            if (!metric) return;
-            const data = metric.data || {};
-            const active = data.connections_active ?? data.connected_clients ?? data.user_sessions ?? data.connections_current ?? 0;
-            const cpuVal = data.cpu_usage != null ? data.cpu_usage : null;
-            const cpu    = cpuVal != null ? cpuVal.toFixed(1) : null;
-            const qps    = data.qps != null ? data.qps.toFixed(1) : null;
-
-            const connEl = DOM.$(`#conn-${connId}`);
-            const cpuEl  = DOM.$(`#cpu-${connId}`);
-            const barEl  = DOM.$(`#cpu-bar-${connId}`);
-            const qpsEl  = DOM.$(`#qps-${connId}`);
-
-            if (connEl) connEl.textContent = active;
-            if (cpuEl)  cpuEl.textContent  = cpu != null ? cpu + '%' : '--';
-            if (qpsEl)  qpsEl.textContent  = qps != null ? qps : '--';
-            if (barEl && cpu != null) {
-                const pct = Math.min(100, parseFloat(cpu));
-                barEl.style.width = pct + '%';
-                barEl.className = 'dash-metric-bar-fill' + (pct >= 80 ? ' level-high' : pct >= 60 ? ' level-medium' : '');
-            }
-        } catch { /* leave as -- */ }
+        } catch (e) { /* keep existing values */ }
+        this._renderDbPanel(this._datasources, this._healthStatuses);
+        this._renderCards();
     },
 
     _startTimer() {

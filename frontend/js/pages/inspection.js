@@ -84,7 +84,7 @@ const InspectionPage = {
             minWidth: '400px',
             maxWidth: '400px',
             showStatus: true,
-            showDetails: false,
+            showDetails: true,
             onChange: (datasource) => {
                 this.filters.datasource_id = datasource ? datasource.id : null;
                 this.applyFilters();
@@ -188,7 +188,7 @@ const InspectionPage = {
                                     ` : ''}
                                 </td>
                                 <td><strong>${r.title}</strong></td>
-                                <td>${r.created_at}</td>
+                                <td>${Format.datetime(r.created_at)}</td>
                                 <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.trigger_reason || '-'}</td>
                                 <td>
                                     <button onclick="InspectionPage.viewReport(${r.report_id})" class="btn btn-sm btn-primary" style="padding:4px 8px;margin-right:5px;">查看报告</button>

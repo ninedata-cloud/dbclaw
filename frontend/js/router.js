@@ -16,13 +16,12 @@ const Router = {
         window.location.hash = path;
     },
 
-    _handleRoute() {
+    async _handleRoute() {
         const hash = window.location.hash.slice(1) || 'dashboard';
         const [page, ...params] = hash.split('/');
 
-        // Auth guard
-        const token = localStorage.getItem('auth_token');
-        if (page !== 'login' && !token) {
+        const currentUser = Store.get('currentUser');
+        if (page !== 'login' && !currentUser) {
             window.location.hash = 'login';
             return;
         }
@@ -37,7 +36,7 @@ const Router = {
 
         const handler = this.routes[page];
         if (handler) {
-            const cleanup = handler(params.join('/'));
+            const cleanup = await handler(params.join('/'));
             if (typeof cleanup === 'function') {
                 this.currentCleanup = cleanup;
             }

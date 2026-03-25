@@ -11,6 +11,7 @@ from backend.database import async_session
 from backend.services.alert_service import AlertService
 from backend.services.notification_service import NotificationService
 from backend.services.aggregation_engine import AggregationEngine
+from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
 
@@ -128,16 +129,18 @@ async def _already_delivered(db, alert_id: int, subscription_id: int) -> bool:
 async def _mark_alert_notified(db, alert):
     """Mark alert as notified so it won't be picked up again"""
     from datetime import datetime
-    alert.notified_at = datetime.now()
+    alert.notified_at = now()
     await db.commit()
 
 
 async def _send_via_integrations(db, alert, subscription):
     """通过 Integration 系统发送通知"""
+    from backend.config import get_settings
     from backend.models.integration import AlertChannel, Integration, IntegrationExecutionLog
     from backend.models.alert_delivery_log import AlertDeliveryLog
     from backend.models.datasource import Datasource
     from backend.services.integration_executor import IntegrationExecutor
+    from backend.services.public_share_service import PublicShareService
     from sqlalchemy import select
     from datetime import datetime
 
@@ -150,6 +153,19 @@ async def _send_via_integrations(db, alert, subscription):
             select(Datasource).where(Datasource.id == alert.datasource_id)
         )
         datasource = ds_result.scalar_one_or_none()
+
+    settings = get_settings()
+    alert_url = None
+    report_url = None
+    base_url = await PublicShareService.get_external_base_url(db)
+    if base_url:
+        alert_token = PublicShareService.create_alert_share_token(alert.id, settings.public_share_expire_minutes)
+        alert_url = f"{base_url}/api/alerts/public/{alert.id}/page?token={alert_token}"
+
+        linked_report = await PublicShareService.get_report_by_alert_id(db, alert.id)
+        if linked_report:
+            report_token = PublicShareService.create_report_share_token(linked_report.id, settings.public_share_expire_minutes)
+            report_url = f"{base_url}/api/inspections/reports/public/{linked_report.id}/page?token={report_token}"
 
     # 遍历所有 Channel
     for channel_id in subscription.channel_ids:
@@ -172,7 +188,9 @@ async def _send_via_integrations(db, alert, subscription):
             "severity": alert.severity,
             "datasource_name": datasource.name if datasource else "未知数据源",
             "alert_id": alert.id,
-            "timestamp": alert.created_at.strftime('%Y-%m-%d %H:%M:%S') if alert.created_at else datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+            "alert_url": alert_url,
+            "report_url": report_url,
+            "timestamp": alert.created_at.strftime('%Y-%m-%d %H:%M:%S') if alert.created_at else now().strftime('%Y-%m-%d %H:%M:%S')
         }
 
         # 执行 Integration
@@ -208,7 +226,7 @@ async def _send_via_integrations(db, alert, subscription):
                 channel=f"integration:{integration.integration_id}",
                 recipient=channel.name,
                 status="sent" if result.get("success") else "failed",
-                sent_at=datetime.utcnow(),
+                sent_at=now(),
                 error_message=result.get("message") if not result.get("success") else None
             )
             db.add(delivery_log)
@@ -242,7 +260,7 @@ async def _send_via_integrations(db, alert, subscription):
                 channel=f"integration:{integration.integration_id}",
                 recipient=channel.name,
                 status="failed",
-                sent_at=datetime.utcnow(),
+                sent_at=now(),
                 error_message=str(e)
             )
             db.add(delivery_log)
@@ -287,7 +305,7 @@ async def _send_recovery_via_integrations(db, alert, subscription):
             continue
 
         # 构建恢复通知 payload
-        resolved_at_str = alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        resolved_at_str = alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else now().strftime('%Y-%m-%d %H:%M:%S')
         recovery_metric_line = ""
         if alert.metric_name and alert.resolved_value is not None:
             recovery_metric_line = f"\nMetric: {alert.metric_name} = {alert.resolved_value:.2f}"
@@ -336,7 +354,7 @@ async def _send_recovery_via_integrations(db, alert, subscription):
                 channel=f"integration:{integration.integration_id}:recovery",
                 recipient=channel.name,
                 status="sent" if result.get("success") else "failed",
-                sent_at=datetime.utcnow(),
+                sent_at=now(),
                 error_message=result.get("message") if not result.get("success") else None
             )
             db.add(delivery_log)
@@ -370,7 +388,7 @@ async def _send_recovery_via_integrations(db, alert, subscription):
                 channel=f"integration:{integration.integration_id}:recovery",
                 recipient=channel.name,
                 status="failed",
-                sent_at=datetime.utcnow(),
+                sent_at=now(),
                 error_message=str(e)
             )
             db.add(delivery_log)

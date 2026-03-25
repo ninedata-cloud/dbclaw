@@ -139,5 +139,6 @@ async def execute_query(datasource: Datasource, query: str, allow_write: bool = 
 
     except Exception as e:
         logger.error(f"Failed to execute query on datasource {datasource.id} ({datasource.name}): {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        error_message = str(e).strip() or type(e).__name__ or "Query execution failed"
+        return {"success": False, "error": error_message}
 
