@@ -11,6 +11,27 @@ const DiagnosisPage = {
     availableModels: [],
     sessionTokenUsage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
 
+    _getApprovalPreferences() {
+        try {
+            return JSON.parse(localStorage.getItem('chatApprovalPreferences') || '{}');
+        } catch (e) {
+            return {};
+        }
+    },
+
+    _saveApprovalPreference(key, enabled) {
+        if (!key) return;
+        const prefs = this._getApprovalPreferences();
+        prefs[key] = !!enabled;
+        localStorage.setItem('chatApprovalPreferences', JSON.stringify(prefs));
+    },
+
+    _shouldAutoApprove(data) {
+        if (!data?.suppressible || !data?.confirmation_key) return false;
+        const prefs = this._getApprovalPreferences();
+        return prefs[data.confirmation_key] === true;
+    },
+
     _getSelectedDatasource() {
         return this.datasourceSelector?.getValue() || Store.get('currentDatasource') || null;
     },
@@ -223,13 +244,12 @@ const DiagnosisPage = {
         sidebar.appendChild(sidebarHeader);
         sidebar.appendChild(sessionList);
 
-        // Right area: chat with tool panel
+        // Main chat area
         const chatContainer = DOM.el('div', {
             className: 'chat-container',
-            style: { flex: '1', minWidth: '0', overflow: 'hidden', display: 'flex', flexDirection: 'row', gap: '0', height: '100%' }
+            style: { flex: '1', minWidth: '0', overflow: 'hidden', display: 'flex', flexDirection: 'row', height: '100%' }
         });
 
-        // Main chat area
         const chatMain = DOM.el('div', {
             style: { flex: '1', display: 'flex', flexDirection: 'column', minWidth: '0', position: 'relative', height: '100%' }
         });
@@ -238,9 +258,8 @@ const DiagnosisPage = {
             id: 'chat-token-usage',
             style: {
                 display: 'none',
-                margin: '10px 12px 0 12px',
+                margin: '0px',
                 padding: '10px 12px',
-                borderRadius: '8px',
                 fontSize: '12px',
                 color: 'var(--text-secondary)'
             }
@@ -267,90 +286,13 @@ const DiagnosisPage = {
         disclaimer.textContent = '内容由AI生成，仅供参考';
         chatMain.appendChild(disclaimer);
 
-        // Tool execution panel (right side)
-        const toolPanel = DOM.el('div', {
-            id: 'tool-execution-panel',
-            style: {
-                width: '400px',
-                minWidth: '400px',
-                flexShrink: '0',
-                height: '100%',
-                borderLeft: '1px solid var(--border-color)',
-                background: 'var(--bg-secondary)',
-                display: 'flex',
-                flexDirection: 'column',
-                overflow: 'hidden',
-                transition: 'width 0.3s ease'
-            }
-        });
-
-        const toolPanelHeader = DOM.el('div', {
-            id: 'tool-panel-header',
-            style: {
-                padding: '12px',
-                borderBottom: '1px solid var(--border-color)',
-                display: 'flex',
-                gap: '8px',
-                alignItems: 'center'
-            }
-        });
-
-        const toolHeaderLeft = DOM.el('div', {
-            id: 'tool-panel-title',
-            style: { flex: '1', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '600', fontSize: '13px' }
-        });
-        toolHeaderLeft.innerHTML = '<i data-lucide="activity"></i> skill调用';
-
-        const clearToolsBtn = DOM.el('button', {
-            className: 'btn-icon-only',
-            innerHTML: '<i data-lucide="trash-2"></i>',
-            title: '清空记录',
-            onClick: () => {
-                const toolPanelContent = DOM.$('#tool-panel-content');
-                if (toolPanelContent) {
-                    toolPanelContent.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">暂无skill调用记录</div>';
-                    DOM.createIcons();
-                }
-                // Clear restored tools mapping
-                if (ChatWidget.restoredTools) {
-                    ChatWidget.restoredTools.clear();
-                }
-                if (ChatWidget.pendingTools) {
-                    ChatWidget.pendingTools.clear();
-                }
-            }
-        });
-
-        const toggleToolPanelBtn = DOM.el('button', {
-            id: 'toggle-tool-panel-btn',
-            className: 'btn-icon-only',
-            innerHTML: '<i data-lucide="panel-right-close"></i>',
-            title: '隐藏工具面板',
-            onClick: () => this._toggleToolPanel()
-        });
-
-        toolPanelHeader.appendChild(toolHeaderLeft);
-        toolPanelHeader.appendChild(clearToolsBtn);
-        toolPanelHeader.appendChild(toggleToolPanelBtn);
-
-        const toolPanelContent = DOM.el('div', {
-            id: 'tool-panel-content',
-            style: {
-                flex: '1',
-                overflowY: 'auto',
-                padding: '12px'
-            }
-        });
-        toolPanelContent.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">暂无skill调用记录</div>';
-
-        toolPanel.appendChild(toolPanelHeader);
-        toolPanel.appendChild(toolPanelContent);
-
         chatContainer.appendChild(chatMain);
-        chatContainer.appendChild(toolPanel);
+        chatContainer.appendChild(ChatWidget.createToolPanel());
 
         ChatWidget.onStop = () => this._stopGeneration();
         ChatWidget.onClear = () => this._clearSession();
+        ChatWidget.onApprovalAction = async (approvalId, action) => this._resolveApproval(approvalId, action);
+        ChatWidget.onApprovalRequest = (data) => this._showApprovalModal(data);
 
         layout.appendChild(sidebar);
         layout.appendChild(chatContainer);
@@ -583,6 +525,8 @@ const DiagnosisPage = {
     async _switchSession(sessionId) {
         this.currentSessionId = sessionId;
         this._connectWebSocket(sessionId);
+        ChatWidget.loadMessages([]);
+        ChatWidget.showToolPanelLoading();
 
         // Update sidebar highlight
         const list = DOM.$('#session-list');
@@ -693,7 +637,7 @@ const DiagnosisPage = {
         ws.connect();
     },
 
-    _sendMessage(text) {
+    async _sendMessage(text) {
         if (!text && (!ChatWidget.attachments || ChatWidget.attachments.length === 0)) return;
         if (ChatWidget.isStreaming) return;
         if (!this.ws || !this.currentSessionId) {
@@ -763,10 +707,19 @@ const DiagnosisPage = {
                 ChatWidget.appendContent(data.content);
                 break;
             case 'tool_call':
-                ChatWidget.addToolCall(data.tool_name, data.tool_args);
+                ChatWidget.addToolCall(data.tool_name, data.tool_args, data.tool_call_id);
                 break;
             case 'tool_result':
-                ChatWidget.addToolResult(data.tool_name, data.result, data.execution_time_ms);
+                ChatWidget.addToolResult(data.tool_name, data.result, data.execution_time_ms, data.tool_call_id);
+                break;
+            case 'confirmation_required':
+                ChatWidget.addApprovalRequest(data);
+                if (this._shouldAutoApprove(data)) {
+                    this._resolveApproval(data.approval_id, 'approved');
+                }
+                break;
+            case 'confirmation_resolved':
+                ChatWidget.updateApprovalStatus(data.approval_id, data.action);
                 break;
             case 'usage':
                 this.sessionTokenUsage.input_tokens += data.usage?.input_tokens || 0;
@@ -785,33 +738,82 @@ const DiagnosisPage = {
         }
     },
 
+    async _resolveApproval(approvalId, action) {
+        if (!this.currentSessionId) {
+            Toast.warning('No active session');
+            return;
+        }
+        try {
+            await API.resolveChatApproval(this.currentSessionId, approvalId, { action, comment: '' });
+        } catch (e) {
+            Toast.error('确认失败: ' + e.message);
+        }
+    },
+
+    _showApprovalModal(data) {
+        if (this._shouldAutoApprove(data)) {
+            return;
+        }
+        Modal.show({
+            title: '确认执行可能变更系统的步骤',
+            content: `
+                <div style="display:flex;flex-direction:column;gap:12px;">
+                    <div><strong>技能：</strong>${data.tool_name}</div>
+                    <div><strong>风险等级：</strong>${data.risk_level || 'high'}</div>
+                    <div><strong>风险原因：</strong>${(data.risk_reason || data.summary || '该操作可能带来状态变更').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+                    ${(data.plan_markdown || data.summary) ? `<pre style="margin:0;background:var(--bg-input);padding:12px;border-radius:8px;white-space:pre-wrap;">${(data.plan_markdown || data.summary || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>` : ''}
+                    ${data.suppressible ? `<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary);"><input type="checkbox" id="approval-skip-future"> 本设备对此类操作不再提示</label>` : ''}
+                </div>
+            `,
+            buttons: [
+                { text: '取消', variant: 'secondary', onClick: () => { Modal.hide(); this._resolveApproval(data.approval_id, 'rejected'); } },
+                { text: '确认执行', variant: 'danger', onClick: () => {
+                    const skip = document.querySelector('#approval-skip-future');
+                    if (skip?.checked && data.confirmation_key) {
+                        this._saveApprovalPreference(data.confirmation_key, true);
+                    }
+                    Modal.hide();
+                    this._resolveApproval(data.approval_id, 'approved');
+                } }
+            ]
+        });
+    },
+
     async _clearSession() {
         if (!this.currentSessionId) {
             Toast.warning('No active session');
             return;
         }
-        if (!confirm('Clear all messages in this session? This cannot be undone.')) return;
-        try {
-            await API.clearSessionMessages(this.currentSessionId);
-            this.sessionTokenUsage = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
-            ChatWidget.resetTokenUsage();
-            const container = DOM.$('#chat-messages');
-            if (container) {
-                container.innerHTML = `
-                    <div class="empty-state" style="padding:40px">
-                        <i data-lucide="bot"></i>
-                        <h3>数据库智能卫士</h3>
-                        <p>关于您的数据库，有任何问题都可以问我。我可以分析性能、诊断问题、审查配置并提出优化建议。</p>
-                    </div>
-                `;
-                DOM.createIcons();
-            }
-            // Update session tab title
-            await this._loadSessions();
-            Toast.success('Session cleared');
-        } catch (e) {
-            Toast.error('Failed to clear session: ' + e.message);
-        }
+        Modal.show({
+            title: '清空当前会话',
+            content: '将删除当前会话中的所有消息，此操作不可撤销。',
+            buttons: [
+                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
+                { text: '确认清空', variant: 'danger', onClick: async () => {
+                    Modal.hide();
+                    try {
+                        await API.clearSessionMessages(this.currentSessionId);
+                        this.sessionTokenUsage = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
+                        ChatWidget.resetTokenUsage();
+                        const container = DOM.$('#chat-messages');
+                        if (container) {
+                            container.innerHTML = `
+                                <div class="empty-state" style="padding:40px">
+                                    <i data-lucide="bot"></i>
+                                    <h3>数据库智能卫士</h3>
+                                    <p>关于您的数据库，有任何问题都可以问我。我可以分析性能、诊断问题、审查配置并提出优化建议。</p>
+                                </div>
+                            `;
+                            DOM.createIcons();
+                        }
+                        await this._loadSessions();
+                        Toast.success('Session cleared');
+                    } catch (e) {
+                        Toast.error('Failed to clear session: ' + e.message);
+                    }
+                } }
+            ]
+        });
     },
 
     _stopGeneration() {
@@ -830,31 +832,49 @@ const DiagnosisPage = {
         }
         const sessions = Store.get('chatSessions') || [];
         const session = sessions.find(s => s.id === this.currentSessionId);
-        if (!confirm(`Delete session "${session?.title || '会话 ' + this.currentSessionId}"?`)) return;
-        try {
-            await API.deleteChatSession(this.currentSessionId);
-            this.currentSessionId = null;
-            await this._loadSessions();
-            Toast.success('Session deleted');
-        } catch (e) {
-            Toast.error('Failed to delete session: ' + e.message);
-        }
+        Modal.show({
+            title: '删除会话',
+            content: `确认删除会话 "${session?.title || '会话 ' + this.currentSessionId}" 吗？`,
+            buttons: [
+                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
+                { text: '删除', variant: 'danger', onClick: async () => {
+                    Modal.hide();
+                    try {
+                        await API.deleteChatSession(this.currentSessionId);
+                        this.currentSessionId = null;
+                        await this._loadSessions();
+                        Toast.success('Session deleted');
+                    } catch (e) {
+                        Toast.error('Failed to delete session: ' + e.message);
+                    }
+                } }
+            ]
+        });
     },
 
     async _deleteSessionById(sessionId) {
         const sessions = Store.get('chatSessions') || [];
         const session = sessions.find(s => s.id === sessionId);
-        if (!confirm(`Delete session "${session?.title || '会话 ' + sessionId}"?`)) return;
-        try {
-            await API.deleteChatSession(sessionId);
-            if (this.currentSessionId === sessionId) {
-                this.currentSessionId = null;
-            }
-            await this._loadSessions();
-            Toast.success('Session deleted');
-        } catch (e) {
-            Toast.error('Failed to delete session: ' + e.message);
-        }
+        Modal.show({
+            title: '删除会话',
+            content: `确认删除会话 "${session?.title || '会话 ' + sessionId}" 吗？`,
+            buttons: [
+                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
+                { text: '删除', variant: 'danger', onClick: async () => {
+                    Modal.hide();
+                    try {
+                        await API.deleteChatSession(sessionId);
+                        if (this.currentSessionId === sessionId) {
+                            this.currentSessionId = null;
+                        }
+                        await this._loadSessions();
+                        Toast.success('Session deleted');
+                    } catch (e) {
+                        Toast.error('Failed to delete session: ' + e.message);
+                    }
+                } }
+            ]
+        });
     },
 
     _updateKBButtonText(button, availableKBs) {
@@ -909,45 +929,6 @@ const DiagnosisPage = {
         requestAnimationFrame(() => DOM.createIcons());
     },
 
-    _toggleToolPanel() {
-        const panel = DOM.$('#tool-execution-panel');
-        const btn = DOM.$('#toggle-tool-panel-btn');
-        const header = DOM.$('#tool-panel-header');
-        const content = DOM.$('#tool-panel-content');
-
-        if (!panel || !btn) return;
-
-        const isCollapsed = panel.style.width === '40px';
-
-        if (isCollapsed) {
-            // Expand
-            panel.style.width = '400px';
-            panel.style.minWidth = '400px';
-            btn.innerHTML = '<i data-lucide="panel-right-close"></i>';
-            btn.title = '隐藏工具面板';
-            if (header) {
-                header.style.justifyContent = 'space-between';
-            }
-            if (content) {
-                content.style.display = 'block';
-            }
-        } else {
-            // Collapse
-            panel.style.width = '40px';
-            panel.style.minWidth = '40px';
-            btn.innerHTML = '<i data-lucide="panel-right-open"></i>';
-            btn.title = '显示工具面板';
-            if (header) {
-                header.style.justifyContent = 'center';
-            }
-            if (content) {
-                content.style.display = 'none';
-            }
-        }
-
-        requestAnimationFrame(() => DOM.createIcons());
-    },
-
     _cleanup() {
         if (this.datasourceClickOutsideHandler) {
             document.removeEventListener('click', this.datasourceClickOutsideHandler);
@@ -959,6 +940,8 @@ const DiagnosisPage = {
             this.ws.disconnect();
             this.ws = null;
         }
+        ChatWidget.onApprovalAction = null;
+        ChatWidget.onApprovalRequest = null;
         this.currentSessionId = null;
     }
 };

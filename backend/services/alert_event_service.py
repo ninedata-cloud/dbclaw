@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.alert_event import AlertEvent
 from backend.models.alert_message import AlertMessage
 from backend.config import ALERT_AGGREGATION_TIME_WINDOW_MINUTES
+from backend.utils.datetime_helper import now
 
 
 class AlertEventService:
@@ -103,7 +104,7 @@ class AlertEventService:
             alert_count=1,
             event_start_time=alert.created_at,
             event_end_time=alert.created_at,
-            last_updated=datetime.now(),
+            last_updated=now(),
             status=alert.status,
             severity=alert.severity,
             title=alert.title,
@@ -128,7 +129,7 @@ class AlertEventService:
         event.latest_alert_id = alert.id
         event.alert_count += 1
         event.event_end_time = alert.created_at
-        event.last_updated = datetime.now()
+        event.last_updated = now()
         event.status = alert.status  # Inherit status from latest alert
 
         # Update severity (keep highest)
@@ -249,7 +250,7 @@ class AlertEventService:
 
         # Update event status
         event.status = "acknowledged"
-        event.last_updated = datetime.now()
+        event.last_updated = now()
 
         # Update all alerts in event
         await db.execute(
@@ -267,7 +268,7 @@ class AlertEventService:
             if alert.status == "active":
                 alert.status = "acknowledged"
                 alert.acknowledged_by = user_id
-                alert.acknowledged_at = datetime.now()
+                alert.acknowledged_at = now()
 
         await db.flush()
         await db.refresh(event)
@@ -290,10 +291,10 @@ class AlertEventService:
             raise ValueError(f"Event {event_id} not found")
 
         # Update event status and end time
-        now = datetime.now()
+        now_time = now()
         event.status = "resolved"
-        event.event_end_time = now  # 更新恢复时间
-        event.last_updated = now
+        event.event_end_time = now_time  # 更新恢复时间
+        event.last_updated = now_time
 
         # Update all alerts in event
         result = await db.execute(
@@ -304,7 +305,7 @@ class AlertEventService:
         for alert in alerts:
             if alert.status != "resolved":
                 alert.status = "resolved"
-                alert.resolved_at = now
+                alert.resolved_at = now_time
 
         await db.flush()
         await db.refresh(event)
@@ -349,10 +350,10 @@ class AlertEventService:
 
         if all_resolved:
             # Auto-resolve the event
-            now = datetime.now()
+            now_time = now()
             event.status = "resolved"
-            event.event_end_time = now  # 更新恢复时间
-            event.last_updated = now
+            event.event_end_time = now_time  # 更新恢复时间
+            event.last_updated = now_time
             await db.flush()
             await db.refresh(event)
             return event

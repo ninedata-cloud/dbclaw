@@ -12,7 +12,7 @@ from backend.database import get_db, async_session
 from backend.config import get_settings
 from backend.models.diagnostic_session import DiagnosticSession, ChatMessage
 from backend.models.user import User
-from backend.schemas.chat import ChatSessionCreate, ChatSessionResponse, ChatMessageResponse
+from backend.schemas.chat import ChatSessionCreate, ChatSessionResponse, ChatMessageResponse, ChatApprovalResolveRequest
 from backend.agent.conversation import run_conversation
 from backend.agent.conversation_skills import run_conversation_with_skills
 from backend.agent.tools import HIGH_RISK_TOOLS
@@ -23,6 +23,255 @@ from backend.services.session_service import SessionService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
+ACTIVE_CHAT_SOCKETS: dict[int, list[WebSocket]] = {}
+PENDING_APPROVALS: dict[int, dict[str, dict]] = {}
+
+
+def _register_socket(session_id: int, websocket: WebSocket) -> None:
+    ACTIVE_CHAT_SOCKETS.setdefault(session_id, []).append(websocket)
+
+
+def _unregister_socket(session_id: int, websocket: WebSocket) -> None:
+    sockets = ACTIVE_CHAT_SOCKETS.get(session_id)
+    if not sockets:
+        return
+    ACTIVE_CHAT_SOCKETS[session_id] = [ws for ws in sockets if ws is not websocket]
+    if not ACTIVE_CHAT_SOCKETS[session_id]:
+        ACTIVE_CHAT_SOCKETS.pop(session_id, None)
+
+
+async def _broadcast_to_session(session_id: int, payload: dict) -> None:
+    sockets = ACTIVE_CHAT_SOCKETS.get(session_id, [])
+    stale = []
+    for ws in sockets:
+        try:
+            await ws.send_json(payload)
+        except Exception:
+            stale.append(ws)
+    for ws in stale:
+        _unregister_socket(session_id, ws)
+
+
+async def _rebuild_llm_messages(all_msgs):
+    messages = []
+    from backend.utils.attachment_handler import AttachmentHandler
+
+    for m in all_msgs:
+        if m.role == "tool_call":
+            try:
+                data = json.loads(m.content)
+                tool_call_id = data.get("tool_call_id") or m.tool_call_id or f"call_{data['tool_name']}_{m.id}"
+                messages.append({
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [{
+                        "id": tool_call_id,
+                        "type": "function",
+                        "function": {
+                            "name": data["tool_name"],
+                            "arguments": json.dumps(data["tool_args"])
+                        }
+                    }]
+                })
+            except Exception as e:
+                logger.error(f"Error parsing tool_call message: {e}")
+            continue
+        if m.role == "tool_result":
+            try:
+                data = json.loads(m.content)
+                tool_call_id = data.get("tool_call_id") or m.tool_call_id or f"call_{data['tool_name']}_{m.id - 1}"
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call_id,
+                    "content": data["result"]
+                })
+            except Exception as e:
+                logger.error(f"Error parsing tool_result message: {e}")
+            continue
+        if m.role in {"approval_request", "approval_response"}:
+            continue
+
+        if m.attachments:
+            content_parts = []
+            if m.content and m.content != "[Attachment]":
+                content_parts.append({"type": "text", "text": m.content})
+
+            for att in m.attachments:
+                try:
+                    att_content = await AttachmentHandler.format_attachment_for_llm(att)
+                    content_parts.append(att_content)
+                except Exception as e:
+                    logger.error(f"Error processing attachment: {e}")
+                    content_parts.append({
+                        "type": "text",
+                        "text": f"[Error loading attachment: {att.get('filename', 'unknown')}]"
+                    })
+
+            msg_dict = {"role": m.role, "content": content_parts}
+        else:
+            msg_dict = {"role": m.role, "content": m.content}
+
+        if m.tool_calls:
+            msg_dict["tool_calls"] = m.tool_calls
+        if m.tool_call_id:
+            msg_dict["tool_call_id"] = m.tool_call_id
+        messages.append(msg_dict)
+
+    return messages
+
+
+async def _continue_conversation_after_tool(
+    session_id: int,
+    user_id: int,
+    datasource_id: int | None,
+    model_id: int | None,
+    kb_ids,
+    disabled_tools,
+):
+    full_response = ""
+    usage_totals = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+
+    async with async_session() as db:
+        msgs_result = await db.execute(
+            select(ChatMessage)
+            .where(ChatMessage.session_id == session_id)
+            .order_by(ChatMessage.created_at)
+        )
+        all_msgs = msgs_result.scalars().all()
+        messages = await _rebuild_llm_messages(all_msgs)
+
+        async for event in run_conversation_with_skills(
+            messages,
+            datasource_id,
+            model_id,
+            kb_ids,
+            db,
+            user_id=user_id,
+            session_id=session_id,
+            disabled_tools=disabled_tools,
+        ):
+            event_type = event.get("type")
+
+            if event_type == "content":
+                full_response += event["content"]
+                await _broadcast_to_session(session_id, {"type": "content", "content": event["content"]})
+            elif event_type == "tool_call":
+                tool_msg = ChatMessage(
+                    session_id=session_id,
+                    role="tool_call",
+                    content=json.dumps({
+                        "tool_name": event["tool_name"],
+                        "tool_args": event["tool_args"],
+                        "tool_call_id": event.get("tool_call_id"),
+                    }),
+                    tool_calls=[{
+                        "name": event["tool_name"],
+                        "arguments": event["tool_args"],
+                    }],
+                    tool_call_id=event.get("tool_call_id"),
+                )
+                db.add(tool_msg)
+                await db.commit()
+                await _broadcast_to_session(session_id, {
+                    "type": "tool_call",
+                    "tool_name": event["tool_name"],
+                    "tool_args": event["tool_args"],
+                    "tool_call_id": event.get("tool_call_id"),
+                })
+            elif event_type == "tool_result":
+                result_msg = ChatMessage(
+                    session_id=session_id,
+                    role="tool_result",
+                    content=json.dumps({
+                        "tool_name": event["tool_name"],
+                        "result": event["result"],
+                        "execution_time_ms": event.get("execution_time_ms"),
+                        "tool_call_id": event.get("tool_call_id"),
+                    }),
+                    tool_call_id=event.get("tool_call_id"),
+                )
+                db.add(result_msg)
+                await db.commit()
+                await _broadcast_to_session(session_id, {
+                    "type": "tool_result",
+                    "tool_name": event["tool_name"],
+                    "result": event["result"],
+                    "execution_time_ms": event.get("execution_time_ms"),
+                    "tool_call_id": event.get("tool_call_id"),
+                })
+            elif event_type == "usage":
+                usage = event.get("usage", {}) or {}
+                usage_totals["input_tokens"] += int(usage.get("input_tokens") or 0)
+                usage_totals["output_tokens"] += int(usage.get("output_tokens") or 0)
+                usage_totals["total_tokens"] += int(usage.get("total_tokens") or 0)
+                session_result = await db.execute(
+                    select(DiagnosticSession).where(DiagnosticSession.id == session_id, DiagnosticSession.user_id == user_id)
+                )
+                session = session_result.scalar_one_or_none()
+                if session:
+                    session.input_tokens += int(usage.get("input_tokens") or 0)
+                    session.output_tokens += int(usage.get("output_tokens") or 0)
+                    session.total_tokens += int(usage.get("total_tokens") or 0)
+                    session.updated_at = datetime.utcnow()
+                    await db.commit()
+                await _broadcast_to_session(session_id, {"type": "usage", "usage": usage})
+            elif event_type == "confirmation_required":
+                approval_id = event["approval_id"]
+                PENDING_APPROVALS.setdefault(session_id, {})[approval_id] = {
+                    "approval_id": approval_id,
+                    "tool_name": event["tool_name"],
+                    "tool_args": event["tool_args"],
+                    "tool_call_id": event.get("tool_call_id"),
+                    "datasource_id": datasource_id,
+                    "model_id": model_id,
+                    "kb_ids": kb_ids,
+                    "disabled_tools": disabled_tools,
+                    "user_id": user_id,
+                    "risk_level": event.get("risk_level", "high"),
+                    "risk_reason": event.get("risk_reason"),
+                    "suppressible": event.get("suppressible", False),
+                    "confirmation_key": event.get("confirmation_key"),
+                }
+                approval_msg = ChatMessage(
+                    session_id=session_id,
+                    role="approval_request",
+                    content=json.dumps({
+                        "approval_id": approval_id,
+                        "tool_name": event["tool_name"],
+                        "tool_args": event["tool_args"],
+                        "tool_call_id": event.get("tool_call_id"),
+                        "summary": event.get("summary"),
+                        "plan_markdown": event.get("plan_markdown"),
+                        "risk_level": event.get("risk_level", "high"),
+                        "risk_reason": event.get("risk_reason"),
+                        "suppressible": event.get("suppressible", False),
+                        "confirmation_key": event.get("confirmation_key"),
+                        "status": "pending",
+                    }),
+                )
+                db.add(approval_msg)
+                await db.commit()
+                await _broadcast_to_session(session_id, event)
+                return
+            elif event_type == "done":
+                await _broadcast_to_session(session_id, {"type": "done"})
+            elif event_type == "error":
+                await _broadcast_to_session(session_id, {
+                    "type": "error",
+                    "content": event.get("content") or event.get("message", "Unknown error"),
+                })
+
+        if full_response:
+            assistant_msg = ChatMessage(
+                session_id=session_id,
+                role="assistant",
+                content=full_response,
+                input_tokens=usage_totals["input_tokens"],
+                output_tokens=usage_totals["output_tokens"],
+                total_tokens=usage_totals["total_tokens"],
+            )
+            db.add(assistant_msg)
+            await db.commit()
 
 
 async def _get_owned_session(db: AsyncSession, session_id: int, user: User) -> DiagnosticSession:
@@ -162,6 +411,7 @@ async def delete_session(session_id: int, db: AsyncSession = Depends(get_db), us
     session = result.scalar_one_or_none()
     if session:
         await db.delete(session)
+    PENDING_APPROVALS.pop(session_id, None)
     await db.commit()
     return {"message": "Session deleted"}
 
@@ -186,8 +436,120 @@ async def clear_session_messages(session_id: int, db: AsyncSession = Depends(get
         session.output_tokens = 0
         session.total_tokens = 0
         session.updated_at = datetime.utcnow()
+    PENDING_APPROVALS.pop(session_id, None)
     await db.commit()
     return {"message": "Messages cleared"}
+
+
+@router.post("/api/chat/sessions/{session_id}/approvals/{approval_id}/resolve")
+async def resolve_chat_approval(
+    session_id: int,
+    approval_id: str,
+    payload: ChatApprovalResolveRequest,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    await _get_owned_session(db, session_id, user)
+    session_pending = PENDING_APPROVALS.get(session_id, {})
+    pending = session_pending.get(approval_id)
+    if not pending or pending.get("user_id") != user.id:
+        raise HTTPException(status_code=404, detail="确认请求不存在或已失效")
+
+    response_msg = ChatMessage(
+        session_id=session_id,
+        role="approval_response",
+        content=json.dumps({
+            "approval_id": approval_id,
+            "action": payload.action,
+            "comment": payload.comment,
+            "status": payload.action,
+            "risk_level": pending.get("risk_level", "high"),
+            "risk_reason": pending.get("risk_reason"),
+        }),
+    )
+    db.add(response_msg)
+    await db.commit()
+
+    await _broadcast_to_session(session_id, {
+        "type": "confirmation_resolved",
+        "approval_id": approval_id,
+        "action": payload.action,
+        "comment": payload.comment,
+    })
+
+    session_pending.pop(approval_id, None)
+    if not session_pending:
+        PENDING_APPROVALS.pop(session_id, None)
+
+    if payload.action == "rejected":
+        return {"approval_id": approval_id, "status": "rejected"}
+
+    tool_call_msg = ChatMessage(
+        session_id=session_id,
+        role="tool_call",
+        content=json.dumps({
+            "tool_name": pending["tool_name"],
+            "tool_args": pending["tool_args"],
+            "tool_call_id": pending.get("tool_call_id"),
+        }),
+        tool_calls=[{
+            "name": pending["tool_name"],
+            "arguments": pending["tool_args"],
+        }],
+        tool_call_id=pending.get("tool_call_id"),
+    )
+    db.add(tool_call_msg)
+    await db.commit()
+
+    await _broadcast_to_session(session_id, {
+        "type": "tool_call",
+        "tool_name": pending["tool_name"],
+        "tool_args": pending["tool_args"],
+        "tool_call_id": pending.get("tool_call_id"),
+    })
+
+    async with async_session() as exec_db:
+        from backend.agent.conversation_skills import execute_skill_call
+        tool_result, execution_time_ms = await execute_skill_call(
+            pending["tool_name"],
+            dict(pending["tool_args"]),
+            exec_db,
+            user.id,
+            session_id,
+        )
+
+        result_msg = ChatMessage(
+            session_id=session_id,
+            role="tool_result",
+            content=json.dumps({
+                "tool_name": pending["tool_name"],
+                "result": tool_result,
+                "execution_time_ms": execution_time_ms,
+                "tool_call_id": pending.get("tool_call_id"),
+            }),
+            tool_call_id=pending.get("tool_call_id"),
+        )
+        exec_db.add(result_msg)
+        await exec_db.commit()
+
+    await _broadcast_to_session(session_id, {
+        "type": "tool_result",
+        "tool_name": pending["tool_name"],
+        "result": tool_result,
+        "execution_time_ms": execution_time_ms,
+        "tool_call_id": pending.get("tool_call_id"),
+    })
+
+    await _continue_conversation_after_tool(
+        session_id=session_id,
+        user_id=user.id,
+        datasource_id=pending.get("datasource_id"),
+        model_id=pending.get("model_id"),
+        kb_ids=pending.get("kb_ids"),
+        disabled_tools=pending.get("disabled_tools"),
+    )
+
+    return {"approval_id": approval_id, "status": "approved"}
 
 
 @router.websocket("/ws/chat/{session_id}")
@@ -202,6 +564,7 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
         return
 
     await websocket.accept()
+    _register_socket(session_id, websocket)
     logger.info(f"Chat WebSocket connected for session {session_id}, user {user.id}")
 
     try:
@@ -273,74 +636,7 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
                 all_msgs = msgs_result.scalars().all()
 
             # Build messages for LLM
-            messages = []
-            from backend.utils.attachment_handler import AttachmentHandler
-
-            for m in all_msgs:
-                # Convert custom roles to standard OpenAI format
-                if m.role == "tool_call":
-                    # Convert tool_call to assistant message with tool_calls
-                    try:
-                        data = json.loads(m.content)
-                        msg_dict = {
-                            "role": "assistant",
-                            "content": None,
-                            "tool_calls": [{
-                                "id": f"call_{data['tool_name']}_{m.id}",
-                                "type": "function",
-                                "function": {
-                                    "name": data["tool_name"],
-                                    "arguments": json.dumps(data["tool_args"])
-                                }
-                            }]
-                        }
-                        messages.append(msg_dict)
-                    except Exception as e:
-                        logger.error(f"Error parsing tool_call message: {e}")
-                    continue
-                elif m.role == "tool_result":
-                    # Convert tool_result to tool message
-                    try:
-                        data = json.loads(m.content)
-                        msg_dict = {
-                            "role": "tool",
-                            "tool_call_id": f"call_{data['tool_name']}_{m.id - 1}",  # Match the tool_call id
-                            "content": data["result"]
-                        }
-                        messages.append(msg_dict)
-                    except Exception as e:
-                        logger.error(f"Error parsing tool_result message: {e}")
-                    continue
-
-                # Handle standard roles
-                # Handle attachments
-                if m.attachments:
-                    # Build content array for multimodal messages
-                    content_parts = []
-                    if m.content and m.content != "[Attachment]":
-                        content_parts.append({"type": "text", "text": m.content})
-
-                    # Add attachments
-                    for att in m.attachments:
-                        try:
-                            att_content = await AttachmentHandler.format_attachment_for_llm(att)
-                            content_parts.append(att_content)
-                        except Exception as e:
-                            logger.error(f"Error processing attachment: {e}")
-                            content_parts.append({
-                                "type": "text",
-                                "text": f"[Error loading attachment: {att.get('filename', 'unknown')}]"
-                            })
-
-                    msg_dict = {"role": m.role, "content": content_parts}
-                else:
-                    msg_dict = {"role": m.role, "content": m.content}
-
-                if m.tool_calls:
-                    msg_dict["tool_calls"] = m.tool_calls
-                if m.tool_call_id:
-                    msg_dict["tool_call_id"] = m.tool_call_id
-                messages.append(msg_dict)
+            messages = await _rebuild_llm_messages(all_msgs)
 
             # Stream AI response using skill-based system
             full_response = ""
@@ -372,12 +668,14 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
                                 role="tool_call",
                                 content=json.dumps({
                                     "tool_name": event["tool_name"],
-                                    "tool_args": event["tool_args"]
+                                    "tool_args": event["tool_args"],
+                                    "tool_call_id": event.get("tool_call_id"),
                                 }),
                                 tool_calls=[{
                                     "name": event["tool_name"],
                                     "arguments": event["tool_args"]
-                                }]
+                                }],
+                                tool_call_id=event.get("tool_call_id"),
                             )
                             tool_db.add(tool_msg)
                             await tool_db.commit()
@@ -386,6 +684,7 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
                             "type": "tool_call",
                             "tool_name": event["tool_name"],
                             "tool_args": event["tool_args"],
+                            "tool_call_id": event.get("tool_call_id"),
                         })
                     elif event_type == "tool_result":
                         # Save tool_result to database
@@ -396,8 +695,10 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
                                 content=json.dumps({
                                     "tool_name": event["tool_name"],
                                     "result": event["result"],
-                                    "execution_time_ms": event.get("execution_time_ms")
-                                })
+                                    "execution_time_ms": event.get("execution_time_ms"),
+                                    "tool_call_id": event.get("tool_call_id"),
+                                }),
+                                tool_call_id=event.get("tool_call_id"),
                             )
                             tool_db.add(result_msg)
                             await tool_db.commit()
@@ -407,7 +708,48 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
                             "tool_name": event["tool_name"],
                             "result": event["result"],
                             "execution_time_ms": event.get("execution_time_ms"),
+                            "tool_call_id": event.get("tool_call_id"),
                         })
+                    elif event_type == "confirmation_required":
+                        approval_id = event["approval_id"]
+                        PENDING_APPROVALS.setdefault(session_id, {})[approval_id] = {
+                            "approval_id": approval_id,
+                            "tool_name": event["tool_name"],
+                            "tool_args": event["tool_args"],
+                            "tool_call_id": event.get("tool_call_id"),
+                            "datasource_id": effective_datasource_id,
+                            "model_id": model_id,
+                            "kb_ids": kb_ids,
+                            "disabled_tools": disabled_tools,
+                            "user_id": user.id,
+                            "risk_level": event.get("risk_level", "high"),
+                            "risk_reason": event.get("risk_reason"),
+                            "suppressible": event.get("suppressible", False),
+                            "confirmation_key": event.get("confirmation_key"),
+                        }
+
+                        async with async_session() as approval_db:
+                            approval_msg = ChatMessage(
+                                session_id=session_id,
+                                role="approval_request",
+                                content=json.dumps({
+                                    "approval_id": approval_id,
+                                    "tool_name": event["tool_name"],
+                                    "tool_args": event["tool_args"],
+                                    "tool_call_id": event.get("tool_call_id"),
+                                    "summary": event.get("summary"),
+                                    "plan_markdown": event.get("plan_markdown"),
+                                    "risk_level": event.get("risk_level", "high"),
+                                    "risk_reason": event.get("risk_reason"),
+                                    "suppressible": event.get("suppressible", False),
+                                    "confirmation_key": event.get("confirmation_key"),
+                                    "status": "pending",
+                                }),
+                            )
+                            approval_db.add(approval_msg)
+                            await approval_db.commit()
+
+                        await websocket.send_json(event)
                     elif event_type == "usage":
                         usage = event.get("usage", {}) or {}
                         usage_totals["input_tokens"] += int(usage.get("input_tokens") or 0)
@@ -445,13 +787,18 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
                         session_id=session_id,
                         role="assistant",
                         content=full_response,
+                        input_tokens=usage_totals["input_tokens"],
+                        output_tokens=usage_totals["output_tokens"],
+                        total_tokens=usage_totals["total_tokens"],
                     )
                     db.add(assistant_msg)
                     await db.commit()
 
     except WebSocketDisconnect:
+        _unregister_socket(session_id, websocket)
         logger.info(f"Chat WebSocket disconnected for session {session_id}")
     except Exception as e:
+        _unregister_socket(session_id, websocket)
         logger.error(f"Chat WebSocket error: {e}", exc_info=True)
         try:
             # Try to send error message first

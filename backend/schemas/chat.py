@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Literal
 from datetime import datetime
 
 
@@ -35,6 +35,9 @@ class ChatMessageResponse(BaseModel):
     content: str
     tool_calls: Optional[Any] = None
     attachments: Optional[List[Any]] = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
     created_at: Optional[datetime] = None
 
     class Config:
@@ -44,3 +47,8 @@ class ChatMessageResponse(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     datasource_id: Optional[int] = None
+
+
+class ChatApprovalResolveRequest(BaseModel):
+    action: Literal["approved", "rejected"]
+    comment: Optional[str] = None

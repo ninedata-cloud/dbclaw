@@ -11,6 +11,7 @@ from backend.database import async_session
 from backend.services.alert_service import AlertService
 from backend.services.notification_service import NotificationService
 from backend.services.aggregation_engine import AggregationEngine
+from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +129,7 @@ async def _already_delivered(db, alert_id: int, subscription_id: int) -> bool:
 async def _mark_alert_notified(db, alert):
     """Mark alert as notified so it won't be picked up again"""
     from datetime import datetime
-    alert.notified_at = datetime.now()
+    alert.notified_at = now()
     await db.commit()
 
 
@@ -189,7 +190,7 @@ async def _send_via_integrations(db, alert, subscription):
             "alert_id": alert.id,
             "alert_url": alert_url,
             "report_url": report_url,
-            "timestamp": alert.created_at.strftime('%Y-%m-%d %H:%M:%S') if alert.created_at else datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+            "timestamp": alert.created_at.strftime('%Y-%m-%d %H:%M:%S') if alert.created_at else now().strftime('%Y-%m-%d %H:%M:%S')
         }
 
         # 执行 Integration
@@ -225,7 +226,7 @@ async def _send_via_integrations(db, alert, subscription):
                 channel=f"integration:{integration.integration_id}",
                 recipient=channel.name,
                 status="sent" if result.get("success") else "failed",
-                sent_at=datetime.utcnow(),
+                sent_at=now(),
                 error_message=result.get("message") if not result.get("success") else None
             )
             db.add(delivery_log)
@@ -259,7 +260,7 @@ async def _send_via_integrations(db, alert, subscription):
                 channel=f"integration:{integration.integration_id}",
                 recipient=channel.name,
                 status="failed",
-                sent_at=datetime.utcnow(),
+                sent_at=now(),
                 error_message=str(e)
             )
             db.add(delivery_log)
@@ -304,7 +305,7 @@ async def _send_recovery_via_integrations(db, alert, subscription):
             continue
 
         # 构建恢复通知 payload
-        resolved_at_str = alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        resolved_at_str = alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else now().strftime('%Y-%m-%d %H:%M:%S')
         recovery_metric_line = ""
         if alert.metric_name and alert.resolved_value is not None:
             recovery_metric_line = f"\nMetric: {alert.metric_name} = {alert.resolved_value:.2f}"
@@ -353,7 +354,7 @@ async def _send_recovery_via_integrations(db, alert, subscription):
                 channel=f"integration:{integration.integration_id}:recovery",
                 recipient=channel.name,
                 status="sent" if result.get("success") else "failed",
-                sent_at=datetime.utcnow(),
+                sent_at=now(),
                 error_message=result.get("message") if not result.get("success") else None
             )
             db.add(delivery_log)
@@ -387,7 +388,7 @@ async def _send_recovery_via_integrations(db, alert, subscription):
                 channel=f"integration:{integration.integration_id}:recovery",
                 recipient=channel.name,
                 status="failed",
-                sent_at=datetime.utcnow(),
+                sent_at=now(),
                 error_message=str(e)
             )
             db.add(delivery_log)

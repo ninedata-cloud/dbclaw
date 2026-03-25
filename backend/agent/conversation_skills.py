@@ -3,6 +3,8 @@ Updated conversation module to use dynamic skill system
 """
 import json
 import logging
+import re
+import uuid
 from typing import AsyncGenerator, List, Dict, Any, Optional
 
 from backend.agent.prompts import DIAGNOSTIC_PROMPT, INFORMATIONAL_PROMPT, ADMINISTRATIVE_PROMPT
@@ -14,6 +16,173 @@ from backend.utils.datetime_helper import now
 logger = logging.getLogger(__name__)
 
 MAX_TOOL_ROUNDS = 30
+
+READ_ONLY_SQL_KEYWORDS = {'SELECT', 'SHOW', 'EXPLAIN', 'EXEC', 'EXECUTE', 'DESCRIBE', 'DESC', 'WITH'}
+DANGEROUS_SQL_KEYWORDS = {'INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'TRUNCATE', 'CREATE', 'GRANT', 'REVOKE', 'CALL'}
+DANGEROUS_COMMAND_PATTERNS = [
+    'rm ', 'rmdir', 'del ', 'delete',
+    'mv ', 'move',
+    'chmod', 'chown', 'chgrp',
+    'kill', 'pkill', 'killall',
+    'shutdown', 'reboot', 'halt', 'poweroff',
+    'mkfs', 'fdisk', 'parted',
+    'dd ', 'format',
+    'iptables', 'firewall',
+    'useradd', 'userdel', 'usermod',
+    'groupadd', 'groupdel',
+    '>>', 'tee',
+    'wget', 'curl -o', 'curl -O',
+    'apt install', 'yum install', 'dnf install',
+    'systemctl stop', 'systemctl start', 'systemctl restart',
+    'service stop', 'service start', 'service restart',
+]
+READ_ONLY_COMMAND_HINTS = [
+    'df', 'du', 'free', 'ps', 'top', 'htop', 'iostat', 'vmstat', 'sar', 'ss', 'netstat',
+    'journalctl', 'tail', 'cat', 'uptime', 'hostname', 'lsblk', 'mount', 'dmesg', 'sysctl',
+]
+
+
+def _normalize_sql_keyword(sql: str) -> str:
+    query = (sql or '').strip().lstrip('(')
+    match = re.match(r'([A-Za-z]+)', query)
+    return match.group(1).upper() if match else ''
+
+
+def _get_command_arg(arguments: Dict[str, Any]) -> str:
+    return str(arguments.get('command') or arguments.get('cmd') or arguments.get('shell_command') or '').strip()
+
+
+def build_tool_summary(tool_name: str, arguments: Dict[str, Any]) -> str:
+    parts = []
+    for key, value in list(arguments.items())[:3]:
+        if isinstance(value, (dict, list)):
+            rendered = json.dumps(value, ensure_ascii=False)
+        else:
+            rendered = str(value)
+        if len(rendered) > 40:
+            rendered = rendered[:37] + "..."
+        parts.append(f"{key}={rendered}")
+    if not parts:
+        return f"准备执行 {tool_name}"
+    return f"准备执行 {tool_name}（{', '.join(parts)}）"
+
+
+def build_tool_plan_markdown(tool_name: str, arguments: Dict[str, Any]) -> str:
+    rendered_args = json.dumps(arguments, ensure_ascii=False, indent=2, default=str)
+    return (
+        f"将执行技能 `{tool_name}`。\n\n"
+        f"**执行参数**\n```json\n{rendered_args}\n```\n\n"
+        "请确认是否继续执行。"
+    )
+
+
+def build_confirmation_reason(tool_name: str, arguments: Dict[str, Any], risk_level: str) -> str:
+    command = _get_command_arg(arguments)
+    sql = str(arguments.get('sql') or '').strip()
+
+    if command:
+        if risk_level == 'destructive':
+            return f"该命令可能直接修改主机状态或中断服务：`{command}`"
+        return f"该命令具备修改主机状态的风险，需要确认后再执行：`{command}`"
+    if sql:
+        if risk_level == 'destructive':
+            return f"该 SQL 可能直接修改或破坏数据库对象/数据：`{sql[:120]}`"
+        return f"该 SQL 可能修改数据库状态，需要确认后再执行：`{sql[:120]}`"
+    return f"技能 `{tool_name}` 具备潜在变更能力，需要确认后再执行。"
+
+
+def assess_tool_risk(tool_name: str, arguments: Dict[str, Any], permissions: Optional[List[str]] = None) -> Dict[str, Any]:
+    permissions = permissions or []
+    command = _get_command_arg(arguments)
+    sql = str(arguments.get('sql') or '').strip()
+    keyword = _normalize_sql_keyword(sql)
+
+    if command:
+        command_lower = command.lower()
+        for pattern in DANGEROUS_COMMAND_PATTERNS:
+            if pattern in command_lower:
+                destructive_patterns = {'rm ', 'rmdir', 'del ', 'delete', 'shutdown', 'reboot', 'halt', 'poweroff', 'mkfs', 'fdisk', 'parted', 'dd '}
+                level = 'destructive' if pattern in destructive_patterns else 'high'
+                return {
+                    'level': level,
+                    'requires_confirmation': True,
+                    'risk_reason': build_confirmation_reason(tool_name, arguments, level),
+                    'suppressible': level != 'destructive',
+                    'confirmation_key': 'os_destructive' if level == 'destructive' else 'os_write',
+                }
+
+        is_read_only_permission = 'execute_any_os_command' not in permissions
+        looks_read_only = any(command_lower.startswith(f'{hint} ') or command_lower == hint or f'| {hint}' in command_lower for hint in READ_ONLY_COMMAND_HINTS)
+        if is_read_only_permission or looks_read_only:
+            return {
+                'level': 'safe',
+                'requires_confirmation': False,
+                'risk_reason': '这是只读 OS 诊断命令，不会修改主机状态。',
+                'suppressible': False,
+                'confirmation_key': 'os_readonly',
+            }
+
+        return {
+            'level': 'high',
+            'requires_confirmation': True,
+            'risk_reason': build_confirmation_reason(tool_name, arguments, 'high'),
+            'suppressible': True,
+            'confirmation_key': 'os_write',
+        }
+
+    if sql:
+        if keyword in DANGEROUS_SQL_KEYWORDS:
+            level = 'destructive' if keyword in {'DROP', 'TRUNCATE'} else 'high'
+            return {
+                'level': level,
+                'requires_confirmation': True,
+                'risk_reason': build_confirmation_reason(tool_name, arguments, level),
+                'suppressible': level != 'destructive',
+                'confirmation_key': 'sql_destructive' if level == 'destructive' else 'sql_write',
+            }
+
+        is_read_only_permission = 'execute_any_sql' not in permissions
+        if keyword in READ_ONLY_SQL_KEYWORDS or is_read_only_permission:
+            return {
+                'level': 'safe',
+                'requires_confirmation': False,
+                'risk_reason': '这是只读 SQL 诊断查询，不会修改数据库状态。',
+                'suppressible': False,
+                'confirmation_key': 'sql_readonly',
+            }
+
+        return {
+            'level': 'high',
+            'requires_confirmation': True,
+            'risk_reason': build_confirmation_reason(tool_name, arguments, 'high'),
+            'suppressible': True,
+            'confirmation_key': 'sql_write',
+        }
+
+    if 'execute_any_sql' in permissions:
+        return {
+            'level': 'high',
+            'requires_confirmation': True,
+            'risk_reason': build_confirmation_reason(tool_name, arguments, 'high'),
+            'suppressible': True,
+            'confirmation_key': 'sql_write',
+        }
+    if 'execute_any_os_command' in permissions:
+        return {
+            'level': 'high',
+            'requires_confirmation': True,
+            'risk_reason': build_confirmation_reason(tool_name, arguments, 'high'),
+            'suppressible': True,
+            'confirmation_key': 'os_write',
+        }
+
+    return {
+        'level': 'safe',
+        'requires_confirmation': False,
+        'risk_reason': '这是只读诊断步骤。',
+        'suppressible': False,
+        'confirmation_key': 'generic_readonly',
+    }
 
 
 async def execute_skill_call(
@@ -248,6 +417,26 @@ async def run_conversation_with_skills(
                         "content": tool_result,
                     })
                     continue
+
+                from backend.skills.registry import SkillRegistry
+                skill = await SkillRegistry(db).get_skill(tool_name) if db else None
+                risk = assess_tool_risk(tool_name, tool_args, getattr(skill, 'permissions', None))
+
+                if risk["requires_confirmation"]:
+                    yield {
+                        "type": "confirmation_required",
+                        "approval_id": f"approval_{uuid.uuid4().hex}",
+                        "tool_name": tool_name,
+                        "tool_args": tool_args,
+                        "tool_call_id": tc["id"],
+                        "summary": build_tool_summary(tool_name, tool_args),
+                        "plan_markdown": build_tool_plan_markdown(tool_name, tool_args),
+                        "risk_level": risk["level"],
+                        "risk_reason": risk["risk_reason"],
+                        "suppressible": risk["suppressible"],
+                        "confirmation_key": risk["confirmation_key"],
+                    }
+                    return
 
                 yield {
                     "type": "tool_call",

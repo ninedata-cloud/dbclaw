@@ -474,7 +474,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 8px;
+    padding: 2px;
     background: var(--bg-hover);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
@@ -482,8 +482,8 @@
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     font-size: 16px;
-    min-width: 36px;
-    min-height: 36px;
+    min-width: 24px;
+    min-height: 24px;
 }
 
 .btn-icon-only:hover {

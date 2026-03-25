@@ -150,6 +150,7 @@ const API = {
     clearSessionMessages(id) { return this.delete(`/api/chat/sessions/${id}/messages`); },
     getSessionMessages(sessionId) { return this.get(`/api/chat/sessions/${sessionId}/messages`); },
     getHighRiskTools() { return this.get('/api/chat/high-risk-tools'); },
+    resolveChatApproval(sessionId, approvalId, data) { return this.post(`/api/chat/sessions/${sessionId}/approvals/${approvalId}/resolve`, data); },
 
     // Query endpoints
     executeQuery(data, options = {}) {
