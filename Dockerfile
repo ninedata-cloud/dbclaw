@@ -10,7 +10,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     POSTGRES_DB=dbguard \
     POSTGRES_USER=dbguard \
     POSTGRES_PASSWORD=DbGuard2026 \
-    DATABASE_URL=postgresql+asyncpg://dbguard:DbGuard2026@localhost:5432/dbguard
+    DATABASE_URL=postgresql+asyncpg://dbguard:DbGuard2026@localhost:5432/dbguard?ssl=disable
 
 WORKDIR /app
 

@@ -84,7 +84,7 @@ const InspectionPage = {
             minWidth: '400px',
             maxWidth: '400px',
             showStatus: true,
-            showDetails: false,
+            showDetails: true,
             onChange: (datasource) => {
                 this.filters.datasource_id = datasource ? datasource.id : null;
                 this.applyFilters();

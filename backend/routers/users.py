@@ -80,11 +80,18 @@ async def delete_user(
 
 
 @router.post("/{user_id}/reset-password")
-async def reset_password(user_id: int, data: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+async def reset_password(
+    user_id: int,
+    data: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+    if user.username == "admin" and current_admin.id != user.id:
+        raise HTTPException(status_code=403, detail="admin 密码只能由本人修改")
 
     user.password_hash = hash_password(data.new_password)
     user.password_changed_at = datetime.now(timezone.utc).replace(tzinfo=None)

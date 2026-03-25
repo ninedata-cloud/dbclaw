@@ -52,7 +52,8 @@ class PostgreSQLConnector(DBConnector):
                 "count(*) FILTER (WHERE state = 'idle') as idle, "
                 "count(*) FILTER (WHERE wait_event_type IS NOT NULL "
                 "  AND wait_event_type NOT IN ('Client', 'Activity')) as waiting "
-                "FROM pg_stat_activity WHERE datname = current_database()"
+                "FROM pg_stat_activity "
+                "WHERE datname = current_database() AND pid <> pg_backend_pid()"
             )
             size = await conn.fetchrow(
                 "SELECT pg_database_size(current_database()) as db_size"

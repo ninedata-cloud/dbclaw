@@ -32,7 +32,7 @@ class Settings(BaseSettings):
 
     # Session settings
     session_cookie_name: str = "dbguard_session"
-    session_idle_timeout_minutes: int = 480
+    session_idle_timeout_minutes: int = 1440
     session_cookie_secure: bool = False
     session_cookie_samesite: str = "lax"
 

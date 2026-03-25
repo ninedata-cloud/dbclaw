@@ -1,5 +1,12 @@
 /* User management page (admin only) */
 const UsersPage = {
+    _maskPhone(phone) {
+        if (!phone) return '-';
+        const trimmed = String(phone).trim();
+        if (trimmed.length < 7) return trimmed;
+        return `${trimmed.slice(0, 3)}****${trimmed.slice(-4)}`;
+    },
+
     async render() {
         Header.render('用户管理', DOM.el('button', {
             className: 'btn btn-primary',
@@ -41,9 +48,9 @@ const UsersPage = {
                     <td><strong>${Utils.escapeHtml(user.username)}</strong></td>
                     <td>${Utils.escapeHtml(user.display_name || '-')}</td>
                     <td>${Utils.escapeHtml(user.email || '-')}</td>
-                    <td>${Utils.escapeHtml(user.phone || '-')}</td>
+                    <td>${Utils.escapeHtml(this._maskPhone(user.phone))}</td>
                     <td><span class="badge ${user.is_admin ? 'badge-primary' : 'badge-secondary'}">${user.is_admin ? '管理员' : '用户'}</span></td>
-                    <td><span class="badge ${user.is_active ? 'badge-success' : 'badge-danger'}">${user.is_active ? '活跃' : '禁用'}</span></td>
+                    <td><span class="badge ${user.is_active ? 'badge-success' : 'badge-secondary'}">${user.is_active ? '活跃' : '禁用'}</span></td>
                     <td>${Format.datetime(user.created_at)}</td>
                     <td class="actions-cell"></td>
                 `;
@@ -51,6 +58,7 @@ const UsersPage = {
                 const actionsCell = tr.querySelector('.actions-cell');
                 const currentUser = Store.get('currentUser');
                 const isSelf = currentUser && currentUser.id === user.id;
+                const canResetPassword = user.username !== 'admin' || isSelf;
 
                 // Edit button
                 const editBtn = DOM.el('button', {
@@ -73,13 +81,15 @@ const UsersPage = {
                 }
 
                 // Reset password button
-                const resetBtn = DOM.el('button', {
-                    className: 'btn btn-sm btn-secondary',
-                    innerHTML: '<i data-lucide="key"></i>',
-                    title: '重置密码',
-                    onClick: () => this._showResetPasswordModal(user)
-                });
-                actionsCell.appendChild(resetBtn);
+                if (canResetPassword) {
+                    const resetBtn = DOM.el('button', {
+                        className: 'btn btn-sm btn-secondary',
+                        innerHTML: '<i data-lucide="key"></i>',
+                        title: '重置密码',
+                        onClick: () => this._showResetPasswordModal(user)
+                    });
+                    actionsCell.appendChild(resetBtn);
+                }
 
                 // Login logs button
                 const logsBtn = DOM.el('button', {

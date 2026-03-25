@@ -1,6 +1,8 @@
 /* AI Diagnosis page */
 const DiagnosisPage = {
     ws: null,
+    datasourceSelector: null,
+    datasourceClickOutsideHandler: null,
     currentSessionId: null,
     selectedModelId: null,
     selectedKBIds: [],
@@ -8,6 +10,10 @@ const DiagnosisPage = {
     highRiskTools: [],
     availableModels: [],
     sessionTokenUsage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+
+    _getSelectedDatasource() {
+        return this.datasourceSelector?.getValue() || Store.get('currentDatasource') || null;
+    },
 
     async render() {
         const content = DOM.$('#page-content');
@@ -19,25 +25,34 @@ const DiagnosisPage = {
 
         // Header with connection, model, KB selectors, and tool safety toggle
         const headerActions = DOM.el('div', { className: 'flex gap-8', style: { flex: '1', minWidth: '0' } });
-        const connSelect = DOM.el('select', { className: 'form-select', style: { minWidth: '200px', maxWidth: '300px', flex: '1' } });
-        connSelect.appendChild(DOM.el('option', { value: '', textContent: '选择数据源...' }));
+        const datasourceContainer = DOM.el('div', {
+            id: 'diagnosis-datasource-selector',
+            style: { minWidth: '280px', maxWidth: '380px', flex: '1' }
+        });
 
         try {
             const datasources = await API.getDatasources();
             Store.set('datasources', datasources);
-            const current = Store.get('currentDatasource');
-            for (const c of datasources) {
-                const opt = DOM.el('option', { value: c.id, textContent: `${c.name} (${c.db_type})` });
-                if (current && c.id === current.id) opt.selected = true;
-                connSelect.appendChild(opt);
-            }
         } catch (e) { /* ignore */ }
 
-        connSelect.addEventListener('change', () => {
-            const id = parseInt(connSelect.value);
-            if (id) {
-                const conns = Store.get('datasources') || [];
-                Store.set('currentDatasource', conns.find(c => c.id === id));
+        this.datasourceSelector?.destroy();
+        this.datasourceSelector = new DatasourceSelector({
+            container: datasourceContainer,
+            allowEmpty: true,
+            emptyText: '选择数据源...',
+            placeholder: '选择数据源',
+            showStatus: true,
+            showDetails: true,
+            onLoad: () => {
+                const current = Store.get('currentDatasource');
+                if (current?.id) {
+                    this.datasourceSelector.setValue(current.id);
+                } else {
+                    this.datasourceSelector.setValue(null);
+                }
+            },
+            onChange: (datasource) => {
+                Store.set('currentDatasource', datasource || null);
             }
         });
 
@@ -120,11 +135,15 @@ const DiagnosisPage = {
         });
 
         // Close dropdown when clicking outside
-        document.addEventListener('click', (e) => {
+        if (this.datasourceClickOutsideHandler) {
+            document.removeEventListener('click', this.datasourceClickOutsideHandler);
+        }
+        this.datasourceClickOutsideHandler = (e) => {
             if (!kbContainer.contains(e.target)) {
                 kbDropdown.style.display = 'none';
             }
-        });
+        };
+        document.addEventListener('click', this.datasourceClickOutsideHandler);
 
         kbContainer.appendChild(kbButton);
         kbContainer.appendChild(kbDropdown);
@@ -137,7 +156,7 @@ const DiagnosisPage = {
             onClick: () => this._showToolSafetyModal()
         });
 
-        headerActions.appendChild(connSelect);
+        headerActions.appendChild(datasourceContainer);
         headerActions.appendChild(modelSelect);
         headerActions.appendChild(kbContainer);
         headerActions.appendChild(toolSafetyBtn);
@@ -534,7 +553,7 @@ const DiagnosisPage = {
     },
 
     async _createSession() {
-        const conn = Store.get('currentDatasource');
+        const conn = this._getSelectedDatasource();
         try {
             const session = await API.createChatSession({
                 datasource_id: conn?.id || null,
@@ -682,7 +701,7 @@ const DiagnosisPage = {
             return;
         }
 
-        const conn = Store.get('currentDatasource');
+        const conn = this._getSelectedDatasource();
         const attachments = ChatWidget.attachments || [];
 
         ChatWidget.addUserMessage(text, attachments);
@@ -930,6 +949,12 @@ const DiagnosisPage = {
     },
 
     _cleanup() {
+        if (this.datasourceClickOutsideHandler) {
+            document.removeEventListener('click', this.datasourceClickOutsideHandler);
+            this.datasourceClickOutsideHandler = null;
+        }
+        this.datasourceSelector?.destroy();
+        this.datasourceSelector = null;
         if (this.ws) {
             this.ws.disconnect();
             this.ws = null;

@@ -8,7 +8,7 @@ from backend.config import get_settings
 from backend.database import get_db
 from backend.models.user import User
 from backend.models.login_log import LoginLog
-from backend.schemas.auth import LoginRequest, LoginResponse, ChangePasswordRequest, UserResponse
+from backend.schemas.auth import LoginRequest, LoginResponse, ChangePasswordRequest, CurrentUserUpdateRequest, UserResponse
 from backend.utils.security import verify_password, hash_password
 from backend.dependencies import get_current_user
 from backend.services.session_service import SessionService
@@ -92,6 +92,20 @@ async def login(data: LoginRequest, request: Request, response: Response, db: As
 
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
+@router.put("/me", response_model=UserResponse)
+async def update_me(
+    data: CurrentUserUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    current_user.display_name = data.display_name
+    current_user.email = data.email
+    current_user.phone = data.phone
+    await db.commit()
+    await db.refresh(current_user)
     return current_user
 
 

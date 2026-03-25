@@ -22,7 +22,6 @@ class MetricNormalizer:
         - cpu_usage: CPU使用率 (%)
         - memory_usage: 内存使用率 (%)
         - disk_usage: 磁盘使用率 (%)
-        - connections: 活跃连接数
         - qps: 每秒查询数
         - tps: 每秒事务数
         """
@@ -43,10 +42,6 @@ class MetricNormalizer:
     def _normalize_postgresql(cls, datasource_id: int, metrics: Dict[str, Any]) -> Dict[str, Any]:
         """PostgreSQL 指标标准化"""
         normalized = {}
-
-        # 连接数
-        if 'connections_active' in metrics:
-            normalized['connections'] = metrics['connections_active']
 
         # 计算 QPS — 基于 tup_fetched + tup_inserted + tup_updated + tup_deleted 增量
         # tup_returned 是 seq scan 返回的行数（含内部过滤前），不适合作为 QPS
@@ -91,12 +86,6 @@ class MetricNormalizer:
     def _normalize_mysql(cls, datasource_id: int, metrics: Dict[str, Any]) -> Dict[str, Any]:
         """MySQL 指标标准化"""
         normalized = {}
-
-        # 活跃连接数（MySQL: Threads_running）
-        if 'threads_running' in metrics:
-            normalized['connections'] = metrics['threads_running']
-        elif 'connections_active' in metrics:
-            normalized['connections'] = metrics['connections_active']
 
         # QPS — 基于 questions 累积值计算实时速率
         if 'questions' in metrics:
@@ -165,12 +154,6 @@ class MetricNormalizer:
     def _normalize_sqlserver(cls, datasource_id: int, metrics: Dict[str, Any]) -> Dict[str, Any]:
         """SQL Server 指标标准化"""
         normalized = {}
-
-        # 连接数 — 使用 connections_active（活跃请求数），与 PostgreSQL/MySQL 对齐
-        if 'connections_active' in metrics:
-            normalized['connections'] = metrics['connections_active']
-        elif 'user_sessions' in metrics:
-            normalized['connections'] = metrics['user_sessions']
 
         # 计算 QPS（基于 batch_requests_total 累积值）
         if 'batch_requests_total' in metrics:
@@ -244,10 +227,6 @@ class MetricNormalizer:
     def _normalize_oracle(cls, datasource_id: int, metrics: Dict[str, Any]) -> Dict[str, Any]:
         """Oracle 指标标准化"""
         normalized = {}
-
-        # 连接数
-        if 'connections_active' in metrics:
-            normalized['connections'] = metrics['connections_active']
 
         # 计算 QPS — 基于 execute_count 累积值（比 user_calls 更准确反映实际 SQL 执行量）
         if 'execute_count' in metrics:
