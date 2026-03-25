@@ -57,6 +57,12 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Diagnostic session token usage migration: {e}")
 
     try:
+        from backend.migrations.add_chat_message_token_usage import migrate as migrate_chat_message_token_usage
+        await migrate_chat_message_token_usage()
+    except Exception as e:
+        logger.warning(f"Chat message token usage migration: {e}")
+
+    try:
         from backend.migrations.add_report_alert_link import migrate as migrate_report_alert_link
         await migrate_report_alert_link()
     except Exception as e:

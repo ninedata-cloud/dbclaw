@@ -109,9 +109,6 @@
     color: var(--text-muted);
     background: var(--bg-primary);
     border-bottom: 1px solid var(--border-color);
-    position: sticky;
-    top: 41px;
-    z-index: 1;
 }
 
 .datasource-selector-group-count {
