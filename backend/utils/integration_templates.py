@@ -569,8 +569,31 @@ async def fetch_metrics(context, params, datasources):
 }
 
 # 所有内置模板
+FEISHU_BOT_TEMPLATE = {
+    "integration_id": "builtin_feishu_bot",
+    "name": "飞书机器人对话",
+    "description": "飞书机器人入站对话配置，用于数据库诊断会话",
+    "integration_type": "bot",
+    "category": "im",
+    "config_schema": {
+        "type": "object",
+        "properties": {
+            "app_id": {"type": "string", "title": "App ID", "description": "飞书应用 App ID", "default": ""},
+            "app_secret": {"type": "string", "title": "App Secret", "description": "飞书应用 App Secret", "format": "password", "default": ""},
+            "signing_secret": {"type": "string", "title": "Signing Secret", "description": "飞书事件签名密钥", "format": "password", "default": ""},
+            "default_datasource_id": {"type": "integer", "title": "默认数据源 ID", "description": "机器人默认绑定的数据源，可选"},
+            "default_ai_model_id": {"type": "integer", "title": "默认 AI 模型 ID", "description": "机器人默认 AI 模型，可选"},
+            "default_kb_ids": {"type": "array", "title": "默认知识库 ID 列表", "items": {"type": "integer"}, "default": []},
+            "default_disabled_tools": {"type": "array", "title": "默认禁用工具", "items": {"type": "string"}, "default": []}
+        },
+        "required": []
+    },
+    "code": "async def handle_event(context, params, payload):\n    return {'success': True, 'message': 'Feishu bot is handled by dedicated router/service'}\n"
+}
+
 BUILTIN_TEMPLATES = [
     FEISHU_WEBHOOK_TEMPLATE,
+    FEISHU_BOT_TEMPLATE,
     DINGTALK_WEBHOOK_TEMPLATE,
     EMAIL_TEMPLATE,
     GENERIC_WEBHOOK_TEMPLATE,

@@ -250,6 +250,41 @@ class IntegrationService:
                     "message": f"测试失败: {str(e)}"
                 }
 
+        elif integration.integration_type == "bot":
+            if integration.integration_id == "builtin_feishu_bot":
+                app_id = test_params.get("app_id")
+                app_secret = test_params.get("app_secret")
+                signing_secret = test_params.get("signing_secret")
+
+                if not app_id or not app_secret:
+                    return {
+                        "success": False,
+                        "message": "请填写 app_id 和 app_secret"
+                    }
+
+                try:
+                    from backend.services.feishu_service import feishu_service
+
+                    await feishu_service.get_tenant_access_token(app_id, app_secret)
+                    return {
+                        "success": True,
+                        "message": "飞书机器人配置可用，tenant_access_token 获取成功",
+                        "data": {
+                            "app_id": app_id,
+                            "signing_secret_configured": bool(signing_secret),
+                        }
+                    }
+                except Exception as e:
+                    return {
+                        "success": False,
+                        "message": f"飞书机器人测试失败: {str(e)}"
+                    }
+
+            return {
+                "success": True,
+                "message": "机器人 Integration 配置格式有效"
+            }
+
         else:
             return {
                 "success": False,
