@@ -80,6 +80,18 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"User session security migration: {e}")
 
+    try:
+        from backend.migrations.add_feishu_chat_tables import migrate as migrate_feishu_chat_tables
+        await migrate_feishu_chat_tables()
+    except Exception as e:
+        logger.warning(f"Feishu chat tables migration: {e}")
+
+    try:
+        from backend.migrations.fix_feishu_chat_event_dedup_duplicates import migrate as fix_feishu_chat_event_dedup_duplicates
+        await fix_feishu_chat_event_dedup_duplicates()
+    except Exception as e:
+        logger.warning(f"Feishu chat event dedup fix migration: {e}")
+
     # Seed default system configs
     from backend.database import async_session as _async_session
     from backend.services import config_service as _config_service
@@ -244,7 +256,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     # Register routers
-    from backend.routers import datasources, hosts, metrics, monitor_ws, chat, query, ai_models, auth, users, inspections, system_configs, alerts, integrations, documents
+    from backend.routers import datasources, hosts, metrics, monitor_ws, chat, query, ai_models, auth, users, inspections, system_configs, alerts, integrations, documents, feishu_bot
     from backend.api import skills
     app.include_router(auth.router)
     app.include_router(users.router)
@@ -261,6 +273,7 @@ def create_app() -> FastAPI:
     app.include_router(system_configs.router)
     app.include_router(alerts.router)
     app.include_router(integrations.router)
+    app.include_router(feishu_bot.router)
 
     # Serve frontend static files
     app.mount("/css", StaticFiles(directory="frontend/css"), name="css")

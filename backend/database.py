@@ -42,6 +42,8 @@ async def init_db():
     import backend.models.alert_subscription  # noqa: F401
     import backend.skills.models  # noqa: F401
     import backend.models.integration  # noqa: F401
+    import backend.models.chat_channel_binding  # noqa: F401
+    import backend.models.chat_event_dedup  # noqa: F401
     # Inspection models
     try:
         import backend.models.inspection_config  # noqa: F401

@@ -39,7 +39,7 @@ class IntegrationsPage {
                         Integrations
                     </button>
                     <button class="integrations-tab" data-tab="channels" onclick="integrationsPage.switchTab('channels')">
-                        Channels
+                        渠道配置
                     </button>
                 </div>
 
@@ -49,9 +49,9 @@ class IntegrationsPage {
 
                 <div id="channels-tab-content" class="tab-content" style="display: none;">
                     <div class="integrations-header" style="margin-top: 0;">
-                        <h2 style="font-size: 18px; margin: 0;">通知渠道</h2>
+                        <h2 style="font-size: 18px; margin: 0;">渠道 / 机器人配置</h2>
                         <button class="btn btn-primary" onclick="integrationsPage.showCreateChannelModal()">
-                            创建 Channel
+                            创建配置
                         </button>
                     </div>
                     <div id="channels-list"></div>
@@ -115,7 +115,8 @@ class IntegrationsPage {
         // 按类型分组
         const groups = {
             'outbound_notification': { label: '出站通知', items: [] },
-            'inbound_metric': { label: '入站指标', items: [] }
+            'inbound_metric': { label: '入站指标', items: [] },
+            'bot': { label: '机器人', items: [] }
         };
 
         this.integrations.forEach(integration => {
@@ -192,7 +193,7 @@ class IntegrationsPage {
                 <div class="empty-state">
                     <div class="empty-icon">📢</div>
                     <h3>暂无 Channel</h3>
-                    <p>创建 Channel 以配置通知渠道</p>
+                    <p>创建渠道或机器人配置后即可在这里管理</p>
                 </div>
             `;
             return;
@@ -426,6 +427,7 @@ class IntegrationsPage {
                     <select id="integration-type" required disabled>
                         <option value="outbound_notification" ${integration.integration_type === 'outbound_notification' ? 'selected' : ''}>出站通知</option>
                         <option value="inbound_metric" ${integration.integration_type === 'inbound_metric' ? 'selected' : ''}>入站指标</option>
+                        <option value="bot" ${integration.integration_type === 'bot' ? 'selected' : ''}>机器人</option>
                     </select>
                     <small style="color: #6b7280; font-size: 12px;">类型不可修改</small>
                 </div>
@@ -535,6 +537,7 @@ class IntegrationsPage {
                         <option value="">请选择</option>
                         <option value="outbound_notification">出站通知</option>
                         <option value="inbound_metric">入站指标</option>
+                        <option value="bot">机器人</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -622,12 +625,12 @@ class IntegrationsPage {
 
     showCreateChannelModal() {
         // 获取可用的 Integration
-        const notificationIntegrations = this.integrations.filter(
-            i => i.integration_type === 'outbound_notification' && i.enabled
+        const configurableIntegrations = this.integrations.filter(
+            i => ['outbound_notification', 'bot'].includes(i.integration_type) && i.enabled
         );
 
-        if (notificationIntegrations.length === 0) {
-            Toast.error('没有可用的通知 Integration');
+        if (configurableIntegrations.length === 0) {
+            Toast.error('没有可用的通知或机器人 Integration');
             return;
         }
 
@@ -645,7 +648,7 @@ class IntegrationsPage {
                     <label>Integration *</label>
                     <select id="channel-integration" required onchange="integrationsPage.onIntegrationChange()">
                         <option value="">请选择</option>
-                        ${notificationIntegrations.map(i => `
+                        ${configurableIntegrations.map(i => `
                             <option value="${i.id}">${i.name}</option>
                         `).join('')}
                     </select>
@@ -655,7 +658,7 @@ class IntegrationsPage {
         `;
 
         Modal.show({
-            title: '创建 Channel',
+            title: '创建配置',
             content: content,
             buttons: [
                 { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
@@ -762,8 +765,8 @@ class IntegrationsPage {
         this.currentChannel = channel;
 
         // 获取可用的 Integration
-        const notificationIntegrations = this.integrations.filter(
-            i => i.integration_type === 'outbound_notification' && i.enabled
+        const configurableIntegrations = this.integrations.filter(
+            i => ['outbound_notification', 'bot'].includes(i.integration_type) && i.enabled
         );
 
         const integration = this.integrations.find(i => i.id === channel.integration_id);
@@ -804,7 +807,7 @@ class IntegrationsPage {
                 <div class="form-group">
                     <label>Integration *</label>
                     <select id="channel-integration" required disabled>
-                        ${notificationIntegrations.map(i => `
+                        ${configurableIntegrations.map(i => `
                             <option value="${i.id}" ${i.id === channel.integration_id ? 'selected' : ''}>${i.name}</option>
                         `).join('')}
                     </select>
@@ -814,7 +817,7 @@ class IntegrationsPage {
         `;
 
         Modal.show({
-            title: '编辑 Channel',
+            title: '编辑配置',
             content: content,
             buttons: [
                 { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
