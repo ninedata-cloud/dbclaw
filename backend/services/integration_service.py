@@ -1,16 +1,21 @@
 """
 Integration 管理服务
+
+仅保留 Integration(模板/驱动) 管理能力。
+实例化参数由订阅(integration_targets)、数据源(inbound_source)、bot binding(params) 承载。
 """
 
 import logging
 from typing import List, Optional, Dict, Any
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_
 from datetime import datetime
 
-from backend.models.integration import Integration, AlertChannel
-from backend.schemas.integration import IntegrationCreate, IntegrationUpdate, AlertChannelCreate
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_
+
+from backend.models.integration import Integration
+from backend.schemas.integration import IntegrationCreate, IntegrationUpdate
 from backend.services.integration_executor import IntegrationExecutor
+from backend.utils.encryption import encrypt_value
 
 logger = logging.getLogger(__name__)
 
@@ -19,17 +24,21 @@ class IntegrationService:
     """Integration 管理服务"""
 
     @staticmethod
-    async def create_integration(
-        db: AsyncSession,
-        data: IntegrationCreate
-    ) -> Integration:
-        """创建 Integration"""
-        # 检查 integration_id 是否已存在
-        result = await db.execute(
-            select(Integration).where(Integration.integration_id == data.integration_id)
-        )
-        existing = result.scalar_one_or_none()
+    def encrypt_sensitive_params(params: Dict[str, Any] | None) -> Dict[str, Any]:
+        """对 params 中以 ENCRYPT: 开头的字符串做加密落库。"""
+        encrypted_params: Dict[str, Any] = {}
+        for key, value in (params or {}).items():
+            if isinstance(value, str) and value.startswith("ENCRYPT:"):
+                encrypted_params[key] = "encrypted:" + encrypt_value(value[8:])
+            else:
+                encrypted_params[key] = value
+        return encrypted_params
 
+    @staticmethod
+    async def create_integration(db: AsyncSession, data: IntegrationCreate) -> Integration:
+        """创建 Integration"""
+        result = await db.execute(select(Integration).where(Integration.integration_id == data.integration_id))
+        existing = result.scalar_one_or_none()
         if existing:
             raise ValueError(f"Integration ID '{data.integration_id}' 已存在")
 
@@ -42,34 +51,38 @@ class IntegrationService:
             is_builtin=data.is_builtin,
             code=data.code,
             config_schema=data.config_schema,
-            enabled=data.enabled
+            enabled=data.enabled,
         )
 
         db.add(integration)
         await db.commit()
         await db.refresh(integration)
-
-        logger.info(f"创建 Integration: {integration.name} (ID: {integration.integration_id})")
+        logger.info("创建 Integration: %s (ID: %s)", integration.name, integration.integration_id)
         return integration
 
     @staticmethod
-    async def update_integration(
-        db: AsyncSession,
-        integration_id: int,
-        data: IntegrationUpdate
-    ) -> Integration:
+    async def update_integration(db: AsyncSession, integration_id: int, data: IntegrationUpdate) -> Integration:
         """更新 Integration"""
         integration = await db.get(Integration, integration_id)
         if not integration:
             raise ValueError("Integration 不存在")
 
-        # 内置模板不允许修改某些字段
         if integration.is_builtin:
-            # 只允许修改 enabled 状态
-            if data.enabled is not None:
-                integration.enabled = data.enabled
+            if integration.integration_id == "builtin_feishu_bot":
+                if data.name is not None:
+                    integration.name = data.name
+                if data.description is not None:
+                    integration.description = data.description
+                if data.code is not None:
+                    integration.code = data.code
+                if data.config_schema is not None:
+                    integration.config_schema = data.config_schema
+                if data.enabled is not None:
+                    integration.enabled = data.enabled
+            else:
+                if data.enabled is not None:
+                    integration.enabled = data.enabled
         else:
-            # 自定义 Integration 可以修改所有字段
             if data.name is not None:
                 integration.name = data.name
             if data.description is not None:
@@ -84,33 +97,21 @@ class IntegrationService:
         integration.updated_at = datetime.utcnow()
         await db.commit()
         await db.refresh(integration)
-
-        logger.info(f"更新 Integration: {integration.name}")
+        logger.info("更新 Integration: %s", integration.name)
         return integration
 
     @staticmethod
-    async def delete_integration(db: AsyncSession, integration_id: int):
+    async def delete_integration(db: AsyncSession, integration_id: int) -> None:
         """删除 Integration"""
         integration = await db.get(Integration, integration_id)
         if not integration:
             raise ValueError("Integration 不存在")
-
         if integration.is_builtin:
             raise ValueError("不能删除内置模板")
 
-        # 检查是否有关联的 Channel
-        result = await db.execute(
-            select(AlertChannel).where(AlertChannel.integration_id == integration_id)
-        )
-        channels = result.scalars().all()
-
-        if channels:
-            raise ValueError(f"该 Integration 有 {len(channels)} 个关联的 Channel，请先删除这些 Channel")
-
         await db.delete(integration)
         await db.commit()
-
-        logger.info(f"删除 Integration: {integration.name}")
+        logger.info("删除 Integration: %s", integration.name)
 
     @staticmethod
     async def list_integrations(
@@ -118,7 +119,7 @@ class IntegrationService:
         integration_type: Optional[str] = None,
         category: Optional[str] = None,
         enabled: Optional[bool] = None,
-        is_builtin: Optional[bool] = None
+        is_builtin: Optional[bool] = None,
     ) -> List[Integration]:
         """查询 Integration 列表"""
         query = select(Integration)
@@ -136,31 +137,17 @@ class IntegrationService:
         if conditions:
             query = query.where(and_(*conditions))
 
-        query = query.order_by(
-            Integration.is_builtin.desc(),
-            Integration.created_at.desc()
-        )
-
+        query = query.order_by(Integration.is_builtin.desc(), Integration.created_at.desc())
         result = await db.execute(query)
         return result.scalars().all()
 
     @staticmethod
-    async def get_integration(
-        db: AsyncSession,
-        integration_id: int
-    ) -> Optional[Integration]:
-        """获取单个 Integration"""
+    async def get_integration(db: AsyncSession, integration_id: int) -> Optional[Integration]:
         return await db.get(Integration, integration_id)
 
     @staticmethod
-    async def get_integration_by_integration_id(
-        db: AsyncSession,
-        integration_id: str
-    ) -> Optional[Integration]:
-        """通过 integration_id 获取 Integration"""
-        result = await db.execute(
-            select(Integration).where(Integration.integration_id == integration_id)
-        )
+    async def get_integration_by_integration_id(db: AsyncSession, integration_id: str) -> Optional[Integration]:
+        result = await db.execute(select(Integration).where(Integration.integration_id == integration_id))
         return result.scalar_one_or_none()
 
     @staticmethod
@@ -169,20 +156,19 @@ class IntegrationService:
         integration_id: int,
         test_params: Dict[str, Any],
         test_payload: Optional[Dict[str, Any]] = None,
-        datasource_id: Optional[int] = None
+        datasource_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """测试 Integration"""
         integration = await db.get(Integration, integration_id)
         if not integration:
             raise ValueError("Integration 不存在")
-
         if not integration.enabled:
             raise ValueError("Integration 已禁用")
 
         executor = IntegrationExecutor(db, logger)
+        test_params = IntegrationService.encrypt_sensitive_params(test_params)
 
         if integration.integration_type == "outbound_notification":
-            # 测试出站通知
             if not test_payload:
                 test_payload = {
                     "title": "测试通知",
@@ -190,135 +176,112 @@ class IntegrationService:
                     "severity": "info",
                     "datasource_name": "测试数据源",
                     "alert_id": 0,
-                    "timestamp": datetime.utcnow().isoformat()
+                    "timestamp": datetime.utcnow().isoformat(),
                 }
 
-            result = await executor.execute_notification(
-                integration.code,
-                test_params,
-                test_payload
-            )
+            return await executor.execute_notification(integration.code, test_params, test_payload)
 
-            return result
-
-        elif integration.integration_type == "inbound_metric":
-            # 测试入站指标
+        if integration.integration_type == "inbound_metric":
             from backend.models.datasource import Datasource
 
-            # 如果指定了数据源 ID，使用指定的数据源
             if datasource_id:
                 test_datasource = await db.get(Datasource, datasource_id)
                 if not test_datasource:
-                    return {
-                        "success": False,
-                        "message": f"数据源 ID {datasource_id} 不存在"
-                    }
+                    return {"success": False, "message": f"数据源 ID {datasource_id} 不存在"}
             else:
-                # 否则查询一个测试数据源
                 ds_result = await db.execute(select(Datasource).limit(1))
                 test_datasource = ds_result.scalar_one_or_none()
-
                 if not test_datasource:
                     return {
                         "success": False,
-                        "message": "没有可用的测试数据源，请先创建数据源或在测试时指定 datasource_id"
+                        "message": "没有可用的测试数据源，请先创建数据源或在测试时指定 datasource_id",
                     }
 
-            datasources = [{
-                "id": test_datasource.id,
-                "name": test_datasource.name,
-                "db_type": test_datasource.db_type,
-                "external_instance_id": getattr(test_datasource, "external_instance_id", None)
-            }]
+            datasources = [
+                {
+                    "id": test_datasource.id,
+                    "name": test_datasource.name,
+                    "db_type": test_datasource.db_type,
+                    "external_instance_id": getattr(test_datasource, "external_instance_id", None),
+                }
+            ]
 
             try:
-                metrics = await executor.execute_metric_collection(
-                    integration.code,
-                    test_params,
-                    datasources
-                )
-
-                return {
-                    "success": True,
-                    "message": f"采集到 {len(metrics)} 条指标",
-                    "data": {"metrics": metrics[:10]}  # 只返回前 10 条
-                }
-
+                metrics = await executor.execute_metric_collection(integration.code, test_params, datasources)
+                return {"success": True, "message": f"采集到 {len(metrics)} 条指标", "data": {"metrics": metrics[:10]}}
             except Exception as e:
-                return {
-                    "success": False,
-                    "message": f"测试失败: {str(e)}"
-                }
+                return {"success": False, "message": f"测试失败: {str(e)}"}
 
-        elif integration.integration_type == "bot":
+        if integration.integration_type == "bot":
             if integration.integration_id == "builtin_feishu_bot":
-                app_id = test_params.get("app_id")
-                app_secret = test_params.get("app_secret")
-                signing_secret = test_params.get("signing_secret")
-
-                if not app_id or not app_secret:
-                    return {
-                        "success": False,
-                        "message": "请填写 app_id 和 app_secret"
-                    }
-
                 try:
                     from backend.services.feishu_service import feishu_service
+                    from backend.services.feishu_bot_service import _extract_feishu_bot_config
+
+                    config = _extract_feishu_bot_config(integration)
+                    app_id = (config.get("app_id") or "").strip()
+                    app_secret = (config.get("app_secret") or "").strip()
+                    signing_secret = (config.get("signing_secret") or "").strip()
+                    if not app_id or not app_secret:
+                        return {"success": False, "message": "请先在 Integration 代码中配置 APP_ID 和 APP_SECRET"}
 
                     await feishu_service.get_tenant_access_token(app_id, app_secret)
                     return {
                         "success": True,
                         "message": "飞书机器人配置可用，tenant_access_token 获取成功",
-                        "data": {
-                            "app_id": app_id,
-                            "signing_secret_configured": bool(signing_secret),
-                        }
+                        "data": {"app_id": app_id, "signing_secret_configured": bool(signing_secret)},
                     }
                 except Exception as e:
+                    return {"success": False, "message": f"飞书机器人测试失败: {str(e)}"}
+
+            if integration.integration_id == "builtin_weixin_bot":
+                baseurl = str(test_params.get("baseurl") or "").strip()
+                if not baseurl:
+                    return {"success": False, "message": "请提供 baseurl 以测试微信扫码登录接口"}
+                try:
+                    from backend.services.weixin_service import weixin_service
+
+                    resp = await weixin_service.get_bot_qrcode(baseurl)
+                    qrcode = resp.get("qrcode") or resp.get("data", {}).get("qrcode")
                     return {
-                        "success": False,
-                        "message": f"飞书机器人测试失败: {str(e)}"
+                        "success": bool(qrcode),
+                        "message": "微信机器人登录接口可用" if qrcode else "微信机器人登录接口返回异常，未拿到 qrcode",
+                        "data": {"has_qrcode": bool(qrcode), "raw": resp},
                     }
+                except Exception as e:
+                    return {"success": False, "message": f"微信机器人测试失败: {str(e)}"}
 
-            return {
-                "success": True,
-                "message": "机器人 Integration 配置格式有效"
-            }
+            return {"success": True, "message": "机器人 Integration 配置格式有效"}
 
-        else:
-            return {
-                "success": False,
-                "message": f"不支持的 Integration 类型: {integration.integration_type}"
-            }
+        return {"success": False, "message": f"不支持的 Integration 类型: {integration.integration_type}"}
 
     @staticmethod
     async def load_builtin_templates(db: AsyncSession):
-        """加载内置模板"""
         from backend.utils.integration_templates import BUILTIN_TEMPLATES
 
         loaded_count = 0
         updated_count = 0
 
         for template in BUILTIN_TEMPLATES:
-            # 检查是否已存在
-            result = await db.execute(
-                select(Integration).where(
-                    Integration.integration_id == template["integration_id"]
-                )
-            )
+            result = await db.execute(select(Integration).where(Integration.integration_id == template["integration_id"]))
             existing = result.scalar_one_or_none()
 
             if existing:
-                # 更新代码（保持用户的 enabled 状态）
-                existing.code = template["code"]
-                existing.config_schema = template["config_schema"]
-                existing.description = template["description"]
-                existing.name = template["name"]
+                if existing.integration_id == "builtin_feishu_bot":
+                    if not existing.description:
+                        existing.description = template["description"]
+                    if existing.config_schema in (None, {}, {"type": "object", "properties": {}, "required": []}):
+                        existing.config_schema = template["config_schema"]
+                    if not existing.code or "APP_ID" not in existing.code:
+                        existing.code = template["code"]
+                else:
+                    existing.code = template["code"]
+                    existing.config_schema = template["config_schema"]
+                    existing.description = template["description"]
+                    existing.name = template["name"]
                 existing.updated_at = datetime.utcnow()
                 updated_count += 1
-                logger.info(f"更新内置模板: {template['name']}")
             else:
-                # 创建新模板
                 integration = Integration(
                     integration_id=template["integration_id"],
                     name=template["name"],
@@ -328,146 +291,10 @@ class IntegrationService:
                     is_builtin=True,
                     code=template["code"],
                     config_schema=template["config_schema"],
-                    enabled=True
+                    enabled=True,
                 )
                 db.add(integration)
                 loaded_count += 1
-                logger.info(f"加载内置模板: {template['name']}")
 
         await db.commit()
-        logger.info(f"内置模板加载完成: 新增 {loaded_count} 个，更新 {updated_count} 个")
-
-    # ===== AlertChannel 管理 =====
-
-    @staticmethod
-    async def create_channel(
-        db: AsyncSession,
-        data: AlertChannelCreate,
-        user_id: Optional[int] = None
-    ) -> AlertChannel:
-        """创建 Channel"""
-        # 检查 Integration 是否存在且启用
-        integration = await db.get(Integration, data.integration_id)
-        if not integration:
-            raise ValueError("Integration 不存在")
-        if not integration.enabled:
-            raise ValueError("Integration 已禁用")
-
-        # 加密敏感参数
-        from backend.utils.encryption import encrypt_value
-
-        encrypted_params = {}
-        for key, value in data.params.items():
-            if isinstance(value, str) and value.startswith("ENCRYPT:"):
-                # 需要加密
-                plaintext = value[8:]  # 去掉前缀
-                encrypted_params[key] = "encrypted:" + encrypt_value(plaintext)
-            else:
-                encrypted_params[key] = value
-
-        channel = AlertChannel(
-            name=data.name,
-            description=data.description,
-            integration_id=data.integration_id,
-            params=encrypted_params,
-            enabled=data.enabled,
-            user_id=user_id
-        )
-
-        db.add(channel)
-        await db.commit()
-        await db.refresh(channel)
-
-        logger.info(f"创建 Channel: {channel.name}")
-        return channel
-
-    @staticmethod
-    async def update_channel(
-        db: AsyncSession,
-        channel_id: int,
-        data: Dict[str, Any]
-    ) -> AlertChannel:
-        """更新 Channel"""
-        channel = await db.get(AlertChannel, channel_id)
-        if not channel:
-            raise ValueError("Channel 不存在")
-
-        # 更新字段
-        if "name" in data:
-            channel.name = data["name"]
-        if "description" in data:
-            channel.description = data["description"]
-        if "enabled" in data:
-            channel.enabled = data["enabled"]
-
-        if "params" in data:
-            # 加密敏感参数
-            from backend.utils.encryption import encrypt_value
-
-            encrypted_params = {}
-            for key, value in data["params"].items():
-                if isinstance(value, str) and value.startswith("ENCRYPT:"):
-                    plaintext = value[8:]
-                    encrypted_params[key] = "encrypted:" + encrypt_value(plaintext)
-                else:
-                    encrypted_params[key] = value
-
-            channel.params = encrypted_params
-
-        channel.updated_at = datetime.utcnow()
-        await db.commit()
-        await db.refresh(channel)
-
-        logger.info(f"更新 Channel: {channel.name}")
-        return channel
-
-    @staticmethod
-    async def delete_channel(db: AsyncSession, channel_id: int):
-        """删除 Channel"""
-        channel = await db.get(AlertChannel, channel_id)
-        if not channel:
-            raise ValueError("Channel 不存在")
-
-        await db.delete(channel)
-        await db.commit()
-
-        logger.info(f"删除 Channel: {channel.name}")
-
-    @staticmethod
-    async def list_channels(
-        db: AsyncSession,
-        integration_id: Optional[int] = None,
-        enabled: Optional[bool] = None,
-        user_id: Optional[int] = None
-    ) -> List[AlertChannel]:
-        """查询 Channel 列表"""
-        query = select(AlertChannel)
-        conditions = []
-
-        if integration_id:
-            conditions.append(AlertChannel.integration_id == integration_id)
-        if enabled is not None:
-            conditions.append(AlertChannel.enabled == enabled)
-        if user_id is not None:
-            conditions.append(
-                or_(
-                    AlertChannel.user_id == user_id,
-                    AlertChannel.user_id.is_(None)  # 公共 Channel
-                )
-            )
-
-        if conditions:
-            query = query.where(and_(*conditions))
-
-        query = query.order_by(AlertChannel.created_at.desc())
-
-        result = await db.execute(query)
-        return result.scalars().all()
-
-    @staticmethod
-    async def get_channel(
-        db: AsyncSession,
-        channel_id: int
-    ) -> Optional[AlertChannel]:
-        """获取单个 Channel"""
-        return await db.get(AlertChannel, channel_id)
+        logger.info("内置模板加载完成: 新增 %s 个，更新 %s 个", loaded_count, updated_count)

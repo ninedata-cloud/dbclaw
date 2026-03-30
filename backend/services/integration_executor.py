@@ -250,7 +250,15 @@ class IntegrationExecutor:
         send_notification = namespace["send_notification"]
 
         # 调用用户函数
-        result = await send_notification(context, params, payload)
+        try:
+            result = await send_notification(context, params, payload)
+        except KeyError as e:
+            missing_key = e.args[0] if e.args else "unknown"
+            return {
+                "success": False,
+                "message": f"Integration 参数缺失: {missing_key}",
+                "data": {"missing_param": missing_key},
+            }
 
         # 确保返回格式正确
         if not isinstance(result, dict):

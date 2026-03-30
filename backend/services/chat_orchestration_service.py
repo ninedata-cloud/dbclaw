@@ -116,6 +116,7 @@ async def _store_tool_result(db: AsyncSession, session_id: int, event: dict[str,
             "result": event["result"],
             "execution_time_ms": event.get("execution_time_ms"),
             "tool_call_id": event.get("tool_call_id"),
+            "skill_execution_id": event.get("skill_execution_id"),
         }),
         tool_call_id=event.get("tool_call_id"),
     )
@@ -149,6 +150,10 @@ async def _store_approval_request(
         "risk_reason": event.get("risk_reason"),
         "suppressible": event.get("suppressible", False),
         "confirmation_key": event.get("confirmation_key"),
+        "action_run_id": event.get("action_run_id"),
+        "recommendation_id": event.get("recommendation_id"),
+        "action_title": event.get("action_title"),
+        "phase": event.get("phase"),
     }
     approval_msg = ChatMessage(
         session_id=session_id,
@@ -165,6 +170,10 @@ async def _store_approval_request(
             "suppressible": event.get("suppressible", False),
             "confirmation_key": event.get("confirmation_key"),
             "status": "pending",
+            "action_run_id": event.get("action_run_id"),
+            "recommendation_id": event.get("recommendation_id"),
+            "action_title": event.get("action_title"),
+            "phase": event.get("phase"),
         }),
     )
     db.add(approval_msg)
@@ -217,6 +226,10 @@ async def _load_pending_approval_from_db(
         "risk_reason": data.get("risk_reason"),
         "suppressible": data.get("suppressible", False),
         "confirmation_key": data.get("confirmation_key"),
+        "action_run_id": data.get("action_run_id"),
+        "recommendation_id": data.get("recommendation_id"),
+        "action_title": data.get("action_title"),
+        "phase": data.get("phase"),
     }
 
 
@@ -282,6 +295,7 @@ async def process_stream_events(
                 "result": event["result"],
                 "execution_time_ms": event.get("execution_time_ms"),
                 "tool_call_id": event.get("tool_call_id"),
+                "skill_execution_id": event.get("skill_execution_id"),
             }, on_event)
         elif event_type == "confirmation_required":
             await _store_approval_request(
@@ -470,6 +484,10 @@ async def resolve_pending_approval(
         "approval_id": approval_id,
         "action": action,
         "comment": comment,
+        "action_run_id": pending.get("action_run_id"),
+        "recommendation_id": pending.get("recommendation_id"),
+        "action_title": pending.get("action_title"),
+        "phase": pending.get("phase"),
     }
     await _emit(resolved_event, on_event)
 
@@ -485,11 +503,15 @@ async def resolve_pending_approval(
         "tool_name": pending["tool_name"],
         "tool_args": pending["tool_args"],
         "tool_call_id": pending.get("tool_call_id"),
+        "action_run_id": pending.get("action_run_id"),
+        "recommendation_id": pending.get("recommendation_id"),
+        "action_title": pending.get("action_title"),
+        "phase": pending.get("phase"),
     }
     await _store_tool_call(db, session_id, tool_call_event)
     await _emit(tool_call_event, on_event)
 
-    tool_result, execution_time_ms = await execute_skill_call(
+    tool_result, execution_time_ms, skill_execution_id = await execute_skill_call(
         pending["tool_name"],
         dict(pending["tool_args"]),
         db,
@@ -502,6 +524,11 @@ async def resolve_pending_approval(
         "result": tool_result,
         "execution_time_ms": execution_time_ms,
         "tool_call_id": pending.get("tool_call_id"),
+        "skill_execution_id": skill_execution_id,
+        "action_run_id": pending.get("action_run_id"),
+        "recommendation_id": pending.get("recommendation_id"),
+        "action_title": pending.get("action_title"),
+        "phase": pending.get("phase"),
     }
     await _store_tool_result(db, session_id, tool_result_event)
     await _emit(tool_result_event, on_event)

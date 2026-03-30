@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.schemas.feishu import FeishuChallengeRequest, FeishuMessageEventBody
-from backend.services.feishu_bot_service import FeishuBotService, _merge_bot_config
+from backend.services.feishu_bot_service import FeishuBotService, _extract_feishu_bot_config
 from backend.services.feishu_service import feishu_service
 
 logger = logging.getLogger(__name__)
@@ -29,8 +29,8 @@ async def handle_feishu_events(
         return {"challenge": challenge_req.challenge}
 
     integration = await FeishuBotService.get_bot_integration(db)
-    channel = await FeishuBotService.get_bot_channel(db, integration.id if integration else None)
-    signing_secret = _merge_bot_config(integration, channel).get("signing_secret")
+    config = _extract_feishu_bot_config(integration)
+    signing_secret = (config.get("signing_secret") or "").strip()
 
     if not feishu_service.verify_signature(
         x_lark_request_timestamp,

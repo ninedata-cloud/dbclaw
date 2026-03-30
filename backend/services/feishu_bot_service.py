@@ -9,15 +9,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.chat_channel_binding import ChatChannelBinding
 from backend.models.chat_event_dedup import ChatEventDedup
 from backend.models.diagnostic_session import ChatMessage, DiagnosticSession
-from backend.models.integration import AlertChannel, Integration
+from backend.models.integration import Integration
 from backend.services.chat_orchestration_service import prepare_user_turn, process_stream_events, resolve_pending_approval
 from backend.services.feishu_service import feishu_service, format_reply_text
-from backend.utils.encryption import decrypt_value
 
 logger = logging.getLogger(__name__)
 
 PENDING_APPROVALS: dict[int, dict[str, dict[str, Any]]] = {}
 PROCESSING_APPROVALS: set[str] = set()
+
+_CONFIG_VAR_PATTERNS = {
+    "app_id": re.compile(r'^\s*APP_ID\s*=\s*(["\'])(.*?)\1\s*$', re.MULTILINE),
+    "app_secret": re.compile(r'^\s*APP_SECRET\s*=\s*(["\'])(.*?)\1\s*$', re.MULTILINE),
+    "signing_secret": re.compile(r'^\s*SIGNING_SECRET\s*=\s*(["\'])(.*?)\1\s*$', re.MULTILINE),
+}
 
 
 TOOL_LABELS = {
@@ -48,29 +53,28 @@ def _toast_response(content: str, toast_type: str = "info") -> dict[str, Any]:
     }
 
 
-def _integration_defaults(integration: Integration | None) -> dict[str, Any]:
-    if not integration or not integration.config_schema:
-        return {}
-    properties = (integration.config_schema or {}).get("properties") or {}
-    defaults: dict[str, Any] = {}
-    for key, config in properties.items():
-        if isinstance(config, dict) and "default" in config:
-            defaults[key] = config.get("default")
-    return defaults
+def _extract_feishu_bot_config(integration: Integration | None) -> dict[str, str]:
+    """从 builtin_feishu_bot 的 Integration 代码中解析飞书凭据。
 
+    约定在代码中定义：
+    - APP_ID = "..."
+    - APP_SECRET = "..."
+    - SIGNING_SECRET = "..."
 
-def _merge_bot_config(integration: Integration | None, channel: AlertChannel | None) -> dict[str, Any]:
-    config = _integration_defaults(integration)
-    if channel and channel.params:
-        config.update(channel.params)
+    只做字符串常量解析，不执行用户代码。
+    """
 
-    for key in ("app_secret", "signing_secret"):
-        value = config.get(key)
-        if isinstance(value, str) and value.startswith("encrypted:"):
-            try:
-                config[key] = decrypt_value(value[10:])
-            except Exception:
-                logger.exception("解密飞书机器人配置失败: %s", key)
+    if not integration or not integration.code:
+        return {"app_id": "", "app_secret": "", "signing_secret": ""}
+
+    code = integration.code
+    config: dict[str, str] = {"app_id": "", "app_secret": "", "signing_secret": ""}
+
+    for key, pattern in _CONFIG_VAR_PATTERNS.items():
+        match = pattern.search(code)
+        if match:
+            config[key] = match.group(2)
+
     return config
 
 
@@ -262,17 +266,6 @@ class FeishuBotService:
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def get_bot_channel(db: AsyncSession, integration_id: int | None) -> Optional[AlertChannel]:
-        if not integration_id:
-            return None
-        result = await db.execute(
-            select(AlertChannel)
-            .where(AlertChannel.integration_id == integration_id, AlertChannel.enabled == True)
-            .order_by(AlertChannel.updated_at.desc())
-        )
-        return result.scalars().first()
-
-    @staticmethod
     async def is_duplicate_event(db: AsyncSession, *, event_id: str | None, message_id: str | None, event_type: str) -> bool:
         if not event_id and not message_id:
             return False
@@ -325,14 +318,9 @@ class FeishuBotService:
             await db.commit()
             return binding
 
-        defaults = _integration_defaults(integration)
         session = DiagnosticSession(
             user_id=None,
-            datasource_id=defaults.get("default_datasource_id"),
             title="飞书会话",
-            ai_model_id=defaults.get("default_ai_model_id"),
-            kb_ids=defaults.get("default_kb_ids"),
-            disabled_tools=defaults.get("default_disabled_tools"),
         )
         db.add(session)
         await db.commit()
@@ -344,10 +332,6 @@ class FeishuBotService:
             external_user_id=user_open_id,
             session_id=session.id,
             integration_id=integration.id if integration else None,
-            default_datasource_id=session.datasource_id,
-            default_model_id=session.ai_model_id,
-            kb_ids=session.kb_ids,
-            disabled_tools=session.disabled_tools,
             last_message_at=datetime.utcnow(),
         )
         db.add(binding)
@@ -379,7 +363,6 @@ class FeishuBotService:
             return {"ok": True, "duplicate": True}
 
         integration = await FeishuBotService.get_bot_integration(db)
-        channel = await FeishuBotService.get_bot_channel(db, integration.id if integration else None)
         sender_open_id = (sender.get("sender_id") or {}).get("open_id")
         binding = await FeishuBotService.get_or_create_binding(
             db,
@@ -388,9 +371,9 @@ class FeishuBotService:
             integration=integration,
         )
 
-        config = _merge_bot_config(integration, channel)
-        app_id = config.get("app_id")
-        app_secret = config.get("app_secret")
+        config = _extract_feishu_bot_config(integration)
+        app_id = (config.get("app_id") or "").strip()
+        app_secret = (config.get("app_secret") or "").strip()
 
         if app_id and app_secret:
             await _reply_normal_message(
@@ -408,8 +391,8 @@ class FeishuBotService:
             user_id=None,
             user_message=text,
             attachments=[],
-            payload_datasource_id=binding.default_datasource_id,
-            model_id=binding.default_model_id,
+            payload_datasource_id=None,
+            model_id=None,
         )
 
         chunks: list[str] = []
@@ -504,10 +487,9 @@ class FeishuBotService:
             return _toast_response("审批处理中，请勿重复点击。", "success")
 
         integration = await FeishuBotService.get_bot_integration(db)
-        channel = await FeishuBotService.get_bot_channel(db, integration.id if integration else None)
-        config = _merge_bot_config(integration, channel)
-        app_id = config.get("app_id")
-        app_secret = config.get("app_secret")
+        config = _extract_feishu_bot_config(integration)
+        app_id = (config.get("app_id") or "").strip()
+        app_secret = (config.get("app_secret") or "").strip()
 
         binding_result = await db.execute(
             select(ChatChannelBinding).where(
