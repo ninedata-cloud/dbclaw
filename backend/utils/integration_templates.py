@@ -155,7 +155,7 @@ DINGTALK_WEBHOOK_TEMPLATE = {
                 "format": "password"
             }
         },
-        "required": ["webhook_url", "secret"]
+        "required": ["webhook_url"]
     },
     "code": """import time
 import hmac
@@ -165,7 +165,7 @@ import urllib.parse
 
 async def send_notification(context, params, payload):
     webhook_url = params["webhook_url"]
-    secret = params["secret"]
+    secret = params.get("secret")
 
     # 构建钉钉 Markdown 消息
     severity_emoji = {
@@ -192,16 +192,17 @@ async def send_notification(context, params, payload):
         }
     }
 
-    # 签名
-    timestamp = str(int(time.time() * 1000))
-    sign_string = f"{timestamp}\\n{secret}"
-    sign = base64.b64encode(hmac.new(
-        secret.encode("utf-8"),
-        sign_string.encode("utf-8"),
-        digestmod=hashlib.sha256
-    ).digest()).decode("utf-8")
-
-    signed_url = f"{webhook_url}&timestamp={timestamp}&sign={urllib.parse.quote(sign)}"
+    # 签名（可选）
+    signed_url = webhook_url
+    if secret:
+        timestamp = str(int(time.time() * 1000))
+        sign_string = f"{timestamp}\\n{secret}"
+        sign = base64.b64encode(hmac.new(
+            secret.encode("utf-8"),
+            sign_string.encode("utf-8"),
+            digestmod=hashlib.sha256
+        ).digest()).decode("utf-8")
+        signed_url = f"{webhook_url}&timestamp={timestamp}&sign={urllib.parse.quote(sign)}"
 
     # 发送请求
     response = await context.http_request("POST", signed_url, json=message)
@@ -460,33 +461,31 @@ async def fetch_metrics(context, params, datasources):
     # 格式: (阿里云指标名, [(SmartDBA指标名, 值索引, 单位)])
     metric_mappings = {
         "MySQL_MemCpuUsage": [
-            ("cpu_usage", 0, "%"),           # CPU 使用率
-            ("memory_usage", 1, "%")         # 内存使用率
+            ("cpu_usage", 0, "%"),            # CPU 使用率
+            ("memory_usage", 1, "%")          # 内存使用率
         ],
         "MySQL_DetailedSpaceUsage": [
-            ("disk_total", 0, "MB"),         # 总空间
-            ("disk_data", 1, "MB"),          # 数据空间
-            ("disk_log", 2, "MB"),           # 日志空间
-            ("disk_temp", 3, "MB"),          # 临时空间
-            ("disk_system", 4, "MB")         # 系统空间
+            ("disk_total", 0, "MB"),          # 总空间
+            ("disk_data", 1, "MB"),           # 数据空间
+            ("disk_log", 2, "MB"),            # 日志空间
+            ("disk_temp", 3, "MB"),           # 临时空间
+            ("disk_system", 4, "MB")          # 系统空间
         ],
         "MySQL_IOPS": [
-            ("iops", 0, "次/秒")             # IOPS
-        ],
-        "MySQL_MBPS": [
-            ("throughput", 0, "Byte/秒")     # 吞吐量
+            ("disk_reads_per_sec", 0, "次/秒"),
+            ("disk_writes_per_sec", 0, "次/秒")
         ],
         "MySQL_NetworkTraffic": [
-            ("network_in", 0, "KB/秒"),      # 入流量
-            ("network_out", 1, "KB/秒")      # 出流量
+            ("network_rx_bytes", 0, "KB/秒"),
+            ("network_tx_bytes", 1, "KB/秒")
         ],
         "MySQL_QPSTPS": [
-            ("qps", 0, "次/秒"),             # QPS
-            ("tps", 1, "个/秒")              # TPS
+            ("qps", 0, "次/秒"),              # QPS
+            ("tps", 1, "个/秒")               # TPS
         ],
         "MySQL_Sessions": [
-            ("active_connections", 0, "个"), # 活跃连接
-            ("total_connections", 1, "个")   # 总连接
+            ("connections_active", 0, "个"),  # 活跃连接
+            ("connections_total", 1, "个")    # 总连接
         ]
     }
 
@@ -577,23 +576,30 @@ FEISHU_BOT_TEMPLATE = {
     "category": "im",
     "config_schema": {
         "type": "object",
-        "properties": {
-            "app_id": {"type": "string", "title": "App ID", "description": "飞书应用 App ID", "default": ""},
-            "app_secret": {"type": "string", "title": "App Secret", "description": "飞书应用 App Secret", "format": "password", "default": ""},
-            "signing_secret": {"type": "string", "title": "Signing Secret", "description": "飞书事件签名密钥", "format": "password", "default": ""},
-            "default_datasource_id": {"type": "integer", "title": "默认数据源 ID", "description": "机器人默认绑定的数据源，可选"},
-            "default_ai_model_id": {"type": "integer", "title": "默认 AI 模型 ID", "description": "机器人默认 AI 模型，可选"},
-            "default_kb_ids": {"type": "array", "title": "默认知识库 ID 列表", "items": {"type": "integer"}, "default": []},
-            "default_disabled_tools": {"type": "array", "title": "默认禁用工具", "items": {"type": "string"}, "default": []}
-        },
+        "properties": {},
         "required": []
     },
-    "code": "async def handle_event(context, params, payload):\n    return {'success': True, 'message': 'Feishu bot is handled by dedicated router/service'}\n"
+    "code": "# 直接修改下面 3 个常量来配置飞书机器人凭据\nAPP_ID = \"\"\nAPP_SECRET = \"\"\nSIGNING_SECRET = \"\"\n\nasync def handle_event(context, params, payload):\n    return {'success': True, 'message': 'Feishu bot is handled by dedicated router/service'}\n"
+}
+
+WEIXIN_BOT_TEMPLATE = {
+    "integration_id": "builtin_weixin_bot",
+    "name": "微信机器人对话",
+    "description": "微信机器人入站对话配置（OpenClaw 协议），通过长轮询收消息并回复",
+    "integration_type": "bot",
+    "category": "im",
+    "config_schema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+    },
+    "code": "# 微信机器人由后台轮询服务处理（weixin_bot_service）。\n# 这里不需要可执行代码，仅作为内置 Bot 类型的配置入口。\n\nasync def handle_event(context, params, payload):\n    return {'success': True, 'message': 'Weixin bot is handled by dedicated poller/service'}\n"
 }
 
 BUILTIN_TEMPLATES = [
     FEISHU_WEBHOOK_TEMPLATE,
     FEISHU_BOT_TEMPLATE,
+    WEIXIN_BOT_TEMPLATE,
     DINGTALK_WEBHOOK_TEMPLATE,
     EMAIL_TEMPLATE,
     GENERIC_WEBHOOK_TEMPLATE,

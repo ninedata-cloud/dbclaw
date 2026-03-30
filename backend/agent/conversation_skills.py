@@ -187,14 +187,32 @@ def assess_tool_risk(tool_name: str, arguments: Dict[str, Any], permissions: Opt
 
 async def execute_skill_call(
     skill_id: str, arguments: Dict[str, Any], db, user_id: int, session_id: Optional[int] = None
-) -> tuple[str, int]:
-    """Execute a skill and return the result as JSON string and execution time in ms"""
+) -> tuple[str, int, Optional[int]]:
+    """Execute a skill and return JSON result, execution time, and skill_execution_id."""
     from backend.skills.registry import SkillRegistry
     from backend.skills.executor import SkillExecutor
     from backend.skills.context import SkillContext
+    from backend.skills.models import SkillExecution
+    from sqlalchemy import select
     import time
 
     start_time = time.time()
+
+    async def _get_latest_execution_id() -> Optional[int]:
+        if not db:
+            return None
+        query = (
+            select(SkillExecution.id)
+            .where(SkillExecution.skill_id == skill_id)
+            .order_by(SkillExecution.id.desc())
+            .limit(1)
+        )
+        if session_id is not None:
+            query = query.where(SkillExecution.session_id == session_id)
+        if user_id is not None:
+            query = query.where(SkillExecution.user_id == user_id)
+        result = await db.execute(query)
+        return result.scalar_one_or_none()
 
     try:
         timeout = arguments.pop('timeout', None)
@@ -206,11 +224,11 @@ async def execute_skill_call(
 
         if not skill:
             execution_time = int((time.time() - start_time) * 1000)
-            return json.dumps({"error": f"Skill '{skill_id}' not found"}), execution_time
+            return json.dumps({"error": f"Skill '{skill_id}' not found"}), execution_time, None
 
         if not skill.is_enabled:
             execution_time = int((time.time() - start_time) * 1000)
-            return json.dumps({"error": f"Skill '{skill_id}' is disabled"}), execution_time
+            return json.dumps({"error": f"Skill '{skill_id}' is disabled"}), execution_time, None
 
         from backend.skills.executor import SkillExecutor
         if timeout is None:
@@ -229,12 +247,14 @@ async def execute_skill_call(
         result = await executor.execute(skill, arguments, context, timeout=timeout)
 
         execution_time = int((time.time() - start_time) * 1000)
-        return json.dumps(result, default=str), execution_time
+        execution_id = await _get_latest_execution_id()
+        return json.dumps(result, default=str), execution_time, execution_id
 
     except Exception as e:
         execution_time = int((time.time() - start_time) * 1000)
         logger.error(f"Error executing skill {skill_id}: {e}")
-        return json.dumps({"error": str(e)}), execution_time
+        execution_id = await _get_latest_execution_id()
+        return json.dumps({"error": str(e)}), execution_time, execution_id
 
 
 async def run_conversation_with_skills(
@@ -297,6 +317,9 @@ async def run_conversation_with_skills(
     else:
         system_msg = INFORMATIONAL_PROMPT
 
+    datasource_db_type = None
+    host_configured_for_tools = None
+
     if datasource_id and db:
         from backend.models.datasource import Datasource
         from backend.models.host import Host
@@ -304,15 +327,23 @@ async def run_conversation_with_skills(
         result = await db.execute(select(Datasource).filter(Datasource.id == datasource_id))
         datasource = result.scalar_one_or_none()
         if datasource:
+            datasource_db_type = datasource.db_type
+            host_id = datasource.host_id
+            host_configured = host_id is not None
+            host_configured_for_tools = host_configured
+
             skill_prefix_map = {
                 'mysql': 'mysql',
                 'postgresql': 'pg',
                 'sqlserver': 'mssql',
-                'oracle': 'oracle'
+                'oracle': 'oracle',
+                'opengauss': 'opengauss',
+                'tidb': 'tidb',
+                'dm': 'dm',
+                'oceanbase': 'oceanbase',
+                'oceanbase_mysql': 'oceanbase',
             }
             skill_prefix = skill_prefix_map.get(datasource.db_type, datasource.db_type)
-            host_id = datasource.host_id
-            host_configured = host_id is not None
 
             system_msg += (
                 "\n\nCurrent conversation datasource context (stable unless the user explicitly asks to switch):"
@@ -354,7 +385,12 @@ async def run_conversation_with_skills(
     if kb_ids:
         system_msg += f"\n\nKnowledge bases are enabled for this session (IDs: {kb_ids}). Use list_documents tool to browse available documentation, then read_document to fetch full content."
 
-    active_tools = await get_available_skills_as_tools(db, disabled_tools)
+    active_tools = await get_available_skills_as_tools(
+        db,
+        disabled_tools,
+        datasource_db_type=datasource_db_type,
+        host_configured=host_configured_for_tools,
+    )
     disabled_set = set(disabled_tools) if disabled_tools else set()
     full_messages = [{"role": "system", "content": system_msg}] + messages
 
@@ -445,7 +481,7 @@ async def run_conversation_with_skills(
                     "tool_call_id": tc["id"],
                 }
 
-                tool_result, execution_time_ms = await execute_skill_call(
+                tool_result, execution_time_ms, skill_execution_id = await execute_skill_call(
                     tool_name, tool_args, db, user_id, session_id
                 )
 
@@ -455,6 +491,7 @@ async def run_conversation_with_skills(
                     "tool_call_id": tc["id"],
                     "result": tool_result[:10000],
                     "execution_time_ms": execution_time_ms,
+                    "skill_execution_id": skill_execution_id,
                 }
 
                 full_messages.append({
@@ -470,8 +507,100 @@ async def run_conversation_with_skills(
 
     yield {
         "type": "error",
-        "content": f"Maximum tool execution rounds ({MAX_TOOL_ROUNDS}) reached. The diagnosis may be too complex or requires manual intervention. Please try breaking down your question into smaller parts."
+        "message": (
+            f"Maximum tool execution rounds ({MAX_TOOL_ROUNDS}) reached. "
+            "The diagnosis may be too complex or requires manual intervention. "
+            "Please try breaking down your question into smaller parts."
+        ),
     }
+
+
+def _strip_markdown_for_summary(text: str) -> str:
+    if not text:
+        return ""
+    cleaned = re.sub(r"```[\s\S]*?```", " ", text)
+    cleaned = re.sub(r"`([^`]*)`", r"\1", cleaned)
+    cleaned = re.sub(r"^#{1,6}\s*", "", cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r"\*\*([^*]+)\*\*", r"\1", cleaned)
+    cleaned = re.sub(r"\*([^*]+)\*", r"\1", cleaned)
+    cleaned = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned.strip()
+
+
+def _sanitize_report_markdown(content_md: str) -> str:
+    if not content_md:
+        return ""
+
+    normalized = content_md.replace("\r\n", "\n").strip()
+    if not normalized:
+        return ""
+
+    report_heading_markers = [
+        "# 数据库巡检报告",
+        "# 数据库诊断报告",
+        "# 数据库连接失败诊断报告",
+        "## 一、执行摘要",
+        "## 执行摘要",
+    ]
+
+    start_index = -1
+    for marker in report_heading_markers:
+        idx = normalized.find(marker)
+        if idx >= 0 and (start_index < 0 or idx < start_index):
+            start_index = idx
+
+    if start_index > 0:
+        normalized = normalized[start_index:].lstrip()
+
+    filtered_lines = []
+    process_line_patterns = [
+        r"^我将为.+生成.+报告",
+        r"^让我先",
+        r"^我先收集",
+        r"^继续收集",
+        r"^现在我已经收集了足够的数据",
+        r"^现在我已经收集了足够的诊断数据",
+        r"^下面(开始)?生成",
+        r"^接下来我将",
+        r"^继续调用",
+    ]
+
+    for raw_line in normalized.splitlines():
+        line = raw_line.strip()
+        if not line:
+            filtered_lines.append(raw_line)
+            continue
+        if any(re.match(pattern, line) for pattern in process_line_patterns):
+            continue
+        filtered_lines.append(raw_line)
+
+    sanitized = "\n".join(filtered_lines).strip()
+    sanitized = re.sub(r"\n{3,}", "\n\n", sanitized)
+    return sanitized
+
+
+def _has_meaningful_report_content(content_md: str) -> bool:
+    plain = _strip_markdown_for_summary(_sanitize_report_markdown(content_md))
+    if not plain:
+        return False
+
+    if plain.startswith("⚠️"):
+        return False
+
+    lower_plain = plain.lower()
+    for fragment in ["未生成任何内容", "报告生成超时", "报告生成失败", "需要人工确认"]:
+        if fragment in plain:
+            return False
+    if "timeout" in lower_plain and len(plain) < 120:
+        return False
+
+    return len(plain) >= 40
+
+
+def _build_report_summary(content_md: str) -> str:
+    plain = _strip_markdown_for_summary(_sanitize_report_markdown(content_md))
+    return plain[:220].strip() if plain else ""
 
 
 async def generate_report_with_skills(
@@ -483,14 +612,26 @@ async def generate_report_with_skills(
     db: Any,
     user_id: int = 1,
     model_id: Optional[int] = None,
-    timeout_seconds: int = 300
-) -> tuple[str, list]:
-    """Generate inspection report using AI with skill calls. Returns (markdown, skill_executions)."""
-    import asyncio
-    from datetime import datetime
+    timeout_seconds: int = 300,
+) -> Dict[str, Any]:
+    """Generate inspection report using AI with skill calls.
 
-    skill_executions = []
+    Returns a structured result:
+    {
+      status: completed|partial|timed_out|awaiting_confirm|failed,
+      content_md,
+      summary,
+      error_message,
+      skill_executions,
+    }
+    """
+    import asyncio
+
+    skill_executions: list[dict[str, Any]] = []
     collected_content = ""
+
+    awaiting_confirm_event: Optional[dict[str, Any]] = None
+    error_message: Optional[str] = None
 
     # Check if datasource has host configured for OS-level analysis
     host_info_msg = ""
@@ -498,6 +639,7 @@ async def generate_report_with_skills(
         from backend.models.datasource import Datasource
         from backend.models.host import Host
         from sqlalchemy import select
+
         ds_result = await db.execute(select(Datasource).filter(Datasource.id == datasource_id))
         ds = ds_result.scalar_one_or_none()
         if ds and ds.host_id:
@@ -521,6 +663,9 @@ async def generate_report_with_skills(
 
     messages = [{"role": "user", "content": initial_message}]
 
+    saw_done = False
+    saw_error = False
+
     try:
         async with asyncio.timeout(timeout_seconds):
             async for event in run_conversation_with_skills(
@@ -531,26 +676,129 @@ async def generate_report_with_skills(
                 user_id=user_id,
                 system_prompt_override=system_prompt,
             ):
-                if event["type"] == "content":
-                    collected_content += event["content"]
-                elif event["type"] == "tool_call":
+                etype = event.get("type")
+
+                if etype == "content":
+                    collected_content += event.get("content") or ""
+                    continue
+
+                if etype == "tool_call":
                     skill_executions.append({
-                        "skill_id": event["tool_name"],
-                        "arguments": event["tool_args"],
-                        "timestamp": now().isoformat()
+                        "skill_id": event.get("tool_name"),
+                        "arguments": event.get("tool_args"),
+                        "timestamp": now().isoformat(),
                     })
-                elif event["type"] == "done":
+                    continue
+
+                if etype == "confirmation_required":
+                    awaiting_confirm_event = event
+                    break
+
+                if etype == "error":
+                    saw_error = True
+                    error_message = str(event.get("message") or event.get("content") or "Unknown error")
+                    break
+
+                if etype == "done":
+                    saw_done = True
                     break
 
     except asyncio.TimeoutError:
-        if collected_content.strip():
-            collected_content += "\n\n⚠️ 报告生成超时，以上为部分结果"
-        else:
-            collected_content = "⚠️ 报告生成超时，未能获取到任何内容。请检查 AI 模型配置是否正确，或稍后重试。"
-    except Exception as e:
-        if collected_content.strip():
-            collected_content += f"\n\n⚠️ 报告生成过程中出错: {str(e)}"
-        else:
-            collected_content = f"⚠️ 报告生成失败: {str(e)}"
+        status = "timed_out"
+        sanitized_content = _sanitize_report_markdown(collected_content)
+        if sanitized_content.strip() and _has_meaningful_report_content(sanitized_content):
+            summary = _build_report_summary(sanitized_content)
+            error_message = f"报告生成超时（{timeout_seconds}s），以上为部分结果。"
+            return {
+                "status": status,
+                "content_md": sanitized_content,
+                "summary": summary or "报告生成超时（部分结果）",
+                "error_message": error_message,
+                "skill_executions": skill_executions,
+            }
 
-    return collected_content or "⚠️ 未生成任何内容，请检查 AI 模型配置。", skill_executions
+        return {
+            "status": status,
+            "content_md": "",
+            "summary": "报告生成超时，未产出正文。",
+            "error_message": f"报告生成超时（{timeout_seconds}s），未能获取到任何内容。",
+            "skill_executions": skill_executions,
+        }
+
+    except Exception as e:
+        error_message = f"{type(e).__name__}: {str(e)}"
+        saw_error = True
+
+    if awaiting_confirm_event is not None:
+        tool_name = awaiting_confirm_event.get("tool_name")
+        risk_level = awaiting_confirm_event.get("risk_level")
+        risk_reason = awaiting_confirm_event.get("risk_reason")
+        summary = awaiting_confirm_event.get("summary")
+        detail = "；".join([str(item) for item in [summary, risk_reason] if item])
+        return {
+            "status": "awaiting_confirm",
+            "content_md": "",
+            "summary": "报告生成需要人工确认后继续。",
+            "error_message": (
+                f"生成报告过程中触发高风险技能确认：{tool_name or '-'}（{risk_level or '-'}）。"
+                + (f" {detail}" if detail else "")
+            ),
+            "skill_executions": skill_executions,
+        }
+
+    if saw_error:
+        sanitized_content = _sanitize_report_markdown(collected_content)
+        if sanitized_content.strip() and _has_meaningful_report_content(sanitized_content):
+            return {
+                "status": "partial",
+                "content_md": sanitized_content,
+                "summary": _build_report_summary(sanitized_content) or "报告生成部分成功",
+                "error_message": error_message or "报告生成过程中出错，已返回部分内容。",
+                "skill_executions": skill_executions,
+            }
+
+        return {
+            "status": "failed",
+            "content_md": "",
+            "summary": "报告生成失败，未产出有效内容。",
+            "error_message": error_message or "报告生成失败（未产出有效内容）。",
+            "skill_executions": skill_executions,
+        }
+
+    # Normal completion
+    sanitized_content = _sanitize_report_markdown(collected_content)
+
+    if not saw_done:
+        # Defensive: stream ended without done/error/confirm
+        if sanitized_content.strip() and _has_meaningful_report_content(sanitized_content):
+            return {
+                "status": "partial",
+                "content_md": sanitized_content,
+                "summary": _build_report_summary(sanitized_content) or "报告生成部分成功",
+                "error_message": "对话流提前结束，已返回部分内容。",
+                "skill_executions": skill_executions,
+            }
+        return {
+            "status": "failed",
+            "content_md": "",
+            "summary": "报告生成失败，未产出有效内容。",
+            "error_message": "对话流提前结束，未生成任何有效内容。",
+            "skill_executions": skill_executions,
+        }
+
+    if not sanitized_content.strip() or not _has_meaningful_report_content(sanitized_content):
+        return {
+            "status": "failed",
+            "content_md": "",
+            "summary": "报告生成失败，未产出有效内容。",
+            "error_message": "AI 未生成任何有效报告内容。",
+            "skill_executions": skill_executions,
+        }
+
+    return {
+        "status": "completed",
+        "content_md": sanitized_content,
+        "summary": _build_report_summary(sanitized_content) or "报告生成完成",
+        "error_message": None,
+        "skill_executions": skill_executions,
+    }

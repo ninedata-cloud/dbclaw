@@ -35,6 +35,7 @@ async def init_db():
     import backend.models.user_session  # noqa: F401
     import backend.models.login_log  # noqa: F401
     import backend.models.report  # noqa: F401
+    import backend.models.action_run  # noqa: F401
     import backend.models.system_config  # noqa: F401
     import backend.models.host_metric  # noqa: F401
     import backend.models.alert_message  # noqa: F401
@@ -42,6 +43,7 @@ async def init_db():
     import backend.models.alert_subscription  # noqa: F401
     import backend.skills.models  # noqa: F401
     import backend.models.integration  # noqa: F401
+    import backend.models.integration_bot_binding  # noqa: F401
     import backend.models.chat_channel_binding  # noqa: F401
     import backend.models.chat_event_dedup  # noqa: F401
     # Inspection models

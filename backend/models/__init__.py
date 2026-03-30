@@ -8,11 +8,13 @@ from backend.models.ai_model import AIModel
 from backend.models.document import DocCategory, DocDocument
 from backend.models.diagnostic_session import DiagnosticSession, ChatMessage
 from backend.models.report import Report
+from backend.models.action_run import ActionRun
 from backend.models.metric_snapshot import MetricSnapshot
 from backend.models.host_metric import HostMetric
 from backend.models.system_config import SystemConfig
 from backend.models.alert_event import AlertEvent
 from backend.models.alert_message import AlertMessage
+from backend.models.integration_bot_binding import IntegrationBotBinding
 
 __all__ = [
     "User",
@@ -24,9 +26,11 @@ __all__ = [
     "DiagnosticSession",
     "ChatMessage",
     "Report",
+    "ActionRun",
     "MetricSnapshot",
     "HostMetric",
     "SystemConfig",
     "AlertEvent",
     "AlertMessage",
+    "IntegrationBotBinding",
 ]
