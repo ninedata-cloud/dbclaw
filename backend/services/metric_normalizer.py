@@ -31,6 +31,10 @@ class MetricNormalizer:
             normalized.update(cls._normalize_postgresql(datasource_id, raw_metrics))
         elif db_type == 'mysql':
             normalized.update(cls._normalize_mysql(datasource_id, raw_metrics))
+        elif db_type == 'oceanbase':
+            normalized.update(cls._normalize_oceanbase(datasource_id, raw_metrics))
+        elif db_type == 'oceanbase_mysql':
+            normalized.update(cls._normalize_oceanbase_mysql(datasource_id, raw_metrics))
         elif db_type == 'sqlserver':
             normalized.update(cls._normalize_sqlserver(datasource_id, raw_metrics))
         elif db_type == 'oracle':
@@ -131,14 +135,14 @@ class MetricNormalizer:
                 datasource_id, 'bytes_received', metrics['bytes_received']
             )
             if net_rx is not None:
-                normalized['network_rx_bytes'] = net_rx
+                normalized['network_rx_rate'] = net_rx
 
         if 'bytes_sent' in metrics:
             net_tx = cls._calculate_rate(
                 datasource_id, 'bytes_sent', metrics['bytes_sent']
             )
             if net_tx is not None:
-                normalized['network_tx_bytes'] = net_tx
+                normalized['network_tx_rate'] = net_tx
 
         # 锁等待速率
         if 'innodb_row_lock_waits' in metrics:
@@ -147,6 +151,36 @@ class MetricNormalizer:
             )
             if lock_waits_sec is not None:
                 normalized['lock_waits_per_sec'] = lock_waits_sec
+
+        return normalized
+
+    @classmethod
+    def _normalize_oceanbase(cls, datasource_id: int, metrics: Dict[str, Any]) -> Dict[str, Any]:
+        """OceanBase 指标标准化（MySQL 兼容模式）"""
+        normalized = {}
+
+        cache_hit_rate = metrics.get('cache_hit_rate')
+        if cache_hit_rate is None:
+            cache_hit_rate = metrics.get('buffer_pool_hit_rate')
+        if cache_hit_rate is not None:
+            normalized['cache_hit_rate'] = cache_hit_rate
+            normalized['buffer_pool_hit_rate'] = cache_hit_rate
+
+        return normalized
+
+    @classmethod
+    def _normalize_oceanbase_mysql(cls, datasource_id: int, metrics: Dict[str, Any]) -> Dict[str, Any]:
+        """OceanBase MySQL 模式指标标准化（独立类型）"""
+        # 目前仅做最小字段统一：缓存命中率字段对齐。
+        # 其他指标（如 max_connections）由 connector 自身保证语义。
+        normalized = {}
+
+        cache_hit_rate = metrics.get('cache_hit_rate')
+        if cache_hit_rate is None:
+            cache_hit_rate = metrics.get('buffer_pool_hit_rate')
+        if cache_hit_rate is not None:
+            normalized['cache_hit_rate'] = cache_hit_rate
+            normalized['buffer_pool_hit_rate'] = cache_hit_rate
 
         return normalized
 
@@ -212,14 +246,14 @@ class MetricNormalizer:
                 datasource_id, 'network_reads_total', metrics['network_reads_total']
             )
             if net_rx is not None:
-                normalized['network_rx_bytes'] = net_rx
+                normalized['network_rx_rate'] = net_rx
 
         if 'network_writes_total' in metrics:
             net_tx = cls._calculate_rate(
                 datasource_id, 'network_writes_total', metrics['network_writes_total']
             )
             if net_tx is not None:
-                normalized['network_tx_bytes'] = net_tx
+                normalized['network_tx_rate'] = net_tx
 
         return normalized
 
@@ -272,14 +306,14 @@ class MetricNormalizer:
                 datasource_id, 'network_bytes_sent', metrics['network_bytes_sent']
             )
             if net_tx is not None:
-                normalized['network_tx_bytes'] = net_tx
+                normalized['network_tx_rate'] = net_tx
 
         if 'network_bytes_received' in metrics:
             net_rx = cls._calculate_rate(
                 datasource_id, 'network_bytes_received', metrics['network_bytes_received']
             )
             if net_rx is not None:
-                normalized['network_rx_bytes'] = net_rx
+                normalized['network_rx_rate'] = net_rx
 
         return normalized
 

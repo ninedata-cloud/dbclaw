@@ -27,6 +27,52 @@ class AlertMessageUpdate(BaseModel):
     resolved_at: Optional[datetime] = None
 
 
+class AlertLinkedReport(BaseModel):
+    report_id: int
+    title: str
+    status: str
+    trigger_type: Optional[str] = None
+    created_at: datetime
+    summary: Optional[str] = None
+
+
+class AlertRecommendedActionPreview(BaseModel):
+    id: str
+    title: str
+    summary: Optional[str] = None
+    risk_level: str = "safe"
+    latest_run: Optional[Dict[str, Any]] = None
+
+
+class AlertDatasourceInfo(BaseModel):
+    id: int
+    name: str
+    db_type: str
+    host: str
+    port: int
+    database: Optional[str] = None
+    importance_level: str
+    monitoring_interval: int
+    remark: Optional[str] = None
+    connection_status: str
+    connection_error: Optional[str] = None
+
+
+class AlertDiagnosisContext(BaseModel):
+    datasource_name: Optional[str] = None
+    datasource_type: Optional[str] = None
+    datasource_info: Optional[AlertDatasourceInfo] = None
+    case_summary: Optional[str] = None
+    diagnosis_summary: Optional[str] = None
+    root_cause: Optional[str] = None
+    recommended_action: Optional[str] = None
+    recommended_actions_preview: List[AlertRecommendedActionPreview] = Field(default_factory=list)
+    latest_action_run: Optional[Dict[str, Any]] = None
+    latest_trigger_type: Optional[str] = None
+    linked_report: Optional[AlertLinkedReport] = None
+    diagnosis_entry_hash: Optional[str] = None
+
+
 class AlertMessageResponse(AlertMessageBase):
     id: int
     status: str
@@ -35,6 +81,7 @@ class AlertMessageResponse(AlertMessageBase):
     resolved_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+    diagnosis_context: Optional[AlertDiagnosisContext] = None
 
     class Config:
         from_attributes = True
@@ -54,11 +101,20 @@ class TimeRange(BaseModel):
         return v
 
 
+class IntegrationTarget(BaseModel):
+    target_id: str = Field(..., min_length=1, max_length=100)
+    integration_id: int
+    name: str = Field(..., min_length=1, max_length=255)
+    enabled: bool = True
+    notify_on: List[str] = Field(default_factory=lambda: ["alert", "recovery"], min_length=1)
+    params: Dict[str, Any] = Field(default_factory=dict)
+
+
 class AlertSubscriptionBase(BaseModel):
     datasource_ids: List[int] = Field(default_factory=list)  # empty = all
     severity_levels: List[str] = Field(default_factory=list)  # empty = all
     time_ranges: List[TimeRange] = Field(default_factory=list)  # empty = 24/7
-    channel_ids: List[int] = Field(..., min_length=1)  # Integration Channel IDs, at least one required
+    integration_targets: List[IntegrationTarget] = Field(..., min_length=1)
     enabled: bool = True
     aggregation_script: Optional[str] = None
 
@@ -79,7 +135,7 @@ class AlertSubscriptionUpdate(BaseModel):
     datasource_ids: Optional[List[int]] = None
     severity_levels: Optional[List[str]] = None
     time_ranges: Optional[List[TimeRange]] = None
-    channel_ids: Optional[List[int]] = None
+    integration_targets: Optional[List[IntegrationTarget]] = None
     enabled: Optional[bool] = None
     aggregation_script: Optional[str] = None
 
@@ -90,7 +146,7 @@ class AlertSubscriptionResponse(BaseModel):
     datasource_ids: List[int] = Field(default_factory=list)
     severity_levels: List[str] = Field(default_factory=list)
     time_ranges: List[TimeRange] = Field(default_factory=list)
-    channel_ids: List[int] = Field(default_factory=list)  # Allow empty for legacy data
+    integration_targets: List[IntegrationTarget] = Field(default_factory=list)
     enabled: bool = True
     aggregation_script: Optional[str] = None
     created_at: datetime
@@ -104,7 +160,10 @@ class AlertSubscriptionResponse(BaseModel):
 class AlertDeliveryLogBase(BaseModel):
     alert_id: int
     subscription_id: int
-    channel: str = Field(..., pattern="^(email|sms|phone|webhook|dingtalk|recovery)$")
+    integration_id: Optional[int] = None
+    target_id: Optional[str] = None
+    target_name: Optional[str] = None
+    channel: str = Field(..., max_length=100)
     recipient: str = Field(..., max_length=255)
     status: str = Field(default="pending", pattern="^(pending|sent|failed)$")
     error_message: Optional[str] = None
@@ -160,6 +219,10 @@ class AlertEventBase(BaseModel):
     title: str
     alert_type: Optional[str] = None
     metric_name: Optional[str] = None
+    ai_diagnosis_summary: Optional[str] = None
+    root_cause: Optional[str] = None
+    recommended_actions: Optional[str] = None
+    diagnosis_status: Optional[str] = None
 
 
 class AlertEventResponse(AlertEventBase):
@@ -167,6 +230,9 @@ class AlertEventResponse(AlertEventBase):
     first_alert_id: int
     latest_alert_id: int
     last_updated: datetime
+    root_cause: Optional[str] = None
+    recommended_actions: Optional[str] = None
+    diagnosis_status: Optional[str] = None
 
     class Config:
         from_attributes = True

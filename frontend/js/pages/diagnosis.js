@@ -11,27 +11,6 @@ const DiagnosisPage = {
     availableModels: [],
     sessionTokenUsage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
 
-    _getApprovalPreferences() {
-        try {
-            return JSON.parse(localStorage.getItem('chatApprovalPreferences') || '{}');
-        } catch (e) {
-            return {};
-        }
-    },
-
-    _saveApprovalPreference(key, enabled) {
-        if (!key) return;
-        const prefs = this._getApprovalPreferences();
-        prefs[key] = !!enabled;
-        localStorage.setItem('chatApprovalPreferences', JSON.stringify(prefs));
-    },
-
-    _shouldAutoApprove(data) {
-        if (!data?.suppressible || !data?.confirmation_key) return false;
-        const prefs = this._getApprovalPreferences();
-        return prefs[data.confirmation_key] === true;
-    },
-
     _getSelectedDatasource() {
         return this.datasourceSelector?.getValue() || Store.get('currentDatasource') || null;
     },
@@ -291,9 +270,6 @@ const DiagnosisPage = {
 
         ChatWidget.onStop = () => this._stopGeneration();
         ChatWidget.onClear = () => this._clearSession();
-        ChatWidget.onApprovalAction = async (approvalId, action) => this._resolveApproval(approvalId, action);
-        ChatWidget.onApprovalRequest = (data) => this._showApprovalModal(data);
-
         layout.appendChild(sidebar);
         layout.appendChild(chatContainer);
         content.appendChild(layout);
@@ -566,6 +542,7 @@ const DiagnosisPage = {
                     `;
                     DOM.createIcons();
                 }
+                ChatWidget.resetToolPanel();
             }
         } catch (e) {
             console.error('加载失败 messages:', e);
@@ -581,6 +558,7 @@ const DiagnosisPage = {
                     </div>
                 `;
                 DOM.createIcons();
+                ChatWidget.resetToolPanel();
             }
         }
     },
@@ -712,15 +690,6 @@ const DiagnosisPage = {
             case 'tool_result':
                 ChatWidget.addToolResult(data.tool_name, data.result, data.execution_time_ms, data.tool_call_id);
                 break;
-            case 'confirmation_required':
-                ChatWidget.addApprovalRequest(data);
-                if (this._shouldAutoApprove(data)) {
-                    this._resolveApproval(data.approval_id, 'approved');
-                }
-                break;
-            case 'confirmation_resolved':
-                ChatWidget.updateApprovalStatus(data.approval_id, data.action);
-                break;
             case 'usage':
                 this.sessionTokenUsage.input_tokens += data.usage?.input_tokens || 0;
                 this.sessionTokenUsage.output_tokens += data.usage?.output_tokens || 0;
@@ -736,47 +705,6 @@ const DiagnosisPage = {
                 ChatWidget.showError(data.content);
                 break;
         }
-    },
-
-    async _resolveApproval(approvalId, action) {
-        if (!this.currentSessionId) {
-            Toast.warning('No active session');
-            return;
-        }
-        try {
-            await API.resolveChatApproval(this.currentSessionId, approvalId, { action, comment: '' });
-        } catch (e) {
-            Toast.error('确认失败: ' + e.message);
-        }
-    },
-
-    _showApprovalModal(data) {
-        if (this._shouldAutoApprove(data)) {
-            return;
-        }
-        Modal.show({
-            title: '确认执行可能变更系统的步骤',
-            content: `
-                <div style="display:flex;flex-direction:column;gap:12px;">
-                    <div><strong>技能：</strong>${data.tool_name}</div>
-                    <div><strong>风险等级：</strong>${data.risk_level || 'high'}</div>
-                    <div><strong>风险原因：</strong>${(data.risk_reason || data.summary || '该操作可能带来状态变更').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
-                    ${(data.plan_markdown || data.summary) ? `<pre style="margin:0;background:var(--bg-input);padding:12px;border-radius:8px;white-space:pre-wrap;">${(data.plan_markdown || data.summary || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>` : ''}
-                    ${data.suppressible ? `<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary);"><input type="checkbox" id="approval-skip-future"> 本设备对此类操作不再提示</label>` : ''}
-                </div>
-            `,
-            buttons: [
-                { text: '取消', variant: 'secondary', onClick: () => { Modal.hide(); this._resolveApproval(data.approval_id, 'rejected'); } },
-                { text: '确认执行', variant: 'danger', onClick: () => {
-                    const skip = document.querySelector('#approval-skip-future');
-                    if (skip?.checked && data.confirmation_key) {
-                        this._saveApprovalPreference(data.confirmation_key, true);
-                    }
-                    Modal.hide();
-                    this._resolveApproval(data.approval_id, 'approved');
-                } }
-            ]
-        });
     },
 
     async _clearSession() {
@@ -940,8 +868,6 @@ const DiagnosisPage = {
             this.ws.disconnect();
             this.ws = null;
         }
-        ChatWidget.onApprovalAction = null;
-        ChatWidget.onApprovalRequest = null;
         this.currentSessionId = null;
     }
 };

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Boolean
 from sqlalchemy.sql import func
 from backend.database import Base
 
@@ -13,6 +13,7 @@ class DiagnosticSession(Base):
     title = Column(String(200), default="New Session")
     kb_ids = Column(JSON, nullable=True)
     disabled_tools = Column(JSON, nullable=True)
+    is_hidden = Column(Boolean, default=False)  # System-created hidden sessions (e.g., auto-diagnosis)
     input_tokens = Column(Integer, nullable=False, default=0)
     output_tokens = Column(Integer, nullable=False, default=0)
     total_tokens = Column(Integer, nullable=False, default=0)

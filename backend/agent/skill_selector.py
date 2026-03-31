@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 # Skills that are always useful, even when a datasource is selected.
 GLOBAL_SKILL_IDS: Set[str] = {
     "execute_diagnostic_query",
+    "diagnose_datasource_connection",
     "execute_any_sql",
     "search_knowledge_base",
     "fetch_webpage",
@@ -28,6 +29,8 @@ GLOBAL_SKILL_IDS: Set[str] = {
 # OS diagnostics are only useful when a datasource has an associated host.
 OS_SKILL_IDS: Set[str] = {
     "get_os_metrics",
+    "execute_os_command",
+    "execute_any_os_command",
     "diagnose_high_cpu",
     "diagnose_high_memory",
     "diagnose_disk_space",

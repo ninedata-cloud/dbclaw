@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, and_, cast, Text
 from typing import List
 import asyncio
 import logging
@@ -17,16 +17,42 @@ from backend.dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
 
+
+def normalize_tags(tags: list[str] | None) -> list[str]:
+    if not tags:
+        return []
+
+    normalized = []
+    seen = set()
+    for tag in tags:
+        value = (tag or '').strip()
+        if not value:
+            continue
+        key = value.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append(value)
+    return normalized
+
+
 router = APIRouter(prefix="/api/datasources", tags=["datasources"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("", response_model=List[DatasourceResponse])
-async def list_datasources(q: str | None = None, db: AsyncSession = Depends(get_db)):
+async def list_datasources(
+    q: str | None = None,
+    db_type: str | None = None,
+    importance_level: str | None = None,
+    tags: str | None = None,
+    db: AsyncSession = Depends(get_db)
+):
     query = select(Datasource)
+    filters = []
 
     if q and q.strip():
         search = f"%{q.strip()}%"
-        query = query.where(
+        filters.append(
             or_(
                 Datasource.name.ilike(search),
                 Datasource.host.ilike(search),
@@ -34,8 +60,30 @@ async def list_datasources(q: str | None = None, db: AsyncSession = Depends(get_
             )
         )
 
+    if db_type and db_type.strip():
+        filters.append(Datasource.db_type == db_type.strip())
+
+    if importance_level and importance_level.strip():
+        filters.append(Datasource.importance_level == importance_level.strip())
+
+    filter_tags = normalize_tags((tags or '').replace('，', ',').split(','))
+    for tag in filter_tags:
+        filters.append(cast(Datasource.tags, Text).ilike(f'%"{tag}"%'))
+
+    if filters:
+        query = query.where(and_(*filters))
+
     result = await db.execute(query.order_by(Datasource.id.desc()))
-    return result.scalars().all()
+    datasources = result.scalars().all()
+
+    if filter_tags:
+        lowered_tags = {tag.lower() for tag in filter_tags}
+        datasources = [
+            datasource for datasource in datasources
+            if lowered_tags.issubset({(tag or '').strip().lower() for tag in (datasource.tags or []) if (tag or '').strip()})
+        ]
+
+    return datasources
 
 
 @router.post("/check-status")
@@ -90,10 +138,12 @@ async def create_datasource(data: DatasourceCreate, db: AsyncSession = Depends(g
         database=data.database,
         host_id=data.host_id,
         extra_params=data.extra_params,
+        tags=normalize_tags(data.tags),
         importance_level=data.importance_level,
         monitoring_interval=data.monitoring_interval,
         metric_source=data.metric_source,
         external_instance_id=data.external_instance_id,
+        inbound_source=data.inbound_source,
     )
     db.add(datasource)
     await db.commit()
@@ -126,6 +176,9 @@ async def update_datasource(datasource_id: int, data: DatasourceUpdate, db: Asyn
         pwd = update_data.pop("password")
         if pwd is not None:
             datasource.password_encrypted = encrypt_value(pwd)
+
+    if "tags" in update_data:
+        update_data["tags"] = normalize_tags(update_data["tags"])
 
     for key, value in update_data.items():
         setattr(datasource, key, value)

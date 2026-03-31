@@ -141,7 +141,10 @@ async def get_high_risk_tools(user=Depends(get_current_user)):
 async def list_sessions(db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     result = await db.execute(
         select(DiagnosticSession)
-        .where(DiagnosticSession.user_id == user.id)
+        .where(
+            DiagnosticSession.user_id == user.id,
+            DiagnosticSession.is_hidden == False  # Exclude system-generated hidden sessions
+        )
         .order_by(desc(DiagnosticSession.updated_at))
     )
     return result.scalars().all()

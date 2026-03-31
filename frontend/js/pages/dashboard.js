@@ -38,6 +38,18 @@ const DashboardPage = {
         return known.includes(type) ? `db-dot-${type}` : 'db-dot-other';
     },
 
+    openAlertFromDashboard(alertId) {
+        Router.navigate('alerts');
+        setTimeout(async () => {
+            try {
+                const alert = await API.getAlert(alertId);
+                await AlertsPage.showAlertDetail(alert);
+            } catch (e) {
+                Toast.error('加载告警详情失败: ' + e.message);
+            }
+        }, 0);
+    },
+
     // ── Main render ──────────────────────────────────────────
     async render() {
         const content = DOM.$('#page-content');
@@ -169,7 +181,7 @@ const DashboardPage = {
                     const ds = this._datasources.find(d => d.id === a.datasource_id);
                     const dsName = ds ? (ds.name || ds.host || `#${a.datasource_id}`) : `#${a.datasource_id}`;
                     return `
-                    <div class="alert-list-item">
+                    <div class="alert-list-item" onclick="DashboardPage.openAlertFromDashboard(${a.id})" style="cursor:pointer;">
                         <div class="alert-severity-bar ${a.severity}"></div>
                         <div class="alert-content">
                             <div class="alert-title">${a.title}</div>

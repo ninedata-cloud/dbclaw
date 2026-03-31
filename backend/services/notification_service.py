@@ -103,8 +103,8 @@ class NotificationService:
         """
         from backend.services.notification_dispatcher import _send_via_integrations
 
-        if not subscription.channel_ids:
-            logger.warning(f"Subscription {subscription.id} has no channels configured")
+        if not subscription.integration_targets:
+            logger.warning(f"Subscription {subscription.id} has no integration targets configured")
             return []
 
         return await _send_via_integrations(db, alert, subscription)
@@ -554,10 +554,6 @@ class NotificationService:
         resolved_at = alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else 'N/A'
         content_lines = [f"**告警标题：** {alert.title}"]
         content_lines.append(f"**告警类型：** {alert.alert_type}")
-        if datasource:
-            content_lines.append(f"**数据库名称：** {datasource.name}")
-            content_lines.append(f"**数据库类型：** {datasource.db_type.upper()}")
-            content_lines.append(f"**数据库地址：** {datasource.host}:{datasource.port}")
         if alert.metric_name and alert.metric_value is not None:
             recovery_val = alert.resolved_value if alert.resolved_value is not None else alert.metric_value
             content_lines.append(f"**恢复时指标：** {alert.metric_name} = {recovery_val:.2f}")
@@ -847,37 +843,32 @@ class NotificationService:
         color = severity_colors.get(severity, 'blue')
         severity_label = severity_labels.get(severity, alert.severity)
 
-        content_lines = [f"**告警标题：** {alert.title}"]
-        content_lines.append(f"**严重程度：** {severity_label}")
-        content_lines.append(f"**告警类型：** {alert.alert_type}")
-        if datasource:
-            content_lines.append(f"**数据库类型：** {datasource.db_type.upper()}")
-            content_lines.append(f"**数据库地址：** {datasource.host}:{datasource.port}")
+        elements = []
+
+        # 告警信息
+        alert_info = [
+            f"**告警标题：** {alert.title}",
+            f"**严重程度：** {severity_label}",
+            f"**告警类型：** {alert.alert_type}",
+        ]
         if alert.metric_name and alert.metric_value is not None:
-            content_lines.append(f"**指标：** {alert.metric_name} = {alert.metric_value:.2f}")
+            alert_info.append(f"**指标：** {alert.metric_name} = {alert.metric_value:.2f}")
         if alert.threshold_value is not None:
-            content_lines.append(f"**阈值：** {alert.threshold_value:.2f}")
+            alert_info.append(f"**阈值：** {alert.threshold_value:.2f}")
         if alert.trigger_reason:
-            content_lines.append(f"**触发原因：** {alert.trigger_reason}")
-        content_lines.append(f"**时间：** {alert.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
+            alert_info.append(f"**触发原因：** {alert.trigger_reason}")
+        alert_info.append(f"**触发时间：** {alert.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
+        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(alert_info)}})
 
         return {
             "msg_type": "interactive",
             "card": {
                 "config": {"wide_screen_mode": True},
                 "header": {
-                    "title": {"tag": "plain_text", "content": f"[数据库智能卫士告警] {datasource.name}"},
+                    "title": {"tag": "plain_text", "content": f"[数据库智能卫士告警] {datasource.name if datasource else '未知'}"},
                     "template": color
                 },
-                "elements": [
-                    {
-                        "tag": "div",
-                        "text": {
-                            "tag": "lark_md",
-                            "content": "\n".join(content_lines)
-                        }
-                    }
-                ]
+                "elements": elements
             }
         }
 

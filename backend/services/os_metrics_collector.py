@@ -174,8 +174,8 @@ class OSMetricsCollector:
                 parts = output.split()
                 if len(parts) == 2:
                     return {
-                        'network_rx_bytes': int(parts[0]),
-                        'network_tx_bytes': int(parts[1])
+                        'host_network_rx_bytes': int(parts[0]),
+                        'host_network_tx_bytes': int(parts[1])
                     }
         except Exception:
             pass

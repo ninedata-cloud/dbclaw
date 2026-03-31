@@ -152,6 +152,7 @@ const API = {
     getHighRiskTools() { return this.get('/api/chat/high-risk-tools'); },
     resolveChatApproval(sessionId, approvalId, data) { return this.post(`/api/chat/sessions/${sessionId}/approvals/${approvalId}/resolve`, data); },
 
+
     // Query endpoints
     executeQuery(data, options = {}) {
         return this.request('/api/query/execute', {
@@ -278,12 +279,31 @@ const API = {
         return this.get(`/api/alerts${queryString}`);
     },
     getAlert(id) { return this.get(`/api/alerts/${id}`); },
+    getAlertContext(id) { return this.get(`/api/alerts/${id}/context`); },
     acknowledgeAlert(id, userId) { return this.post(`/api/alerts/${id}/acknowledge`, { user_id: userId }); },
     resolveAlert(id) { return this.post(`/api/alerts/${id}/resolve`, {}); },
     getSubscriptions(userId) { return this.get(`/api/alerts/subscriptions/list?user_id=${userId}`); },
     createSubscription(data) { return this.post('/api/alerts/subscriptions', data); },
     updateSubscription(id, data) { return this.put(`/api/alerts/subscriptions/${id}`, data); },
     deleteSubscription(id) { return this.delete(`/api/alerts/subscriptions/${id}`); },
-    testNotification(subscriptionId) { return this.post(`/api/alerts/subscriptions/${subscriptionId}/test`, {}); }
+    testNotification(subscriptionId) { return this.post(`/api/alerts/subscriptions/${subscriptionId}/test`, {}); },
 
+    // P1 Action Runs (under inspections router for now)
+    getReportActions(reportId) { return this.get(`/api/inspections/reports/${reportId}/actions`); },
+    createActionRun(data) { return this.post('/api/inspections/actions/runs', data); },
+    getActionRun(runId) { return this.get(`/api/inspections/actions/runs/${runId}`); },
+    listActionRuns(params = null) {
+        const qs = params ? `?${new URLSearchParams(params).toString()}` : '';
+        return this.get(`/api/inspections/actions/runs${qs}`);
+    },
+    approveActionRun(runId, comment = '') { return this.post(`/api/inspections/actions/runs/${runId}/approve`, { action: 'approved', comment }); },
+    rejectActionRun(runId, comment = '') { return this.post(`/api/inspections/actions/runs/${runId}/reject`, { action: 'rejected', comment }); },
+    verifyActionRun(runId) { return this.post(`/api/inspections/actions/runs/${runId}/verify`, {}); },
+
+    // Weixin Bot
+    getWeixinBotBindings() { return this.get('/api/integration-bots'); },
+    updateWeixinBotBinding(code, data) { return this.put(`/api/integration-bots/${code}`, data); },
+    getWeixinBotStatus() { return this.get('/api/weixin/bot/binding/status'); },
+    createWeixinLoginQrcode() { return this.post('/api/weixin/bot/login/qrcode', {}); },
+    pollWeixinLoginStatus(qrcode) { return this.post('/api/weixin/bot/login/status', { qrcode }); }
 };
