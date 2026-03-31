@@ -18,7 +18,9 @@ const Router = {
 
     async _handleRoute() {
         const hash = window.location.hash.slice(1) || 'dashboard';
-        const [page, ...params] = hash.split('/');
+        const [pathPart, queryString = ''] = hash.split('?');
+        const [page, ...params] = pathPart.split('/');
+        const routeParam = queryString || params.join('/');
 
         const currentUser = Store.get('currentUser');
         if (page !== 'login' && !currentUser) {
@@ -36,7 +38,7 @@ const Router = {
 
         const handler = this.routes[page];
         if (handler) {
-            const cleanup = await handler(params.join('/'));
+            const cleanup = await handler(routeParam);
             if (typeof cleanup === 'function') {
                 this.currentCleanup = cleanup;
             }

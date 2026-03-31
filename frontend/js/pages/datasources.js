@@ -44,6 +44,7 @@ const DatasourcesPage = {
         const filtersContainer = DOM.el('div', { className: 'dashboard-filters' });
         filtersContainer.innerHTML = `
             <input type="text" id="filterName" class="filter-input" placeholder="搜索名称/IP/主机名/数据库名...">
+            <input type="text" id="filterTags" class="filter-input" placeholder="标签筛选（逗号分隔，可组合）">
             <select id="filterType" class="filter-select">
                 <option value="">所有类型</option>
                 <option value="mysql">MySQL</option>
@@ -77,24 +78,36 @@ const DatasourcesPage = {
 
     _setupFilterListeners() {
         DOM.$('#filterName')?.addEventListener('input', () => this._applyFilters());
+        DOM.$('#filterTags')?.addEventListener('input', () => this._applyFilters());
         DOM.$('#filterType')?.addEventListener('change', () => this._applyFilters());
         DOM.$('#filter重要性')?.addEventListener('change', () => this._applyFilters());
     },
 
     _applyFilters() {
-        const nameFilter = DOM.$('#filterName')?.value.toLowerCase().trim() || '';
-        const typeFilter = DOM.$('#filterType')?.value || '';
-        const importanceFilter = DOM.$('#filter重要性')?.value || '';
+        clearTimeout(this._filterDebounce);
+        this._filterDebounce = setTimeout(() => this._reloadWithFilters(), 250);
+    },
 
-        this.filteredDatasources = this.allDatasources.filter(ds => {
-            const matchName = !nameFilter || [ds.name, ds.host, ds.database]
-                .some(value => (value || '').toLowerCase().includes(nameFilter));
-            const matchType = !typeFilter || ds.db_type === typeFilter;
-            const match重要性 = !importanceFilter || ds.importance_level === importanceFilter;
-            return matchName && matchType && match重要性;
-        });
+    async _reloadWithFilters() {
+        const q = DOM.$('#filterName')?.value.trim() || '';
+        const tagsRaw = DOM.$('#filterTags')?.value.trim() || '';
+        const db_type = DOM.$('#filterType')?.value || '';
+        const importance_level = DOM.$('#filter重要性')?.value || '';
 
-        this._renderTable();
+        const params = {};
+        if (q) params.q = q;
+        if (tagsRaw) params.tags = tagsRaw;
+        if (db_type) params.db_type = db_type;
+        if (importance_level) params.importance_level = importance_level;
+
+        try {
+            this.allDatasources = await API.getDatasources(params);
+            this.filteredDatasources = [...this.allDatasources];
+            Store.set('datasources', this.allDatasources);
+            this._renderTable();
+        } catch (err) {
+            Toast.error('筛选失败: ' + err.message);
+        }
     },
 
     _getStatusCell(conn, statusConfig) {
@@ -106,6 +119,22 @@ const DatasourcesPage = {
                 <span style="padding:2px 8px;border-radius:12px;font-size:12px;background:${config.bg};color:${config.color};font-weight:500;">
                     ${config.label}
                 </span>
+            </div>
+        `;
+    },
+
+    _renderTags(tags = []) {
+        if (!tags.length) {
+            return '<span style="color:var(--text-tertiary);">-</span>';
+        }
+
+        return `
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                ${tags.map(tag => `
+                    <span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:var(--bg-tertiary);color:var(--text-secondary);font-size:12px;line-height:1.5;">
+                        ${tag}
+                    </span>
+                `).join('')}
             </div>
         `;
     },
@@ -134,6 +163,7 @@ const DatasourcesPage = {
                     <tr>
                         <th>名称</th>
                         <th>类型</th>
+                        <th>标签</th>
                         <th>连接状态</th>
                         <th>主机</th>
                         <th>数据库</th>
@@ -149,6 +179,7 @@ const DatasourcesPage = {
                             <tr>
                                 <td><strong>${conn.name}</strong></td>
                                 <td><span class="badge badge-info">${conn.db_type}</span></td>
+                                <td>${this._renderTags(conn.tags || [])}</td>
                                 <td>
                                     ${this._getStatusCell(conn, statusConfig)}
                                 </td>

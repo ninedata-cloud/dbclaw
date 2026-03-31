@@ -13,8 +13,8 @@ const ChatWidget = {
         const panel = DOM.el('div', {
             id: 'tool-execution-panel',
             style: {
-                width: '360px',
-                minWidth: '360px',
+                width: '40px',
+                minWidth: '40px',
                 flexShrink: '0',
                 height: '100%',
                 borderLeft: '1px solid var(--border-color)',
@@ -35,27 +35,27 @@ const ChatWidget = {
                 display: 'flex',
                 gap: '8px',
                 alignItems: 'center',
-                justifyContent: 'space-between'
+                justifyContent: 'center'
             }
         });
 
         const title = DOM.el('div', {
             id: 'tool-panel-title',
-            style: { fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' },
+            style: { fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)', display: 'none' },
             textContent: 'Skill 调用记录'
         });
 
         const toggleBtn = DOM.el('button', {
             className: 'btn-icon-only',
             id: 'toggle-tool-panel-btn',
-            innerHTML: '<i data-lucide="panel-right-close"></i>',
-            title: '隐藏 skill 调用记录',
+            innerHTML: '<i data-lucide="panel-right-open"></i>',
+            title: '显示 skill 调用记录',
             onClick: () => this.toggleToolPanel()
         });
 
         const content = DOM.el('div', {
             id: 'tool-panel-content',
-            style: { flex: '1', overflowY: 'auto', padding: '16px' }
+            style: { flex: '1', overflowY: 'auto', padding: '8px', display: 'none' }
         });
 
         header.appendChild(title);
@@ -247,6 +247,15 @@ const ChatWidget = {
         this.updateAttachmentPreview();
     },
 
+    setDraft(text) {
+        const input = DOM.$('#chat-input');
+        if (!input) return;
+        input.value = text || '';
+        input.style.height = 'auto';
+        input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+        input.focus();
+    },
+
     addUserMessage(text, attachments = []) {
         const messages = DOM.$('#chat-messages');
         if (!messages) return;
@@ -381,7 +390,6 @@ const ChatWidget = {
 
     _ensureMaps() {
         if (!this.pendingTools) this.pendingTools = new Map();
-        if (!this.pendingApprovals) this.pendingApprovals = new Map();
     },
 
     _appendSystemCard(cardElement) {
@@ -464,29 +472,17 @@ const ChatWidget = {
 
     addToolCall(toolName, args, toolCallId = null) {
         this._ensureMaps();
-        const existingApprovalCard = toolCallId
-            ? DOM.$(`[data-tool-call-id="${toolCallId}"]`)
-            : null;
-
-        if (existingApprovalCard) {
-            const toolId = existingApprovalCard.id;
-            const toolMsg = this._buildToolCard(toolId, toolName, args, '执行中', 'running');
-            toolMsg.setAttribute('data-tool-call-id', toolCallId);
-            existingApprovalCard.replaceWith(toolMsg);
-            DOM.createIcons();
-            this._scrollToolPanelToBottom();
-            this.pendingTools.set(toolCallId || toolName, toolId);
-            return;
-        }
-
         const toolId = `tool-${toolCallId || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`}`;
         const toolMsg = this._buildToolCard(toolId, toolName, args, '执行中', 'running');
         if (toolCallId) toolMsg.setAttribute('data-tool-call-id', toolCallId);
         this._appendSystemCard(toolMsg);
         this.pendingTools.set(toolCallId || toolName, toolId);
+
+        // Also add inline step in chat stream
+        this.addInlineToolStep(toolName, '执行中', toolCallId);
     },
 
-    addToolResult(toolName, result, executionTimeMs = null, toolCallId = null) {
+    addToolResult(toolName, result, executionTimeMs = null, toolCallId = null, metadata = {}) {
         this._ensureMaps();
         const toolId = this.pendingTools.get(toolCallId || toolName);
         if (!toolId) return;
@@ -513,14 +509,20 @@ const ChatWidget = {
         const status = toolMsg.querySelector('.chat-tool-status');
         if (status) {
             status.className = `chat-tool-status ${isError ? 'error' : 'success'}`;
-            status.textContent = `${isError ? '失败' : '完成'}${executionTimeMs !== null ? ` · ${executionTimeMs}ms` : ''}`;
+            const phaseLabel = metadata.phase ? ` · ${metadata.phase}` : '';
+            status.textContent = `${isError ? '失败' : '完成'}${phaseLabel}${executionTimeMs !== null ? ` · ${executionTimeMs}ms` : ''}`;
         }
 
         const resultSection = toolMsg.querySelector(`#${toolId}-result`);
         if (resultSection) {
             resultSection.style.display = 'block';
             const resultContent = resultSection.querySelector('.chat-tool-content');
-            if (resultContent) resultContent.textContent = resultStr;
+            const headerLines = [];
+            if (metadata.action_title) headerLines.push(`动作: ${metadata.action_title}`);
+            if (metadata.action_run_id) headerLines.push(`action_run_id: ${metadata.action_run_id}`);
+            if (metadata.skill_execution_id) headerLines.push(`skill_execution_id: ${metadata.skill_execution_id}`);
+            const decorated = headerLines.length ? `${headerLines.join('\n')}\n\n${resultStr}` : resultStr;
+            if (resultContent) resultContent.textContent = decorated;
             if (isTruncated && !resultSection.querySelector('.chat-tool-truncate')) {
                 const notice = DOM.el('div', { className: 'chat-tool-truncate', textContent: '结果过长，当前仅展示前 2000 个字符' });
                 resultSection.appendChild(notice);
@@ -530,73 +532,64 @@ const ChatWidget = {
         this.pendingTools.delete(toolCallId || toolName);
         DOM.createIcons();
         this._scrollToolPanelToBottom();
+
+        // Also update inline step
+        this.updateInlineToolStep(toolCallId, isError ? '失败' : '完成', result, executionTimeMs, metadata);
     },
 
-    addApprovalRequest(data, options = {}) {
-        this._ensureMaps();
-        const { showModal = true } = options;
-        const approvalId = data.approval_id;
-        const cardId = `approval-${approvalId}`;
-        const existingCard = DOM.$(`#${cardId}`);
-        if (existingCard) existingCard.remove();
-        const card = DOM.el('div', {
-            className: 'chat-message assistant chat-system-message',
-            id: cardId,
+    addInlineToolStep(toolName, status, toolCallId = null) {
+        const messages = DOM.$('#chat-messages');
+        if (!messages) return;
+
+        // Remove any existing inline step for this tool
+        const existing = toolCallId ? DOM.$(`[data-inline-tool-id="${toolCallId}"]`) : null;
+        if (existing) existing.remove();
+
+        const step = DOM.el('div', {
+            className: 'chat-message assistant inline-tool-step',
+            'data-inline-tool-id': toolCallId || toolName,
+            style: { padding: '8px 12px', borderLeft: '3px solid var(--accent-blue)', margin: '4px 0 4px 48px' }
         });
-        if (data.tool_call_id) card.setAttribute('data-tool-call-id', data.tool_call_id);
-        card.innerHTML = `
-            <div class="chat-system-body">
-                <div class="chat-tool-call chat-approval-card">
-                    <div class="chat-tool-header" onclick="ChatWidget.toggleToolBody('${cardId}')" aria-expanded="false">
-                        <div class="chat-tool-icon"><i data-lucide="shield-alert"></i></div>
-                        <div class="chat-tool-main">
-                            <span class="chat-tool-name">${this._escapeHtml(data.tool_name)}</span>
-                            ${data.risk_reason ? `<div class="chat-approval-risk">${this._escapeHtml(data.risk_reason)}</div>` : ''}
-                        </div>
-                        <span class="chat-tool-status pending">待确认</span>
-                        <i data-lucide="chevron-right" class="chat-tool-expand"></i>
-                    </div>
-                    <div class="chat-tool-body" style="display:none;">
-                        <div class="chat-tool-section">
-                            <div class="chat-tool-section-title"><span>计划</span></div>
-                            <div class="chat-tool-content">${this._escapeHtml(data.plan_markdown || '')}</div>
-                        </div>
-                        <div class="chat-tool-section">
-                            <div class="chat-tool-section-title"><span>参数</span></div>
-                            <div class="chat-tool-content">${this._escapeHtml(this._stringifyData(data.tool_args || {}))}</div>
-                        </div>
-                        <div class="chat-approval-actions">
-                            <button class="btn btn-danger" onclick="ChatWidget.handleApprovalAction('${approvalId}', 'approved')">确认执行</button>
-                            <button class="btn btn-secondary" onclick="ChatWidget.handleApprovalAction('${approvalId}', 'rejected')">取消</button>
-                        </div>
-                    </div>
-                </div>
+
+        step.innerHTML = `
+            <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary);">
+                <i data-lucide="wrench" style="width:14px;height:14px;color:var(--accent-blue);"></i>
+                <span style="font-weight:500;color:var(--text-primary);">正在执行 ${toolName}...</span>
             </div>
         `;
-        this.pendingApprovals.set(approvalId, cardId);
-        this._appendSystemCard(card);
-        if (showModal && typeof this.onApprovalRequest === 'function') this.onApprovalRequest(data);
+        messages.appendChild(step);
+        DOM.createIcons();
+        this._scrollToBottom();
     },
 
-    updateApprovalStatus(approvalId, action) {
-        this._ensureMaps();
-        const cardId = this.pendingApprovals.get(approvalId) || `approval-${approvalId}`;
-        const card = DOM.$(`#${cardId}`);
-        if (!card) return;
-        const status = card.querySelector('.chat-tool-status');
-        if (status) {
-            status.className = `chat-tool-status ${action === 'approved' ? 'success' : 'error'}`;
-            status.textContent = action === 'approved' ? '已确认' : '已取消';
-        }
-        const actions = card.querySelector('.chat-approval-actions');
-        if (actions) actions.style.display = 'none';
-        this.pendingApprovals.delete(approvalId);
-    },
+    updateInlineToolStep(toolCallId, status, result, executionTimeMs = null, metadata = {}) {
+        const step = DOM.$(`[data-inline-tool-id="${toolCallId || toolName}"]`);
+        if (!step) return;
 
-    async handleApprovalAction(approvalId, action) {
-        if (typeof this.onApprovalAction === 'function') {
-            await this.onApprovalAction(approvalId, action);
-        }
+        const isError = result && ((typeof result === 'object' && result.error) || (typeof result === 'string' && result.toLowerCase().includes('error')));
+        const statusColor = isError ? 'var(--accent-red)' : 'var(--accent-green)';
+        const statusIcon = isError ? 'x-circle' : 'check-circle';
+        const statusText = status;
+        const timeText = executionTimeMs !== null ? ` (${executionTimeMs}ms)` : '';
+
+        step.innerHTML = `
+            <div style="display:flex;align-items:center;gap:8px;font-size:13px;">
+                <i data-lucide="${statusIcon}" style="width:14px;height:14px;color:${statusColor};"></i>
+                <span style="font-weight:500;color:var(--text-primary);">${statusText}${timeText}</span>
+                <span style="color:var(--text-muted);">·</span>
+                <span style="color:${statusColor};">${toolCallId ? '已完成' : '完成'}</span>
+            </div>
+        `;
+        DOM.createIcons();
+        this._scrollToBottom();
+
+        // Auto-hide after 3 seconds
+        setTimeout(() => {
+            if (step && step.parentNode) {
+                step.style.transition = 'opacity 0.3s';
+                step.style.opacity = '0.4';
+            }
+        }, 3000);
     },
 
     toggleToolBody(toolId) {
@@ -646,7 +639,6 @@ const ChatWidget = {
         container.innerHTML = '';
         this.resetToolPanel();
         this.pendingTools = new Map();
-        this.pendingApprovals = new Map();
 
         for (const msg of messages) {
             if (msg.role === 'user') {
@@ -682,23 +674,20 @@ const ChatWidget = {
             } else if (msg.role === 'tool_result') {
                 try {
                     const data = JSON.parse(msg.content);
-                    this.addToolResult(data.tool_name, data.result, data.execution_time_ms, data.tool_call_id || msg.tool_call_id || null);
+                    this.addToolResult(
+                        data.tool_name,
+                        data.result,
+                        data.execution_time_ms,
+                        data.tool_call_id || msg.tool_call_id || null,
+                        {
+                            skill_execution_id: data.skill_execution_id,
+                            action_run_id: data.action_run_id,
+                            action_title: data.action_title,
+                            phase: data.phase,
+                        }
+                    );
                 } catch (e) {
                     console.error('Failed to parse tool_result message:', e);
-                }
-            } else if (msg.role === 'approval_request') {
-                try {
-                    const data = JSON.parse(msg.content);
-                    this.addApprovalRequest(data, { showModal: false });
-                } catch (e) {
-                    console.error('Failed to parse approval_request message:', e);
-                }
-            } else if (msg.role === 'approval_response') {
-                try {
-                    const data = JSON.parse(msg.content);
-                    this.updateApprovalStatus(data.approval_id, data.action);
-                } catch (e) {
-                    console.error('Failed to parse approval_response message:', e);
                 }
             }
         }

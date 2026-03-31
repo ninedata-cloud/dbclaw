@@ -9,6 +9,9 @@ class AlertDeliveryLog(Base):
     id = Column(Integer, primary_key=True, index=True)
     alert_id = Column(Integer, nullable=False, index=True)
     subscription_id = Column(Integer, nullable=False, index=True)
+    integration_id = Column(Integer, nullable=True, index=True)
+    target_id = Column(String(100), nullable=True, index=True)
+    target_name = Column(String(255), nullable=True)
     channel = Column(String(100), nullable=False)  # integration:builtin_email, integration:builtin_dingtalk, etc.
     recipient = Column(String(255), nullable=False)
     status = Column(String(20), nullable=False, default="pending", index=True)  # pending, sent, failed

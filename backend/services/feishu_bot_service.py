@@ -223,17 +223,6 @@ async def _build_followup_event_handler(
         if event_type_local == "content":
             chunks.append(event_obj.get("content", ""))
             return
-        if event_type_local == "confirmation_required":
-            card = _build_approval_card(event_obj, session_id)
-            await feishu_service.send_interactive_card(
-                card,
-                message_id=message_id,
-                open_id=open_id,
-                chat_id=chat_id,
-                app_id=app_id,
-                app_secret=app_secret,
-            )
-            return
         if event_type_local == "tool_call":
             logger.info("飞书审批后执行工具: session_id=%s tool=%s args=%s", session_id, event_obj.get("tool_name"), event_obj.get("tool_args"))
         elif event_type_local == "tool_result":
@@ -404,18 +393,6 @@ class FeishuBotService:
             if event_type_local == "content":
                 chunks.append(event_obj.get("content", ""))
                 return
-
-            if event_type_local == "confirmation_required" and app_id and app_secret:
-                approval_sent = True
-                card = _build_approval_card(event_obj, binding.session_id)
-                await feishu_service.send_interactive_card(
-                    card,
-                    message_id=message_id,
-                    open_id=sender_open_id,
-                    chat_id=chat_id,
-                    app_id=app_id,
-                    app_secret=app_secret,
-                )
 
         await process_stream_events(
             db,

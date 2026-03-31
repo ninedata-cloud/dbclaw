@@ -3,6 +3,8 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from datetime import datetime
+import hashlib
+import logging
 
 from backend.database import get_db
 from backend.services.alert_service import AlertService
@@ -11,9 +13,15 @@ from backend.services.notification_service import NotificationService
 from backend.services.public_share_service import PublicShareService
 from backend.config import get_settings
 from backend.models.report import Report
+from backend.models.datasource import Datasource
+from backend.models.inspection_trigger import InspectionTrigger
+from backend.services.action_run_service import get_report_actions_with_runs
 from sqlalchemy import select
 from backend.schemas.alert import (
     AlertMessageResponse,
+    AlertDiagnosisContext,
+    AlertDatasourceInfo,
+    AlertLinkedReport,
     AlertQueryParams,
     AlertAcknowledgeRequest,
     AlertResolveRequest,
@@ -27,6 +35,132 @@ from backend.schemas.alert import (
 )
 
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
+logger = logging.getLogger(__name__)
+
+
+def _extract_recommended_action(text: Optional[str]) -> Optional[str]:
+    if not text:
+        return None
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        normalized = line.lstrip("-•*1234567890. ")
+        if any(keyword in normalized for keyword in ["建议", "处置", "操作", "下一步", "优化"]):
+            return normalized[:220]
+    return None
+
+
+async def _build_alert_response(db: AsyncSession, alert) -> AlertMessageResponse:
+    datasource = await db.get(Datasource, alert.datasource_id)
+
+    report_result = await db.execute(
+        select(Report)
+        .where(Report.alert_id == alert.id)
+        .order_by(Report.created_at.desc())
+        .limit(1)
+    )
+    report = report_result.scalar_one_or_none()
+
+    if not report and alert.event_id:
+        event_alerts_result = await db.execute(
+            select(Report)
+            .where(Report.datasource_id == alert.datasource_id, Report.trigger_type.in_(["anomaly", "connection_failure"]))
+            .order_by(Report.created_at.desc())
+            .limit(1)
+        )
+        report = event_alerts_result.scalar_one_or_none()
+
+    trigger_result = await db.execute(
+        select(InspectionTrigger)
+        .where(InspectionTrigger.alert_id == alert.id)
+        .order_by(InspectionTrigger.triggered_at.desc())
+        .limit(1)
+    )
+    trigger = trigger_result.scalar_one_or_none()
+
+    # Fetch root_cause from alert event if available
+    root_cause = None
+    if alert.event_id:
+        from backend.models.alert_event import AlertEvent
+        event_result = await db.execute(select(AlertEvent).where(AlertEvent.id == alert.event_id))
+        event_obj = event_result.scalar_one_or_none()
+        if event_obj:
+            root_cause = event_obj.root_cause
+            # Use event root_cause as diagnosis_summary if no report summary
+            if not diagnosis_summary and event_obj.ai_diagnosis_summary:
+                diagnosis_summary = event_obj.ai_diagnosis_summary
+
+    case_summary = alert.trigger_reason or alert.content.split("\n")[0] if alert.content else None
+    if not diagnosis_summary:
+        diagnosis_summary = report.summary if report else None
+    recommended_action = _extract_recommended_action(report.content_md if report else None)
+    diagnosis_entry_hash = None
+
+    linked_report = None
+    recommended_actions_preview = []
+    latest_action_run = None
+    if report:
+        linked_report = AlertLinkedReport(
+            report_id=report.id,
+            title=report.title,
+            status=report.status,
+            trigger_type=report.trigger_type,
+            created_at=report.created_at,
+            summary=report.summary,
+        )
+        diagnosis_entry_hash = hashlib.md5(f"alert:{alert.id}:report:{report.id}".encode("utf-8")).hexdigest()[:12]
+
+        try:
+            report_actions = await get_report_actions_with_runs(db, report)
+            recommended_actions_preview = [
+                {
+                    "id": action.get("id"),
+                    "title": action.get("title"),
+                    "summary": action.get("summary"),
+                    "risk_level": action.get("risk_level") or "safe",
+                    "latest_run": action.get("latest_run"),
+                }
+                for action in report_actions[:3]
+            ]
+            latest_candidates = [item.get("latest_run") for item in report_actions if item.get("latest_run")]
+            latest_action_run = latest_candidates[0] if latest_candidates else None
+        except Exception:
+            logger.exception("Failed to build alert action preview for alert_id=%s report_id=%s", alert.id, report.id)
+            recommended_actions_preview = []
+            latest_action_run = None
+
+    # Build datasource info if datasource exists
+    datasource_info = None
+    if datasource:
+        datasource_info = AlertDatasourceInfo(
+            id=datasource.id,
+            name=datasource.name,
+            db_type=datasource.db_type,
+            host=datasource.host,
+            port=datasource.port,
+            database=datasource.database,
+            importance_level=datasource.importance_level or 'production',
+            monitoring_interval=datasource.monitoring_interval or 60,
+            remark=datasource.remark,
+            connection_status=datasource.connection_status or 'unknown',
+            connection_error=datasource.connection_error,
+        )
+
+    payload = AlertMessageResponse.model_validate(alert)
+    payload.diagnosis_context = AlertDiagnosisContext(
+        datasource_name=datasource.name if datasource else None,
+        datasource_type=datasource.db_type if datasource else None,
+        datasource_info=datasource_info,
+        case_summary=case_summary,
+        diagnosis_summary=diagnosis_summary,
+        root_cause=root_cause,
+        recommended_action=recommended_action,
+        recommended_actions_preview=recommended_actions_preview,
+        latest_action_run=latest_action_run,
+        latest_trigger_type=(trigger.trigger_type if trigger else (report.trigger_type if report else None)),
+        linked_report=linked_report,
+        diagnosis_entry_hash=diagnosis_entry_hash,
+    )
+    return payload
 
 
 @router.get("", response_model=dict)
@@ -64,7 +198,7 @@ async def list_alerts(
     alerts, total = await AlertService.get_alerts(db, params)
 
     return {
-        "alerts": [AlertMessageResponse.model_validate(alert) for alert in alerts],
+        "alerts": [await _build_alert_response(db, alert) for alert in alerts],
         "total": total,
         "limit": limit,
         "offset": offset
@@ -129,7 +263,7 @@ async def get_event_alerts(
     )
 
     return {
-        "alerts": [AlertMessageResponse.model_validate(alert) for alert in alerts],
+        "alerts": [await _build_alert_response(db, alert) for alert in alerts],
         "total": total,
         "limit": limit,
         "offset": offset
@@ -175,7 +309,7 @@ async def get_alert(
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
 
-    return AlertMessageResponse.model_validate(alert)
+    return await _build_alert_response(db, alert)
 
 
 @router.get("/public/{alert_id}")
@@ -193,7 +327,7 @@ async def get_public_alert(
     )
     report = result.scalar_one_or_none()
 
-    payload = AlertMessageResponse.model_validate(alert).model_dump()
+    payload = (await _build_alert_response(db, alert)).model_dump()
     payload["linked_report"] = None
     if report:
         report_token = PublicShareService.create_report_share_token(report.id, get_settings().public_share_expire_minutes)
@@ -208,24 +342,135 @@ async def get_public_alert(
     return payload
 
 
+@router.get("/{alert_id}/context", response_model=AlertDiagnosisContext)
+async def get_alert_context(
+    alert_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get compact diagnosis context for P0 alert->report->chat loop"""
+    alert = await AlertService.get_alert_by_id(db, alert_id)
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+
+    response = await _build_alert_response(db, alert)
+    return response.diagnosis_context or AlertDiagnosisContext()
+
+
 @router.get("/public/{alert_id}/page", response_class=HTMLResponse)
 async def public_alert_page(
     alert_id: int,
     token: str = Query(...),
     db: AsyncSession = Depends(get_db)
 ):
-    """Render public alert detail page"""
+    """Render public alert detail page with datasource config and AI diagnosis"""
     PublicShareService.verify_alert_share_token(token, alert_id)
     alert = await PublicShareService.get_alert_or_404(db, alert_id)
 
+    # Fetch datasource info
+    datasource = await db.get(Datasource, alert.datasource_id)
+
+    # Fetch alert event for AI diagnosis
+    alert_event = None
+    ai_summary = None
+    ai_root_cause = None
+    ai_actions = None
+    if alert.event_id:
+        from backend.models.alert_event import AlertEvent
+        result = await db.execute(select(AlertEvent).where(AlertEvent.id == alert.event_id))
+        alert_event = result.scalar_one_or_none()
+        if alert_event:
+            ai_summary = alert_event.ai_diagnosis_summary
+            ai_root_cause = alert_event.root_cause
+            ai_actions = alert_event.recommended_actions
+
+    # Fetch linked report
     result = await db.execute(
         select(Report).where(Report.alert_id == alert_id).order_by(Report.created_at.desc()).limit(1)
     )
     report = result.scalar_one_or_none()
-    report_link_html = ""
+
+    # Escape HTML
+    def esc(s):
+        if s is None:
+            return ''
+        return str(s).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
+
+    # Severity badge
+    sev = alert.severity or ''
+    sev_color = {'critical': '#dc2626', 'high': '#ea580c', 'medium': '#ca8a04', 'low': '#16a34a'}.get(sev.lower(), '#6b7280')
+    sev_label = {'critical': '严重', 'high': '高', 'medium': '中', 'low': '低'}.get(sev.lower(), sev)
+    severity_badge = f'<span class="sev-badge" style="background:{sev_color};color:#fff;padding:2px 10px;border-radius:4px;font-size:12px;font-weight:600;">{esc(sev_label)}</span>'
+
+    # Status label
+    status_label = {'active': '活跃', 'acknowledged': '已确认', 'resolved': '已解决'}.get(alert.status or '', alert.status or '-')
+    status_color = {'active': '#dc2626', 'acknowledged': '#ea580c', 'resolved': '#16a34a'}.get(alert.status or '', '#6b7280')
+
+    # Alert type label
+    alert_type_label = {'threshold_violation': '超过阈值', 'custom_expression': '自定义表达式', 'system_error': '系统错误'}.get(alert.alert_type or '', alert.alert_type or '-')
+
+    # Datasource info
+    ds_name = esc(datasource.name if datasource else '-')
+    ds_type = esc(datasource.db_type.upper() if datasource and datasource.db_type else '-')
+    ds_host = esc(datasource.host if datasource else '-')
+    ds_port = datasource.port if datasource else '-'
+    ds_db = esc(datasource.database if datasource else '-')
+    ds_level = datasource.importance_level if datasource else 'production'
+    ds_level_label = {'core': '核心', 'production': '生产', 'development': '开发', 'temporary': '临时'}.get(ds_level, ds_level)
+    ds_level_color = {'core': '#dc2626', 'production': '#2563eb', 'development': '#7c3aed', 'temporary': '#6b7280'}.get(ds_level, '#6b7280')
+    ds_interval = datasource.monitoring_interval if datasource else 60
+    ds_remark = esc(datasource.remark if datasource and datasource.remark else '')
+    ds_status = datasource.connection_status if datasource else 'unknown'
+    ds_status_label = {'normal': '正常', 'warning': '警告', 'failed': '失败', 'unknown': '未知'}.get(ds_status, ds_status)
+    ds_status_color = {'normal': '#16a34a', 'warning': '#ca8a04', 'failed': '#dc2626', 'unknown': '#6b7280'}.get(ds_status, '#6b7280')
+
+    # AI diagnosis sections
+    has_diagnosis = ai_root_cause or ai_actions
+    ai_diagnosis_html = ''
+    if has_diagnosis:
+        ai_diagnosis_html = f'''
+        <div class="section ai-section">
+            <div class="section-header">
+                <span class="section-icon">🧠</span>
+                <span class="section-title">AI 诊断分析</span>
+            </div>
+            <div class="section-body">
+                {"<div class=\"diag-block root-cause\"><div class=\"diag-label\">🔍 根本原因</div><div class=\"diag-content\">" + esc(ai_root_cause) + "</div></div>" if ai_root_cause else ""}
+                {"<div class=\"diag-block actions\"><div class=\"diag-label\">🛠 建议措施</div><div class=\"diag-content\">" + esc(ai_actions) + "</div></div>" if ai_actions else ""}
+            </div>
+        </div>'''
+
+    # Report link
+    report_html = ''
     if report:
         report_token = PublicShareService.create_report_share_token(report.id, get_settings().public_share_expire_minutes)
-        report_link_html = f'<a class="button secondary" href="/api/inspections/reports/public/{report.id}/page?token={report_token}">查看诊断报告</a>'
+        report_status_label = {'pending': '待处理', 'running': '生成中', 'completed': '已完成', 'failed': '失败'}.get(report.status or '', report.status or '-')
+        report_html = f'''
+        <div class="section report-section">
+            <div class="section-header">
+                <span class="section-icon">📋</span>
+                <span class="section-title">关联诊断报告</span>
+            </div>
+            <div class="section-body">
+                <div class="report-info">
+                    <div class="report-meta">
+                        <span class="report-time">{report.created_at}</span>
+                        <span class="report-title">{esc(report.title or f"报告 #{report.id}")}</span>
+                        <span class="report-status">{report_status_label}</span>
+                    </div>
+                    <a class="btn btn-secondary" href="/api/inspections/reports/public/{report.id}/page?token={report_token}">查看报告</a>
+                </div>
+            </div>
+        </div>'''
+
+    # Render markdown content
+    content_md = alert.content or ''
+    try:
+        from markdown_it import MarkdownIt
+        md = MarkdownIt("commonmark", {"breaks": True, "html": True})
+        md.enable('table')
+        content_html = md.render(content_md)
+    except Exception:
+        content_html = f"<pre>{esc(content_md)}</pre>"
 
     return f"""
     <!DOCTYPE html>
@@ -233,36 +478,185 @@ async def public_alert_page(
     <head>
         <meta charset=\"UTF-8\">
         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-        <title>告警详情</title>
+        <title>{esc(alert.title)} - 告警详情</title>
+        <link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/github-markdown@2.10.0/github-markdown.min.css\">
         <style>
-            body {{ font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#f5f7fa; margin:0; padding:24px; color:#1f2937; }}
-            .card {{ max-width:960px; margin:0 auto; background:#fff; border-radius:12px; padding:24px; box-shadow:0 8px 24px rgba(0,0,0,.08); }}
-            .grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; margin:20px 0; }}
+            :root {{
+                --bg: #f5f7fa;
+                --card-bg: #fff;
+                --border: #e5e7eb;
+                --text-primary: #1f2937;
+                --text-secondary: #6b7280;
+                --accent-blue: #2563eb;
+                --accent-green: #16a34a;
+                --accent-orange: #ea580c;
+                --accent-red: #dc2626;
+                --accent-yellow: #ca8a04;
+            }}
+            * {{ box-sizing: border-box; }}
+            body {{ font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--bg); margin:0; padding:24px; color:var(--text-primary); }}
+            .container {{ max-width:1000px; margin:0 auto; }}
+            .page-title {{ font-size:20px; font-weight:700; margin-bottom:20px; color:var(--text-primary); }}
+            .section {{ background:var(--card-bg); border-radius:12px; padding:20px; margin-bottom:16px; box-shadow:0 2px 8px rgba(0,0,0,.06); border:1px solid var(--border); }}
+            .section-header {{ display:flex; align-items:center; gap:10px; margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--border); }}
+            .section-icon {{ font-size:18px; }}
+            .section-title {{ font-size:15px; font-weight:600; color:var(--text-primary); }}
+            .section-body {{ display:flex; flex-direction:column; gap:12px; }}
+            .grid-2 {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; }}
+            .grid-3 {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; }}
             .field {{ background:#f9fafb; border-radius:8px; padding:12px; }}
-            .label {{ font-size:12px; color:#6b7280; margin-bottom:6px; }}
-            .value {{ font-size:14px; white-space:pre-wrap; word-break:break-word; }}
-            .content {{ background:#111827; color:#f9fafb; border-radius:8px; padding:16px; white-space:pre-wrap; }}
-            .actions {{ margin-top:20px; display:flex; gap:12px; }}
-            .button {{ display:inline-block; padding:10px 16px; border-radius:8px; text-decoration:none; background:#2563eb; color:#fff; }}
-            .button.secondary {{ background:#374151; }}
+            .field-label {{ font-size:11px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }}
+            .field-value {{ font-size:14px; font-weight:500; color:var(--text-primary); word-break:break-word; }}
+            .field-value.full {{ grid-column:1/-1; }}
+            .status-dot {{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; }}
+            .remark-block {{ background:#fffbeb; border-left:3px solid #f59e0b; border-radius:4px; padding:10px 12px; margin-top:8px; }}
+            .remark-label {{ font-size:11px; color:#b45309; text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }}
+            .remark-content {{ font-size:13px; color:#92400e; }}
+            .diag-block {{ background:#f9fafb; border-radius:8px; padding:12px; }}
+            .diag-block.root-cause {{ background:#fef2f2; border:1px solid #fca5a5; }}
+            .diag-block.actions {{ background:#fff7ed; border:1px solid #fed7aa; }}
+            .diag-label {{ font-size:11px; font-weight:600; color:var(--text-secondary); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }}
+            .diag-content {{ font-size:13px; color:var(--text-primary); line-height:1.6; white-space:pre-wrap; word-break:break-word; }}
+            .report-info {{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }}
+            .report-meta {{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }}
+            .report-time {{ font-size:12px; color:var(--text-secondary); }}
+            .report-title {{ font-size:14px; font-weight:500; color:var(--text-primary); }}
+            .report-status {{ font-size:11px; background:#f3f4f6; padding:2px 8px; border-radius:4px; color:var(--text-secondary); }}
+            .content-block {{ background:#fff; border-radius:8px; padding:16px; }}
+            .btn {{ display:inline-block; padding:8px 16px; border-radius:8px; text-decoration:none; font-size:13px; font-weight:500; border:none; cursor:pointer; transition:all .2s; }}
+            .btn-secondary {{ background:#374151; color:#fff; }}
+            .btn-secondary:hover {{ background:#4b5563; }}
+            .meta-row {{ display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:16px; }}
+            .meta-item {{ font-size:13px; color:var(--text-secondary); }}
+            .alert-title {{ font-size:18px; font-weight:700; color:var(--text-primary); margin:0 0 16px 0; }}
+            .trigger-block {{ background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:12px; margin-bottom:16px; font-size:13px; color:#1e40af; }}
+            .markdown-body {{ font-size:14px; line-height:1.7; color:var(--text-primary); }}
+            .markdown-body h1,.markdown-body h2,.markdown-body h3,.markdown-body h4 {{ margin-top:16px; margin-bottom:8px; font-weight:600; }}
+            .markdown-body h1 {{ font-size:18px; }}
+            .markdown-body h2 {{ font-size:16px; }}
+            .markdown-body h3 {{ font-size:15px; }}
+            .markdown-body p {{ margin:0 0 12px 0; }}
+            .markdown-body code {{ background:#f3f4f6; padding:2px 6px; border-radius:4px; font-size:13px; font-family:'JetBrains Mono','Fira Code',monospace; }}
+            .markdown-body pre {{ background:#1f2937; color:#e5e7eb; padding:12px; border-radius:8px; overflow-x:auto; }}
+            .markdown-body pre code {{ background:none; padding:0; color:inherit; }}
+            .markdown-body table {{ border-collapse:collapse; width:100%; margin:12px 0; }}
+            .markdown-body th,.markdown-body td {{ border:1px solid var(--border); padding:8px 12px; text-align:left; }}
+            .markdown-body th {{ background:#f9fafb; font-weight:600; }}
+            .markdown-body ul,.markdown-body ol {{ margin:0 0 12px 0; padding-left:24px; }}
+            .markdown-body li {{ margin-bottom:4px; }}
+            @media (max-width:640px) {{
+                body {{ padding:16px; }}
+                .grid-2, .grid-3 {{ grid-template-columns:1fr; }}
+                .report-info {{ flex-direction:column; align-items:flex-start; }}
+            }}
         </style>
     </head>
     <body>
-        <div class=\"card\">
-            <h1>{alert.title}</h1>
-            <div class=\"grid\">
-                <div class=\"field\"><div class=\"label\">严重程度</div><div class=\"value\">{alert.severity}</div></div>
-                <div class=\"field\"><div class=\"label\">状态</div><div class=\"value\">{alert.status}</div></div>
-                <div class=\"field\"><div class=\"label\">数据源ID</div><div class=\"value\">{alert.datasource_id}</div></div>
-                <div class=\"field\"><div class=\"label\">告警类型</div><div class=\"value\">{alert.alert_type}</div></div>
-                <div class=\"field\"><div class=\"label\">指标名称</div><div class=\"value\">{alert.metric_name or '-'}</div></div>
-                <div class=\"field\"><div class=\"label\">创建时间</div><div class=\"value\">{alert.created_at}</div></div>
-                <div class=\"field\"><div class=\"label\">阈值</div><div class=\"value\">{alert.threshold_value if alert.threshold_value is not None else '-'}</div></div>
-                <div class=\"field\"><div class=\"label\">当前值</div><div class=\"value\">{alert.metric_value if alert.metric_value is not None else '-'}</div></div>
+        <div class="container">
+            <h1 class="alert-title">{esc(alert.title)}</h1>
+
+            <div class="meta-row">
+                <span class="meta-item">{severity_badge}</span>
+                <span class="meta-item" style="color:{status_color};font-weight:500;">● {status_label}</span>
+                <span class="meta-item">触发时间：{alert.created_at}</span>
             </div>
-            <h3>详细内容</h3>
-            <div class=\"content\">{alert.content}</div>
-            <div class=\"actions\">{report_link_html}</div>
+
+            {f'<div class="trigger-block">触发原因：{esc(alert.trigger_reason)}</div>' if alert.trigger_reason else ''}
+
+            <!-- 数据库配置信息 -->
+            <div class="section">
+                <div class="section-header">
+                    <span class="section-icon">📊</span>
+                    <span class="section-title">数据库配置信息</span>
+                </div>
+                <div class="section-body">
+                    <div class="grid-2">
+                        <div class="field">
+                            <div class="field-label">名称</div>
+                            <div class="field-value">{ds_name}</div>
+                        </div>
+                        <div class="field">
+                            <div class="field-label">类型</div>
+                            <div class="field-value">{ds_type}</div>
+                        </div>
+                        <div class="field">
+                            <div class="field-label">连接</div>
+                            <div class="field-value">{ds_host}:{ds_port} / {ds_db}</div>
+                        </div>
+                        <div class="field">
+                            <div class="field-label">等级</div>
+                            <div class="field-value">
+                                <span style="display:inline-flex;align-items:center;gap:4px;">
+                                    <span class="status-dot" style="background:{ds_level_color};"></span>
+                                    {ds_level_label}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <div class="field-label">监控间隔</div>
+                            <div class="field-value">{ds_interval}秒</div>
+                        </div>
+                        <div class="field">
+                            <div class="field-label">连接状态</div>
+                            <div class="field-value">
+                                <span style="display:inline-flex;align-items:center;gap:4px;">
+                                    <span class="status-dot" style="background:{ds_status_color};"></span>
+                                    {ds_status_label}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {f'<div class="remark-block"><div class="remark-label">备注</div><div class="remark-content">{ds_remark}</div></div>' if ds_remark else ''}
+                </div>
+            </div>
+
+            <!-- 告警详情 -->
+            <div class="section">
+                <div class="section-header">
+                    <span class="section-icon">⚠️</span>
+                    <span class="section-title">告警详情</span>
+                </div>
+                <div class="section-body">
+                    <div class="grid-3">
+                        <div class="field">
+                            <div class="field-label">告警类型</div>
+                            <div class="field-value">{alert_type_label}</div>
+                        </div>
+                        <div class="field">
+                            <div class="field-label">指标名称</div>
+                            <div class="field-value">{esc(alert.metric_name or '-')}</div>
+                        </div>
+                        <div class="field">
+                            <div class="field-label">当前值</div>
+                            <div class="field-value">{'{:.2f}'.format(alert.metric_value) if alert.metric_value is not None else '-'}</div>
+                        </div>
+                        <div class="field">
+                            <div class="field-label">阈值</div>
+                            <div class="field-value">{'{:.2f}'.format(alert.threshold_value) if alert.threshold_value is not None else '-'}</div>
+                        </div>
+                        <div class="field">
+                            <div class="field-label">确认时间</div>
+                            <div class="field-value">{alert.acknowledged_at or '-'}</div>
+                        </div>
+                        <div class="field">
+                            <div class="field-label">恢复时间</div>
+                            <div class="field-value">{alert.resolved_at or '-'}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {ai_diagnosis_html}
+            {report_html}
+
+            <!-- 详细内容 -->
+            <div class="section">
+                <div class="section-header">
+                    <span class="section-icon">📝</span>
+                    <span class="section-title">详细内容</span>
+                </div>
+                <div class="content-block markdown-body">{content_html}</div>
+            </div>
         </div>
     </body>
     </html>
@@ -280,7 +674,7 @@ async def acknowledge_alert(
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
 
-    return AlertMessageResponse.model_validate(alert)
+    return await _build_alert_response(db, alert)
 
 
 @router.post("/{alert_id}/resolve", response_model=AlertMessageResponse)
@@ -293,7 +687,7 @@ async def resolve_alert(
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
 
-    return AlertMessageResponse.model_validate(alert)
+    return await _build_alert_response(db, alert)
 
 
 @router.get("/subscriptions/list", response_model=List[AlertSubscriptionResponse])

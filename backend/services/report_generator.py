@@ -1,4 +1,5 @@
 import logging
+import re
 
 from sqlalchemy import select
 
@@ -7,9 +8,41 @@ from backend.models.report import Report
 from backend.agent.prompts import REPORT_GENERATION_PROMPT
 from backend.database import async_session
 from backend.agent.conversation_skills import generate_report_with_skills
+from backend.services.action_run_service import ensure_report_recommended_actions
 from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
+
+
+def _strip_markdown(text: str) -> str:
+    if not text:
+        return ""
+    cleaned = re.sub(r"```[\s\S]*?```", " ", text)
+    cleaned = re.sub(r"`([^`]*)`", r"\1", cleaned)
+    cleaned = re.sub(r"^#{1,6}\s*", "", cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r"\*\*([^*]+)\*\*", r"\1", cleaned)
+    cleaned = re.sub(r"\*([^*]+)\*", r"\1", cleaned)
+    cleaned = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned.strip()
+
+
+def _extract_report_summary(content_md: str) -> str:
+    plain = _strip_markdown(content_md)
+    if not plain:
+        return ""
+    return plain[:220].strip()
+
+
+def _extract_recommended_action(content_md: str) -> str:
+    if not content_md:
+        return ""
+    for raw_line in content_md.splitlines():
+        line = raw_line.strip()
+        normalized = line.lstrip("-•*1234567890. ")
+        if any(keyword in normalized for keyword in ["建议", "处置", "操作", "下一步", "优化"]):
+            return _strip_markdown(normalized)[:220]
+    return ""
 
 
 async def generate_report(report_id: int, datasource_id: int, report_type: str = "comprehensive"):
@@ -28,7 +61,9 @@ async def _update_report_status(report_id: int, status: str, **kwargs):
         report = result.scalar_one_or_none()
         if report:
             report.status = status
-            if status == "completed":
+            if status == "generating":
+                report.completed_at = None
+            else:
                 report.completed_at = now()
             for k, v in kwargs.items():
                 setattr(report, k, v)
@@ -78,8 +113,8 @@ class ReportGenerator:
             else:
                 system_prompt = REPORT_GENERATION_PROMPT
 
-            # Generate AI report
-            content_md, skill_executions = await generate_report_with_skills(
+            # Generate AI report (structured result)
+            result = await generate_report_with_skills(
                 datasource_id=datasource.id,
                 datasource_name=datasource.name,
                 datasource_type=datasource.db_type,
@@ -87,25 +122,31 @@ class ReportGenerator:
                 system_prompt=system_prompt,
                 db=self.db,
                 model_id=config.ai_model_id if config else None,
-                timeout_seconds=600
+                timeout_seconds=600,
             )
 
-            # Validate content — check if it's just an error message
-            is_error_content = content_md.startswith("⚠️") and len(content_md) < 200
+            report.status = result.get("status") or "failed"
+            report.content_md = result.get("content_md") or ""
+            report.summary = result.get("summary") or None
+            report.error_message = result.get("error_message")
+            report.skill_executions = result.get("skill_executions")
 
-            # Generate HTML from markdown
-            try:
-                from markdown_it import MarkdownIt
-                md = MarkdownIt("commonmark", {"breaks": True, "html": True})
-                md.enable('table')
-                content_html_body = md.render(content_md)
-            except Exception as e:
-                logger.warning(f"Markdown rendering failed, using plain text fallback: {e}")
-                import html as html_module
-                content_html_body = f"<pre>{html_module.escape(content_md)}</pre>"
+            # completed_at is managed by the unified status setter below
 
-            # Wrap in styled HTML document
-            content_html = f"""<!DOCTYPE html>
+            # Generate HTML only when we have content
+            if report.content_md:
+                try:
+                    from markdown_it import MarkdownIt
+                    md = MarkdownIt("commonmark", {"breaks": True, "html": True})
+                    md.enable('table')
+                    content_html_body = md.render(report.content_md)
+                except Exception as e:
+                    logger.warning(f"Markdown rendering failed, using plain text fallback: {e}")
+                    import html as html_module
+                    content_html_body = f"<pre>{html_module.escape(report.content_md)}</pre>"
+
+                # Wrap in styled HTML document
+                report.content_html = f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -236,16 +277,15 @@ class ReportGenerator:
 </body>
 </html>
 """
-
-            report.content_md = content_md
-            report.content_html = content_html
-            report.skill_executions = skill_executions
-            if is_error_content:
-                report.status = "failed"
-                report.error_message = content_md
             else:
-                report.status = "completed"
-            report.completed_at = now()
+                report.content_html = None
+
+            # P1: structured action recommendations (only for completed)
+            try:
+                if report.status == "completed":
+                    await ensure_report_recommended_actions(self.db, report)
+            except Exception as e:
+                logger.warning(f"Failed to generate recommended_actions for report {report.id}: {e}")
 
         except Exception as e:
             logger.error(f"Error generating inspection report: {e}", exc_info=True)

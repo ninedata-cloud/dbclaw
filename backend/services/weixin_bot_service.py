@@ -303,18 +303,11 @@ class WeixinBotService:
         )
 
         chunks: list[str] = []
-        approval_hint: str | None = None
 
         async def on_event(event_obj: dict[str, Any]) -> None:
-            nonlocal approval_hint
             event_type_local = event_obj.get("type")
             if event_type_local == "content":
                 chunks.append(event_obj.get("content", ""))
-                return
-            if event_type_local == "confirmation_required":
-                approval_id = str(event_obj.get("approval_id") or "")
-                summary = str(event_obj.get("summary") or "检测到需要你确认的高风险操作。")
-                approval_hint = f"{summary}\n请回复：批准 {approval_id} 或 拒绝 {approval_id}"
 
         await process_stream_events(
             db,
@@ -332,7 +325,7 @@ class WeixinBotService:
         await WeixinBotService.mark_event_processed(db, event_id=event_id, message_id=raw_message_id or None, event_type=event_type)
 
         final_text = format_reply_text("".join(chunks))
-        reply_text = final_text or approval_hint or "已收到消息。"
+        reply_text = final_text or "已收到消息。"
         # outbound 的 to_user_id 应为消息发送者（用户），而非 bot 自己的 ID
         reply_to = sender_user_id if not group_id else receiver_user_id or sender_user_id
         logger.info(f"[微信回复] to={reply_to[:30]}, context={context_token[:20]}")

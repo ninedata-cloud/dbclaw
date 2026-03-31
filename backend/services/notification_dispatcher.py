@@ -16,6 +16,13 @@ from backend.utils.datetime_helper import now
 logger = logging.getLogger(__name__)
 
 
+def _get_required_integration_params(integration) -> list[str]:
+    """从 Integration config_schema 提取必填参数"""
+    schema = integration.config_schema or {}
+    required = schema.get("required") or []
+    return [key for key in required if isinstance(key, str) and key.strip()]
+
+
 async def start_notification_dispatcher():
     """
     Background task that processes pending alerts and sends notifications.
@@ -55,6 +62,28 @@ async def _process_pending_alerts():
                         logger.debug(f"Skipping alert {alert.id}: datasource {alert.datasource_id} is silenced")
                         continue
 
+                    # Check if datasource exists (may have been deleted)
+                    from backend.models.datasource import Datasource
+                    from sqlalchemy import select
+                    ds_result = await db.execute(select(Datasource).where(Datasource.id == alert.datasource_id))
+                    datasource = ds_result.scalar_one_or_none()
+
+                    # Pre-diagnosis: run sync diagnosis before sending notifications (max 60s timeout)
+                    diagnosis_result = {
+                        "root_cause": None,
+                        "recommended_actions": None,
+                        "summary": None,
+                        "status": None,
+                    }
+                    if alert.event_id and datasource:
+                        try:
+                            from backend.services.alert_service import run_sync_diagnosis
+                            diagnosis_result = await run_sync_diagnosis(db, alert.event_id, timeout_seconds=600)
+                        except Exception as diag_err:
+                            logger.warning(f"Pre-diagnosis failed for alert {alert.id}: {diag_err}")
+                    elif alert.event_id and not datasource:
+                        logger.debug(f"Skipping diagnosis for alert {alert.id}: datasource {alert.datasource_id} not found")
+
                     for subscription in subscriptions:
                         try:
                             # Check if subscription matches alert (datasource, severity, time range)
@@ -71,9 +100,9 @@ async def _process_pending_alerts():
                                 continue
 
                             # Send notifications via Integration system
-                            if not subscription.channel_ids:
+                            if not subscription.integration_targets:
                                 logger.warning(
-                                    f"Subscription {subscription.id} has no channels configured, skipping"
+                                    f"Subscription {subscription.id} has no targets configured, skipping"
                                 )
                                 continue
 
@@ -85,12 +114,15 @@ async def _process_pending_alerts():
                                 continue
 
                             delivery_logs = await _send_via_integrations(
-                                db, alert, subscription
+                                db, alert, subscription, diagnosis_result
                             )
 
                             # Mark alert as notified after first successful send
                             if delivery_logs and any(l.status == "sent" for l in delivery_logs):
                                 await _mark_alert_notified(db, alert)
+                                # Trigger async background diagnosis for deeper analysis (UI side)
+                                if alert.event_id:
+                                    asyncio.create_task(_trigger_alert_auto_diagnosis(alert.event_id))
 
                             logger.info(
                                 f"Sent {len(delivery_logs)} notifications for alert {alert.id} "
@@ -126,6 +158,16 @@ async def _already_delivered(db, alert_id: int, subscription_id: int) -> bool:
     return result.scalar_one_or_none() is not None
 
 
+async def _trigger_alert_auto_diagnosis(alert_event_id: int):
+    """Trigger AI auto-diagnosis for an alert event, non-blocking."""
+    try:
+        from backend.services.alert_service import AlertService
+        async with async_session() as db:
+            await AlertService.trigger_auto_diagnosis(db, alert_event_id)
+    except Exception as e:
+        logger.error(f"Failed to trigger auto-diagnosis for alert event {alert_event_id}: {e}", exc_info=True)
+
+
 async def _mark_alert_notified(db, alert):
     """Mark alert as notified so it won't be picked up again"""
     from datetime import datetime
@@ -133,10 +175,10 @@ async def _mark_alert_notified(db, alert):
     await db.commit()
 
 
-async def _send_via_integrations(db, alert, subscription):
+async def _send_via_integrations(db, alert, subscription, diagnosis_result=None):
     """通过 Integration 系统发送通知"""
     from backend.config import get_settings
-    from backend.models.integration import AlertChannel, Integration, IntegrationExecutionLog
+    from backend.models.integration import Integration, IntegrationExecutionLog
     from backend.models.alert_delivery_log import AlertDeliveryLog
     from backend.models.datasource import Datasource
     from backend.services.integration_executor import IntegrationExecutor
@@ -146,12 +188,9 @@ async def _send_via_integrations(db, alert, subscription):
 
     delivery_logs = []
 
-    # 获取数据源信息
     datasource = None
     if alert.datasource_id:
-        ds_result = await db.execute(
-            select(Datasource).where(Datasource.id == alert.datasource_id)
-        )
+        ds_result = await db.execute(select(Datasource).where(Datasource.id == alert.datasource_id))
         datasource = ds_result.scalar_one_or_none()
 
     settings = get_settings()
@@ -167,21 +206,46 @@ async def _send_via_integrations(db, alert, subscription):
             report_token = PublicShareService.create_report_share_token(linked_report.id, settings.public_share_expire_minutes)
             report_url = f"{base_url}/api/inspections/reports/public/{linked_report.id}/page?token={report_token}"
 
-    # 遍历所有 Channel
-    for channel_id in subscription.channel_ids:
-        # 查询 Channel
-        channel = await db.get(AlertChannel, channel_id)
-        if not channel or not channel.enabled:
-            logger.warning(f"Channel {channel_id} 不存在或已禁用")
+    for target in (subscription.integration_targets or []):
+        if not isinstance(target, dict):
+            continue
+        if not target.get("enabled", True):
+            continue
+        if "alert" not in (target.get("notify_on") or ["alert"]):
             continue
 
-        # 查询 Integration
-        integration = await db.get(Integration, channel.integration_id)
+        integration_id = target.get("integration_id")
+        if not integration_id:
+            continue
+
+        integration = await db.get(Integration, int(integration_id))
         if not integration or not integration.enabled:
-            logger.warning(f"Integration {channel.integration_id} 不存在或已禁用")
+            logger.warning(f"Integration {integration_id} 不存在或已禁用")
             continue
 
-        # 构建 payload
+        # Fetch AI diagnosis fields from alert event (fallback if sync diagnosis didn't run)
+        ai_diagnosis_summary = None
+        root_cause = None
+        recommended_actions = None
+        diagnosis_status = None
+
+        if diagnosis_result:
+            ai_diagnosis_summary = diagnosis_result.get("summary")
+            root_cause = diagnosis_result.get("root_cause")
+            recommended_actions = diagnosis_result.get("recommended_actions")
+            diagnosis_status = diagnosis_result.get("status")
+        else:
+            # Fallback: try to get from alert event if sync diagnosis wasn't run
+            if alert.event_id:
+                from backend.models.alert_event import AlertEvent
+                event_result = await db.execute(select(AlertEvent).where(AlertEvent.id == alert.event_id))
+                event_obj = event_result.scalar_one_or_none()
+                if event_obj:
+                    ai_diagnosis_summary = event_obj.ai_diagnosis_summary
+                    root_cause = event_obj.root_cause
+                    recommended_actions = event_obj.recommended_actions
+                    diagnosis_status = event_obj.diagnosis_status
+
         payload = {
             "title": f"【{alert.severity.upper()}】{datasource.name if datasource else '未知数据源'} 告警",
             "content": alert.content,
@@ -190,26 +254,83 @@ async def _send_via_integrations(db, alert, subscription):
             "alert_id": alert.id,
             "alert_url": alert_url,
             "report_url": report_url,
-            "timestamp": alert.created_at.strftime('%Y-%m-%d %H:%M:%S') if alert.created_at else now().strftime('%Y-%m-%d %H:%M:%S')
+            "timestamp": alert.created_at.strftime('%Y-%m-%d %H:%M:%S') if alert.created_at else now().strftime('%Y-%m-%d %H:%M:%S'),
+            "ai_diagnosis_summary": ai_diagnosis_summary,
+            "root_cause": root_cause,
+            "recommended_actions": recommended_actions,
+            "diagnosis_status": diagnosis_status,
+            "alert_type": alert.alert_type,
+            "metric_name": alert.metric_name,
+            "metric_value": alert.metric_value,
+            "threshold_value": alert.threshold_value,
+            "trigger_reason": alert.trigger_reason,
         }
 
-        # 执行 Integration
+        params = target.get("params") or {}
+        target_id = target.get("target_id")
+        target_name = target.get("name") or integration.name
+        required_params = _get_required_integration_params(integration)
+        missing_params = [key for key in required_params if not params.get(key)]
         executor = IntegrationExecutor(db, logger)
         start_time = datetime.utcnow()
 
-        try:
-            result = await executor.execute_notification(
-                integration.code,
-                channel.params,
-                payload
+        if missing_params:
+            missing_params_text = ", ".join(missing_params)
+            error_message = f"Integration 缺少必填参数: {missing_params_text}"
+            logger.warning(
+                "跳过告警通知 target=%s integration=%s subscription=%s，原因：%s",
+                target_name,
+                integration.integration_id,
+                subscription.id,
+                error_message,
             )
 
-            execution_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
-
-            # 记录执行日志
             exec_log = IntegrationExecutionLog(
                 integration_id=integration.id,
-                channel_id=channel.id,
+                target_type="subscription_target",
+                target_ref=str(target_id) if target_id is not None else None,
+                subscription_id=subscription.id,
+                target_name=target_name,
+                params_snapshot=params,
+                payload_summary={"alert_id": alert.id, "severity": alert.severity},
+                trigger_source="alert_dispatch",
+                trigger_ref_id=str(alert.id),
+                status="failed",
+                execution_time_ms=0,
+                result={"success": False, "message": error_message, "data": {"missing_params": missing_params}},
+                error_message=error_message,
+            )
+            db.add(exec_log)
+
+            delivery_log = AlertDeliveryLog(
+                alert_id=alert.id,
+                subscription_id=subscription.id,
+                integration_id=integration.id,
+                target_id=str(target_id) if target_id is not None else None,
+                target_name=target_name,
+                channel=f"integration:{integration.integration_id}",
+                recipient=target_name,
+                status="failed",
+                sent_at=now(),
+                error_message=error_message,
+            )
+            db.add(delivery_log)
+            delivery_logs.append(delivery_log)
+            await db.commit()
+            continue
+
+        try:
+            result = await executor.execute_notification(integration.code, params, payload)
+            execution_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+
+            exec_log = IntegrationExecutionLog(
+                integration_id=integration.id,
+                target_type="subscription_target",
+                target_ref=str(target_id) if target_id is not None else None,
+                subscription_id=subscription.id,
+                target_name=target_name,
+                params_snapshot=params,
+                payload_summary={"alert_id": alert.id, "severity": alert.severity},
                 trigger_source="alert_dispatch",
                 trigger_ref_id=str(alert.id),
                 status="success" if result.get("success") else "failed",
@@ -219,33 +340,32 @@ async def _send_via_integrations(db, alert, subscription):
             )
             db.add(exec_log)
 
-            # 记录告警投递日志
             delivery_log = AlertDeliveryLog(
                 alert_id=alert.id,
                 subscription_id=subscription.id,
+                integration_id=integration.id,
+                target_id=str(target_id) if target_id is not None else None,
+                target_name=target_name,
                 channel=f"integration:{integration.integration_id}",
-                recipient=channel.name,
+                recipient=target_name,
                 status="sent" if result.get("success") else "failed",
                 sent_at=now(),
                 error_message=result.get("message") if not result.get("success") else None
             )
             db.add(delivery_log)
             delivery_logs.append(delivery_log)
-
             await db.commit()
-
-            if result.get("success"):
-                logger.info(f"通过 Integration {integration.name} 发送通知成功")
-            else:
-                logger.error(f"通过 Integration {integration.name} 发送通知失败: {result.get('message')}")
 
         except Exception as e:
             logger.error(f"Integration 执行异常: {str(e)}", exc_info=True)
-
-            # 记录失败日志
             exec_log = IntegrationExecutionLog(
                 integration_id=integration.id,
-                channel_id=channel.id,
+                target_type="subscription_target",
+                target_ref=str(target_id) if target_id is not None else None,
+                subscription_id=subscription.id,
+                target_name=target_name,
+                params_snapshot=params,
+                payload_summary={"alert_id": alert.id, "severity": alert.severity},
                 trigger_source="alert_dispatch",
                 trigger_ref_id=str(alert.id),
                 status="failed",
@@ -257,15 +377,17 @@ async def _send_via_integrations(db, alert, subscription):
             delivery_log = AlertDeliveryLog(
                 alert_id=alert.id,
                 subscription_id=subscription.id,
+                integration_id=integration.id,
+                target_id=str(target_id) if target_id is not None else None,
+                target_name=target_name,
                 channel=f"integration:{integration.integration_id}",
-                recipient=channel.name,
+                recipient=target_name,
                 status="failed",
                 sent_at=now(),
                 error_message=str(e)
             )
             db.add(delivery_log)
             delivery_logs.append(delivery_log)
-
             await db.commit()
 
     return delivery_logs
@@ -273,7 +395,7 @@ async def _send_via_integrations(db, alert, subscription):
 
 async def _send_recovery_via_integrations(db, alert, subscription):
     """通过 Integration 系统发送恢复通知"""
-    from backend.models.integration import AlertChannel, Integration, IntegrationExecutionLog
+    from backend.models.integration import Integration, IntegrationExecutionLog
     from backend.models.alert_delivery_log import AlertDeliveryLog
     from backend.models.datasource import Datasource
     from backend.services.integration_executor import IntegrationExecutor
@@ -282,62 +404,110 @@ async def _send_recovery_via_integrations(db, alert, subscription):
 
     delivery_logs = []
 
-    # 获取数据源信息
     datasource = None
     if alert.datasource_id:
-        ds_result = await db.execute(
-            select(Datasource).where(Datasource.id == alert.datasource_id)
-        )
+        ds_result = await db.execute(select(Datasource).where(Datasource.id == alert.datasource_id))
         datasource = ds_result.scalar_one_or_none()
 
-    # 遍历所有 Channel
-    for channel_id in subscription.channel_ids:
-        # 查询 Channel
-        channel = await db.get(AlertChannel, channel_id)
-        if not channel or not channel.enabled:
-            logger.warning(f"Channel {channel_id} 不存在或已禁用")
+    for target in (subscription.integration_targets or []):
+        if not isinstance(target, dict):
+            continue
+        if not target.get("enabled", True):
+            continue
+        if "recovery" not in (target.get("notify_on") or ["alert", "recovery"]):
             continue
 
-        # 查询 Integration
-        integration = await db.get(Integration, channel.integration_id)
+        integration_id = target.get("integration_id")
+        if not integration_id:
+            continue
+
+        integration = await db.get(Integration, int(integration_id))
         if not integration or not integration.enabled:
-            logger.warning(f"Integration {channel.integration_id} 不存在或已禁用")
+            logger.warning(f"Integration {integration_id} 不存在或已禁用")
             continue
 
-        # 构建恢复通知 payload
         resolved_at_str = alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else now().strftime('%Y-%m-%d %H:%M:%S')
         recovery_metric_line = ""
         if alert.metric_name and alert.resolved_value is not None:
-            recovery_metric_line = f"\nMetric: {alert.metric_name} = {alert.resolved_value:.2f}"
+            recovery_metric_line = f"\n恢复时指标：{alert.metric_name} = {alert.resolved_value:.2f}"
         elif alert.metric_name and alert.metric_value is not None:
-            recovery_metric_line = f"\nMetric: {alert.metric_name} = {alert.metric_value:.2f}"
+            recovery_metric_line = f"\n恢复时指标：{alert.metric_name} = {alert.metric_value:.2f}"
+
         payload = {
             "title": f"【已恢复】{datasource.name if datasource else '未知数据源'} 告警已恢复",
             "content": f"{alert.content}{recovery_metric_line}\n\n告警时间：{alert.created_at.strftime('%Y-%m-%d %H:%M:%S') if alert.created_at else '未知'}\n恢复时间：{resolved_at_str}",
-            "severity": "info",  # 恢复通知使用 info 级别
+            "severity": "info",
             "datasource_name": datasource.name if datasource else "未知数据源",
             "alert_id": alert.id,
             "timestamp": resolved_at_str,
             "status": "resolved"
         }
 
-        # 执行 Integration
+        params = target.get("params") or {}
+        target_id = target.get("target_id")
+        target_name = target.get("name") or integration.name
+        required_params = _get_required_integration_params(integration)
+        missing_params = [key for key in required_params if not params.get(key)]
         executor = IntegrationExecutor(db, logger)
         start_time = datetime.utcnow()
 
-        try:
-            result = await executor.execute_notification(
-                integration.code,
-                channel.params,
-                payload
+        if missing_params:
+            missing_params_text = ", ".join(missing_params)
+            error_message = f"Integration 缺少必填参数: {missing_params_text}"
+            logger.warning(
+                "跳过恢复通知 target=%s integration=%s subscription=%s，原因：%s",
+                target_name,
+                integration.integration_id,
+                subscription.id,
+                error_message,
             )
 
-            execution_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
-
-            # 记录执行日志
             exec_log = IntegrationExecutionLog(
                 integration_id=integration.id,
-                channel_id=channel.id,
+                target_type="subscription_target",
+                target_ref=str(target_id) if target_id is not None else None,
+                subscription_id=subscription.id,
+                target_name=target_name,
+                params_snapshot=params,
+                payload_summary={"alert_id": alert.id, "status": "resolved"},
+                trigger_source="alert_recovery",
+                trigger_ref_id=str(alert.id),
+                status="failed",
+                execution_time_ms=0,
+                result={"success": False, "message": error_message, "data": {"missing_params": missing_params}},
+                error_message=error_message,
+            )
+            db.add(exec_log)
+
+            delivery_log = AlertDeliveryLog(
+                alert_id=alert.id,
+                subscription_id=subscription.id,
+                integration_id=integration.id,
+                target_id=str(target_id) if target_id is not None else None,
+                target_name=target_name,
+                channel=f"integration:{integration.integration_id}:recovery",
+                recipient=target_name,
+                status="failed",
+                sent_at=now(),
+                error_message=error_message,
+            )
+            db.add(delivery_log)
+            delivery_logs.append(delivery_log)
+            await db.commit()
+            continue
+
+        try:
+            result = await executor.execute_notification(integration.code, params, payload)
+            execution_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+
+            exec_log = IntegrationExecutionLog(
+                integration_id=integration.id,
+                target_type="subscription_target",
+                target_ref=str(target_id) if target_id is not None else None,
+                subscription_id=subscription.id,
+                target_name=target_name,
+                params_snapshot=params,
+                payload_summary={"alert_id": alert.id, "status": "resolved"},
                 trigger_source="alert_recovery",
                 trigger_ref_id=str(alert.id),
                 status="success" if result.get("success") else "failed",
@@ -347,33 +517,32 @@ async def _send_recovery_via_integrations(db, alert, subscription):
             )
             db.add(exec_log)
 
-            # 记录告警投递日志
             delivery_log = AlertDeliveryLog(
                 alert_id=alert.id,
                 subscription_id=subscription.id,
+                integration_id=integration.id,
+                target_id=str(target_id) if target_id is not None else None,
+                target_name=target_name,
                 channel=f"integration:{integration.integration_id}:recovery",
-                recipient=channel.name,
+                recipient=target_name,
                 status="sent" if result.get("success") else "failed",
                 sent_at=now(),
                 error_message=result.get("message") if not result.get("success") else None
             )
             db.add(delivery_log)
             delivery_logs.append(delivery_log)
-
             await db.commit()
-
-            if result.get("success"):
-                logger.info(f"通过 Integration {integration.name} 发送恢复通知成功")
-            else:
-                logger.error(f"通过 Integration {integration.name} 发送恢复通知失败: {result.get('message')}")
 
         except Exception as e:
             logger.error(f"Integration 执行异常: {str(e)}", exc_info=True)
-
-            # 记录失败日志
             exec_log = IntegrationExecutionLog(
                 integration_id=integration.id,
-                channel_id=channel.id,
+                target_type="subscription_target",
+                target_ref=str(target_id) if target_id is not None else None,
+                subscription_id=subscription.id,
+                target_name=target_name,
+                params_snapshot=params,
+                payload_summary={"alert_id": alert.id, "status": "resolved"},
                 trigger_source="alert_recovery",
                 trigger_ref_id=str(alert.id),
                 status="failed",
@@ -385,15 +554,17 @@ async def _send_recovery_via_integrations(db, alert, subscription):
             delivery_log = AlertDeliveryLog(
                 alert_id=alert.id,
                 subscription_id=subscription.id,
+                integration_id=integration.id,
+                target_id=str(target_id) if target_id is not None else None,
+                target_name=target_name,
                 channel=f"integration:{integration.integration_id}:recovery",
-                recipient=channel.name,
+                recipient=target_name,
                 status="failed",
                 sent_at=now(),
                 error_message=str(e)
             )
             db.add(delivery_log)
             delivery_logs.append(delivery_log)
-
             await db.commit()
 
     return delivery_logs
@@ -452,13 +623,6 @@ async def _process_recovery_notifications(db):
                 if await AlertService.has_recovery_notification_for_subscription(
                     db, alert.id, subscription.id
                 ):
-                    continue
-
-                # Send recovery notifications via Integration system
-                if not subscription.channel_ids:
-                    logger.warning(
-                        f"Subscription {subscription.id} has no channels configured, skipping recovery notification"
-                    )
                     continue
 
                 delivery_logs = await _send_recovery_via_integrations(

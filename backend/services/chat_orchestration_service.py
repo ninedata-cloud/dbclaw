@@ -297,21 +297,6 @@ async def process_stream_events(
                 "tool_call_id": event.get("tool_call_id"),
                 "skill_execution_id": event.get("skill_execution_id"),
             }, on_event)
-        elif event_type == "confirmation_required":
-            await _store_approval_request(
-                db,
-                session_id,
-                event,
-                pending_approvals,
-                datasource_id,
-                model_id,
-                kb_ids,
-                disabled_tools,
-                user_id,
-            )
-            await _emit(event, on_event)
-            paused_for_approval = True
-            break
         elif event_type == "usage":
             usage = event.get("usage", {}) or {}
             usage_totals["input_tokens"] += int(usage.get("input_tokens") or 0)

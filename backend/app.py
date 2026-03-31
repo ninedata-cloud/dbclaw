@@ -124,6 +124,12 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Datasource inbound_source migration: {e}")
 
     try:
+        from backend.migrations.add_diagnostic_session_hidden_and_alert_diagnosis import migrate as migrate_diagnostic_session_hidden_and_alert_diagnosis
+        await migrate_diagnostic_session_hidden_and_alert_diagnosis()
+    except Exception as e:
+        logger.warning(f"Diagnostic session hidden + alert diagnosis migration: {e}")
+
+    try:
         from backend.migrations.add_bot_bindings import migrate as migrate_bot_bindings
         await migrate_bot_bindings()
     except Exception as e:
@@ -140,6 +146,18 @@ async def lifespan(app: FastAPI):
         await migrate_alert_delivery_log_targets()
     except Exception as e:
         logger.warning(f"Alert delivery log targets migration: {e}")
+
+    try:
+        from backend.migrations.add_alert_ai_diagnosis_summary import migrate as migrate_alert_ai_diagnosis_summary
+        await migrate_alert_ai_diagnosis_summary()
+    except Exception as e:
+        logger.warning(f"Alert AI diagnosis summary migration: {e}")
+
+    try:
+        from backend.migrations.create_diagnosis_conclusions import migrate as migrate_diagnosis_conclusions
+        await migrate_diagnosis_conclusions()
+    except Exception as e:
+        logger.warning(f"Diagnosis conclusions migration: {e}")
 
     try:
         from backend.migrations.migrate_alert_channels_to_subscription_targets import migrate as migrate_alert_channels_to_subscription_targets
@@ -275,6 +293,11 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(start_integration_scheduler())
     logger.info("🔄 Integration scheduler started")
 
+    # Start AI Perception Service
+    from backend.services.ai_perception_service import start_perception_service
+    asyncio.create_task(start_perception_service(interval_minutes=5))
+    logger.info("🧠 AI Perception Service started")
+
     # Start Weixin bot poller
     from backend.services.weixin_bot_service import start_weixin_bot_poller
     await start_weixin_bot_poller()
@@ -286,10 +309,12 @@ async def lifespan(app: FastAPI):
     from backend.services.ssh_connection_pool import stop_ssh_pool
     from backend.services.integration_scheduler import stop_integration_scheduler
     from backend.services.weixin_bot_service import stop_weixin_bot_poller
+    from backend.services.ai_perception_service import stop_perception_service
 
     stop_scheduler()
     stop_integration_scheduler()
     await stop_weixin_bot_poller()
+    await stop_perception_service()
     await inspection_service.stop()
     await stop_ssh_pool()
     logger.info("Application shutdown complete")
@@ -329,7 +354,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     # Register routers
-    from backend.routers import datasources, hosts, metrics, monitor_ws, chat, query, ai_models, auth, users, inspections, system_configs, alerts, integrations, documents, feishu_bot, integration_bots, weixin_bot
+    from backend.routers import datasources, hosts, metrics, monitor_ws, chat, query, ai_models, auth, users, inspections, system_configs, alerts, integrations, documents, feishu_bot, integration_bots, weixin_bot, perception
     from backend.api import skills
     app.include_router(auth.router)
     app.include_router(users.router)
@@ -349,6 +374,7 @@ def create_app() -> FastAPI:
     app.include_router(integration_bots.router)
     app.include_router(feishu_bot.router)
     app.include_router(weixin_bot.router)
+    app.include_router(perception.router)
 
     # Serve frontend static files
     app.mount("/css", StaticFiles(directory="frontend/css"), name="css")

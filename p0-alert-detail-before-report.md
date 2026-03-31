@@ -1,0 +1,109 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e18]:
+      - generic [ref=e19]:
+        - img "数据库智能卫士" [ref=e20]
+        - generic [ref=e21]:
+          - generic [ref=e22]: NineData
+          - generic [ref=e23]: 数据库智能卫士
+      - navigation [ref=e24]:
+        - generic [ref=e25] [cursor=pointer]:
+          - img [ref=e2341]
+          - generic [ref=e31]: 资源大盘
+        - generic [ref=e32] [cursor=pointer]:
+          - img [ref=e2346]
+          - generic [ref=e37]: 智能巡检
+        - generic [ref=e38] [cursor=pointer]:
+          - img [ref=e2350]
+          - generic [ref=e42]: AI 诊断
+        - generic [ref=e43] [cursor=pointer]:
+          - img [ref=e2353]
+          - generic [ref=e46]: 性能监控
+        - generic [ref=e47] [cursor=pointer]:
+          - img [ref=e2355]
+          - generic [ref=e51]: 告警管理
+        - generic [ref=e52] [cursor=pointer]:
+          - img [ref=e2358]
+          - generic [ref=e56]: SQL 查询
+        - generic [ref=e57]:
+          - generic [ref=e58]: AI 智能体配置
+          - generic [ref=e59] [cursor=pointer]:
+            - img [ref=e2361]
+            - generic [ref=e63]: AI 大模型管理
+          - generic [ref=e64] [cursor=pointer]:
+            - img [ref=e2364]
+            - generic [ref=e67]: 技能管理
+          - generic [ref=e68] [cursor=pointer]:
+            - img [ref=e2366]
+            - generic [ref=e72]: 知识库
+        - generic [ref=e73]:
+          - generic [ref=e74]: 系统配置
+          - generic [ref=e75] [cursor=pointer]:
+            - img [ref=e2369]
+            - generic [ref=e80]: 数据源管理
+          - generic [ref=e81] [cursor=pointer]:
+            - img [ref=e2373]
+            - generic [ref=e84]: 主机管理
+          - generic [ref=e85] [cursor=pointer]:
+            - img [ref=e2375]
+            - generic [ref=e90]: 外部集成管理
+          - generic [ref=e91] [cursor=pointer]:
+            - img [ref=e2379]
+            - generic [ref=e95]: 系统参数配置
+          - generic [ref=e96] [cursor=pointer]:
+            - img [ref=e2382]
+            - generic [ref=e102]: 用户管理
+      - generic [ref=e103]:
+        - generic [ref=e104]: A
+        - button "Administrator 管理员" [ref=e105] [cursor=pointer]:
+          - generic [ref=e106]: Administrator
+          - generic [ref=e107]: 管理员
+      - generic [ref=e109]: v1.0.0
+    - main [ref=e3]:
+      - generic [ref=e110]:
+        - heading "数据库智能巡检" [level=1] [ref=e2387]
+        - generic [ref=e2389]:
+          - generic [ref=e2390]:
+            - button "所有数据源" [ref=e2391] [cursor=pointer]:
+              - generic [ref=e2393]: 所有数据源
+              - img [ref=e2394]
+            - text: 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址
+          - combobox [ref=e2396] [cursor=pointer]:
+            - option "所有状态" [selected]
+            - option "已完成"
+            - option "生成中"
+            - option "失败"
+          - combobox [ref=e2397] [cursor=pointer]:
+            - option "所有类型" [selected]
+            - option "手动"
+            - option "定时"
+            - option "异常"
+          - textbox [ref=e2398]:
+            - /placeholder: 开始日期
+          - textbox [ref=e2399]:
+            - /placeholder: 结束日期
+          - button "检索" [ref=e2400] [cursor=pointer]:
+            - img [ref=e2401]
+            - text: 检索
+          - button "重置" [ref=e2404] [cursor=pointer]:
+            - img [ref=e2405]
+            - text: 重置
+      - generic [ref=e2408]:
+        - generic [ref=e2409]:
+          - button "← 返回报告列表" [ref=e2410] [cursor=pointer]
+          - generic [ref=e2411]:
+            - button "进入 AI 诊断" [ref=e2412] [cursor=pointer]
+            - button "📄 Export Markdown" [ref=e2413] [cursor=pointer]
+            - button "📑 Export PDF" [ref=e2414] [cursor=pointer]
+        - generic [ref=e2415]:
+          - generic [ref=e2416]:
+            - strong [ref=e2417]: "触发原因:"
+            - text: "Database connection failed: vastbase(132) (postgresql)"
+          - generic [ref=e2418]:
+            - paragraph [ref=e2419]: 我将为 vastbase(132) PostgreSQL 数据库生成全面的连接失败诊断报告。首先收集数据库和操作系统层面的诊断数据。
+            - paragraph [ref=e2420]: 现在让我获取更多数据库信息和连接详情：
+            - paragraph [ref=e2421]: 让我继续获取更多连接信息和系统配置：
+            - paragraph [ref=e2422]: 现在让我检查防火墙配置和获取更多连接信息：
+  - generic [ref=e2424]:
+    - generic [ref=e2425]: 加载报告失败
+    - button "×" [ref=e2426] [cursor=pointer]

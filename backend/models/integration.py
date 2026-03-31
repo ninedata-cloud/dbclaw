@@ -54,8 +54,15 @@ class IntegrationExecutionLog(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     integration_id = Column(Integer, nullable=False, index=True)
-    # 可选关联：alert_channel_id 或 datasource_id
+    # deprecated: legacy channel reference
     channel_id = Column(Integer, nullable=True, index=True)
+    target_type = Column(String(50), nullable=True, index=True)
+    target_ref = Column(String(100), nullable=True, index=True)
+    subscription_id = Column(Integer, nullable=True, index=True)
+    datasource_id = Column(Integer, nullable=True, index=True)
+    target_name = Column(String(255), nullable=True)
+    params_snapshot = Column(JSON, nullable=True)
+    payload_summary = Column(JSON, nullable=True)
     # 触发来源: alert_dispatch, manual, scheduler
     trigger_source = Column(String(50), nullable=False, default="manual")
     # 关联对象 ID（如 alert_id）

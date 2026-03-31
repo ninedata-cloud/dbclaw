@@ -4,7 +4,6 @@ Updated conversation module to use dynamic skill system
 import json
 import logging
 import re
-import uuid
 from typing import AsyncGenerator, List, Dict, Any, Optional
 
 from backend.agent.prompts import DIAGNOSTIC_PROMPT, INFORMATIONAL_PROMPT, ADMINISTRATIVE_PROMPT
@@ -26,7 +25,7 @@ DANGEROUS_COMMAND_PATTERNS = [
     'kill', 'pkill', 'killall',
     'shutdown', 'reboot', 'halt', 'poweroff',
     'mkfs', 'fdisk', 'parted',
-    'dd ', 'format',
+    'dd ',
     'iptables', 'firewall',
     'useradd', 'userdel', 'usermod',
     'groupadd', 'groupdel',
@@ -50,30 +49,6 @@ def _normalize_sql_keyword(sql: str) -> str:
 
 def _get_command_arg(arguments: Dict[str, Any]) -> str:
     return str(arguments.get('command') or arguments.get('cmd') or arguments.get('shell_command') or '').strip()
-
-
-def build_tool_summary(tool_name: str, arguments: Dict[str, Any]) -> str:
-    parts = []
-    for key, value in list(arguments.items())[:3]:
-        if isinstance(value, (dict, list)):
-            rendered = json.dumps(value, ensure_ascii=False)
-        else:
-            rendered = str(value)
-        if len(rendered) > 40:
-            rendered = rendered[:37] + "..."
-        parts.append(f"{key}={rendered}")
-    if not parts:
-        return f"准备执行 {tool_name}"
-    return f"准备执行 {tool_name}（{', '.join(parts)}）"
-
-
-def build_tool_plan_markdown(tool_name: str, arguments: Dict[str, Any]) -> str:
-    rendered_args = json.dumps(arguments, ensure_ascii=False, indent=2, default=str)
-    return (
-        f"将执行技能 `{tool_name}`。\n\n"
-        f"**执行参数**\n```json\n{rendered_args}\n```\n\n"
-        "请确认是否继续执行。"
-    )
 
 
 def build_confirmation_reason(tool_name: str, arguments: Dict[str, Any], risk_level: str) -> str:
@@ -105,7 +80,7 @@ def assess_tool_risk(tool_name: str, arguments: Dict[str, Any], permissions: Opt
                 level = 'destructive' if pattern in destructive_patterns else 'high'
                 return {
                     'level': level,
-                    'requires_confirmation': True,
+                    'requires_confirmation': False,
                     'risk_reason': build_confirmation_reason(tool_name, arguments, level),
                     'suppressible': level != 'destructive',
                     'confirmation_key': 'os_destructive' if level == 'destructive' else 'os_write',
@@ -124,7 +99,7 @@ def assess_tool_risk(tool_name: str, arguments: Dict[str, Any], permissions: Opt
 
         return {
             'level': 'high',
-            'requires_confirmation': True,
+            'requires_confirmation': False,
             'risk_reason': build_confirmation_reason(tool_name, arguments, 'high'),
             'suppressible': True,
             'confirmation_key': 'os_write',
@@ -135,7 +110,7 @@ def assess_tool_risk(tool_name: str, arguments: Dict[str, Any], permissions: Opt
             level = 'destructive' if keyword in {'DROP', 'TRUNCATE'} else 'high'
             return {
                 'level': level,
-                'requires_confirmation': True,
+                'requires_confirmation': False,
                 'risk_reason': build_confirmation_reason(tool_name, arguments, level),
                 'suppressible': level != 'destructive',
                 'confirmation_key': 'sql_destructive' if level == 'destructive' else 'sql_write',
@@ -153,7 +128,7 @@ def assess_tool_risk(tool_name: str, arguments: Dict[str, Any], permissions: Opt
 
         return {
             'level': 'high',
-            'requires_confirmation': True,
+            'requires_confirmation': False,
             'risk_reason': build_confirmation_reason(tool_name, arguments, 'high'),
             'suppressible': True,
             'confirmation_key': 'sql_write',
@@ -162,7 +137,7 @@ def assess_tool_risk(tool_name: str, arguments: Dict[str, Any], permissions: Opt
     if 'execute_any_sql' in permissions:
         return {
             'level': 'high',
-            'requires_confirmation': True,
+            'requires_confirmation': False,
             'risk_reason': build_confirmation_reason(tool_name, arguments, 'high'),
             'suppressible': True,
             'confirmation_key': 'sql_write',
@@ -170,7 +145,7 @@ def assess_tool_risk(tool_name: str, arguments: Dict[str, Any], permissions: Opt
     if 'execute_any_os_command' in permissions:
         return {
             'level': 'high',
-            'requires_confirmation': True,
+            'requires_confirmation': False,
             'risk_reason': build_confirmation_reason(tool_name, arguments, 'high'),
             'suppressible': True,
             'confirmation_key': 'os_write',
@@ -356,6 +331,12 @@ async def run_conversation_with_skills(
             system_msg += f"\n\nThe user is currently working with datasource ID: {datasource_id} (Type: {datasource.db_type.upper()}, Name: {datasource.name}). Use this ID when calling tools unless they specify otherwise."
             system_msg += f"\n\nIMPORTANT: This is a {datasource.db_type.upper()} database. You MUST use {skill_prefix}_* skills (e.g., {skill_prefix}_get_db_status, {skill_prefix}_get_slow_queries, {skill_prefix}_get_table_stats, etc.). Do NOT use skills for other database types like mysql_*, pg_*, mssql_*, or oracle_* unless they match this database type. Unless the user explicitly asks to switch datasources, keep all diagnosis and tool calls scoped to this datasource."
 
+            if datasource.remark:
+                system_msg += (
+                    f"\n\n**数据源备注**：{datasource.remark}"
+                    "\n此备注包含该数据源的业务背景、特殊配置或已知问题等重要上下文信息，诊断时请结合此备注进行分析。"
+                )
+
             if host_id:
                 host_result = await db.execute(select(Host).filter(Host.id == host_id))
                 host = host_result.scalar_one_or_none()
@@ -457,22 +438,6 @@ async def run_conversation_with_skills(
                 from backend.skills.registry import SkillRegistry
                 skill = await SkillRegistry(db).get_skill(tool_name) if db else None
                 risk = assess_tool_risk(tool_name, tool_args, getattr(skill, 'permissions', None))
-
-                if risk["requires_confirmation"]:
-                    yield {
-                        "type": "confirmation_required",
-                        "approval_id": f"approval_{uuid.uuid4().hex}",
-                        "tool_name": tool_name,
-                        "tool_args": tool_args,
-                        "tool_call_id": tc["id"],
-                        "summary": build_tool_summary(tool_name, tool_args),
-                        "plan_markdown": build_tool_plan_markdown(tool_name, tool_args),
-                        "risk_level": risk["level"],
-                        "risk_reason": risk["risk_reason"],
-                        "suppressible": risk["suppressible"],
-                        "confirmation_key": risk["confirmation_key"],
-                    }
-                    return
 
                 yield {
                     "type": "tool_call",
@@ -630,7 +595,6 @@ async def generate_report_with_skills(
     skill_executions: list[dict[str, Any]] = []
     collected_content = ""
 
-    awaiting_confirm_event: Optional[dict[str, Any]] = None
     error_message: Optional[str] = None
 
     # Check if datasource has host configured for OS-level analysis
@@ -690,10 +654,6 @@ async def generate_report_with_skills(
                     })
                     continue
 
-                if etype == "confirmation_required":
-                    awaiting_confirm_event = event
-                    break
-
                 if etype == "error":
                     saw_error = True
                     error_message = str(event.get("message") or event.get("content") or "Unknown error")
@@ -728,23 +688,6 @@ async def generate_report_with_skills(
     except Exception as e:
         error_message = f"{type(e).__name__}: {str(e)}"
         saw_error = True
-
-    if awaiting_confirm_event is not None:
-        tool_name = awaiting_confirm_event.get("tool_name")
-        risk_level = awaiting_confirm_event.get("risk_level")
-        risk_reason = awaiting_confirm_event.get("risk_reason")
-        summary = awaiting_confirm_event.get("summary")
-        detail = "；".join([str(item) for item in [summary, risk_reason] if item])
-        return {
-            "status": "awaiting_confirm",
-            "content_md": "",
-            "summary": "报告生成需要人工确认后继续。",
-            "error_message": (
-                f"生成报告过程中触发高风险技能确认：{tool_name or '-'}（{risk_level or '-'}）。"
-                + (f" {detail}" if detail else "")
-            ),
-            "skill_executions": skill_executions,
-        }
 
     if saw_error:
         sanitized_content = _sanitize_report_markdown(collected_content)

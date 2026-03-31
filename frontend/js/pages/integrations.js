@@ -5,16 +5,13 @@
 class IntegrationsPage {
     constructor() {
         this.integrations = [];
-        this.channels = [];
-        this.currentTab = 'integrations';
-        this.codeEditor = null;
         this.currentIntegration = null;
-        this.currentChannel = null;
     }
 
     async init() {
         this.render();
-        await this.loadData();
+        await this.loadIntegrations();
+        await this.loadBotBindings();
     }
 
     render() {
@@ -34,48 +31,60 @@ class IntegrationsPage {
                     </div>
                 </div>
 
-                <div class="integrations-tabs">
-                    <button class="integrations-tab active" data-tab="integrations" onclick="integrationsPage.switchTab('integrations')">
-                        Integrations
-                    </button>
-                    <button class="integrations-tab" data-tab="channels" onclick="integrationsPage.switchTab('channels')">
-                        渠道配置
-                    </button>
+                <div class="alert alert-info" style="margin-bottom: 16px; padding: 12px 16px; border-radius: 8px; background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe;">
+                    现在只保留 Integration 概念：通知目标参数在告警订阅中配置，入站采集参数在数据源中配置，Bot 参数在 Bot 绑定中配置。
                 </div>
 
-                <div id="integrations-tab-content" class="tab-content">
-                    <div id="integrations-list"></div>
-                </div>
+                <div id="bot-bindings-summary"></div>
 
-                <div id="channels-tab-content" class="tab-content" style="display: none;">
-                    <div class="integrations-header" style="margin-top: 0;">
-                        <h2 style="font-size: 18px; margin: 0;">渠道 / 机器人配置</h2>
-                        <button class="btn btn-primary" onclick="integrationsPage.showCreateChannelModal()">
-                            创建配置
-                        </button>
-                    </div>
-                    <div id="channels-list"></div>
-                </div>
+                <div id="integrations-list"></div>
             </div>
         `;
     }
 
-    switchTab(tab) {
-        this.currentTab = tab;
-
-        // 更新 tab 样式
-        document.querySelectorAll('.integrations-tab').forEach(t => {
-            t.classList.toggle('active', t.dataset.tab === tab);
-        });
-
-        // 切换内容
-        document.getElementById('integrations-tab-content').style.display = tab === 'integrations' ? 'block' : 'none';
-        document.getElementById('channels-tab-content').style.display = tab === 'channels' ? 'block' : 'none';
-    }
-
-    async loadData() {
-        await this.loadIntegrations();
-        await this.loadChannels();
+    async loadBotBindings() {
+        const container = document.getElementById('bot-bindings-summary');
+        if (!container) return;
+        try {
+            const bindings = await API.getWeixinBotBindings();
+            const statusMap = {
+                'not_ready': { label: '未配置', color: '#999' },
+                'pending': { label: '等待扫码', color: '#f59e0b' },
+                'confirmed': { label: '已登录', color: '#10b981' },
+                'error': { label: '失败', color: '#ef4444' },
+            };
+            const rows = bindings.map(b => {
+                const rawParams = b.params?.raw?.params || {};
+                const loginStatus = rawParams.login_status || 'not_ready';
+                const s = statusMap[loginStatus] || statusMap['not_ready'];
+                const isWeixin = b.code === 'weixin_bot';
+                const configureBtn = isWeixin
+                    ? `<button class="btn btn-sm" style="padding: 2px 10px; font-size: 11px;" onclick="integrationsPage.showWeixinBotModal()">配置</button>`
+                    : '';
+                return `
+                    <div style="display: flex; align-items: center; gap: 16px; padding: 8px 12px; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px;">
+                        <span style="font-size: 18px;">${b.code === 'weixin_bot' ? '💬' : '🚀'}</span>
+                        <div>
+                            <div style="font-weight: 600; font-size: 14px;">${b.name}</div>
+                            <div style="font-size: 11px; color: ${s.color};">${s.label}</div>
+                        </div>
+                        ${configureBtn}
+                    </div>
+                `;
+            }).join('');
+            if (rows) {
+                container.innerHTML = `
+                    <div style="margin-bottom: 20px;">
+                        <div style="font-size: 13px; font-weight: 600; color: #666; margin-bottom: 10px;">🤖 Bot 绑定状态</div>
+                        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                            ${rows}
+                        </div>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            // Bot bindings not critical; silent fail
+        }
     }
 
     async loadIntegrations() {
@@ -88,16 +97,6 @@ class IntegrationsPage {
         }
     }
 
-    async loadChannels() {
-        try {
-            const response = await API.get('/api/alert-channels');
-            this.channels = response;
-            this.renderChannels();
-        } catch (error) {
-            Toast.error('加载 Channels 失败: ' + error.message);
-        }
-    }
-
     renderIntegrations() {
         const container = document.getElementById('integrations-list');
 
@@ -106,17 +105,16 @@ class IntegrationsPage {
                 <div class="empty-state">
                     <div class="empty-icon">📦</div>
                     <h3>暂无 Integration</h3>
-                    <p>点击"加载内置模板"或"创建 Integration"开始使用</p>
+                    <p>点击“加载内置模板”或“创建 Integration”开始使用</p>
                 </div>
             `;
             return;
         }
 
-        // 按类型分组
         const groups = {
-            'outbound_notification': { label: '出站通知', items: [] },
-            'inbound_metric': { label: '入站指标', items: [] },
-            'bot': { label: '机器人', items: [] }
+            outbound_notification: { label: '出站通知', items: [] },
+            inbound_metric: { label: '入站指标', items: [] },
+            bot: { label: '机器人', items: [] }
         };
 
         this.integrations.forEach(integration => {
@@ -126,9 +124,8 @@ class IntegrationsPage {
         });
 
         let html = '';
-        for (const [type, group] of Object.entries(groups)) {
+        for (const group of Object.values(groups)) {
             if (group.items.length === 0) continue;
-
             html += `
                 <div class="integration-section">
                     <h3>${group.label}</h3>
@@ -144,13 +141,18 @@ class IntegrationsPage {
 
     renderIntegrationCard(integration) {
         const categoryIcons = {
-            'webhook': '🔗',
-            'email': '📧',
-            'sms': '📱',
-            'im': '💬',
-            'monitoring': '📊',
-            'custom': '⚙️'
+            webhook: '🔗',
+            email: '📧',
+            sms: '📱',
+            im: '💬',
+            monitoring: '📊',
+            custom: '⚙️'
         };
+
+        const isWeixinBot = integration.integration_id === 'builtin_weixin_bot';
+        const configureBotButton = isWeixinBot
+            ? `<button class="btn btn-sm" style="padding: 4px 12px; font-size: 12px;" onclick="integrationsPage.showWeixinBotModal()">配置</button>`
+            : '';
 
         return `
             <div class="integration-card ${integration.is_builtin ? 'builtin' : 'custom'}">
@@ -160,74 +162,33 @@ class IntegrationsPage {
                     ${integration.is_builtin ? '<span class="builtin-badge">内置</span>' : ''}
                 </div>
                 <p class="description">${integration.description || '无描述'}</p>
+                <div style="font-size: 12px; color: #666; margin-bottom: 12px;">
+                    类型：${integration.integration_type}
+                </div>
                 <div class="card-footer">
                     <span class="status ${integration.enabled ? 'enabled' : 'disabled'}">
                         ${integration.enabled ? '已启用' : '已禁用'}
                     </span>
                     <div class="actions">
-                        <button class="btn-icon" onclick="integrationsPage.viewIntegration(${integration.id})" title="查看">
-                            👁️
-                        </button>
-                        <button class="btn-icon" onclick="integrationsPage.testIntegration(${integration.id})" title="测试">
-                            🧪
-                        </button>
-                        ${!integration.is_builtin ? `
-                            <button class="btn-icon" onclick="integrationsPage.editIntegration(${integration.id})" title="编辑">
-                                ✏️
-                            </button>
-                            <button class="btn-icon" onclick="integrationsPage.deleteIntegration(${integration.id})" title="删除">
-                                🗑️
-                            </button>
-                        ` : ''}
+                        <button class="btn-icon" onclick="integrationsPage.viewIntegration(${integration.id})" title="查看">👁️</button>
+                        <button class="btn-icon" onclick="integrationsPage.testIntegration(${integration.id})" title="测试">🧪</button>
+                        ${configureBotButton}
+                        ${integration.is_builtin ? `
+                            <button class="btn-icon" onclick="integrationsPage.editIntegration(${integration.id})" title="编辑">✏️</button>
+                        ` : `
+                            <button class="btn-icon" onclick="integrationsPage.editIntegration(${integration.id})" title="编辑">✏️</button>
+                            <button class="btn-icon" onclick="integrationsPage.deleteIntegration(${integration.id})" title="删除">🗑️</button>
+                        `}
                     </div>
                 </div>
             </div>
         `;
     }
 
-    renderChannels() {
-        const container = document.getElementById('channels-list');
-
-        if (this.channels.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-icon">📢</div>
-                    <h3>暂无 Channel</h3>
-                    <p>创建渠道或机器人配置后即可在这里管理</p>
-                </div>
-            `;
-            return;
-        }
-
-        const html = `
-            <div class="channel-list">
-                ${this.channels.map(channel => this.renderChannelItem(channel)).join('')}
-            </div>
-        `;
-
-        container.innerHTML = html;
-    }
-
-    renderChannelItem(channel) {
-        return `
-            <div class="channel-item">
-                <div class="channel-info">
-                    <h4 class="channel-name">${channel.name}</h4>
-                    <div class="channel-meta">
-                        ${channel.integration_name || 'Unknown Integration'} ·
-                        ${channel.enabled ? '已启用' : '已禁用'}
-                    </div>
-                </div>
-                <div class="channel-actions">
-                    <button class="btn-icon" onclick="integrationsPage.editChannel(${channel.id})" title="编辑">
-                        ✏️
-                    </button>
-                    <button class="btn-icon" onclick="integrationsPage.deleteChannel(${channel.id})" title="删除">
-                        🗑️
-                    </button>
-                </div>
-            </div>
-        `;
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     async viewIntegration(id) {
@@ -250,6 +211,10 @@ class IntegrationsPage {
                     <p>${integration.category}</p>
                 </div>
                 <div class="form-group">
+                    <label>配置 Schema</label>
+                    <pre style="padding: 12px; border-radius: 6px; overflow-x: auto; max-height: 240px;"><code>${this.escapeHtml(JSON.stringify(integration.config_schema || {}, null, 2))}</code></pre>
+                </div>
+                <div class="form-group">
                     <label>代码</label>
                     <pre style="padding: 12px; border-radius: 6px; overflow-x: auto; max-height: 400px;"><code>${this.escapeHtml(integration.code)}</code></pre>
                 </div>
@@ -260,89 +225,56 @@ class IntegrationsPage {
         });
     }
 
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
     async testIntegration(id) {
         const integration = this.integrations.find(i => i.id === id);
         if (!integration) return;
 
-        // 如果是入站指标类型，需要加载数据源列表
         let datasourcesHtml = '';
         if (integration.integration_type === 'inbound_metric') {
             try {
                 const datasources = await API.get('/api/datasources');
-                if (datasources && datasources.length > 0) {
-                    datasourcesHtml = `
-                        <div class="form-group">
-                            <label>测试数据源 *</label>
-                            <select id="test-datasource-id" required>
-                                <option value="">请选择数据源</option>
-                                ${datasources.map(ds => `
-                                    <option value="${ds.id}">
-                                        ${ds.name} (${ds.db_type})
-                                        ${ds.external_instance_id ? ' - ' + ds.external_instance_id : ''}
-                                    </option>
-                                `).join('')}
-                            </select>
-                            <small style="color: #666; display: block; margin-top: 4px;">
-                                提示：请选择已配置 external_instance_id 的数据源
-                            </small>
-                        </div>
-                    `;
-                } else {
-                    datasourcesHtml = `
-                        <div class="form-group">
-                            <p style="color: #f56c6c;">没有可用的数据源，请先创建数据源</p>
-                        </div>
-                    `;
-                }
-            } catch (error) {
-                console.error('加载数据源失败:', error);
                 datasourcesHtml = `
                     <div class="form-group">
-                        <p style="color: #f56c6c;">加载数据源失败: ${error.message}</p>
+                        <label>测试数据源</label>
+                        <select id="test-datasource-id">
+                            <option value="">请选择</option>
+                            ${datasources.map(ds => `
+                                <option value="${ds.id}">${ds.name} (${ds.db_type})</option>
+                            `).join('')}
+                        </select>
                     </div>
                 `;
+            } catch (error) {
+                datasourcesHtml = `<div class="form-group"><p style="color: #f56c6c;">加载数据源失败: ${error.message}</p></div>`;
             }
         }
 
-        // 构建测试参数表单
         const schema = integration.config_schema;
         let paramsHtml = '';
-
         if (schema && schema.properties) {
             for (const [key, prop] of Object.entries(schema.properties)) {
                 const required = schema.required?.includes(key) ? 'required' : '';
                 paramsHtml += `
                     <div class="form-group">
                         <label>${prop.title || key} ${required ? '*' : ''}</label>
-                        <input type="${prop.format === 'password' ? 'password' : 'text'}"
-                               id="test-param-${key}"
-                               placeholder="${prop.description || ''}"
-                               ${required}>
+                        <input type="${prop.format === 'password' ? 'password' : 'text'}" id="test-param-${key}" placeholder="${prop.description || ''}" ${required}>
                     </div>
                 `;
             }
         }
 
-        const content = `
-            <form id="test-integration-form">
-                ${datasourcesHtml}
-                ${paramsHtml || '<p>此 Integration 无需参数</p>'}
-            </form>
-            <div id="test-result" style="margin-top: 20px; display: none;">
-                <h3 style="font-size: 16px; margin-bottom: 12px;">测试结果</h3>
-                <pre id="test-result-content" style="padding: 12px; border-radius: 6px; overflow-x: auto; max-height: 300px;"></pre>
-            </div>
-        `;
-
         Modal.show({
             title: `测试 ${integration.name}`,
-            content: content,
+            content: `
+                <form id="test-integration-form">
+                    ${datasourcesHtml}
+                    ${paramsHtml || '<p>此 Integration 无需参数</p>'}
+                </form>
+                <div id="test-result" style="margin-top: 20px; display: none;">
+                    <h3 style="font-size: 16px; margin-bottom: 12px;">测试结果</h3>
+                    <pre id="test-result-content" style="padding: 12px; border-radius: 6px; overflow-x: auto; max-height: 300px;"></pre>
+                </div>
+            `,
             buttons: [
                 { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
                 { text: '执行测试', variant: 'primary', onClick: () => this.executeTest(id) }
@@ -355,20 +287,19 @@ class IntegrationsPage {
         const integration = this.integrations.find(i => i.id === id);
         if (!integration) return;
 
-        // 收集参数
         const params = {};
         const schema = integration.config_schema;
-
         if (schema && schema.properties) {
             for (const key of Object.keys(schema.properties)) {
                 const input = document.getElementById(`test-param-${key}`);
                 if (input) {
-                    params[key] = input.value;
+                    params[key] = schema.properties[key].format === 'password' && input.value
+                        ? `ENCRYPT:${input.value}`
+                        : input.value;
                 }
             }
         }
 
-        // 收集数据源 ID（如果是入站指标类型）
         const testData = { params };
         if (integration.integration_type === 'inbound_metric') {
             const datasourceSelect = document.getElementById('test-datasource-id');
@@ -379,24 +310,18 @@ class IntegrationsPage {
 
         try {
             const response = await API.post(`/api/integrations/${id}/test`, testData);
-
-            // 显示结果
             document.getElementById('test-result').style.display = 'block';
             document.getElementById('test-result-content').textContent = JSON.stringify(response, null, 2);
-
-            if (response.success) {
-                Toast.success('测试成功');
-            } else {
-                Toast.error('测试失败: ' + response.message);
-            }
+            if (response.success) Toast.success('测试成功');
+            else Toast.error('测试失败: ' + response.message);
         } catch (error) {
             Toast.error('测试失败: ' + error.message);
         }
     }
 
+
     async deleteIntegration(id) {
         if (!confirm('确定要删除此 Integration 吗？')) return;
-
         try {
             await API.delete(`/api/integrations/${id}`);
             Toast.success('删除成功');
@@ -409,60 +334,41 @@ class IntegrationsPage {
     async editIntegration(id) {
         const integration = this.integrations.find(i => i.id === id);
         if (!integration) return;
-
         this.currentIntegration = integration;
-
-        const content = `
-            <form id="edit-integration-form">
-                <div class="form-group">
-                    <label>名称 *</label>
-                    <input type="text" id="integration-name" value="${integration.name}" required>
-                </div>
-                <div class="form-group">
-                    <label>描述</label>
-                    <textarea id="integration-description">${integration.description || ''}</textarea>
-                </div>
-                <div class="form-group">
-                    <label>类型 *</label>
-                    <select id="integration-type" required disabled>
-                        <option value="outbound_notification" ${integration.integration_type === 'outbound_notification' ? 'selected' : ''}>出站通知</option>
-                        <option value="inbound_metric" ${integration.integration_type === 'inbound_metric' ? 'selected' : ''}>入站指标</option>
-                        <option value="bot" ${integration.integration_type === 'bot' ? 'selected' : ''}>机器人</option>
-                    </select>
-                    <small style="color: #6b7280; font-size: 12px;">类型不可修改</small>
-                </div>
-                <div class="form-group">
-                    <label>分类 *</label>
-                    <select id="integration-category" required disabled>
-                        <option value="webhook" ${integration.category === 'webhook' ? 'selected' : ''}>Webhook</option>
-                        <option value="email" ${integration.category === 'email' ? 'selected' : ''}>Email</option>
-                        <option value="sms" ${integration.category === 'sms' ? 'selected' : ''}>SMS</option>
-                        <option value="im" ${integration.category === 'im' ? 'selected' : ''}>即时通讯</option>
-                        <option value="monitoring" ${integration.category === 'monitoring' ? 'selected' : ''}>监控系统</option>
-                        <option value="custom" ${integration.category === 'custom' ? 'selected' : ''}>自定义</option>
-                    </select>
-                    <small style="color: #6b7280; font-size: 12px;">分类不可修改</small>
-                </div>
-                <div class="form-group">
-                    <label>配置 Schema (JSON)</label>
-                    <textarea id="integration-config-schema" rows="6" placeholder='{"properties": {"url": {"type": "string", "title": "URL"}}, "required": ["url"]}'>${integration.config_schema ? JSON.stringify(integration.config_schema, null, 2) : ''}</textarea>
-                </div>
-                <div class="form-group">
-                    <label>代码 *</label>
-                    <textarea id="integration-code" rows="12" required>${integration.code}</textarea>
-                </div>
-                <div class="form-group">
-                    <label style="display: flex; align-items: center; gap: 8px;">
-                        <input type="checkbox" id="integration-enabled" ${integration.enabled ? 'checked' : ''}>
-                        启用此 Integration
-                    </label>
-                </div>
-            </form>
-        `;
 
         Modal.show({
             title: '编辑 Integration',
-            content: content,
+            content: `
+                <form id="edit-integration-form">
+                    <div class="form-group">
+                        <label>名称 *</label>
+                        <input type="text" id="integration-name" value="${integration.name}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>描述</label>
+                        <textarea id="integration-description">${integration.description || ''}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>配置 Schema (JSON)</label>
+                        <textarea id="integration-config-schema" rows="6">${integration.config_schema ? JSON.stringify(integration.config_schema, null, 2) : ''}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>代码 *</label>
+                        ${integration.integration_id === 'builtin_feishu_bot' ? `
+                            <div class="alert alert-info" style="margin-bottom: 12px; padding: 10px 12px; border-radius: 8px; background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe;">
+                                直接修改代码顶部的 APP_ID、APP_SECRET、SIGNING_SECRET 三个常量即可配置飞书机器人。
+                            </div>
+                        ` : ''}
+                        <textarea id="integration-code" rows="12" required>${integration.code}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 8px;">
+                            <input type="checkbox" id="integration-enabled" ${integration.enabled ? 'checked' : ''}>
+                            启用此 Integration
+                        </label>
+                    </div>
+                </form>
+            `,
             buttons: [
                 { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
                 { text: '保存', variant: 'primary', onClick: () => this.updateIntegration() }
@@ -501,7 +407,6 @@ class IntegrationsPage {
                 code,
                 enabled
             });
-
             Toast.success('更新成功');
             Modal.hide();
             await this.loadIntegrations();
@@ -521,51 +426,49 @@ class IntegrationsPage {
     }
 
     showCreateIntegrationModal() {
-        const content = `
-            <form id="create-integration-form">
-                <div class="form-group">
-                    <label>名称 *</label>
-                    <input type="text" id="integration-name" required>
-                </div>
-                <div class="form-group">
-                    <label>描述</label>
-                    <textarea id="integration-description"></textarea>
-                </div>
-                <div class="form-group">
-                    <label>类型 *</label>
-                    <select id="integration-type" required>
-                        <option value="">请选择</option>
-                        <option value="outbound_notification">出站通知</option>
-                        <option value="inbound_metric">入站指标</option>
-                        <option value="bot">机器人</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>分类 *</label>
-                    <select id="integration-category" required>
-                        <option value="">请选择</option>
-                        <option value="webhook">Webhook</option>
-                        <option value="email">Email</option>
-                        <option value="sms">SMS</option>
-                        <option value="im">即时通讯</option>
-                        <option value="monitoring">监控系统</option>
-                        <option value="custom">自定义</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>配置 Schema (JSON)</label>
-                    <textarea id="integration-config-schema" rows="6" placeholder='{"properties": {"url": {"type": "string", "title": "URL"}}, "required": ["url"]}'></textarea>
-                </div>
-                <div class="form-group">
-                    <label>代码 *</label>
-                    <textarea id="integration-code" rows="12" required placeholder="async def execute(context, params):&#10;    # 实现代码&#10;    return {'success': True}"></textarea>
-                </div>
-            </form>
-        `;
-
         Modal.show({
             title: '创建 Integration',
-            content: content,
+            content: `
+                <form id="create-integration-form">
+                    <div class="form-group">
+                        <label>名称 *</label>
+                        <input type="text" id="integration-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>描述</label>
+                        <textarea id="integration-description"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>类型 *</label>
+                        <select id="integration-type" required>
+                            <option value="">请选择</option>
+                            <option value="outbound_notification">出站通知</option>
+                            <option value="inbound_metric">入站指标</option>
+                            <option value="bot">机器人</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>分类 *</label>
+                        <select id="integration-category" required>
+                            <option value="">请选择</option>
+                            <option value="webhook">Webhook</option>
+                            <option value="email">Email</option>
+                            <option value="sms">SMS</option>
+                            <option value="im">即时通讯</option>
+                            <option value="monitoring">监控系统</option>
+                            <option value="custom">自定义</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>配置 Schema (JSON)</label>
+                        <textarea id="integration-config-schema" rows="6" placeholder='{"properties": {"url": {"type": "string", "title": "URL"}}, "required": ["url"]}'></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>代码 *</label>
+                        <textarea id="integration-code" rows="12" required placeholder="async def execute(context, params):&#10;    return {'success': True}"></textarea>
+                    </div>
+                </form>
+            `,
             buttons: [
                 { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
                 { text: '保存', variant: 'primary', onClick: () => this.saveIntegration() }
@@ -597,7 +500,6 @@ class IntegrationsPage {
             }
         }
 
-        // 生成 integration_id：使用名称的拼音或英文，转小写并替换空格为下划线
         const integrationId = name.toLowerCase()
             .replace(/\s+/g, '_')
             .replace(/[^\w\u4e00-\u9fa5]+/g, '_')
@@ -614,7 +516,6 @@ class IntegrationsPage {
                 code,
                 enabled: true
             });
-
             Toast.success('创建成功');
             Modal.hide();
             await this.loadIntegrations();
@@ -623,256 +524,154 @@ class IntegrationsPage {
         }
     }
 
-    showCreateChannelModal() {
-        // 获取可用的 Integration
-        const configurableIntegrations = this.integrations.filter(
-            i => ['outbound_notification', 'bot'].includes(i.integration_type) && i.enabled
-        );
-
-        if (configurableIntegrations.length === 0) {
-            Toast.error('没有可用的通知或机器人 Integration');
-            return;
+    async showWeixinBotModal() {
+        try {
+            const bindings = await API.getWeixinBotBindings();
+            const weixinBinding = bindings.find(b => b.code === 'weixin_bot');
+            await this._showWeixinLoginModal(weixinBinding);
+        } catch (error) {
+            Toast.error('加载微信机器人状态失败: ' + error.message);
         }
+    }
 
-        const content = `
-            <form id="create-channel-form">
-                <div class="form-group">
-                    <label>名称 *</label>
-                    <input type="text" id="channel-name" required>
-                </div>
-                <div class="form-group">
-                    <label>描述</label>
-                    <textarea id="channel-description"></textarea>
-                </div>
-                <div class="form-group">
-                    <label>Integration *</label>
-                    <select id="channel-integration" required onchange="integrationsPage.onIntegrationChange()">
-                        <option value="">请选择</option>
-                        ${configurableIntegrations.map(i => `
-                            <option value="${i.id}">${i.name}</option>
-                        `).join('')}
-                    </select>
-                </div>
-                <div id="channel-params-container"></div>
-            </form>
-        `;
+    async _showWeixinLoginModal(binding) {
+        const statusMap = {
+            'not_ready': { label: '未配置', color: '#999' },
+            'pending': { label: '等待扫码', color: '#f59e0b' },
+            'confirmed': { label: '已登录', color: '#10b981' },
+            'error': { label: '登录失败', color: '#ef4444' },
+        };
+        const rawParams = binding?.params?.raw?.params || binding?.params || {};
+        const s = statusMap[rawParams.login_status] || statusMap['not_ready'];
+        const isLoggedIn = rawParams.login_status === 'confirmed';
 
         Modal.show({
-            title: '创建配置',
-            content: content,
-            buttons: [
-                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
-                { text: '保存', variant: 'primary', onClick: () => this.saveChannel() }
-            ],
-            size: 'large'
-        });
-    }
-
-    onIntegrationChange() {
-        const integrationId = document.getElementById('channel-integration').value;
-        if (!integrationId) {
-            document.getElementById('channel-params-container').innerHTML = '';
-            return;
-        }
-
-        const integration = this.integrations.find(i => i.id === parseInt(integrationId));
-        if (!integration || !integration.config_schema) {
-            document.getElementById('channel-params-container').innerHTML = '';
-            return;
-        }
-
-        // 根据 config_schema 生成参数表单
-        const schema = integration.config_schema;
-        let html = '<h3 style="font-size: 16px; margin: 20px 0 12px 0;">参数配置</h3>';
-
-        for (const [key, prop] of Object.entries(schema.properties)) {
-            const required = schema.required?.includes(key) ? 'required' : '';
-            html += `
-                <div class="form-group">
-                    <label>${prop.title || key} ${required ? '*' : ''}</label>
-                    <input type="${prop.format === 'password' ? 'password' : 'text'}"
-                           id="channel-param-${key}"
-                           placeholder="${prop.description || ''}"
-                           ${required}>
-                </div>
-            `;
-        }
-
-        document.getElementById('channel-params-container').innerHTML = html;
-    }
-
-    async saveChannel() {
-        const name = document.getElementById('channel-name').value;
-        const description = document.getElementById('channel-description').value;
-        const integrationId = document.getElementById('channel-integration').value;
-
-        if (!name || !integrationId) {
-            Toast.error('请填写必填项');
-            return;
-        }
-
-        const integration = this.integrations.find(i => i.id === parseInt(integrationId));
-        const params = {};
-
-        if (integration && integration.config_schema) {
-            for (const key of Object.keys(integration.config_schema.properties)) {
-                const input = document.getElementById(`channel-param-${key}`);
-                if (input) {
-                    // 敏感参数加密标记
-                    const prop = integration.config_schema.properties[key];
-                    if (prop.format === 'password' && input.value) {
-                        params[key] = 'ENCRYPT:' + input.value;
-                    } else {
-                        params[key] = input.value;
-                    }
-                }
-            }
-        }
-
-        try {
-            await API.post('/api/alert-channels', {
-                name,
-                description,
-                integration_id: parseInt(integrationId),
-                params,
-                enabled: true
-            });
-
-            Toast.success('创建成功');
-            Modal.hide();
-            await this.loadChannels();
-        } catch (error) {
-            Toast.error('创建失败: ' + error.message);
-        }
-    }
-
-    async deleteChannel(id) {
-        if (!confirm('确定要删除此 Channel 吗？')) return;
-
-        try {
-            await API.delete(`/api/alert-channels/${id}`);
-            Toast.success('删除成功');
-            await this.loadChannels();
-        } catch (error) {
-            Toast.error('删除失败: ' + error.message);
-        }
-    }
-
-    async editChannel(id) {
-        const channel = this.channels.find(c => c.id === id);
-        if (!channel) return;
-
-        this.currentChannel = channel;
-
-        // 获取可用的 Integration
-        const configurableIntegrations = this.integrations.filter(
-            i => ['outbound_notification', 'bot'].includes(i.integration_type) && i.enabled
-        );
-
-        const integration = this.integrations.find(i => i.id === channel.integration_id);
-        if (!integration) {
-            Toast.error('关联的 Integration 不存在');
-            return;
-        }
-
-        // 构建参数表单
-        let paramsHtml = '';
-        if (integration.config_schema && integration.config_schema.properties) {
-            for (const [key, prop] of Object.entries(integration.config_schema.properties)) {
-                const required = integration.config_schema.required?.includes(key) ? 'required' : '';
-                const value = channel.params[key] || '';
-                paramsHtml += `
-                    <div class="form-group">
-                        <label>${prop.title || key} ${required ? '*' : ''}</label>
-                        <input type="${prop.format === 'password' ? 'password' : 'text'}"
-                               id="channel-param-${key}"
-                               value="${prop.format === 'password' ? '' : value}"
-                               placeholder="${prop.description || ''}"
-                               ${required}>
+            title: '微信机器人配置',
+            content: `
+                <div style="margin-bottom: 16px;">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                        <span style="font-weight: 600;">登录状态：</span>
+                        <span style="color: ${s.color}; font-weight: 600;">${s.label}</span>
+                        ${isLoggedIn ? '<span style="color: #10b981; font-size: 12px;">（后端轮询服务已自动接收消息）</span>' : ''}
                     </div>
-                `;
-            }
-        }
-
-        const content = `
-            <form id="edit-channel-form">
-                <div class="form-group">
-                    <label>名称 *</label>
-                    <input type="text" id="channel-name" value="${channel.name}" required>
+                    ${rawParams.last_error ? `<div style="color: #ef4444; font-size: 12px; margin-bottom: 8px;">错误：${rawParams.last_error}</div>` : ''}
                 </div>
-                <div class="form-group">
-                    <label>描述</label>
-                    <textarea id="channel-description">${channel.description || ''}</textarea>
+                <div id="weixin-login-body">
+                    ${isLoggedIn ? this._weixinLoggedInHtml(rawParams) : this._weixinLoginFormHtml(rawParams)}
                 </div>
-                <div class="form-group">
-                    <label>Integration *</label>
-                    <select id="channel-integration" required disabled>
-                        ${configurableIntegrations.map(i => `
-                            <option value="${i.id}" ${i.id === channel.integration_id ? 'selected' : ''}>${i.name}</option>
-                        `).join('')}
-                    </select>
-                </div>
-                ${paramsHtml}
-            </form>
-        `;
-
-        Modal.show({
-            title: '编辑配置',
-            content: content,
+                <div id="weixin-login-status" style="margin-top: 12px;"></div>
+            `,
             buttons: [
-                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
-                { text: '保存', variant: 'primary', onClick: () => this.updateChannel() }
+                { text: '关闭', variant: 'secondary', onClick: () => Modal.hide() },
+                ...(isLoggedIn ? [
+                    { text: '退出登录', variant: 'danger', onClick: () => this._weixinLogout(rawParams) }
+                ] : [])
             ],
-            size: 'large'
+            size: 'medium'
         });
     }
 
-    async updateChannel() {
-        const name = document.getElementById('channel-name').value;
-        const description = document.getElementById('channel-description').value;
+    _weixinLoginFormHtml(binding) {
+        return `
+            <div class="form-group">
+                <label>Step 1. 获取登录二维码</label>
+                <div style="font-size: 12px; color: #666; margin-bottom: 10px;">点击后将显示微信登录二维码，请用微信扫码确认登录</div>
+                <button class="btn btn-primary" id="weixin-get-qr-btn" onclick="integrationsPage._getWeixinQrcode()">获取二维码</button>
+            </div>
+            <div id="weixin-qrcode-area" style="display: none; margin: 16px 0; text-align: center;">
+                <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; display: inline-block;">
+                    <div id="weixin-qrcode-display" style="margin-bottom: 8px;"></div>
+                    <div id="weixin-qrcode-hint" style="font-size: 12px; color: #666;"></div>
+                </div>
+                <div style="margin-top: 12px;">
+                    <button class="btn btn-secondary" id="weixin-poll-status-btn" onclick="integrationsPage._pollWeixinLoginStatus()">查询扫码状态</button>
+                </div>
+            </div>
+        `;
+    }
 
-        if (!name) {
-            Toast.error('请填写必填项');
-            return;
-        }
+    _weixinLoggedInHtml(binding) {
+        return `
+            <div style="padding: 16px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; text-align: center;">
+                <div style="font-size: 32px; margin-bottom: 8px;">🤖</div>
+                <div style="font-weight: 600; color: #166534; margin-bottom: 4px;">微信机器人已就绪</div>
+                <div style="font-size: 13px; color: #15803d;">后端轮询服务正在运行，可以直接在微信中向机器人发送消息了。</div>
+            </div>
+        `;
+    }
 
-        const integration = this.integrations.find(i => i.id === this.currentChannel.integration_id);
-        const params = {};
-
-        if (integration && integration.config_schema) {
-            for (const key of Object.keys(integration.config_schema.properties)) {
-                const input = document.getElementById(`channel-param-${key}`);
-                if (input && input.value) {
-                    // 敏感参数加密标记
-                    const prop = integration.config_schema.properties[key];
-                    if (prop.format === 'password') {
-                        params[key] = 'ENCRYPT:' + input.value;
-                    } else {
-                        params[key] = input.value;
-                    }
-                } else if (this.currentChannel.params[key]) {
-                    // 保留原有值（密码字段未修改时）
-                    params[key] = this.currentChannel.params[key];
-                }
-            }
-        }
+    async _getWeixinQrcode() {
+        const btn = document.getElementById('weixin-get-qr-btn');
+        if (btn) btn.disabled = true;
 
         try {
-            await API.put(`/api/alert-channels/${this.currentChannel.id}`, {
-                name,
-                description,
-                params,
-                enabled: this.currentChannel.enabled
-            });
+            const resp = await API.createWeixinLoginQrcode();
+            document.getElementById('weixin-qrcode-area').style.display = 'block';
+            const display = document.getElementById('weixin-qrcode-display');
+            const hint = document.getElementById('weixin-qrcode-hint');
 
-            Toast.success('更新成功');
-            Modal.hide();
-            await this.loadChannels();
+            if (resp.qrcode_img_content) {
+                display.innerHTML = `<img src="${resp.qrcode_img_content}" alt="QR Code" style="width: 200px; height: 200px;">`;
+            } else {
+                display.innerHTML = `<div style="width: 200px; height: 200px; display: flex; align-items: center; justify-content: center; background: #f9fafb; border: 1px solid #e5e7eb; font-size: 12px; color: #666; word-break: break-all; padding: 12px;">${resp.qrcode}</div>`;
+            }
+            hint.textContent = '请使用微信扫码登录';
+            window._weixinQrcode = resp.qrcode;
         } catch (error) {
-            Toast.error('更新失败: ' + error.message);
+            Toast.error('获取二维码失败: ' + error.message);
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
+    async _pollWeixinLoginStatus() {
+        const qrcode = window._weixinQrcode;
+        if (!qrcode) {
+            Toast.error('请先获取二维码');
+            return;
+        }
+        const btn = document.getElementById('weixin-poll-status-btn');
+        if (btn) btn.disabled = true;
+        const statusDiv = document.getElementById('weixin-login-status');
+
+        try {
+            statusDiv.innerHTML = '<span style="color: #f59e0b;">查询中...</span>';
+            const resp = await API.pollWeixinLoginStatus(qrcode);
+            statusDiv.innerHTML = '';
+
+            const statusMap = {
+                'pending': { label: '等待扫码...', color: '#f59e0b' },
+                'confirmed': { label: '登录成功！', color: '#10b981' },
+                'expired': { label: '二维码已过期，请重新获取', color: '#ef4444' },
+                'error': { label: '扫码失败，请重试', color: '#ef4444' },
+            };
+            const s = statusMap[resp.status] || { label: resp.status, color: '#666' };
+            statusDiv.innerHTML = `<span style="color: ${s.color}; font-weight: 600;">${s.label}</span>`;
+
+            if (resp.status === 'confirmed') {
+                await new Promise(r => setTimeout(r, 800));
+                const bindings = await API.getWeixinBotBindings();
+                const weixinBinding = bindings.find(b => b.code === 'weixin_bot');
+                await this._showWeixinLoginModal(weixinBinding);
+                Toast.success('微信机器人登录成功！');
+            }
+        } catch (error) {
+            statusDiv.innerHTML = `<span style="color: #ef4444;">查询失败：${error.message}</span>`;
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
+    async _weixinLogout(params) {
+        if (!confirm('确定要退出微信机器人登录吗？退出后轮询服务将停止接收消息。')) return;
+        try {
+            await API.updateWeixinBotBinding('weixin_bot', { enabled: false, params: { bot_token: '', login_status: 'not_ready', api_baseurl: '', gateway_url: '' } });
+            Toast.success('已退出登录');
+            await this.showWeixinBotModal();
+        } catch (error) {
+            Toast.error('退出失败: ' + error.message);
         }
     }
 }
 
-// 全局实例
 const integrationsPage = new IntegrationsPage();
