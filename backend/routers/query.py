@@ -75,6 +75,7 @@ async def execute_query(req: QueryExecuteRequest, db: AsyncSession = Depends(get
             message=result.get("message"),
         )
     except Exception as e:
+        logger.error(f"Query execute failed: datasource_id={req.datasource_id}, sql={req.sql!r}, error={e}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e))
     finally:
         await connector.close()
@@ -87,6 +88,7 @@ async def explain_query(req: QueryExplainRequest, db: AsyncSession = Depends(get
         result = await connector.explain_query(req.sql)
         return result
     except Exception as e:
+        logger.error(f"Query explain failed: datasource_id={req.datasource_id}, sql={req.sql!r}, error={e}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e))
     finally:
         await connector.close()
