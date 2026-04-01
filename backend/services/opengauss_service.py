@@ -30,14 +30,14 @@ class OpenGaussConnector(DBConnector):
                 "SELECT numbackends, xact_commit, xact_rollback, blks_read, "
                 "blks_hit, tup_returned, tup_fetched, tup_inserted, "
                 "tup_updated, tup_deleted, conflicts, deadlocks "
-                "FROM pg_stat_database WHERE datname = current_database()"
+                "FROM pg_stat_database"
             )
             activity = await conn.fetchrow(
                 "SELECT count(*) as total, "
-                "count(*) FILTER (WHERE state = 'active') as active, "
-                "count(*) FILTER (WHERE state = 'idle') as idle, "
-                "count(*) FILTER (WHERE wait_event_type IS NOT NULL) as waiting "
-                "FROM pg_stat_activity WHERE datname = current_database()"
+                "count(CASE WHEN state = 'active' THEN 1 END) as active, "
+                "count(CASE WHEN state = 'idle' THEN 1 END) as idle, "
+                "CASE WHEN waiting = true THEN 1 END) as waiting "
+                "FROM pg_stat_activity"
             )
             size = await conn.fetchrow(
                 "SELECT pg_database_size(current_database()) as db_size"
@@ -99,7 +99,7 @@ class OpenGaussConnector(DBConnector):
             rows = await conn.fetch(
                 "SELECT pid, usename, client_addr, datname, state, "
                 "query_start, wait_event_type, wait_event, query "
-                "FROM pg_stat_activity WHERE datname = current_database() "
+                "FROM pg_stat_activity"
                 "ORDER BY query_start DESC NULLS LAST LIMIT 50"
             )
             return [dict(r) for r in rows]

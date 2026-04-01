@@ -13,7 +13,7 @@ from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
 
-MAX_TOOL_ROUNDS = 30
+MAX_TOOL_ROUNDS = 1000
 
 
 def is_dashscope_api(client) -> bool:
@@ -356,7 +356,7 @@ async def generate_report_with_skills(
     db: Any,
     user_id: int = 1,
     model_id: Optional[int] = None,
-    timeout_seconds: int = 300
+    timeout_seconds: int = 600
 ) -> tuple[str, list]:
     """Generate inspection report using AI with skill calls. Returns (markdown, skill_executions)."""
     import asyncio
