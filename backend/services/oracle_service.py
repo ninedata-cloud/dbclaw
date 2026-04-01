@@ -217,26 +217,43 @@ class OracleConnector(DBConnector):
 
     async def execute_query(self, sql: str, max_rows: int = 1000) -> Dict[str, Any]:
         conn = await self._connect()
+        cursor = None
         try:
             cursor = conn.cursor()
             start = time.time()
             await cursor.execute(sql)
-            rows = await cursor.fetchmany(max_rows)
             elapsed = round((time.time() - start) * 1000, 2)
 
-            columns = [desc[0] for desc in cursor.description] if cursor.description else []
-            row_count = cursor.rowcount if cursor.rowcount > 0 else len(rows)
+            has_result_set = bool(cursor.description)
+            columns = [desc[0] for desc in cursor.description] if has_result_set else []
 
-            cursor.close()
+            if has_result_set:
+                rows = await cursor.fetchmany(max_rows + 1)
+                truncated = len(rows) > max_rows
+                visible_rows = rows[:max_rows]
+                result = {
+                    "columns": columns,
+                    "rows": [list(row) for row in visible_rows],
+                    "row_count": len(visible_rows),
+                    "execution_time_ms": elapsed,
+                    "truncated": truncated,
+                }
+            else:
+                await conn.commit()
+                row_count = cursor.rowcount if cursor.rowcount and cursor.rowcount > 0 else 0
+                result = {
+                    "columns": [],
+                    "rows": [],
+                    "row_count": row_count,
+                    "execution_time_ms": elapsed,
+                    "truncated": False,
+                    "message": "Statement executed successfully",
+                }
 
-            return {
-                "columns": columns,
-                "rows": [list(row) for row in rows],
-                "row_count": row_count,
-                "execution_time_ms": elapsed,
-                "truncated": len(rows) >= max_rows,
-            }
+            return result
         finally:
+            if cursor is not None:
+                cursor.close()
             await conn.close()
 
     async def explain_query(self, sql: str) -> Dict[str, Any]:
