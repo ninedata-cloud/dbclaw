@@ -248,20 +248,24 @@ class SQLServerConnector(DBConnector):
                 elapsed = round((time.time() - start) * 1000, 2)
                 if cursor.description:
                     columns = [col[0] for col in cursor.description]
-                    rows = cursor.fetchmany(max_rows)
+                    rows = cursor.fetchmany(max_rows + 1)
+                    truncated = len(rows) > max_rows
+                    visible_rows = rows[:max_rows]
                     result = {
                         "columns": columns,
-                        "rows": [list(r) for r in rows],
-                        "row_count": len(rows),
+                        "rows": [list(r) for r in visible_rows],
+                        "row_count": len(visible_rows),
                         "execution_time_ms": elapsed,
-                        "truncated": len(rows) >= max_rows,
+                        "truncated": truncated,
                     }
                     cursor.close()  # Close cursor to free connection
                     return result
+                row_count = cursor.rowcount if cursor.rowcount >= 0 else 0
                 result = {
-                    "columns": [], "rows": [], "row_count": cursor.rowcount,
+                    "columns": [], "rows": [], "row_count": row_count,
                     "execution_time_ms": elapsed,
-                    "message": f"Query OK, {cursor.rowcount} rows affected",
+                    "truncated": False,
+                    "message": f"Query OK, {row_count} rows affected",
                 }
                 cursor.close()  # Close cursor to free connection
                 return result

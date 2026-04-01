@@ -3,6 +3,7 @@ Utility functions for skill execution
 """
 from typing import Dict, Any
 import logging
+import re
 from backend.models.datasource import Datasource
 from backend.services.mysql_service import MySQLConnector
 from backend.services.postgres_service import PostgreSQLConnector
@@ -12,7 +13,6 @@ from backend.services.sqlserver_service import SQLServerConnector
 from backend.services.oracle_service import OracleConnector
 from backend.services.tidb_service import TiDBConnector
 from backend.services.oceanbase_service import OceanBaseConnector
-from backend.services.oceanbase_mysql_service import OceanBaseMySQLConnector
 from backend.services.opengauss_service import OpenGaussConnector
 from backend.services.dm_service import DMConnector
 from backend.utils.encryption import decrypt_value
@@ -20,31 +20,60 @@ from backend.utils.encryption import decrypt_value
 logger = logging.getLogger(__name__)
 
 
-def _format_query_error(error: Exception) -> Dict[str, Any]:
-    """Format database query errors into a user-friendly payload."""
+def _get_non_empty_error_message(error: Exception) -> str:
+    """Extract a non-empty error message from an exception."""
     message = str(error).strip()
-    if not message:
-        message = getattr(error, "message", None) or repr(error)
+    if message:
+        return message
 
-    payload = {
-        "success": False,
-        "error": message,
-        "error_type": type(error).__name__,
-    }
+    representation = repr(error).strip()
+    if representation:
+        return representation
 
-    sqlstate = getattr(error, "sqlstate", None)
-    if sqlstate:
-        payload["sqlstate"] = sqlstate
+    return error.__class__.__name__
 
-    detail = getattr(error, "detail", None)
-    if detail:
-        payload["detail"] = detail
 
-    hint = getattr(error, "hint", None)
-    if hint:
-        payload["hint"] = hint
+def _normalize_sql_for_readonly_check(query: str) -> str:
+    """Remove comments and quoted strings for lightweight read-only checks."""
+    normalized = re.sub(r"/\*.*?\*/", " ", query, flags=re.DOTALL)
+    normalized = re.sub(r"--.*?$", " ", normalized, flags=re.MULTILINE)
+    normalized = re.sub(r"'(?:''|[^'])*'", "''", normalized)
+    normalized = re.sub(r'"(?:""|[^"])*"', '""', normalized)
+    return normalized.strip().upper()
 
-    return payload
+
+def _is_explain_write_query(query_upper: str) -> bool:
+    """Detect EXPLAIN statements that wrap write operations."""
+    if not query_upper.startswith('EXPLAIN'):
+        return False
+
+    explain_body = re.sub(
+        r'^EXPLAIN\s*(?:\((?:[^()]|\([^()]*\))*\)\s*)*(?:ANALYZE\s+)?',
+        '',
+        query_upper,
+        count=1,
+    ).lstrip()
+    return bool(re.match(r'^(UPDATE|DELETE|INSERT|MERGE)\b', explain_body))
+
+
+
+def _is_read_only_query(query: str) -> bool:
+    query_upper = _normalize_sql_for_readonly_check(query)
+    simple_allowed_keywords = ['SELECT', 'SHOW', 'EXPLAIN', 'DESCRIBE', 'DESC']
+
+    if ';' in query_upper:
+        return False
+
+    if query_upper.startswith('EXPLAIN'):
+        return not _is_explain_write_query(query_upper)
+
+    if any(query_upper.startswith(keyword) for keyword in simple_allowed_keywords):
+        return True
+
+    if query_upper.startswith('WITH'):
+        return not re.search(r'\b(INSERT|UPDATE|DELETE|MERGE)\b', query_upper)
+
+    return False
 
 
 async def execute_query(datasource: Datasource, query: str, allow_write: bool = False) -> Dict[str, Any]:
@@ -59,10 +88,7 @@ async def execute_query(datasource: Datasource, query: str, allow_write: bool = 
     try:
         # Validate query if write operations are not allowed
         if not allow_write:
-            query_upper = query.strip().upper()
-            allowed_keywords = ['SELECT', 'SHOW', 'EXPLAIN', 'EXEC', 'EXECUTE', 'DESCRIBE', 'DESC', 'WITH']
-
-            if not any(query_upper.startswith(keyword) for keyword in allowed_keywords):
+            if not _is_read_only_query(query):
                 return {
                     "success": False,
                     "error": "Only read-only queries (SELECT, SHOW, EXPLAIN, DESCRIBE) are allowed. Enable 'Execute Any SQL' permission for write operations."
@@ -136,14 +162,6 @@ async def execute_query(datasource: Datasource, query: str, allow_write: bool = 
                 password=password,
                 database=datasource.database,
             )
-        elif datasource.db_type == "oceanbase_mysql":
-            service = OceanBaseMySQLConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-            )
         elif datasource.db_type == "opengauss":
             service = OpenGaussConnector(
                 host=datasource.host,
@@ -169,11 +187,19 @@ async def execute_query(datasource: Datasource, query: str, allow_write: bool = 
         if "success" not in result:
             result["success"] = True
         # Convert to data format expected by skills
-        if "rows" in result and "columns" in result:
+        if "rows" in result and "data" not in result:
             result["data"] = result["rows"]
         return result
 
     except Exception as e:
-        logger.error(f"Failed to execute query on datasource {datasource.id} ({datasource.name}): {e}", exc_info=True)
-        return _format_query_error(e)
+        error_message = _get_non_empty_error_message(e)
+        logger.error(
+            f"Failed to execute query on datasource {datasource.id} ({datasource.name}): {error_message}",
+            exc_info=True,
+        )
+        return {
+            "success": False,
+            "error": error_message,
+            "error_type": e.__class__.__name__,
+        }
 

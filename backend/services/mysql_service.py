@@ -185,22 +185,26 @@ class MySQLConnector(DBConnector):
 
                 if cur.description:
                     columns = [d[0] for d in cur.description]
-                    rows = await cur.fetchmany(max_rows)
-                    total = cur.rowcount
+                    fetched_rows = await cur.fetchmany(max_rows + 1)
+                    truncated = len(fetched_rows) > max_rows
+                    visible_rows = fetched_rows[:max_rows]
                     return {
                         "columns": columns,
-                        "rows": [list(r) for r in rows],
-                        "row_count": len(rows),
+                        "rows": [list(r) for r in visible_rows],
+                        "row_count": len(visible_rows),
                         "execution_time_ms": elapsed,
-                        "truncated": total > max_rows if total >= 0 else False,
+                        "truncated": truncated,
                     }
                 else:
+                    row_count = cur.rowcount if cur.rowcount >= 0 else 0
+                    await conn.commit()
                     return {
                         "columns": [],
                         "rows": [],
-                        "row_count": cur.rowcount,
+                        "row_count": row_count,
                         "execution_time_ms": elapsed,
-                        "message": f"Query OK, {cur.rowcount} rows affected",
+                        "truncated": False,
+                        "message": f"Query OK, {row_count} rows affected",
                     }
         finally:
             conn.close()

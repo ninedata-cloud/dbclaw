@@ -151,21 +151,26 @@ class DMConnector(DBConnector):
 
                 if cursor.description:
                     columns = [col[0] for col in cursor.description]
-                    rows = cursor.fetchmany(max_rows)
+                    fetched_rows = cursor.fetchmany(max_rows + 1)
+                    truncated = len(fetched_rows) > max_rows
+                    visible_rows = fetched_rows[:max_rows]
                     return {
                         "columns": columns,
-                        "rows": [list(row) for row in rows],
-                        "row_count": len(rows),
+                        "rows": [list(row) for row in visible_rows],
+                        "row_count": len(visible_rows),
                         "execution_time_ms": elapsed,
-                        "truncated": cursor.rowcount > max_rows if cursor.rowcount >= 0 else False,
+                        "truncated": truncated,
                     }
                 else:
+                    row_count = cursor.rowcount if cursor.rowcount >= 0 else 0
+                    conn.commit()
                     return {
                         "columns": [],
                         "rows": [],
-                        "row_count": cursor.rowcount,
+                        "row_count": row_count,
                         "execution_time_ms": elapsed,
-                        "message": f"Query OK, {cursor.rowcount} rows affected",
+                        "truncated": False,
+                        "message": f"Query OK, {row_count} rows affected",
                     }
             finally:
                 conn.close()
