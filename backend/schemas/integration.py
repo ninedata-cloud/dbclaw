@@ -10,7 +10,7 @@ class IntegrationCreate(BaseModel):
     integration_id: str = Field(..., description="唯一标识符")
     name: str = Field(..., description="集成名称")
     description: Optional[str] = Field(None, description="描述")
-    integration_type: str = Field(..., description="集成类型: outbound_notification / inbound_metric")
+    integration_type: str = Field(..., description="集成类型: outbound_notification / inbound_metric / bot")
     category: str = Field(default="custom", description="分类: webhook/email/sms/im/monitoring/custom")
     is_builtin: bool = Field(default=False, description="是否为内置模板")
     code: str = Field(..., description="可编程脚本")
@@ -46,39 +46,6 @@ class IntegrationResponse(BaseModel):
         from_attributes = True
 
 
-class AlertChannelCreate(BaseModel):
-    name: str = Field(..., description="渠道名称")
-    description: Optional[str] = None
-    integration_id: int = Field(..., description="引用的集成 ID")
-    params: Dict[str, Any] = Field(default_factory=dict, description="渠道参数")
-    enabled: bool = Field(default=True)
-
-
-class AlertChannelUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    params: Optional[Dict[str, Any]] = None
-    enabled: Optional[bool] = None
-
-
-class AlertChannelResponse(BaseModel):
-    id: int
-    name: str
-    description: Optional[str]
-    integration_id: int
-    params: Dict[str, Any]
-    enabled: bool
-    created_at: datetime
-    updated_at: datetime
-    # 冗余字段，方便前端展示
-    integration_name: Optional[str] = None
-    integration_type: Optional[str] = None
-    integration_category: Optional[str] = None
-
-    class Config:
-        from_attributes = True
-
-
 class IntegrationTestResult(BaseModel):
     success: bool
     message: str
@@ -86,10 +53,37 @@ class IntegrationTestResult(BaseModel):
     execution_time_ms: Optional[int] = None
 
 
+class IntegrationBotBindingUpdate(BaseModel):
+    name: Optional[str] = None
+    enabled: Optional[bool] = None
+    params: Optional[Dict[str, Any]] = None
+
+
+class IntegrationBotBindingResponse(BaseModel):
+    id: int
+    integration_id: int
+    code: str
+    name: str
+    enabled: bool
+    params: Dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class IntegrationExecutionLogResponse(BaseModel):
     id: int
     integration_id: int
     channel_id: Optional[int]
+    target_type: Optional[str]
+    target_ref: Optional[str]
+    subscription_id: Optional[int]
+    datasource_id: Optional[int]
+    target_name: Optional[str]
+    params_snapshot: Optional[Dict[str, Any]]
+    payload_summary: Optional[Dict[str, Any]]
     trigger_source: str
     trigger_ref_id: Optional[str]
     status: str
@@ -109,5 +103,5 @@ class IntegrationTemplate(BaseModel):
     description: str
     integration_type: str
     category: str
-    config_schema: List[Dict[str, Any]]  # 配置项描述
+    config_schema: List[Dict[str, Any]]
     code_template: str

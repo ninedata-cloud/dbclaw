@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, JSON
+from sqlalchemy import Column, Integer, Text, Boolean, DateTime, JSON
 from sqlalchemy.sql import func
 from backend.database import Base
 
@@ -11,7 +11,8 @@ class AlertSubscription(Base):
     datasource_ids = Column(JSON, nullable=False, default=list)  # empty = all datasources
     severity_levels = Column(JSON, nullable=False, default=list)  # empty = all severities
     time_ranges = Column(JSON, nullable=False, default=list)  # empty = 24/7
-    channel_ids = Column(JSON, nullable=False, default=list)  # [1, 2, 3] - Integration system channels
+    channel_ids = Column(JSON, nullable=False, default=list)  # deprecated
+    integration_targets = Column(JSON, nullable=False, default=list)
     enabled = Column(Boolean, nullable=False, default=True, index=True)
     aggregation_script = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, server_default=func.now())

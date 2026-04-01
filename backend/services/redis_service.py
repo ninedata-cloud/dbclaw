@@ -13,7 +13,8 @@ class RedisConnector(DBConnector):
             password=self.password or None,
             db=int(self.database or 0),
             decode_responses=True,
-            socket_timeout=10,
+            socket_connect_timeout=5,
+            socket_timeout=5,
         )
         return client
 

@@ -2,6 +2,11 @@
 const DatasourcesPage = {
     allDatasources: [],
     filteredDatasources: [],
+    latestMetrics: {},
+    _sort: {
+        field: 'name',
+        direction: 'asc'
+    },
 
     async render() {
         const content = DOM.$('#page-content');
@@ -10,6 +15,7 @@ const DatasourcesPage = {
         try {
             this.allDatasources = await API.getDatasources();
             this.filteredDatasources = [...this.allDatasources];
+            this._applySort();
             Store.set('datasources', this.allDatasources);
 
             Header.render('数据源管理', this._buildHeaderActions());
@@ -35,15 +41,28 @@ const DatasourcesPage = {
             this._renderTable();
             DOM.createIcons();
 
+            // Fetch latest metrics separately (after table renders for fast initial load)
+            this._loadLatestMetrics();
+
         } catch (err) {
             Toast.error('加载数据源失败: ' + err.message);
+        }
+    },
+
+    async _loadLatestMetrics() {
+        try {
+            this.latestMetrics = await API.getDatasourcesLatestMetrics();
+            this._renderTable();
+        } catch (err) {
+            console.warn('Failed to load latest metrics:', err);
         }
     },
 
     _buildHeaderActions() {
         const filtersContainer = DOM.el('div', { className: 'dashboard-filters' });
         filtersContainer.innerHTML = `
-            <input type="text" id="filterName" class="filter-input" placeholder="按名称搜索...">
+            <input type="text" id="filterName" class="filter-input" placeholder="搜索名称/IP/主机名/数据库名...">
+            <input type="text" id="filterTags" class="filter-input" placeholder="标签筛选（逗号分隔，可组合）">
             <select id="filterType" class="filter-select">
                 <option value="">所有类型</option>
                 <option value="mysql">MySQL</option>
@@ -53,13 +72,6 @@ const DatasourcesPage = {
                 <option value="dm">DM</option>
                 <option value="mongodb">MongoDB</option>
                 <option value="redis">Redis</option>
-            </select>
-            <select id="filter重要性" class="filter-select">
-                <option value="">所有级别</option>
-                <option value="core">核心系统</option>
-                <option value="production">生产系统</option>
-                <option value="development">开发测试</option>
-                <option value="temporary">临时</option>
             </select>
         `;
 
@@ -77,35 +89,136 @@ const DatasourcesPage = {
 
     _setupFilterListeners() {
         DOM.$('#filterName')?.addEventListener('input', () => this._applyFilters());
+        DOM.$('#filterTags')?.addEventListener('input', () => this._applyFilters());
         DOM.$('#filterType')?.addEventListener('change', () => this._applyFilters());
-        DOM.$('#filter重要性')?.addEventListener('change', () => this._applyFilters());
     },
 
     _applyFilters() {
-        const nameFilter = DOM.$('#filterName')?.value.toLowerCase() || '';
-        const typeFilter = DOM.$('#filterType')?.value || '';
-        const importanceFilter = DOM.$('#filter重要性')?.value || '';
-
-        this.filteredDatasources = this.allDatasources.filter(ds => {
-            const matchName = !nameFilter || ds.name.toLowerCase().includes(nameFilter);
-            const matchType = !typeFilter || ds.db_type === typeFilter;
-            const match重要性 = !importanceFilter || ds.importance_level === importanceFilter;
-            return matchName && matchType && match重要性;
-        });
-
-        this._renderTable();
+        clearTimeout(this._filterDebounce);
+        this._filterDebounce = setTimeout(() => this._reloadWithFilters(), 250);
     },
 
-    _getStatusCell(conn, statusConfig) {
+    async _reloadWithFilters() {
+        const q = DOM.$('#filterName')?.value.trim() || '';
+        const tagsRaw = DOM.$('#filterTags')?.value.trim() || '';
+        const db_type = DOM.$('#filterType')?.value || '';
+
+        const params = {};
+        if (q) params.q = q;
+        if (tagsRaw) params.tags = tagsRaw;
+        if (db_type) params.db_type = db_type;
+
+        try {
+            this.allDatasources = await API.getDatasources(params);
+            this.filteredDatasources = [...this.allDatasources];
+            this._applySort();
+            Store.set('datasources', this.allDatasources);
+            this._renderTable();
+            this._loadLatestMetrics();
+        } catch (err) {
+            Toast.error('筛选失败: ' + err.message);
+        }
+    },
+
+    _getStatusBadge(conn) {
         const status = conn.connection_status || 'unknown';
-        const config = statusConfig[status] || statusConfig.unknown;
+        const message = conn.connection_error || '';
+
+        const statusMap = {
+            normal: { icon: '✓', label: '正常', class: 'badge-success', title: message || '连接正常' },
+            failed: { icon: '✗', label: '失败', class: 'badge-danger', title: message || '连接失败' },
+            warning: { icon: '⚠', label: '警告', class: 'badge-warning', title: message || '连接警告' },
+            unknown: { icon: '○', label: '未知', class: 'badge-secondary', title: message || '暂无监控数据' }
+        };
+
+        const s = statusMap[status] || statusMap.unknown;
+        return `<span class="badge ${s.class}" title="${s.title}" style="cursor:help">${s.icon} ${s.label}</span>`;
+    },
+
+    _getMetricColor(value) {
+        if (value == null) return '';
+        if (value >= 90) return 'text-danger';
+        if (value >= 80) return 'text-warning';
+        return '';
+    },
+
+    _toggleSort(field) {
+        if (this._sort.field === field) {
+            this._sort.direction = this._sort.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+            this._sort.field = field;
+            this._sort.direction = 'asc';
+        }
+        this._applySort();
+    },
+
+    _applySort() {
+        const { field, direction } = this._sort;
+        this.filteredDatasources.sort((a, b) => {
+            let va, vb;
+            // For CPU, QPS, connections - get from latestMetrics
+            if (field === 'cpu_usage' || field === 'qps' || field === 'connections_active') {
+                const metricsA = this.latestMetrics[a.id] || {};
+                const metricsB = this.latestMetrics[b.id] || {};
+                va = metricsA[field];
+                vb = metricsB[field];
+            } else {
+                va = a[field];
+                vb = b[field];
+            }
+            const vaNull = va == null;
+            const vbNull = vb == null;
+            if (vaNull) va = direction === 'asc' ? Infinity : -Infinity;
+            if (vbNull) vb = direction === 'asc' ? Infinity : -Infinity;
+            if (typeof va === 'string') va = va.toLowerCase();
+            if (typeof vb === 'string') vb = vb.toLowerCase();
+            if (vaNull && vbNull) return 0;
+            if (vaNull) return 1;
+            if (vbNull) return -1;
+            if (va < vb) return direction === 'asc' ? -1 : 1;
+            if (va > vb) return direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+    },
+
+    _updateSortIcons() {
+        document.querySelectorAll('.sort-icon').forEach(icon => {
+            const field = icon.dataset.field;
+            if (field === this._sort.field) {
+                icon.textContent = this._sort.direction === 'asc' ? '▲' : '▼';
+            } else {
+                icon.textContent = '';
+            }
+        });
+    },
+
+    _renderTags(tags = []) {
+        if (!tags.length) {
+            return '<span style="color:var(--text-tertiary);">-</span>';
+        }
+
         return `
-            <div style="display:flex;align-items:center;gap:6px;">
-                <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${config.color}"></span>
-                <span style="padding:2px 8px;border-radius:12px;font-size:12px;background:${config.bg};color:${config.color};font-weight:500;">
-                    ${config.label}
-                </span>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                ${tags.map(tag => `
+                    <span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:var(--bg-tertiary);color:var(--text-secondary);font-size:12px;line-height:1.5;">
+                        ${tag}
+                    </span>
+                `).join('')}
             </div>
+        `;
+    },
+
+    _renderMetricsCell(conn) {
+        const metrics = this.latestMetrics[conn.id] || {};
+        const cpu = metrics.cpu_usage;
+        const qps = metrics.qps;
+        const connections = metrics.connections_active;
+        const cpuColor = this._getMetricColor(cpu);
+
+        return `
+            <td class="${cpuColor}">${cpu != null ? cpu.toFixed(1) + '%' : '-'}</td>
+            <td>${qps != null ? qps.toFixed(1) : '-'}</td>
+            <td>${connections != null ? connections : '-'}</td>
         `;
     },
 
@@ -113,48 +226,33 @@ const DatasourcesPage = {
         const container = DOM.$('#datasource-table-container');
         if (!container) return;
 
-        const importanceLevels = {
-            core: { label: '核心系统', color: '#ef4444' },
-            production: { label: '生产系统', color: '#f59e0b' },
-            development: { label: '开发测试', color: '#3b82f6' },
-            temporary: { label: '临时', color: '#6b7280' }
-        };
-
-        const statusConfig = {
-            'normal': { label: '正常', color: '#10b981', bg: '#ecfdf5' },
-            'failed': { label: '连接失败', color: '#ef4444', bg: '#fef2f2' },
-            'warning': { label: '警告', color: '#f59e0b', bg: '#fffbeb' },
-            'unknown': { label: '未知', color: '#6b7280', bg: '#f3f4f6' }
-        };
-
         container.innerHTML = `
             <table class="data-table">
                 <thead>
                     <tr>
-                        <th>名称</th>
-                        <th>类型</th>
-                        <th>连接状态</th>
-                        <th>主机</th>
-                        <th>数据库</th>
-                        <th>重要性</th>
-                        <th>监控间隔</th>
+                        <th class="sortable" data-sort="name">名称 <span class="sort-icon" data-field="name"></span></th>
+                        <th class="sortable" data-sort="db_type">类型 <span class="sort-icon" data-field="db_type"></span></th>
+                        <th>标签</th>
+                        <th class="sortable" data-sort="connection_status">连接状态 <span class="sort-icon" data-field="connection_status"></span></th>
+                        <th class="sortable" data-sort="host">主机 <span class="sort-icon" data-field="host"></span></th>
+                        <th class="sortable" data-sort="database">数据库 <span class="sort-icon" data-field="database"></span></th>
+                        <th class="sortable" data-sort="cpu_usage">CPU <span class="sort-icon" data-field="cpu_usage"></span></th>
+                        <th class="sortable" data-sort="qps">QPS <span class="sort-icon" data-field="qps"></span></th>
+                        <th class="sortable" data-sort="connections_active">活跃连接 <span class="sort-icon" data-field="connections_active"></span></th>
                         <th>操作</th>
                     </tr>
                 </thead>
                 <tbody>
                     ${this.filteredDatasources.map(conn => {
-                        const importance = importanceLevels[conn.importance_level] || importanceLevels.production;
                         return `
                             <tr>
                                 <td><strong>${conn.name}</strong></td>
                                 <td><span class="badge badge-info">${conn.db_type}</span></td>
-                                <td>
-                                    ${this._getStatusCell(conn, statusConfig)}
-                                </td>
+                                <td>${this._renderTags(conn.tags || [])}</td>
+                                <td>${this._getStatusBadge(conn)}</td>
                                 <td>${conn.host}:${conn.port}</td>
                                 <td>${conn.database || '-'}</td>
-                                <td><span style="color:${importance.color};font-weight:500;">${importance.label}</span></td>
-                                <td>${conn.monitoring_interval || 60}s</td>
+                                ${this._renderMetricsCell(conn)}
                                 <td>
                                     <div style="display:flex;gap:4px;align-items:center;">
                                         <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._editDatasource(${conn.id})" title="编辑">
@@ -191,6 +289,14 @@ const DatasourcesPage = {
                 </tbody>
             </table>
         `;
+        this._updateSortIcons();
+        container.querySelectorAll('th.sortable').forEach(th => {
+            th.addEventListener('click', () => {
+                const field = th.dataset.sort;
+                this._toggleSort(field);
+                this._renderTable();
+            });
+        });
         DOM.createIcons();
     },
 

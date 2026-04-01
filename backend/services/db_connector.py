@@ -107,6 +107,7 @@ def get_connector(db_type: str, host: str, port: int, username: str = None,
         "oracle": "backend.services.oracle_service.OracleConnector",
         "tidb": "backend.services.tidb_service.TiDBConnector",
         "oceanbase": "backend.services.oceanbase_service.OceanBaseConnector",
+        "oceanbase_mysql": "backend.services.oceanbase_mysql_service.OceanBaseMySQLConnector",
         "opengauss": "backend.services.opengauss_service.OpenGaussConnector",
         "dm": "backend.services.dm_service.DMConnector",
     }

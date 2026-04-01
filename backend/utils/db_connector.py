@@ -12,6 +12,7 @@ from backend.services.sqlserver_service import SQLServerConnector
 from backend.services.oracle_service import OracleConnector
 from backend.services.tidb_service import TiDBConnector
 from backend.services.oceanbase_service import OceanBaseConnector
+from backend.services.oceanbase_mysql_service import OceanBaseMySQLConnector
 from backend.services.opengauss_service import OpenGaussConnector
 from backend.services.dm_service import DMConnector
 from backend.utils.encryption import decrypt_value
@@ -129,6 +130,14 @@ async def execute_query(datasource: Datasource, query: str, allow_write: bool = 
             )
         elif datasource.db_type == "oceanbase":
             service = OceanBaseConnector(
+                host=datasource.host,
+                port=datasource.port,
+                username=datasource.username,
+                password=password,
+                database=datasource.database,
+            )
+        elif datasource.db_type == "oceanbase_mysql":
+            service = OceanBaseMySQLConnector(
                 host=datasource.host,
                 port=datasource.port,
                 username=datasource.username,

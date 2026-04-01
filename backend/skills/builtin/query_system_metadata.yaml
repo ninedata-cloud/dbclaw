@@ -44,7 +44,7 @@ code: |
           # Table whitelist
           allowed_tables = [
               'datasources', 'hosts', 'skills', 'metric_snapshots',
-              'diagnostic_sessions', 'reports', 'users', 'knowledge_bases',
+              'diagnostic_sessions', 'reports', 'users', 'doc_categories', 'doc_documents',
               'skill_executions', 'inspection_configs', 'inspection_triggers',
               'ai_models', 'host_metrics', 'login_logs'
           ]
@@ -90,21 +90,21 @@ code: |
       # Config mode
       if query_type == 'config':
           from backend.models.ai_model import AIModel
-          from backend.models.knowledge_base import KnowledgeBase
+          from backend.models.document import DocCategory, DocDocument
           from backend.models.inspection_config import InspectionConfig
-          
+
           # Get AI models
           ai_models_result = await context.db.execute(select(AIModel))
           ai_models = ai_models_result.scalars().all()
-          
-          # Get knowledge bases
-          kbs_result = await context.db.execute(select(KnowledgeBase))
-          kbs = kbs_result.scalars().all()
-          
+
+          # Get document metadata
+          docs_count = await context.db.scalar(select(func.count()).select_from(DocDocument))
+          categories_count = await context.db.scalar(select(func.count()).select_from(DocCategory))
+
           # Get inspection configs
           configs_result = await context.db.execute(select(InspectionConfig))
           configs = configs_result.scalars().all()
-          
+
           return {
               "success": True,
               "query_type": "config",
@@ -115,26 +115,24 @@ code: |
                           "name": m.name,
                           "provider": m.provider,
                           "model_name": m.model_name,
-                          "is_default": m.is_default
+                          "is_default": m.is_default,
+                          "is_active": m.is_active
                       }
                       for m in ai_models
                   ],
-                  "knowledge_bases": [
-                      {
-                          "id": k.id,
-                          "name": k.name,
-                          "description": k.description,
-                          "file_count": k.file_count
-                      }
-                      for k in kbs
-                  ],
+                  "documents": {
+                      "document_count": docs_count or 0,
+                      "category_count": categories_count or 0
+                  },
                   "inspection_configs": [
                       {
                           "id": c.id,
                           "datasource_id": c.datasource_id,
                           "enabled": c.enabled,
                           "schedule_interval": c.schedule_interval,
-                          "use_ai_analysis": c.use_ai_analysis
+                          "use_ai_analysis": c.use_ai_analysis,
+                          "ai_model_id": c.ai_model_id,
+                          "kb_ids": c.kb_ids or []
                       }
                       for c in configs
                   ]
@@ -148,8 +146,8 @@ code: |
           from backend.models.diagnostic_session import DiagnosticSession
           from backend.models.report import Report
           from backend.skills.models import Skill, SkillExecution
-          from backend.models.knowledge_base import KnowledgeBase
-          
+          from backend.models.document import DocCategory, DocDocument
+
           stats = {}
           stats['datasources'] = await context.db.scalar(select(func.count()).select_from(Datasource))
           stats['hosts'] = await context.db.scalar(select(func.count()).select_from(Host))
@@ -157,22 +155,23 @@ code: |
           stats['sessions'] = await context.db.scalar(select(func.count()).select_from(DiagnosticSession))
           stats['reports'] = await context.db.scalar(select(func.count()).select_from(Report))
           stats['executions'] = await context.db.scalar(select(func.count()).select_from(SkillExecution))
-          stats['knowledge_bases'] = await context.db.scalar(select(func.count()).select_from(KnowledgeBase))
-          
+          stats['documents'] = await context.db.scalar(select(func.count()).select_from(DocDocument))
+          stats['document_categories'] = await context.db.scalar(select(func.count()).select_from(DocCategory))
+
           # Datasource breakdown by type
           ds_result = await context.db.execute(
               select(Datasource.db_type, func.count().label('count'))
               .group_by(Datasource.db_type)
           )
           stats['datasources_by_type'] = {row.db_type: row.count for row in ds_result}
-          
+
           # Report breakdown by status
           report_result = await context.db.execute(
               select(Report.status, func.count().label('count'))
               .group_by(Report.status)
           )
           stats['reports_by_status'] = {row.status: row.count for row in report_result}
-          
+
           return {
               "success": True,
               "query_type": "statistics",

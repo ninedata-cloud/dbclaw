@@ -58,7 +58,8 @@ async def _dispatch_tool(tool_name: str, args: Dict[str, Any]) -> Any:
         "execute_os_command": _tool_execute_os_command,
         "get_metric_history": _tool_get_metric_history,
         "list_connections": _tool_list_connections,
-        "search_knowledge_base": _tool_search_knowledge_base,
+        "list_documents": _tool_list_documents,
+        "read_document": _tool_read_document,
     }
 
     handler = handlers.get(tool_name)
@@ -254,78 +255,36 @@ async def _tool_list_connections(args):
         ]
 
 
-async def _tool_search_knowledge_base(args):
-    """Search knowledge bases for relevant documentation."""
-    from backend.models.knowledge_base import KnowledgeBase
-    from backend.services.vector_store import VectorStore
-    from backend.config import get_settings
+async def _tool_list_documents(args):
+    """列出文档目录，供 AI 决策读哪篇文档"""
+    db_type = args.get("db_type")
+    from backend.database import async_session
+    from backend.services.document_service import list_documents_for_ai
+    async with async_session() as db:
+        return await list_documents_for_ai(db, db_type)
 
-    query = args.get("query", "").strip()
-    if not query:
-        return {"error": "Query is required"}
 
-    kb_ids = args.get("kb_ids")
-    top_k = args.get("top_k", 5)
-
-    # Get session context if available (passed via args)
-    session_kb_ids = args.get("session_kb_ids")
-
-    # Determine which KBs to search
-    if kb_ids:
-        search_kb_ids = kb_ids
-    elif session_kb_ids:
-        search_kb_ids = session_kb_ids
-    else:
-        # Search all active KBs
-        async with async_session() as db:
-            result = await db.execute(
-                select(KnowledgeBase.id).where(KnowledgeBase.is_active == True)
-            )
-            search_kb_ids = [row[0] for row in result.all()]
-
-    if not search_kb_ids:
-        return {"message": "No knowledge bases available to search"}
-
-    # Get KBs
+async def _tool_read_document(args):
+    """读取指定文档完整内容"""
+    doc_id = args.get("doc_id")
+    if not doc_id:
+        return {"error": "doc_id is required"}
+    from backend.database import async_session
+    from backend.models.document import DocDocument, DocCategory
+    from sqlalchemy import select
     async with async_session() as db:
         result = await db.execute(
-            select(KnowledgeBase).where(KnowledgeBase.id.in_(search_kb_ids))
+            select(DocDocument, DocCategory.name.label("cat_name"))
+            .join(DocCategory, DocDocument.category_id == DocCategory.id)
+            .where(DocDocument.id == doc_id, DocDocument.is_active == True)
         )
-        kbs = result.scalars().all()
-
-    if not kbs:
-        return {"message": "No knowledge bases found"}
-
-    # Search each KB
-    settings = get_settings()
-    vector_store = VectorStore(
-        persist_dir=settings.chroma_persist_dir,
-        embedding_model=settings.embedding_model,
-    )
-
-    all_results = []
-    for kb in kbs:
-        try:
-            results = vector_store.search(kb.collection_name, query, top_k=top_k)
-            for result in results:
-                all_results.append({
-                    "content": result["content"][:2000],  # Truncate to avoid token overflow
-                    "filename": result["metadata"].get("filename", "unknown"),
-                    "file_type": result["metadata"].get("file_type", "unknown"),
-                    "document_id": result["metadata"].get("document_id"),
-                    "kb_id": kb.id,
-                    "kb_name": kb.name,
-                    "distance": result["distance"],
-                    "chunk_index": result["metadata"].get("chunk_index", 0),
-                })
-        except Exception as e:
-            logger.warning(f"Error searching KB {kb.id}: {e}")
-
-    # Sort by distance (lower is better) and take top_k
-    all_results.sort(key=lambda x: x["distance"])
-    all_results = all_results[:top_k]
-
-    if not all_results:
-        return {"message": "No relevant documentation found"}
-
-    return {"results": all_results, "query": query}
+        row = result.one_or_none()
+        if not row:
+            return {"error": f"Document {doc_id} not found"}
+        doc, cat_name = row.DocDocument, row.cat_name
+        return {
+            "id": doc.id,
+            "title": doc.title,
+            "category_name": cat_name,
+            "content": doc.content,
+        }

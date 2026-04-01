@@ -1,11 +1,11 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Literal
+from typing import Optional, Literal, List, Dict, Any
 from datetime import datetime
 
 
 class DatasourceCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
-    db_type: str = Field(..., pattern="^(mysql|postgresql|mongodb|redis|sqlserver|oracle|tidb|oceanbase|opengauss|dm)$")
+    db_type: str = Field(..., pattern="^(mysql|postgresql|mongodb|redis|sqlserver|oracle|tidb|oceanbase|oceanbase_mysql|opengauss|dm)$")
     host: str = Field(..., min_length=1)
     port: int = Field(..., gt=0, lt=65536)
     username: Optional[str] = None
@@ -13,12 +13,15 @@ class DatasourceCreate(BaseModel):
     database: Optional[str] = None
     host_id: Optional[int] = None
     extra_params: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
     importance_level: Optional[str] = Field(default='production', pattern="^(core|production|development|temporary)$")
     monitoring_interval: Optional[int] = Field(default=60, ge=5, le=3600)
+    remark: Optional[str] = Field(None, description="备注，帮助 AI 诊断时理解数据源背景")
 
     # 监控数据来源配置
     metric_source: Optional[Literal['system', 'integration']] = Field(default='system', description="监控数据来源")
     external_instance_id: Optional[str] = Field(None, description="外部系统实例 ID")
+    inbound_source: Optional[Dict[str, Any]] = Field(None, description="入站集成配置")
 
 
 class DatasourceUpdate(BaseModel):
@@ -31,12 +34,15 @@ class DatasourceUpdate(BaseModel):
     database: Optional[str] = None
     host_id: Optional[int] = None
     extra_params: Optional[str] = None
+    tags: Optional[List[str]] = None
     importance_level: Optional[str] = Field(None, pattern="^(core|production|development|temporary)$")
     monitoring_interval: Optional[int] = Field(None, ge=5, le=3600)
+    remark: Optional[str] = Field(None, description="备注，帮助 AI 诊断时理解数据源背景")
 
     # 监控数据来源配置
     metric_source: Optional[Literal['system', 'integration']] = None
     external_instance_id: Optional[str] = None
+    inbound_source: Optional[Dict[str, Any]] = None
 
 
 class DatasourceResponse(BaseModel):
@@ -49,13 +55,16 @@ class DatasourceResponse(BaseModel):
     database: Optional[str] = None
     host_id: Optional[int] = None
     extra_params: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
     is_active: bool = True
     importance_level: str = 'production'
     monitoring_interval: int = 60
+    remark: Optional[str] = None
 
     # 监控数据来源配置
     metric_source: str = 'system'
     external_instance_id: Optional[str] = None
+    inbound_source: Optional[Dict[str, Any]] = None
 
     # 临时静默配置
     silence_until: Optional[datetime] = None
@@ -66,6 +75,11 @@ class DatasourceResponse(BaseModel):
     connection_error: Optional[str] = None
     connection_checked_at: Optional[datetime] = None
 
+    # 最新指标数据
+    cpu_usage: Optional[float] = None
+    qps: Optional[float] = None
+    connections_active: Optional[int] = None
+
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -75,7 +89,7 @@ class DatasourceResponse(BaseModel):
 
 class DatasourceTestRequest(BaseModel):
     datasource_id: Optional[int] = None  # If provided, use saved password when password is None
-    db_type: str = Field(..., pattern="^(mysql|postgresql|mongodb|redis|sqlserver|oracle|tidb|oceanbase|opengauss|dm)$")
+    db_type: str = Field(..., pattern="^(mysql|postgresql|mongodb|redis|sqlserver|oracle|tidb|oceanbase|oceanbase_mysql|opengauss|dm)$")
     host: str = Field(..., min_length=1)
     port: int = Field(..., gt=0, lt=65536)
     username: Optional[str] = None
@@ -84,10 +98,41 @@ class DatasourceTestRequest(BaseModel):
     extra_params: Optional[str] = None
 
 
+class DatasourceDiagnosticClassification(BaseModel):
+    layer: str
+    category: str
+    code: str
+    severity: str = 'error'
+    retryable: bool = False
+
+
+class DatasourceDiagnosticCheck(BaseModel):
+    layer: str
+    name: str
+    success: bool
+    details: Optional[str] = None
+    error: Optional[str] = None
+    latency_ms: Optional[float] = None
+    skipped: bool = False
+    reason: Optional[str] = None
+
+
+class DatasourceDiagnosticHints(BaseModel):
+    probable_causes: List[str] = []
+    recommendations: List[str] = []
+
+
 class DatasourceTestResult(BaseModel):
     success: bool
     message: str
     version: Optional[str] = None
+    summary: Optional[str] = None
+    classification: Optional[DatasourceDiagnosticClassification] = None
+    checks: List[DatasourceDiagnosticCheck] = []
+    diagnosis: Optional[DatasourceDiagnosticHints] = None
+    raw_error: Optional[str] = None
+    target: Optional[Dict[str, Any]] = None
+    timing: Optional[Dict[str, Any]] = None
 
 
 class DatasourceSilenceRequest(BaseModel):

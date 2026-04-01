@@ -6,6 +6,13 @@ from backend.services.db_connector import DBConnector
 class OceanBaseConnector(DBConnector):
     """OceanBase database connector using aiomysql (MySQL-compatible mode)."""
 
+    @staticmethod
+    def _safe_int(value: Any) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
+
     def _get_conn_params(self):
         return dict(
             host=self.host,
@@ -17,7 +24,7 @@ class OceanBaseConnector(DBConnector):
 
     async def _connect(self):
         import aiomysql
-        return await aiomysql.connect(**self._get_conn_params(), connect_timeout=10)
+        return await aiomysql.connect(**self._get_conn_params(), connect_timeout=5)
 
     async def test_connection(self) -> str:
         conn = await self._connect()
@@ -41,31 +48,78 @@ class OceanBaseConnector(DBConnector):
                 except Exception:
                     server_count = 0
 
-                # Get active connections
-                await cur.execute("SELECT COUNT(*) FROM information_schema.PROCESSLIST")
-                proc_count = (await cur.fetchone())[0]
+                await cur.execute("SELECT CONNECTION_ID()")
+                current_connection_id = (await cur.fetchone())[0]
+
+                # Get process count for reference
+                await cur.execute(
+                    "SELECT "
+                    "COUNT(*) as total, "
+                    "SUM(CASE WHEN COMMAND != 'Sleep' THEN 1 ELSE 0 END) as active "
+                    "FROM information_schema.PROCESSLIST "
+                    "WHERE ID != %s",
+                    (current_connection_id,)
+                )
+                process_stats = await cur.fetchone()
+                process_count = process_stats[0] if process_stats else 0
 
                 # Get global status
                 await cur.execute("SHOW GLOBAL STATUS")
                 rows = await cur.fetchall()
                 status = {r[0]: r[1] for r in rows}
 
+                max_connections: Optional[int] = None
+                try:
+                    await cur.execute("SHOW GLOBAL VARIABLES LIKE 'max_connections'")
+                    max_conn_row = await cur.fetchone()
+                    candidate = self._safe_int(max_conn_row[1]) if max_conn_row and len(max_conn_row) > 1 else 0
+                    if 0 < candidate < 2147483647:
+                        max_connections = candidate
+                except Exception:
+                    max_connections = None
+
+                cache_hit_rate = self._calc_cache_hit_rate(status)
+
+                visible_threads_running = int(process_stats[1] or 0) if process_stats else 0
+                visible_threads_connected = int(process_stats[0] or 0) if process_stats else 0
+                global_threads_running = int(status.get("Threads_running", 0))
+                global_threads_connected = int(status.get("Threads_connected", 0))
+                threads_running = max(visible_threads_running, max(global_threads_running - 1, 0))
+                threads_connected = max(visible_threads_connected, global_threads_connected)
+
+                uptime = max(self._safe_int(status.get("Uptime", 0)), 1)
+
                 return {
                     "server_count": server_count,
-                    "connections_active": proc_count,
-                    "threads_running": int(status.get("Threads_running", 0)),
-                    "threads_connected": int(status.get("Threads_connected", 0)),
+                    "connections_active": threads_running,
+                    "connections_total": threads_connected,
+                    "max_connections": max_connections,
+                    "process_count": process_count,
+                    "threads_running": threads_running,
+                    "threads_connected": threads_connected,
+                    # 缓存命中率（百分比）。若无法计算则为 None，由前端展示为 --/空。
+                    "cache_hit_rate": cache_hit_rate,
+                    "buffer_pool_hit_rate": cache_hit_rate,
                     "queries_per_second": float(status.get("Queries", 0)),
-                    "uptime": int(status.get("Uptime", 0)),
-                    "slow_queries": int(status.get("Slow_queries", 0)),
-                    "qps": round(int(status.get("Queries", 0)) / max(int(status.get("Uptime", 1)), 1), 2),
+                    "uptime": uptime,
+                    "slow_queries": self._safe_int(status.get("Slow_queries", 0)),
+                    "qps": round(self._safe_int(status.get("Queries", 0)) / uptime, 2),
                     "tps": round(
-                        (int(status.get("Com_commit", 0)) + int(status.get("Com_rollback", 0)))
-                        / max(int(status.get("Uptime", 1)), 1), 2
+                        (self._safe_int(status.get("Com_commit", 0)) + self._safe_int(status.get("Com_rollback", 0)))
+                        / uptime, 2
                     ),
                 }
         finally:
             conn.close()
+
+    def _calc_cache_hit_rate(self, status: Dict[str, Any]) -> Optional[float]:
+        logical_reads = self._safe_int(status.get("Innodb_buffer_pool_read_requests", 0))
+        physical_reads = self._safe_int(status.get("Innodb_buffer_pool_reads", 0))
+        if logical_reads <= 0:
+            # OceanBase MySQL 兼容模式下可能没有暴露 InnoDB 计数器；此时不展示假值。
+            return None
+        hit_rate = (1 - physical_reads / logical_reads) * 100
+        return round(min(max(hit_rate, 0.0), 100.0), 2)
 
     async def get_variables(self) -> Dict[str, Any]:
         conn = await self._connect()

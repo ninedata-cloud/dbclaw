@@ -1,68 +1,75 @@
 // Skills management page
 const SkillsPage = {
-    render() {
-        Header.render('Skills Management', `
-            <button class="btn btn-secondary" onclick="SkillsPage.importSkill()">
-                <i data-lucide="upload"></i> Import Skill
-            </button>
-            <button class="btn btn-primary" onclick="SkillsPage.createSkill()">
-                <i data-lucide="plus"></i> Create Skill
-            </button>
-        `);
+    _categories: [],
+
+    async render() {
         const content = DOM.$('#page-content');
         content.innerHTML = '<div class="loading">Loading skills...</div>';
 
-        this.loadSkills();
-    },
-
-    async loadSkills() {
-        const content = DOM.$('#page-content');
-
         try {
-            const skills = await API.get('/api/skills');
-            const categories = await API.get('/api/skills/categories');
+            const [skills, categoriesRes] = await Promise.all([
+                API.get('/api/skills?is_enabled=true'),
+                API.get('/api/skills/categories')
+            ]);
+            this._categories = categoriesRes.categories || [];
 
-            content.innerHTML = `
-            <div class="skills-page">
-
-                <div class="skills-filters">
-                    <div class="search-box">
-                        <i data-lucide="search"></i>
-                        <input type="text" id="search-input" class="form-control"
-                               placeholder="Search by ID, name, description, tags, or code..."
-                               onkeyup="SkillsPage.handleSearch(event)">
-                    </div>
-                    <select id="category-filter" onchange="SkillsPage.filterSkills()">
-                        <option value="">All Categories</option>
-                        ${categories.categories.map(cat => `<option value="${cat}">${cat}</option>`).join('')}
-                    </select>
-                    <label>
-                        <input type="checkbox" id="builtin-filter" onchange="SkillsPage.filterSkills()">
-                        Show Built-in Only
-                    </label>
-                    <label>
-                        <input type="checkbox" id="enabled-filter" checked onchange="SkillsPage.filterSkills()">
-                        已启用 Only
-                    </label>
-                </div>
-
-                <div class="skills-grid" id="skills-grid">
-                    ${skills.map(skill => SkillsPage.renderSkillCard(skill)).join('')}
-                </div>
-            </div>
-        `;
-
-            DOM.createIcons();
+            Header.render('技能管理', this._buildHeaderActions());
+            this._renderGrid(content, skills);
         } catch (error) {
             console.error('Error loading skills:', error);
             content.innerHTML = `
                 <div class="error-state">
                     <h3>Error loading skills</h3>
                     <p>${error.message}</p>
-                    <button class="btn btn-primary" onclick="SkillsPage.loadSkills()">Retry</button>
+                    <button class="btn btn-primary" onclick="SkillsPage.render()">Retry</button>
                 </div>
             `;
         }
+    },
+
+    _buildHeaderActions() {
+        const filters = DOM.el('div', { className: 'dashboard-filters' });
+        filters.innerHTML = `
+            <div style=\"position:relative;display:flex;align-items:center;\">
+                <i data-lucide=\"search\" style=\"position:absolute;left:8px;width:14px;height:14px;color:var(--text-secondary);pointer-events:none;z-index:1;\"></i>
+                <input type=\"text\" id=\"search-input\" class=\"filter-input\"
+                       placeholder=\"搜索名称、标签、描述...\"
+                       style=\"padding-left:28px;min-width:200px;\"
+                       onkeyup=\"SkillsPage.handleSearch(event)\">
+            </div>
+            <select id=\"category-filter\" class=\"filter-select\" onchange=\"SkillsPage.filterSkills()\">
+                <option value=\"\">全部分类</option>
+                ${this._categories.map(cat => `<option value=\"${cat}\">${cat}</option>`).join('')}
+            </select>
+            <label class=\"filter-checkbox\">
+                <input type=\"checkbox\" id=\"builtin-filter\" onchange=\"SkillsPage.filterSkills()\"> 仅内置
+            </label>
+            <label class=\"filter-checkbox\">
+                <input type=\"checkbox\" id=\"enabled-filter\" checked onchange=\"SkillsPage.filterSkills()\"> 已启用
+            </label>
+        `;
+
+        const importBtn = DOM.el('button', { className: 'btn btn-secondary' });
+        importBtn.innerHTML = '<i data-lucide=\"upload\"></i> 导入';
+        importBtn.onclick = () => SkillsPage.importSkill();
+
+        const createBtn = DOM.el('button', { className: 'btn btn-primary' });
+        createBtn.innerHTML = '<i data-lucide=\"plus\"></i> 创建技能';
+        createBtn.onclick = () => SkillsPage.createSkill();
+
+        setTimeout(() => DOM.createIcons(), 0);
+        return [filters, importBtn, createBtn];
+    },
+
+    _renderGrid(content, skills) {
+        content.innerHTML = `
+            <div class=\"skills-page\">
+                <div class=\"skills-grid\" id=\"skills-grid\">
+                    ${skills.map(skill => SkillsPage.renderSkillCard(skill)).join('')}
+                </div>
+            </div>
+        `;
+        DOM.createIcons();
     },
 
     renderSkillCard(skill) {
@@ -397,13 +404,9 @@ const SkillsPage = {
             formData.append('file', file);
 
             try {
-                const token = localStorage.getItem('auth_token');
-                const headers = {};
-                if (token) headers['Authorization'] = `Bearer ${token}`;
-
                 const response = await fetch('/api/skills/import', {
                     method: 'POST',
-                    headers,
+                    credentials: 'same-origin',
                     body: formData
                 });
 

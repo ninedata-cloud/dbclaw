@@ -12,6 +12,7 @@ const InspectionPage = {
         start_date: null,
         end_date: null
     },
+    currentReportDetail: null,
 
     async render() {
         const content = DOM.$('#page-content');
@@ -84,7 +85,7 @@ const InspectionPage = {
             minWidth: '400px',
             maxWidth: '400px',
             showStatus: true,
-            showDetails: false,
+            showDetails: true,
             onChange: (datasource) => {
                 this.filters.datasource_id = datasource ? datasource.id : null;
                 this.applyFilters();
@@ -180,15 +181,13 @@ const InspectionPage = {
                                     </span>
                                 </td>
                                 <td>
-                                    <span class="badge badge-${r.status === 'completed' ? 'success' : r.status === 'failed' ? 'danger' : 'warning'}">
-                                        ${r.status === 'completed' ? '✓ 已完成' : r.status === 'failed' ? '✗ 失败' : '⏳ 生成中'}
-                                    </span>
-                                    ${r.status === 'failed' && r.error_message ? `
+                                    ${(() => { const s = InspectionPage.formatReportStatus(r.status); return `<span class="badge badge-${s.badge}">${s.text}</span>`; })()}
+                                    ${r.status !== 'completed' && r.error_message ? `
                                         <span class="error-icon" data-error="${r.error_message.replace(/"/g, '&quot;')}" style="margin-left:6px;color:#dc3545;cursor:help;font-size:16px;">⚠️</span>
                                     ` : ''}
                                 </td>
                                 <td><strong>${r.title}</strong></td>
-                                <td>${r.created_at}</td>
+                                <td>${Format.datetime(r.created_at)}</td>
                                 <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.trigger_reason || '-'}</td>
                                 <td>
                                     <button onclick="InspectionPage.viewReport(${r.report_id})" class="btn btn-sm btn-primary" style="padding:4px 8px;margin-right:5px;">查看报告</button>
@@ -225,13 +224,15 @@ const InspectionPage = {
     },
 
     renderPagination() {
+        const pagination = DOM.$('#pagination');
+        if (!pagination) return;
+
         const totalPages = Math.ceil(this.totalReports / this.pageSize);
         if (totalPages <= 1) {
-            DOM.$('#pagination').innerHTML = '';
+            pagination.innerHTML = '';
             return;
         }
 
-        const pagination = DOM.$('#pagination');
         const buttons = [];
 
         // Previous button
@@ -257,47 +258,185 @@ const InspectionPage = {
         await this.loadReports();
     },
 
+    formatReportStatus(status) {
+        const map = {
+            completed: { text: '✓ 已完成', badge: 'success' },
+            partial: { text: '◐ 部分结果', badge: 'warning' },
+            timed_out: { text: '⏱ 已超时', badge: 'warning' },
+            awaiting_confirm: { text: '🛑 待确认', badge: 'warning' },
+            failed: { text: '✗ 失败', badge: 'danger' },
+            generating: { text: '⏳ 生成中', badge: 'warning' }
+        };
+        return map[status] || { text: status || '未知', badge: 'warning' };
+    },
+
+    formatTriggerType(triggerType) {
+        const map = {
+            anomaly: '异常触发',
+            scheduled: '定时触发',
+            threshold: '阈值触发',
+            manual: '手动触发'
+        };
+        return map[triggerType] || triggerType || '未知类型';
+    },
+
     async viewReport(reportId) {
         try {
             const report = await API.get(`/api/inspections/reports/detail/${reportId}`);
+            this.currentReportDetail = report;
             const content = DOM.$('#page-content');
 
-            // Parse trigger reason to show threshold details
-            let triggerDetailsHtml = '';
-            if (report.trigger_reason) {
-                triggerDetailsHtml = `
-                    <div style="background:#e3f2fd;padding:12px;border-radius:4px;margin-bottom:15px;border-left:4px solid #2196f3;">
-                        <strong style="color:#1976d2;">触发原因:</strong>
-                        <span style="margin-left:8px; color:black">${report.trigger_reason}</span>
+            const statusMeta = this.formatReportStatus(report.status);
+            const triggerTypeLabel = this.formatTriggerType(report.trigger_type || 'manual');
+            const datasourceLabel = report.datasource_name || `ID: ${report.datasource_id || '-'}`;
+            const createdAtLabel = report.created_at ? Format.datetime(report.created_at) : '-';
+            const completedAtLabel = report.completed_at ? Format.datetime(report.completed_at) : null;
+
+            const summaryHtml = report.summary ? `
+                <section class="inspection-report-section inspection-report-summary">
+                    <div class="inspection-report-section-title">诊断摘要</div>
+                    <div class="inspection-report-summary-text">${report.summary}</div>
+                </section>
+            ` : '';
+
+            const triggerDetailsHtml = report.trigger_reason ? `
+                <section class="inspection-report-section inspection-report-trigger">
+                    <div class="inspection-report-section-title">触发原因</div>
+                    <div class="inspection-report-trigger-text">${report.trigger_reason}</div>
+                </section>
+            ` : '';
+
+            const actions = Array.isArray(report.actions) ? report.actions : [];
+            const actionsHtml = actions.length ? `
+                <section class="inspection-report-section inspection-report-actions">
+                    <div class="inspection-report-section-title">动作建议</div>
+                    <div class="inspection-report-actions-list">
+                        ${actions.map(action => `
+                            <div class="inspection-report-action-card">
+                                <div class="inspection-report-action-header">
+                                    <div>
+                                        <div class="inspection-report-action-title">${action.title || '未命名动作'}</div>
+                                        <div class="inspection-report-action-summary">${action.summary || ''}</div>
+                                        ${action.precheck ? `<div class="inspection-report-action-meta">前置检查：${action.precheck}</div>` : ''}
+                                        ${action.verification?.success_criteria ? `<div class="inspection-report-action-meta">验证：${action.verification.success_criteria}</div>` : ''}
+                                    </div>
+                                    <div class="inspection-report-action-badges">
+                                        <span class="badge badge-${action.risk_level === 'destructive' ? 'danger' : action.risk_level === 'high' ? 'warning' : 'success'}">${action.risk_level || 'safe'}</span>
+                                        ${action.latest_run ? `<span class="badge badge-info">${InspectionPage.formatActionRunStatus(action.latest_run.status)}</span>` : ''}
+                                    </div>
+                                </div>
+                                <div class="inspection-report-action-buttons">
+                                    <button class="btn btn-sm btn-primary" onclick="InspectionPage.executeRecommendedAction(${report.id}, '${String(action.id).replace(/'/g, "\\'")}')">审批并执行</button>
+                                    ${action.latest_run ? `<button class="btn btn-sm btn-secondary" onclick="InspectionPage.verifyActionRun(${action.latest_run.run_id})">执行后验证</button>` : ''}
+                                    ${action.latest_run ? `<button class="btn btn-sm btn-secondary" onclick="InspectionPage.showActionRunDetail(${action.latest_run.run_id})">查看执行记录</button>` : ''}
+                                    ${action.latest_run ? `<button class="btn btn-sm btn-secondary" onclick="InspectionPage.openDiagnosisFromActionRun(${action.latest_run.run_id}, ${report.datasource_id}, ${report.alert_id || 'null'}, ${report.id})">进入 AI 诊断</button>` : ''}
+                                </div>
+                            </div>
+                        `).join('')}
                     </div>
-                `;
-            }
+                </section>
+            ` : '';
+
+            const diagnosisPrompt = `基于巡检/诊断报告，给出【现象-证据-根因-建议动作-验证方式】的处置建议。\n\n数据源：${datasourceLabel}\n报告标题：${report.title}\n触发类型：${report.trigger_type || '-'}\n触发原因：${report.trigger_reason || '-'}\n诊断摘要：${report.summary || '-'}\n\n如果需要，请调用技能进一步确认（Top SQL/EXPLAIN/连接情况/OS 指标）。`;
 
             content.innerHTML = `
-                <div style="max-width: 1200px; margin: 0 auto; padding: 20px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                        <button onclick="InspectionPage.render()" style="padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; flex: 0 0 auto;">← 返回报告列表</button>
-                        <div style="display: flex; gap: 10px;">
-                            <button onclick="InspectionPage.exportMarkdown(${reportId})" class="btn btn-secondary" style="padding: 8px 16px; flex: 0 0 auto;">
-                                📄 Export Markdown
-                            </button>
-                            <button onclick="InspectionPage.exportPDF(${reportId})" class="btn btn-primary" style="padding: 8px 16px; flex: 0 0 auto;">
-                                📑 Export PDF
-                            </button>
+                <div class="inspection-report-shell">
+                    <div class="inspection-report-toolbar">
+                        <button onclick="InspectionPage.render()" class="btn btn-secondary inspection-report-back">← 返回报告列表</button>
+                        <div class="inspection-report-toolbar-actions">
+                            ${report.alert_id ? `<button onclick="InspectionPage.openLinkedAlert(${report.alert_id})" class="btn btn-secondary">查看关联告警</button>` : ''}
+                            <button id="report-open-diagnosis" class="btn btn-secondary">进入 AI 诊断</button>
+                            <button onclick="InspectionPage.exportMarkdown(${reportId})" class="btn btn-secondary">导出 Markdown</button>
+                            <button onclick="InspectionPage.exportPDF(${reportId})" class="btn btn-primary">导出 PDF</button>
                         </div>
                     </div>
-                    <div style="background:var(--background-secondary);padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                        ${triggerDetailsHtml}
-                        <div id="reportContent"></div>
+
+                    <div class="inspection-report-header">
+                        <div>
+                            <div class="inspection-report-kicker">巡检报告</div>
+                            <h1 class="inspection-report-title">${report.title}</h1>
+                            <div class="inspection-report-badges">
+                                <span class="badge badge-${statusMeta.badge}">${statusMeta.text}</span>
+                                <span class="badge badge-info">${triggerTypeLabel}</span>
+                                <span class="badge badge-secondary">${datasourceLabel}</span>
+                            </div>
+                        </div>
+                        <div class="inspection-report-meta">
+                            <div class="inspection-report-meta-item">
+                                <span class="inspection-report-meta-label">创建时间</span>
+                                <span class="inspection-report-meta-value">${createdAtLabel}</span>
+                            </div>
+                            <div class="inspection-report-meta-item">
+                                <span class="inspection-report-meta-label">完成时间</span>
+                                <span class="inspection-report-meta-value">${completedAtLabel || '—'}</span>
+                            </div>
+                            <div class="inspection-report-meta-item">
+                                <span class="inspection-report-meta-label">报告 ID</span>
+                                <span class="inspection-report-meta-value">#${report.id}</span>
+                            </div>
+                        </div>
                     </div>
+
+                    <div class="inspection-report-overview">
+                        ${summaryHtml}
+                        ${triggerDetailsHtml}
+                        ${actionsHtml}
+                    </div>
+
+                    <section class="inspection-report-section inspection-report-body">
+                        <div class="inspection-report-section-title">报告正文</div>
+                        <div id="reportContent"></div>
+                    </section>
                 </div>
             `;
+            const diagnosisBtn = DOM.$('#report-open-diagnosis');
+            if (diagnosisBtn) {
+                diagnosisBtn.addEventListener('click', () => {
+                    this.openDiagnosisFromReport(report.datasource_id, report.alert_id, diagnosisPrompt);
+                });
+            }
             const reportContent = DOM.$('#reportContent');
             reportContent.className = 'report-content-markdown';
-            reportContent.innerHTML = MarkdownRenderer.render(report.content_md || '暂无内容');
+            const fallbackContent = report.error_message
+                ? `## 报告未生成成功\n\n状态：${this.formatReportStatus(report.status).text}\n\n原因：${report.error_message}`
+                : '暂无内容';
+            reportContent.innerHTML = MarkdownRenderer.render(report.content_md || fallbackContent);
         } catch (error) {
             Toast.show('加载失败 report', 'error');
         }
+    },
+
+    async openLinkedAlert(alertId) {
+        try {
+            Router.navigate('alerts');
+            setTimeout(async () => {
+                try {
+                    const alert = await API.getAlert(alertId);
+                    await AlertsPage.showAlertDetail(alert);
+                } catch (error) {
+                    Toast.show(`加载关联告警失败: ${error.message}`, 'error');
+                }
+            }, 0);
+        } catch (error) {
+            Toast.show(`打开关联告警失败: ${error.message}`, 'error');
+        }
+    },
+
+    openDiagnosisFromReport(datasourceId, alertId, prompt) {
+        const params = new URLSearchParams();
+        if (datasourceId) params.set('datasource', datasourceId);
+        if (alertId) params.set('alert', alertId);
+        if (prompt) params.set('ask', prompt);
+        Router.navigate(`diagnosis?${params.toString()}`);
+    },
+
+    openDiagnosisFromActionRun(runId, datasourceId, alertId, reportId) {
+        const params = new URLSearchParams();
+        if (datasourceId) params.set('datasource', datasourceId);
+        if (alertId) params.set('alert', alertId);
+        if (reportId) params.set('report', reportId);
+        if (runId) params.set('action_run', runId);
+        Router.navigate(`diagnosis?${params.toString()}`);
     },
 
     async exportMarkdown(reportId) {
@@ -420,6 +559,98 @@ const InspectionPage = {
         } catch (error) {
             Toast.show(`删除失败: ${error.message}`, 'error');
         }
+    },
+
+    async executeRecommendedAction(reportId, recommendationId) {
+        try {
+            const res = await API.createActionRun({ report_id: reportId, recommendation_id: recommendationId });
+            const run = res?.run;
+            if (!run?.run_id) {
+                Toast.show('创建动作执行记录失败', 'error');
+                return;
+            }
+
+            Toast.show('动作已执行', 'success');
+            await this.viewReport(reportId);
+        } catch (e) {
+            Toast.show('执行失败: ' + e.message, 'error');
+        }
+    },
+
+    async verifyActionRun(runId) {
+        try {
+            await API.verifyActionRun(runId);
+            Toast.show('验证已触发', 'success');
+            if (this.currentReportDetail?.id) {
+                await this.viewReport(this.currentReportDetail.id);
+            }
+        } catch (e) {
+            Toast.show('验证失败: ' + e.message, 'error');
+        }
+    },
+
+    async showActionRunDetail(runId) {
+        try {
+            const res = await API.getActionRun(runId);
+            const run = res?.run;
+            if (!run) {
+                Toast.show('未找到执行记录', 'error');
+                return;
+            }
+            const safe = (v) => String(v ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            Modal.show({
+                title: '执行记录',
+                content: `
+                            <div style="display:flex;flex-direction:column;gap:10px;">
+                            <div><strong>动作：</strong>${safe(run.title)}</div>
+                            <div><strong>状态：</strong>${safe(this.formatActionRunStatus(run.status))}</div>
+                            <div><strong>执行：</strong>${safe(this.formatExecutionStatus(run.execution_status))} ${run.skill_execution_id ? `(skill_execution_id=${safe(run.skill_execution_id)})` : ''}</div>
+                            ${run.execution_result_summary ? `<pre style="margin:0;background:var(--bg-input);padding:10px;border-radius:8px;white-space:pre-wrap;">${safe(run.execution_result_summary)}</pre>` : ''}
+                            <div><strong>验证：</strong>${safe(this.formatVerificationStatus(run.verification_status))} ${run.verification_skill_execution_id ? `(skill_execution_id=${safe(run.verification_skill_execution_id)})` : ''}</div>
+                            ${run.verification_summary ? `<pre style="margin:0;background:var(--bg-input);padding:10px;border-radius:8px;white-space:pre-wrap;">${safe(run.verification_summary)}</pre>` : ''}
+                        </div>
+                `,
+                buttons: [
+                    { text: '关闭', variant: 'secondary', onClick: () => Modal.hide() }
+                ]
+            });
+        } catch (e) {
+            Toast.show('加载执行记录失败: ' + e.message, 'error');
+        }
+    },
+
+    formatActionRunStatus(status) {
+        const map = {
+            rejected: '已拒绝',
+            executing: '执行中',
+            execution_succeeded: '执行成功',
+            execution_failed: '执行失败',
+            verifying: '验证中',
+            verified_passed: '验证通过',
+            verified_failed: '验证失败',
+            closed: '已关闭'
+        };
+        return map[status] || status || '-';
+    },
+
+    formatExecutionStatus(status) {
+        const map = {
+            pending: '待执行',
+            running: '执行中',
+            succeeded: '执行成功',
+            failed: '执行失败'
+        };
+        return map[status] || status || '-';
+    },
+
+    formatVerificationStatus(status) {
+        const map = {
+            not_requested: '未验证',
+            running: '验证中',
+            passed: '验证通过',
+            failed: '验证失败'
+        };
+        return map[status] || status || '-';
     },
 
     cleanup() {

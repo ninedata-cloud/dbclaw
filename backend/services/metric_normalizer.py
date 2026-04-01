@@ -2,6 +2,7 @@
 Metric Normalizer Service
 指标标准化服务 - 将不同数据库的指标映射到统一格式
 """
+from decimal import Decimal
 from typing import Dict, Any, Optional
 from datetime import datetime
 from backend.utils.datetime_helper import now
@@ -22,7 +23,6 @@ class MetricNormalizer:
         - cpu_usage: CPU使用率 (%)
         - memory_usage: 内存使用率 (%)
         - disk_usage: 磁盘使用率 (%)
-        - connections: 活跃连接数
         - qps: 每秒查询数
         - tps: 每秒事务数
         """
@@ -32,21 +32,32 @@ class MetricNormalizer:
             normalized.update(cls._normalize_postgresql(datasource_id, raw_metrics))
         elif db_type == 'mysql':
             normalized.update(cls._normalize_mysql(datasource_id, raw_metrics))
+        elif db_type == 'oceanbase':
+            normalized.update(cls._normalize_oceanbase(datasource_id, raw_metrics))
+        elif db_type == 'oceanbase_mysql':
+            normalized.update(cls._normalize_oceanbase_mysql(datasource_id, raw_metrics))
         elif db_type == 'sqlserver':
             normalized.update(cls._normalize_sqlserver(datasource_id, raw_metrics))
         elif db_type == 'oracle':
             normalized.update(cls._normalize_oracle(datasource_id, raw_metrics))
 
-        return normalized
+        return cls._convert_decimals(normalized)
+
+    @classmethod
+    def _convert_decimals(cls, data: Any) -> Any:
+        """递归将 Dict 中的 Decimal 转换为 float，确保 JSON 可序列化"""
+        if isinstance(data, dict):
+            return {k: cls._convert_decimals(v) for k, v in data.items()}
+        elif isinstance(data, (list, tuple)):
+            return [cls._convert_decimals(item) for item in data]
+        elif isinstance(data, Decimal):
+            return float(data)
+        return data
 
     @classmethod
     def _normalize_postgresql(cls, datasource_id: int, metrics: Dict[str, Any]) -> Dict[str, Any]:
         """PostgreSQL 指标标准化"""
         normalized = {}
-
-        # 连接数
-        if 'connections_active' in metrics:
-            normalized['connections'] = metrics['connections_active']
 
         # 计算 QPS — 基于 tup_fetched + tup_inserted + tup_updated + tup_deleted 增量
         # tup_returned 是 seq scan 返回的行数（含内部过滤前），不适合作为 QPS
@@ -92,10 +103,6 @@ class MetricNormalizer:
         """MySQL 指标标准化"""
         normalized = {}
 
-        # 连接数
-        if 'threads_connected' in metrics:
-            normalized['connections'] = metrics['threads_connected']
-
         # QPS — 基于 questions 累积值计算实时速率
         if 'questions' in metrics:
             qps = cls._calculate_rate(
@@ -140,14 +147,14 @@ class MetricNormalizer:
                 datasource_id, 'bytes_received', metrics['bytes_received']
             )
             if net_rx is not None:
-                normalized['network_rx_bytes'] = net_rx
+                normalized['network_rx_rate'] = net_rx
 
         if 'bytes_sent' in metrics:
             net_tx = cls._calculate_rate(
                 datasource_id, 'bytes_sent', metrics['bytes_sent']
             )
             if net_tx is not None:
-                normalized['network_tx_bytes'] = net_tx
+                normalized['network_tx_rate'] = net_tx
 
         # 锁等待速率
         if 'innodb_row_lock_waits' in metrics:
@@ -160,15 +167,39 @@ class MetricNormalizer:
         return normalized
 
     @classmethod
+    def _normalize_oceanbase(cls, datasource_id: int, metrics: Dict[str, Any]) -> Dict[str, Any]:
+        """OceanBase 指标标准化（MySQL 兼容模式）"""
+        normalized = {}
+
+        cache_hit_rate = metrics.get('cache_hit_rate')
+        if cache_hit_rate is None:
+            cache_hit_rate = metrics.get('buffer_pool_hit_rate')
+        if cache_hit_rate is not None:
+            normalized['cache_hit_rate'] = cache_hit_rate
+            normalized['buffer_pool_hit_rate'] = cache_hit_rate
+
+        return normalized
+
+    @classmethod
+    def _normalize_oceanbase_mysql(cls, datasource_id: int, metrics: Dict[str, Any]) -> Dict[str, Any]:
+        """OceanBase MySQL 模式指标标准化（独立类型）"""
+        # 目前仅做最小字段统一：缓存命中率字段对齐。
+        # 其他指标（如 max_connections）由 connector 自身保证语义。
+        normalized = {}
+
+        cache_hit_rate = metrics.get('cache_hit_rate')
+        if cache_hit_rate is None:
+            cache_hit_rate = metrics.get('buffer_pool_hit_rate')
+        if cache_hit_rate is not None:
+            normalized['cache_hit_rate'] = cache_hit_rate
+            normalized['buffer_pool_hit_rate'] = cache_hit_rate
+
+        return normalized
+
+    @classmethod
     def _normalize_sqlserver(cls, datasource_id: int, metrics: Dict[str, Any]) -> Dict[str, Any]:
         """SQL Server 指标标准化"""
         normalized = {}
-
-        # 连接数 — 使用 connections_active（活跃请求数），与 PostgreSQL/MySQL 对齐
-        if 'connections_active' in metrics:
-            normalized['connections'] = metrics['connections_active']
-        elif 'user_sessions' in metrics:
-            normalized['connections'] = metrics['user_sessions']
 
         # 计算 QPS（基于 batch_requests_total 累积值）
         if 'batch_requests_total' in metrics:
@@ -227,14 +258,14 @@ class MetricNormalizer:
                 datasource_id, 'network_reads_total', metrics['network_reads_total']
             )
             if net_rx is not None:
-                normalized['network_rx_bytes'] = net_rx
+                normalized['network_rx_rate'] = net_rx
 
         if 'network_writes_total' in metrics:
             net_tx = cls._calculate_rate(
                 datasource_id, 'network_writes_total', metrics['network_writes_total']
             )
             if net_tx is not None:
-                normalized['network_tx_bytes'] = net_tx
+                normalized['network_tx_rate'] = net_tx
 
         return normalized
 
@@ -242,10 +273,6 @@ class MetricNormalizer:
     def _normalize_oracle(cls, datasource_id: int, metrics: Dict[str, Any]) -> Dict[str, Any]:
         """Oracle 指标标准化"""
         normalized = {}
-
-        # 连接数
-        if 'connections_active' in metrics:
-            normalized['connections'] = metrics['connections_active']
 
         # 计算 QPS — 基于 execute_count 累积值（比 user_calls 更准确反映实际 SQL 执行量）
         if 'execute_count' in metrics:
@@ -291,14 +318,14 @@ class MetricNormalizer:
                 datasource_id, 'network_bytes_sent', metrics['network_bytes_sent']
             )
             if net_tx is not None:
-                normalized['network_tx_bytes'] = net_tx
+                normalized['network_tx_rate'] = net_tx
 
         if 'network_bytes_received' in metrics:
             net_rx = cls._calculate_rate(
                 datasource_id, 'network_bytes_received', metrics['network_bytes_received']
             )
             if net_rx is not None:
-                normalized['network_rx_bytes'] = net_rx
+                normalized['network_rx_rate'] = net_rx
 
         return normalized
 

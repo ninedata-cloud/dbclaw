@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from typing import List, Optional, Dict, Any
@@ -10,10 +10,46 @@ from backend.models.inspection_config import InspectionConfig
 from backend.schemas.metrics import MetricResponse
 from backend.dependencies import get_current_user
 from backend.utils.datetime_helper import now
-from backend.services.threshold_checker import ThresholdChecker
 from backend.services import metric_collector
+from backend.services.integration_scheduler import execute_integration
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"], dependencies=[Depends(get_current_user)])
+
+
+async def _get_db_status_snapshots(
+    db: AsyncSession,
+    conn_id: int,
+    limit: int,
+    datasource=None,
+) -> List[MetricSnapshot]:
+    actual_limit = limit
+    if datasource and datasource.metric_source == 'integration':
+        actual_limit = max(limit, 100)
+
+    result = await db.execute(
+        select(MetricSnapshot)
+        .where(
+            MetricSnapshot.datasource_id == conn_id,
+            MetricSnapshot.metric_type == 'db_status',
+        )
+        .order_by(desc(MetricSnapshot.collected_at))
+        .limit(actual_limit)
+    )
+    snapshots = result.scalars().all()
+
+    if snapshots or not datasource or datasource.metric_source != 'integration':
+        return snapshots
+
+    legacy_result = await db.execute(
+        select(MetricSnapshot)
+        .where(
+            MetricSnapshot.datasource_id == conn_id,
+            MetricSnapshot.metric_type == 'integration_metric',
+        )
+        .order_by(desc(MetricSnapshot.collected_at))
+        .limit(limit * 15)
+    )
+    return _convert_integration_metrics_to_db_status(legacy_result.scalars().all())
 
 
 @router.get("/{conn_id}", response_model=List[MetricResponse])
@@ -42,17 +78,10 @@ async def get_metrics(
     )
     datasource = ds_result.scalar_one_or_none()
 
-    # 如果请求 db_status 但数据源使用集成采集，则查询 integration_metric
-    actual_metric_type = metric_type
-    need_conversion = False
-    if datasource and datasource.metric_source == 'integration' and metric_type == 'db_status':
-        actual_metric_type = 'integration_metric'
-        need_conversion = True
-
     query = select(MetricSnapshot).where(MetricSnapshot.datasource_id == conn_id)
 
-    if actual_metric_type:
-        query = query.where(MetricSnapshot.metric_type == actual_metric_type)
+    if metric_type and metric_type != 'db_status':
+        query = query.where(MetricSnapshot.metric_type == metric_type)
 
     # 时间范围过滤
     if minutes:
@@ -66,16 +95,22 @@ async def get_metrics(
         if end_time:
             query = query.where(MetricSnapshot.collected_at <= end_time)
 
-    # 如果需要转换，获取更多原始记录（每个时间戳约15个指标）
-    actual_limit = limit * 15 if need_conversion else limit
-    query = query.order_by(desc(MetricSnapshot.collected_at)).limit(actual_limit)
+    query = query.order_by(desc(MetricSnapshot.collected_at)).limit(limit)
     result = await db.execute(query)
     snapshots = result.scalars().all()
 
-    # 如果是集成指标，需要转换为前端期望的格式
-    if need_conversion:
-        snapshots = _convert_integration_metrics_to_db_status(snapshots)
-        # 转换后再限制数量
+    if metric_type == 'db_status':
+        snapshots = await _get_db_status_snapshots(db, conn_id, limit, datasource)
+
+        if minutes:
+            start = now() - timedelta(minutes=minutes)
+            snapshots = [snapshot for snapshot in snapshots if snapshot.collected_at >= start]
+        elif start_time or end_time:
+            if start_time:
+                snapshots = [snapshot for snapshot in snapshots if snapshot.collected_at >= start_time]
+            if end_time:
+                snapshots = [snapshot for snapshot in snapshots if snapshot.collected_at <= end_time]
+
         snapshots = snapshots[:limit]
 
     return snapshots
@@ -94,30 +129,111 @@ async def get_latest_metric(
     )
     datasource = ds_result.scalar_one_or_none()
 
-    # 如果请求 db_status 但数据源使用集成采集，则查询 integration_metric
-    actual_metric_type = metric_type
-    if datasource and datasource.metric_source == 'integration' and metric_type == 'db_status':
-        actual_metric_type = 'integration_metric'
+    if metric_type == 'db_status':
+        snapshots = await _get_db_status_snapshots(db, conn_id, 1, datasource)
+        return snapshots[0] if snapshots else None
 
     result = await db.execute(
         select(MetricSnapshot)
         .where(
             MetricSnapshot.datasource_id == conn_id,
-            MetricSnapshot.metric_type == actual_metric_type,
+            MetricSnapshot.metric_type == metric_type,
         )
         .order_by(desc(MetricSnapshot.collected_at))
-        .limit(100 if actual_metric_type == 'integration_metric' else 1)
+        .limit(1)
     )
+    return result.scalar_one_or_none()
 
-    if actual_metric_type == 'integration_metric':
-        # 获取最近的所有指标并转换
-        snapshots = result.scalars().all()
-        if snapshots:
-            converted = _convert_integration_metrics_to_db_status(snapshots)
-            return converted[0] if converted else None
-        return None
-    else:
-        return result.scalar_one_or_none()
+
+@router.post("/batch/dashboard")
+async def get_batch_dashboard(
+    conn_ids: List[int] = Body(..., embed=True),
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    批量获取多个数据源的健康状态和最新指标，减少前端请求数量。
+    返回: { conn_id: { health: {...}, metric: {...} } }
+    """
+    if not conn_ids:
+        return {}
+
+    from backend.models.datasource import Datasource
+
+    # 批量查询数据源配置（metric_source 字段）
+    ds_result = await db.execute(
+        select(Datasource).where(Datasource.id.in_(conn_ids))
+    )
+    datasources = {ds.id: ds for ds in ds_result.scalars().all()}
+
+    # 批量查询巡检配置
+    config_result = await db.execute(
+        select(InspectionConfig).where(InspectionConfig.datasource_id.in_(conn_ids))
+    )
+    configs = {c.datasource_id: c for c in config_result.scalars().all()}
+
+    latest_metrics: Dict[int, Any] = {}  # conn_id -> MetricSnapshot or None
+
+    for cid in conn_ids:
+        latest_snaps = await _get_db_status_snapshots(db, cid, 1, datasources.get(cid))
+        latest_metrics[cid] = latest_snaps[0] if latest_snaps else None
+
+    # 组装结果
+    result = {}
+    stale_threshold = 300  # 5分钟
+    for cid in conn_ids:
+        snap = latest_metrics.get(cid)
+
+        # --- 构建 metric 部分 ---
+        if snap:
+            metric_data = {
+                "id": snap.id,
+                "datasource_id": snap.datasource_id,
+                "metric_type": snap.metric_type,
+                "data": snap.data,
+                "collected_at": snap.collected_at.isoformat(),
+            }
+        else:
+            metric_data = None
+
+        # --- 构建 health 部分 ---
+        if not snap:
+            health = {"healthy": False, "status": "unknown", "violations": [], "message": "无监控数据"}
+        else:
+            metric_age = (now() - snap.collected_at).total_seconds()
+            if metric_age > stale_threshold:
+                health = {"healthy": False, "status": "unknown", "violations": [], "message": f"监控数据过期 ({int(metric_age/60)}分钟前)"}
+            else:
+                config = configs.get(cid)
+                if not config or not config.threshold_rules:
+                    health = {"healthy": True, "status": "healthy", "violations": [], "message": "正常（未配置阈值）"}
+                else:
+                    metrics_data = snap.data or {}
+                    violations = []
+                    if "custom_expression" in config.threshold_rules:
+                        custom_rule = config.threshold_rules["custom_expression"]
+                        expression = custom_rule.get("expression", "")
+                        eval_context = _prepare_eval_context(metrics_data)
+                        try:
+                            if eval(expression, {"__builtins__": {}}, eval_context):
+                                violations.append({"type": "custom_expression", "expression": expression, "metrics": eval_context})
+                        except Exception:
+                            pass
+                    else:
+                        for metric_name, rule in config.threshold_rules.items():
+                            threshold = rule.get("threshold")
+                            if threshold is None:
+                                continue
+                            current_value = _extract_metric_value(metrics_data, metric_name)
+                            if current_value is not None and current_value > threshold:
+                                violations.append({"type": "threshold", "metric": metric_name, "value": current_value, "threshold": threshold})
+                    if not violations:
+                        health = {"healthy": True, "status": "healthy", "violations": [], "message": "正常"}
+                    else:
+                        health = {"healthy": False, "status": "critical", "violations": violations, "message": f"检测到 {len(violations)} 个指标异常"}
+
+        result[str(cid)] = {"health": health, "metric": metric_data}
+
+    return result
 
 
 @router.get("/{conn_id}/health")
@@ -143,32 +259,8 @@ async def get_datasource_health(
     )
     datasource = ds_result.scalar_one_or_none()
 
-    # 确定实际的指标类型
-    actual_metric_type = "db_status"
-    if datasource and datasource.metric_source == 'integration':
-        actual_metric_type = 'integration_metric'
-
-    # Get latest metric
-    metric_result = await db.execute(
-        select(MetricSnapshot)
-        .where(
-            MetricSnapshot.datasource_id == conn_id,
-            MetricSnapshot.metric_type == actual_metric_type,
-        )
-        .order_by(desc(MetricSnapshot.collected_at))
-        .limit(100 if actual_metric_type == 'integration_metric' else 1)
-    )
-
-    if actual_metric_type == 'integration_metric':
-        # 转换集成指标
-        snapshots = metric_result.scalars().all()
-        if snapshots:
-            converted = _convert_integration_metrics_to_db_status(snapshots)
-            latest_metric = converted[0] if converted else None
-        else:
-            latest_metric = None
-    else:
-        latest_metric = metric_result.scalar_one_or_none()
+    latest_snaps = await _get_db_status_snapshots(db, conn_id, 1, datasource)
+    latest_metric = latest_snaps[0] if latest_snaps else None
 
     if not latest_metric:
         return {
@@ -286,7 +378,7 @@ def _extract_metric_value(metrics: Dict[str, Any], metric_name: str) -> Optional
         "cpu_usage": ["cpu_usage_percent", "cpu_percent"],
         "memory_usage": ["memory_usage_percent", "mem_percent"],
         "disk_usage": ["disk_usage_percent", "disk_percent"],
-        "connections": ["connections_active", "active_connections", "connection_count", "threads_connected"],
+        "connections": ["connections_active", "threads_running", "active_connections", "connection_count"],
     }
 
     if metric_name in mappings:
@@ -391,7 +483,10 @@ async def refresh_metrics(
 
     # Trigger metric collection
     try:
-        await metric_collector.collect_metrics_for_connection(conn_id)
+        if datasource.metric_source == 'integration':
+            await execute_integration(conn_id)
+        else:
+            await metric_collector.collect_metrics_for_connection(conn_id)
         return {"success": True, "message": "指标采集已触发"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"采集失败: {str(e)}")

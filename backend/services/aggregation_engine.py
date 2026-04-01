@@ -54,8 +54,10 @@ class AggregationEngine:
         """
         Default aggregation rule:
         - If alert belongs to an event, only send notification for the first alert in the event,
-          or if the last notification for this event was sent more than 60 minutes ago (re-notify).
-        - Otherwise, use 60-minute cooldown per datasource + alert_type
+          or if the last notification for this event was sent more than 60 minutes ago (re-notify),
+          OR if the previous alert in the event was already resolved (recurrence → re-notify).
+        - Otherwise, use 60-minute cooldown per datasource + alert_type, but allow re-notification
+          if the previous alert was resolved (recurrence detection).
 
         Args:
             db: Database session
@@ -82,6 +84,26 @@ class AggregationEngine:
             event_deliveries = result.scalars().all()
 
             if event_deliveries:
+                # 查询该事件中是否有已恢复（resolved）的告警
+                # 如果之前的告警已恢复，新告警是再次触发，应重新通知
+                resolved_result = await db.execute(
+                    select(AlertMessage).where(
+                        and_(
+                            AlertMessage.event_id == alert.event_id,
+                            AlertMessage.status == "resolved"
+                        )
+                    )
+                )
+                resolved_alerts = resolved_result.scalars().all()
+
+                if resolved_alerts:
+                    # 之前有告警已恢复，重新触发时应通知
+                    logger.info(
+                        f"Re-notifying for event {alert.event_id} - previous alert(s) were resolved, "
+                        f"this is a recurrence (found {len(resolved_alerts)} resolved alerts)"
+                    )
+                    return True
+
                 # 检查最近一次投递是否超过60分钟，超过则允许重新通知
                 latest_delivery = max(event_deliveries, key=lambda d: d.sent_at or d.created_at)
                 latest_sent_at = latest_delivery.sent_at or latest_delivery.created_at
@@ -121,6 +143,28 @@ class AggregationEngine:
         recent_deliveries = result.scalars().all()
 
         if recent_deliveries:
+            # 查询最近60分钟内是否有同类型、同数据源的已恢复告警
+            # 如果之前告警已恢复，新告警再次触发时应重新通知
+            resolved_check = await db.execute(
+                select(AlertMessage).where(
+                    and_(
+                        AlertMessage.datasource_id == alert.datasource_id,
+                        AlertMessage.alert_type == alert.alert_type,
+                        AlertMessage.status == "resolved",
+                        AlertMessage.resolved_at >= cutoff_time
+                    )
+                )
+            )
+            resolved_recent = resolved_check.scalars().all()
+
+            if resolved_recent:
+                logger.info(
+                    f"Re-notifying for alert {alert.id} - previous alert(s) for "
+                    f"datasource={alert.datasource_id} type={alert.alert_type} were resolved, "
+                    f"this is a recurrence"
+                )
+                return True
+
             logger.info(
                 f"Suppressing alert {alert.id} due to recent delivery "
                 f"(datasource={alert.datasource_id}, type={alert.alert_type}, "

@@ -1,3 +1,4 @@
+import asyncio
 import time
 from typing import Any, Dict, List, Optional
 from backend.services.db_connector import DBConnector
@@ -8,13 +9,25 @@ class PostgreSQLConnector(DBConnector):
 
     async def _connect(self):
         import asyncpg
-        return await asyncpg.connect(
-            host=self.host, port=self.port,
-            user=self.username, password=self.password or "",
-            database=self.database or "postgres",
-            timeout=10,
-            ssl=False,
-        )
+
+        last_error = None
+        for attempt in range(2):
+            try:
+                return await asyncpg.connect(
+                    host=self.host, port=self.port,
+                    user=self.username, password=self.password or "",
+                    database=self.database or "postgres",
+                    timeout=10,
+                    ssl=False,
+                )
+            except TimeoutError as e:
+                last_error = e
+                if attempt == 0:
+                    await asyncio.sleep(0.2)
+                    continue
+                raise
+
+        raise last_error
 
     async def test_connection(self) -> str:
         conn = await self._connect()
@@ -28,21 +41,30 @@ class PostgreSQLConnector(DBConnector):
         conn = await self._connect()
         try:
             stats = await conn.fetchrow(
-                "SELECT numbackends, xact_commit, xact_rollback, blks_read, "
-                "blks_hit, tup_returned, tup_fetched, tup_inserted, "
-                "tup_updated, tup_deleted, conflicts, deadlocks "
-                "FROM pg_stat_database WHERE datname = current_database()"
+                """SELECT 
+                        sum(numbackends)::bigint as numbackends, 
+                        sum(xact_commit)::bigint as xact_commit, 
+                        sum(xact_rollback)::bigint as xact_rollback, 
+                        sum(blks_read)::bigint as blks_read, 
+                        sum(blks_hit)::bigint as blks_hit, 
+                        sum(tup_returned)::bigint as tup_returned, 
+                        sum(tup_fetched)::bigint as tup_fetched, 
+                        sum(tup_inserted)::bigint as tup_inserted, 
+                        sum(tup_updated)::bigint as tup_updated, 
+                        sum(tup_deleted)::bigint as tup_deleted, 
+                        sum(conflicts)::bigint as conflicts, 
+                        sum(deadlocks)::bigint as deadlocks 
+                    FROM pg_stat_database"""
             )
             activity = await conn.fetchrow(
                 "SELECT count(*) as total, "
-                "count(*) FILTER (WHERE state = 'active') as active, "
-                "count(*) FILTER (WHERE state = 'idle') as idle, "
-                "count(*) FILTER (WHERE wait_event_type IS NOT NULL "
-                "  AND wait_event_type NOT IN ('Client', 'Activity')) as waiting "
-                "FROM pg_stat_activity WHERE datname = current_database()"
+                "count(CASE WHEN state = 'active' THEN 1 END) as active, "
+                "count(CASE WHEN state = 'idle' THEN 1 END) as idle, "
+                "count(CASE WHEN wait_event_type IS NOT NULL AND wait_event_type NOT IN ('Client', 'Activity') THEN 1 END) as waiting "
+                "FROM pg_stat_activity"
             )
             size = await conn.fetchrow(
-                "SELECT pg_database_size(current_database()) as db_size"
+                "SELECT sum(pg_database_size(datname)) as db_size FROM pg_database"
             )
             # Get database start time and max_connections
             start_time = await conn.fetchrow(
@@ -54,14 +76,13 @@ class PostgreSQLConnector(DBConnector):
             # 锁等待数
             lock_waiting = await conn.fetchrow(
                 "SELECT count(*) as cnt FROM pg_stat_activity "
-                "WHERE wait_event_type = 'Lock' AND datname = current_database()"
+                "WHERE wait_event_type IS NOT NULL AND wait_event_type NOT IN ('Client', 'Activity')"
             )
             # 最长事务运行时间（秒）
             longest_tx = await conn.fetchrow(
                 "SELECT EXTRACT(EPOCH FROM max(now() - xact_start))::int as seconds "
                 "FROM pg_stat_activity "
                 "WHERE xact_start IS NOT NULL AND state != 'idle' "
-                "AND datname = current_database()"
             )
 
             hit_rate = 0
@@ -121,7 +142,7 @@ class PostgreSQLConnector(DBConnector):
             rows = await conn.fetch(
                 "SELECT pid, usename, client_addr, datname, state, "
                 "query_start, wait_event_type, wait_event, query "
-                "FROM pg_stat_activity WHERE datname = current_database() "
+                "FROM pg_stat_activity"
                 "ORDER BY query_start DESC NULLS LAST LIMIT 50"
             )
             return [dict(r) for r in rows]

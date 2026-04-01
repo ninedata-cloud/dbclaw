@@ -73,8 +73,6 @@ const LoginPage = {
 
         try {
             const result = await API.login(username, password);
-            localStorage.setItem('auth_token', result.access_token);
-            localStorage.setItem('auth_user', JSON.stringify(result.user));
             Store.set('currentUser', result.user);
 
             // Restore sidebar and header

@@ -1,6 +1,5 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
-import os
 
 
 class Settings(BaseSettings):
@@ -10,6 +9,7 @@ class Settings(BaseSettings):
     debug: bool = True
 
     encryption_key: str = "temporary-encryption-key"
+    initial_admin_password: str = ""
 
     openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
@@ -25,18 +25,19 @@ class Settings(BaseSettings):
     # Alert aggregation time window (in minutes)
     alert_aggregation_time_window_minutes: int = 5
 
-    # JWT settings
-    jwt_secret_key: str = "change-me-to-a-random-secret-key"
+    # Token settings
     jwt_algorithm: str = "HS256"
-    jwt_expire_minutes: int = 1440
+    public_share_secret_key: str = "change-me-to-a-random-public-share-secret"
+    public_share_expire_minutes: int = 1440
 
-    # Knowledge Base settings
-    chroma_persist_dir: str = "./data/chroma"
-    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
-    knowledge_base_dir: str = "./data/knowledge_bases"
+    # Session settings
+    session_cookie_name: str = "dbguard_session"
+    session_idle_timeout_minutes: int = 1440
+    session_cookie_secure: bool = False
+    session_cookie_samesite: str = "lax"
 
     # Bocha AI Web Search API
-    bocha_api_key: str = "sk-66d203942a6c404b89eff2adb494febc"
+    bocha_api_key: str = ""
     bocha_api_url: str = "https://api.bochaai.com/v1/web-search"
 
     class Config:

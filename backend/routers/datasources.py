@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_, and_, cast, Text
 from typing import List
 import asyncio
 import logging
@@ -12,48 +12,122 @@ from backend.schemas.datasource import (
     DatasourceSilenceRequest, DatasourceSilenceResponse
 )
 from backend.utils.encryption import encrypt_value, decrypt_value
+from backend.services.connection_diagnostic_service import ConnectionDiagnosticService
 from backend.dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_tags(tags: list[str] | None) -> list[str]:
+    if not tags:
+        return []
+
+    normalized = []
+    seen = set()
+    for tag in tags:
+        value = (tag or '').strip()
+        if not value:
+            continue
+        key = value.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append(value)
+    return normalized
+
 
 router = APIRouter(prefix="/api/datasources", tags=["datasources"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("", response_model=List[DatasourceResponse])
-async def list_datasources(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Datasource).order_by(Datasource.id.desc()))
-    return result.scalars().all()
+async def list_datasources(
+    q: str | None = None,
+    db_type: str | None = None,
+    importance_level: str | None = None,
+    tags: str | None = None,
+    db: AsyncSession = Depends(get_db)
+):
+    query = select(Datasource)
+    filters = []
+
+    if q and q.strip():
+        search = f"%{q.strip()}%"
+        filters.append(
+            or_(
+                Datasource.name.ilike(search),
+                Datasource.host.ilike(search),
+                Datasource.database.ilike(search)
+            )
+        )
+
+    if db_type and db_type.strip():
+        filters.append(Datasource.db_type == db_type.strip())
+
+    if importance_level and importance_level.strip():
+        filters.append(Datasource.importance_level == importance_level.strip())
+
+    filter_tags = normalize_tags((tags or '').replace('，', ',').split(','))
+    for tag in filter_tags:
+        filters.append(cast(Datasource.tags, Text).ilike(f'%"{tag}"%'))
+
+    if filters:
+        query = query.where(and_(*filters))
+
+    result = await db.execute(query.order_by(Datasource.id.desc()))
+    datasources = result.scalars().all()
+
+    if filter_tags:
+        lowered_tags = {tag.lower() for tag in filter_tags}
+        datasources = [
+            datasource for datasource in datasources
+            if lowered_tags.issubset({(tag or '').strip().lower() for tag in (datasource.tags or []) if (tag or '').strip()})
+        ]
+
+    return datasources
+
+
+@router.get("/latest-metrics")
+async def get_datasources_latest_metrics(
+    db: AsyncSession = Depends(get_db)
+):
+    """获取所有数据源的最新指标（轻量级接口，列表页使用）"""
+    from sqlalchemy import select, desc
+    from backend.models.metric_snapshot import MetricSnapshot
+
+    # Get all datasources with their latest db_status metric
+    result = await db.execute(
+        select(MetricSnapshot)
+        .where(MetricSnapshot.metric_type == 'db_status')
+        .order_by(MetricSnapshot.datasource_id, desc(MetricSnapshot.collected_at))
+        .distinct(MetricSnapshot.datasource_id)
+    )
+    metrics = result.scalars().all()
+
+    # Return as dict keyed by datasource_id
+    return {
+        m.datasource_id: {
+            'cpu_usage': m.data.get('cpu_usage') if m.data else None,
+            'qps': m.data.get('qps') if m.data else None,
+            'connections_active': m.data.get('connections_active') if m.data else None,
+        }
+        for m in metrics
+    }
 
 
 @router.post("/check-status")
 async def check_all_datasource_status(db: AsyncSession = Depends(get_db)):
     """批量检测所有数据源的连接状态"""
-    from backend.services.db_connector import get_connector
     from backend.utils.datetime_helper import now
 
     result = await db.execute(select(Datasource).order_by(Datasource.id.desc()))
     datasources = result.scalars().all()
+    diagnostic_service = ConnectionDiagnosticService(db)
 
     async def check_one(ds):
-        try:
-            password = None
-            if ds.password_encrypted:
-                password = decrypt_value(ds.password_encrypted)
-            connector = get_connector(
-                db_type=ds.db_type,
-                host=ds.host,
-                port=ds.port,
-                username=ds.username,
-                password=password,
-                database=ds.database,
-                extra_params=ds.extra_params,
-            )
-            await asyncio.wait_for(connector.test_connection(), timeout=10)
-            return ds.id, 'normal', None
-        except asyncio.TimeoutError:
-            return ds.id, 'failed', '连接超时'
-        except Exception as e:
-            return ds.id, 'failed', str(e)
+        diagnosis = await diagnostic_service.diagnose_datasource(ds.id, include_host_checks=False, include_tcp_checks=True)
+        status = 'normal' if diagnosis.get('success') else 'failed'
+        error = None if diagnosis.get('success') else diagnosis.get('summary') or diagnosis.get('message')
+        return ds.id, status, error
 
     tasks = [check_one(ds) for ds in datasources]
     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -92,10 +166,12 @@ async def create_datasource(data: DatasourceCreate, db: AsyncSession = Depends(g
         database=data.database,
         host_id=data.host_id,
         extra_params=data.extra_params,
+        tags=normalize_tags(data.tags),
         importance_level=data.importance_level,
         monitoring_interval=data.monitoring_interval,
         metric_source=data.metric_source,
         external_instance_id=data.external_instance_id,
+        inbound_source=data.inbound_source,
     )
     db.add(datasource)
     await db.commit()
@@ -129,6 +205,9 @@ async def update_datasource(datasource_id: int, data: DatasourceUpdate, db: Asyn
         if pwd is not None:
             datasource.password_encrypted = encrypt_value(pwd)
 
+    if "tags" in update_data:
+        update_data["tags"] = normalize_tags(update_data["tags"])
+
     for key, value in update_data.items():
         setattr(datasource, key, value)
 
@@ -158,9 +237,8 @@ async def delete_datasource(datasource_id: int, db: AsyncSession = Depends(get_d
 @router.post("/test", response_model=DatasourceTestResult)
 async def test_datasource_connection(data: DatasourceTestRequest, db: AsyncSession = Depends(get_db)):
     """Test database connection with provided parameters (without saving to database)"""
+    diagnostic_service = ConnectionDiagnosticService(db)
     try:
-        from backend.services.db_connector import get_connector
-
         password = data.password
 
         # If datasource_id is provided and password is None, use saved password
@@ -170,7 +248,7 @@ async def test_datasource_connection(data: DatasourceTestRequest, db: AsyncSessi
             if datasource and datasource.password_encrypted:
                 password = decrypt_value(datasource.password_encrypted)
 
-        connector = get_connector(
+        return await diagnostic_service.diagnose_connection_params(
             db_type=data.db_type,
             host=data.host,
             port=data.port,
@@ -178,9 +256,10 @@ async def test_datasource_connection(data: DatasourceTestRequest, db: AsyncSessi
             password=password,
             database=data.database,
             extra_params=data.extra_params,
+            datasource_id=data.datasource_id,
+            include_host_checks=False,
+            include_tcp_checks=True,
         )
-        version = await connector.test_connection()
-        return DatasourceTestResult(success=True, message="Connection successful", version=version)
     except Exception as e:
         logger.error(f"Failed to test connection to {data.host}:{data.port}: {e}", exc_info=True)
         return DatasourceTestResult(success=False, message=str(e))
@@ -196,37 +275,19 @@ async def test_datasource(datasource_id: int, db: AsyncSession = Depends(get_db)
     if not datasource:
         raise HTTPException(status_code=404, detail="数据源不存在")
 
-    try:
-        from backend.services.db_connector import get_connector
-        password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
-        connector = get_connector(
-            db_type=datasource.db_type,
-            host=datasource.host,
-            port=datasource.port,
-            username=datasource.username,
-            password=password,
-            database=datasource.database,
-            extra_params=datasource.extra_params,
-        )
-        version = await connector.test_connection()
+    diagnostic_service = ConnectionDiagnosticService(db)
+    diagnosis = await diagnostic_service.diagnose_datasource(
+        datasource_id,
+        include_host_checks=True,
+        include_tcp_checks=True,
+    )
 
-        # 更新连接状态
-        datasource.connection_status = 'normal'
-        datasource.connection_error = None
-        datasource.connection_checked_at = now()
-        await db.commit()
+    datasource.connection_status = 'normal' if diagnosis.get('success') else 'failed'
+    datasource.connection_error = None if diagnosis.get('success') else diagnosis.get('summary') or diagnosis.get('message')
+    datasource.connection_checked_at = now()
+    await db.commit()
 
-        return DatasourceTestResult(success=True, message="Connection successful", version=version)
-    except Exception as e:
-        logger.error(f"Failed to test datasource {datasource_id} ({datasource.name}): {e}", exc_info=True)
-
-        # 更新连接状态
-        datasource.connection_status = 'failed'
-        datasource.connection_error = str(e)
-        datasource.connection_checked_at = now()
-        await db.commit()
-
-        return DatasourceTestResult(success=False, message=str(e))
+    return diagnosis
 
 
 @router.post("/{datasource_id}/silence", response_model=DatasourceSilenceResponse)

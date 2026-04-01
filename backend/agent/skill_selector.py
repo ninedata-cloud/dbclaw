@@ -1,23 +1,169 @@
+"""AI Agent skill selector - converts skills to OpenAI function format.
+
+This module also supports filtering skills exposed as tools based on the current
+conversation datasource type to reduce LLM tool-schema token usage.
 """
-AI Agent skill selector - converts skills to OpenAI function format
-"""
-from typing import List, Dict, Any
+
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict, List, Optional, Set
+
 from backend.skills.models import Skill
+
+logger = logging.getLogger(__name__)
+
+
+# Skills that are always useful, even when a datasource is selected.
+GLOBAL_SKILL_IDS: Set[str] = {
+    "execute_diagnostic_query",
+    "diagnose_datasource_connection",
+    "execute_any_sql",
+    "search_knowledge_base",
+    "fetch_webpage",
+    "web_search_bocha",
+    # Confirmed: keep datasource listing available even when scoped.
+    "list_datasources",
+}
+
+# OS diagnostics are only useful when a datasource has an associated host.
+OS_SKILL_IDS: Set[str] = {
+    "get_os_metrics",
+    "execute_os_command",
+    "execute_any_os_command",
+    "diagnose_high_cpu",
+    "diagnose_high_memory",
+    "diagnose_disk_space",
+    "diagnose_disk_io",
+    "diagnose_network",
+}
+
+# Mapping from datasource.db_type -> eligible skill families.
+# Primary signal: skill id prefix; secondary: category/tags.
+DB_TOOL_FAMILY_MAP: dict[str, dict[str, Set[str]]] = {
+    "mysql": {
+        "prefixes": {"mysql_"},
+        "categories": {"mysql"},
+        "tags": {"mysql"},
+    },
+    "postgresql": {
+        "prefixes": {"pg_"},
+        "categories": {"postgresql"},
+        "tags": {"postgresql", "pg"},
+    },
+    "sqlserver": {
+        "prefixes": {"mssql_"},
+        "categories": {"sqlserver"},
+        "tags": {"sqlserver", "mssql"},
+    },
+    "oracle": {
+        "prefixes": {"oracle_"},
+        "categories": {"oracle"},
+        "tags": {"oracle"},
+    },
+    "opengauss": {
+        "prefixes": {"opengauss_"},
+        "categories": {"opengauss"},
+        "tags": {"opengauss"},
+    },
+    "tidb": {
+        "prefixes": {"tidb_"},
+        "categories": {"tidb"},
+        "tags": {"tidb"},
+    },
+    "dm": {
+        "prefixes": {"dm_"},
+        "categories": {"dm"},
+        "tags": {"dm"},
+    },
+    # OceanBase uses a shared tool family for both oceanbase/oceanbase_mysql.
+    "oceanbase": {
+        "prefixes": {"oceanbase_"},
+        "categories": {"oceanbase"},
+        "tags": {"oceanbase"},
+    },
+    "oceanbase_mysql": {
+        "prefixes": {"oceanbase_"},
+        "categories": {"oceanbase"},
+        "tags": {"oceanbase", "oceanbase_mysql"},
+    },
+}
+
+
+def normalize_db_type(db_type: Optional[str]) -> Optional[str]:
+    if not db_type:
+        return None
+    value = db_type.strip().lower()
+    aliases = {
+        "postgres": "postgresql",
+        "pg": "postgresql",
+        "mssql": "sqlserver",
+        "sql_server": "sqlserver",
+    }
+    return aliases.get(value, value)
+
+
+def is_global_skill(skill: Skill) -> bool:
+    return (skill.id or "") in GLOBAL_SKILL_IDS
+
+
+def is_os_skill(skill: Skill) -> bool:
+    return (skill.id or "") in OS_SKILL_IDS
+
+
+def skill_matches_datasource(skill: Skill, db_type: str) -> bool:
+    family = DB_TOOL_FAMILY_MAP.get(db_type)
+    if not family:
+        return False
+
+    skill_id = (skill.id or "").lower()
+    if any(skill_id.startswith(prefix) for prefix in family["prefixes"]):
+        return True
+
+    category = (skill.category or "").lower()
+    if category and category in family["categories"]:
+        return True
+
+    tags = {str(t).lower() for t in (skill.tags or [])}
+    if tags.intersection(family["tags"]):
+        return True
+
+    return False
 
 
 def skill_to_openai_function(skill: Skill) -> Dict[str, Any]:
-    """Convert a Skill to OpenAI function calling format"""
-    properties = {}
-    required = []
+    """Convert a Skill to OpenAI function calling format."""
+    properties: dict[str, Any] = {}
+    required: list[str] = []
 
     for param in skill.parameters or []:
-        param_def = {
+        param_def: dict[str, Any] = {
             "type": param["type"],
             "description": param["description"],
         }
 
         if param.get("default") is not None:
             param_def["default"] = param["default"]
+        if param.get("enum") is not None:
+            param_def["enum"] = param["enum"]
+        if param.get("pattern") is not None:
+            param_def["pattern"] = param["pattern"]
+        if param.get("min") is not None:
+            if param["type"] in {"integer", "number"}:
+                param_def["minimum"] = param["min"]
+            elif param["type"] == "string":
+                param_def["minLength"] = int(param["min"])
+            elif param["type"] == "array":
+                param_def["minItems"] = int(param["min"])
+        if param.get("max") is not None:
+            if param["type"] in {"integer", "number"}:
+                param_def["maximum"] = param["max"]
+            elif param["type"] == "string":
+                param_def["maxLength"] = int(param["max"])
+            elif param["type"] == "array":
+                param_def["maxItems"] = int(param["max"])
+        if param["type"] == "array":
+            param_def["items"] = param.get("items") or {"type": "string"}
 
         properties[param["name"]] = param_def
 
@@ -28,6 +174,8 @@ def skill_to_openai_function(skill: Skill) -> Dict[str, Any]:
     properties["timeout"] = {
         "type": "integer",
         "description": "Execution timeout in seconds (30-3600). Estimate based on task complexity: simple queries 30-60s, complex analysis 300-600s, deep diagnostics 600-3600s.",
+        "minimum": 30,
+        "maximum": 3600,
     }
 
     return {
@@ -45,12 +193,18 @@ def skill_to_openai_function(skill: Skill) -> Dict[str, Any]:
 
 
 async def get_available_skills_as_tools(
-    db, disabled_tools: List[str] = None
+    db,
+    disabled_tools: Optional[List[str]] = None,
+    datasource_db_type: Optional[str] = None,
+    host_configured: Optional[bool] = None,
 ) -> List[Dict[str, Any]]:
+    """Get enabled skills and convert them to OpenAI tool format.
+
+    - If datasource_db_type is None: return all enabled skills (minus disabled_tools).
+    - If datasource_db_type is provided: keep only global skills, db-matching skills,
+      and OS skills (only when host_configured is True).
     """
-    Get all enabled skills and convert them to OpenAI function format.
-    Filters out disabled tools.
-    """
+
     from backend.skills.registry import SkillRegistry
 
     registry = SkillRegistry(db)
@@ -58,9 +212,53 @@ async def get_available_skills_as_tools(
 
     disabled_set = set(disabled_tools) if disabled_tools else set()
 
-    tools = []
-    for skill in skills:
-        if skill.id not in disabled_set:
-            tools.append(skill_to_openai_function(skill))
+    normalized_db_type = normalize_db_type(datasource_db_type)
 
-    return tools
+    kept: list[Skill] = []
+
+    if not normalized_db_type:
+        for skill in skills:
+            if skill.id not in disabled_set:
+                kept.append(skill)
+
+        logger.info(
+            "Skill tools: db_type=None total=%d kept=%d disabled=%d",
+            len(skills),
+            len(kept),
+            len(disabled_set),
+        )
+        return [skill_to_openai_function(skill) for skill in kept]
+
+    family_exists = normalized_db_type in DB_TOOL_FAMILY_MAP
+    if not family_exists:
+        logger.warning(
+            "No tool family mapping for db_type=%s; keeping only global tools",
+            normalized_db_type,
+        )
+
+    for skill in skills:
+        if skill.id in disabled_set:
+            continue
+
+        if is_global_skill(skill):
+            kept.append(skill)
+            continue
+
+        if is_os_skill(skill):
+            if host_configured:
+                kept.append(skill)
+            continue
+
+        if family_exists and skill_matches_datasource(skill, normalized_db_type):
+            kept.append(skill)
+
+    logger.info(
+        "Skill tools: db_type=%s total=%d kept=%d disabled=%d host_configured=%s",
+        normalized_db_type,
+        len(skills),
+        len(kept),
+        len(disabled_set),
+        host_configured,
+    )
+
+    return [skill_to_openai_function(skill) for skill in kept]

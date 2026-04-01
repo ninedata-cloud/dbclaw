@@ -4,7 +4,7 @@ Alert Event Model
 Represents aggregated alert events that group related alerts together.
 """
 
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, Integer, String, DateTime, Text
 from datetime import datetime
 
 from backend.database import Base
@@ -38,6 +38,10 @@ class AlertEvent(Base):
     title = Column(String(255), nullable=False)
     alert_type = Column(String(50), nullable=True)
     metric_name = Column(String(100), nullable=True)
+    ai_diagnosis_summary = Column(Text, nullable=True)  # AI-generated diagnosis for this event
+    root_cause = Column(Text, nullable=True)            # Root cause analysis
+    recommended_actions = Column(Text, nullable=True)  # Recommended fix actions
+    diagnosis_status = Column(String(20), nullable=True)  # pending / in_progress / completed / failed
 
     def __repr__(self):
         return (

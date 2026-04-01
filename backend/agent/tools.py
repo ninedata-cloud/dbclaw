@@ -1,11 +1,11 @@
 # Tools that can modify state or execute arbitrary commands.
 # Users can disable these per-session from the diagnosis UI.
 HIGH_RISK_TOOLS = {
-    "execute_diagnostic_query": "Execute read-only SQL queries (SELECT, SHOW, EXPLAIN)",
-    "execute_os_command": "Execute read-only shell commands on the host via SSH",
-    "explain_query": "Run EXPLAIN on SQL queries",
-    "execute_any_sql": "⚠️ DANGEROUS: Execute ANY SQL command (INSERT, UPDATE, DELETE, DROP, etc.)",
-    "execute_any_os_command": "⚠️ DANGEROUS: Execute ANY OS command (can modify system)",
+    "execute_diagnostic_query": "执行只读 SQL 诊断查询（SELECT / SHOW / EXPLAIN）",
+    "execute_os_command": "执行只读 OS 诊断命令（df、free、ps、ss、日志查看等）",
+    "explain_query": "分析 SQL 执行计划（只读）",
+    "execute_any_sql": "⚠️ 允许执行任意 SQL，可能修改数据库数据或结构",
+    "execute_any_os_command": "⚠️ 允许执行任意 OS 命令，可能修改主机状态",
 }
 
 
@@ -204,20 +204,33 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
-            "name": "search_knowledge_base",
-            "description": "Search knowledge bases for relevant documentation. Use when user questions relate to custom configurations, internal procedures, or topics that might be documented in uploaded files.",
+            "name": "list_documents",
+            "description": "列出知识库中的诊断文档目录（含摘要），AI 根据目录决定需要读取哪些文档。可按数据库类型过滤。",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "Search query"},
-                    "kb_ids": {
-                        "type": "array",
-                        "items": {"type": "integer"},
-                        "description": "Optional KB IDs to search (if not provided, searches all active KBs in session)"
-                    },
-                    "top_k": {"type": "integer", "description": "Number of results (default: 5)", "default": 5}
+                    "db_type": {
+                        "type": "string",
+                        "description": "数据库类型过滤，可选值: mysql, postgresql, oracle, sqlserver，不传则返回所有类型"
+                    }
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_document",
+            "description": "读取指定文档的完整 Markdown 内容。根据 list_documents 返回的文档目录选择合适的文档 id 后调用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "doc_id": {
+                        "type": "integer",
+                        "description": "文档 ID，从 list_documents 返回的列表中获取"
+                    }
                 },
-                "required": ["query"]
+                "required": ["doc_id"]
             }
         }
     },

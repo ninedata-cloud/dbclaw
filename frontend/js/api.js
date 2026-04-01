@@ -3,41 +3,31 @@ const API = {
     async request(url, options = {}) {
         const defaultOpts = {
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
         };
         const merged = { ...defaultOpts, ...options };
+        merged.headers = { ...defaultOpts.headers, ...(options.headers || {}) };
 
-        // Inject auth token
-        const token = localStorage.getItem('auth_token');
-        if (token) {
-            merged.headers['Authorization'] = `Bearer ${token}`;
-        }
-
-        if (merged.body && typeof merged.body === 'object') {
+        if (merged.body && typeof merged.body === 'object' && !(merged.body instanceof FormData)) {
             merged.body = JSON.stringify(merged.body);
         }
         try {
             const response = await fetch(url, merged);
             if (!response.ok) {
-                // Handle 401 - redirect to login
-                if (response.status === 401) {
-                    localStorage.removeItem('auth_token');
-                    localStorage.removeItem('auth_user');
+                if (response.status === 401 && url !== '/api/auth/login') {
                     Store.set('currentUser', null);
                     window.location.hash = 'login';
                     throw new Error('会话已过期，请重新登录');
                 }
 
-                // Parse error response
                 const err = await response.json().catch(() => ({ detail: response.statusText }));
 
-                // Extract error message, handling various formats
                 let errorMessage = '请求失败';
 
                 if (err.detail) {
                     if (typeof err.detail === 'string') {
                         errorMessage = err.detail;
                     } else if (Array.isArray(err.detail)) {
-                        // Pydantic validation errors
                         errorMessage = err.detail.map(e => {
                             const loc = e.loc ? e.loc.join('.') : '';
                             return `${loc}: ${e.msg}`;
@@ -67,36 +57,26 @@ const API = {
     delete(url) { return this.request(url, { method: 'DELETE' }); },
 
     async postFormData(url, formData) {
-        const token = localStorage.getItem('auth_token');
-        const headers = {};
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
         const response = await fetch(url, {
             method: 'POST',
-            headers,
+            credentials: 'same-origin',
             body: formData
         });
         if (!response.ok) {
             if (response.status === 401) {
-                localStorage.removeItem('auth_token');
-                localStorage.removeItem('auth_user');
                 Store.set('currentUser', null);
                 window.location.hash = 'login';
                 throw new Error('会话已过期，请重新登录');
             }
 
-            // Parse error response
             const err = await response.json().catch(() => ({ detail: response.statusText }));
 
-            // Extract error message, handling various formats
             let errorMessage = '请求失败';
 
             if (err.detail) {
                 if (typeof err.detail === 'string') {
                     errorMessage = err.detail;
                 } else if (Array.isArray(err.detail)) {
-                    // Pydantic validation errors
                     errorMessage = err.detail.map(e => {
                         const loc = e.loc ? e.loc.join('.') : '';
                         return `${loc}: ${e.msg}`;
@@ -113,9 +93,11 @@ const API = {
         return await response.json();
     },
 
-    // Auth endpoints
     login(username, password) { return this.post('/api/auth/login', { username, password }); },
     getMe() { return this.get('/api/auth/me'); },
+    updateMe(data) { return this.put('/api/auth/me', data); },
+    logout() { return this.post('/api/auth/logout', {}); },
+    logoutAll() { return this.post('/api/auth/logout-all', {}); },
     changePassword(old_password, new_password) { return this.post('/api/auth/change-password', { old_password, new_password }); },
 
     // User endpoints
@@ -128,7 +110,10 @@ const API = {
     getUserLoginLogs(id) { return this.get(`/api/users/${id}/login-logs`); },
 
     // Datasource endpoints
-    getDatasources() { return this.get('/api/datasources'); },
+    getDatasources(params = null) {
+        const queryString = params ? `?${new URLSearchParams(params).toString()}` : '';
+        return this.get(`/api/datasources${queryString}`);
+    },
     createDatasource(data) { return this.post('/api/datasources', data); },
     updateDatasource(id, data) { return this.put(`/api/datasources/${id}`, data); },
     deleteDatasource(id) { return this.delete(`/api/datasources/${id}`); },
@@ -144,6 +129,9 @@ const API = {
     // Bulk status check for datasources
     checkAllDatasourceStatus() { return this.post('/api/datasources/check-status'); },
 
+    // Get latest metrics for all datasources (lightweight)
+    getDatasourcesLatestMetrics() { return this.get('/api/datasources/latest-metrics'); },
+
     // Host endpoints
     getHosts() { return this.get('/api/hosts'); },
     createHost(data) { return this.post('/api/hosts', data); },
@@ -155,6 +143,7 @@ const API = {
     getMetrics(connId, params = '') { return this.get(`/api/metrics/${connId}${params ? '?' + params : ''}`); },
     getLatestMetric(connId, type = 'db_status') { return this.get(`/api/metrics/${connId}/latest?metric_type=${type}`); },
     getDatasourceHealth(connId) { return this.get(`/api/metrics/${connId}/health`); },
+    getBatchDashboard(connIds) { return this.post('/api/metrics/batch/dashboard', { conn_ids: connIds }); },
     refreshMetrics(connId) { return this.post(`/api/metrics/${connId}/refresh`); },
 
     // Chat endpoints
@@ -164,6 +153,8 @@ const API = {
     clearSessionMessages(id) { return this.delete(`/api/chat/sessions/${id}/messages`); },
     getSessionMessages(sessionId) { return this.get(`/api/chat/sessions/${sessionId}/messages`); },
     getHighRiskTools() { return this.get('/api/chat/high-risk-tools'); },
+    resolveChatApproval(sessionId, approvalId, data) { return this.post(`/api/chat/sessions/${sessionId}/approvals/${approvalId}/resolve`, data); },
+
 
     // Query endpoints
     executeQuery(data, options = {}) {
@@ -193,13 +184,9 @@ const API = {
     getReport(id) { return this.get(`/api/reports/${id}`); },
     getReportDownloadUrl(id, format) { return `/api/reports/${id}/download?format=${format}`; },
     async downloadReport(id, format) {
-        const token = localStorage.getItem('auth_token');
-        const headers = {};
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-
         const response = await fetch(`/api/reports/${id}/download?format=${format}`, {
             method: 'GET',
-            headers
+            credentials: 'same-origin'
         });
 
         if (!response.ok) {
@@ -225,46 +212,65 @@ const API = {
     updateAIModel(id, data) { return this.put(`/api/ai-models/${id}`, data); },
     deleteAIModel(id) { return this.delete(`/api/ai-models/${id}`); },
     setDefaultAIModel(id) { return this.post(`/api/ai-models/${id}/set-default`); },
+    testAIModelChat(id, data) { return this.post(`/api/ai-models/${id}/test-chat`, data); },
 
-    // Knowledge Base endpoints
-    getKnowledgeBases() { return this.get('/api/knowledge-bases'); },
-    createKnowledgeBase(data) { return this.post('/api/knowledge-bases', data); },
-    getKnowledgeBase(id) { return this.get(`/api/knowledge-bases/${id}`); },
-    updateKnowledgeBase(id, data) { return this.put(`/api/knowledge-bases/${id}`, data); },
-    deleteKnowledgeBase(id) { return this.delete(`/api/knowledge-bases/${id}`); },
-    getDocuments(kbId) { return this.get(`/api/knowledge-bases/${kbId}/documents`); },
-    async uploadDocument(kbId, file) {
-        const formData = new FormData();
-        formData.append('file', file);
-        const token = localStorage.getItem('auth_token');
-        const headers = {};
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-        const response = await fetch(`/api/knowledge-bases/${kbId}/documents`, {
-            method: 'POST',
-            headers,
-            body: formData,
-        });
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({ detail: response.statusText }));
-            throw new Error(err.detail || '上传失败');
-        }
-        return await response.json();
+    // Document API
+    getDocCategories(dbType = null) {
+        const qs = dbType ? `?db_type=${dbType}` : '';
+        return this.get(`/api/docs/categories${qs}`);
     },
-    deleteDocument(kbId, docId) { return this.delete(`/api/knowledge-bases/${kbId}/documents/${docId}`); },
-    async getDocumentContent(kbId, docId) {
-        const token = localStorage.getItem('auth_token');
-        const headers = {};
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-        const response = await fetch(`/api/knowledge-bases/${kbId}/documents/${docId}/content`, { headers });
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({ detail: response.statusText }));
-            throw new Error(err.detail || '获取文档内容失败');
+    getCategoryDocuments(categoryId) {
+        return this.get(`/api/docs/categories/${categoryId}/documents`);
+    },
+    getDocument(docId) {
+        return this.get(`/api/docs/${docId}`);
+    },
+    createDocument(data) {
+        return this.post('/api/docs', data);
+    },
+    updateDocument(docId, data) {
+        return this.put(`/api/docs/${docId}`, data);
+    },
+    deleteDocument(docId) {
+        return this.delete(`/api/docs/${docId}`);
+    },
+    exportDocument(docId) {
+        const a = document.createElement('a');
+        a.href = `/api/docs/${docId}/export`;
+        a.setAttribute('download', '');
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    },
+    async importDocument(categoryId, title, markdownContent) {
+        return this.post('/api/docs', {
+            category_id: categoryId,
+            title: title,
+            content: markdownContent,
+        });
+    },
+    async getKnowledgeBases() {
+        const categories = await this.getDocCategories();
+        const items = [];
+
+        const appendCategory = (category) => {
+            items.push({
+                id: category.id,
+                name: category.name,
+                db_type: category.db_type,
+                is_active: true,
+                document_count: category.document_count ?? 0,
+            });
+            for (const child of (category.children || [])) {
+                appendCategory(child);
+            }
+        };
+
+        for (const category of categories) {
+            appendCategory(category);
         }
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/pdf')) {
-            return { type: 'pdf', url: `/api/knowledge-bases/${kbId}/documents/${docId}/content` };
-        }
-        return await response.json();
+
+        return items;
     },
 
     // Skills
@@ -276,12 +282,31 @@ const API = {
         return this.get(`/api/alerts${queryString}`);
     },
     getAlert(id) { return this.get(`/api/alerts/${id}`); },
+    getAlertContext(id) { return this.get(`/api/alerts/${id}/context`); },
     acknowledgeAlert(id, userId) { return this.post(`/api/alerts/${id}/acknowledge`, { user_id: userId }); },
     resolveAlert(id) { return this.post(`/api/alerts/${id}/resolve`, {}); },
     getSubscriptions(userId) { return this.get(`/api/alerts/subscriptions/list?user_id=${userId}`); },
     createSubscription(data) { return this.post('/api/alerts/subscriptions', data); },
     updateSubscription(id, data) { return this.put(`/api/alerts/subscriptions/${id}`, data); },
     deleteSubscription(id) { return this.delete(`/api/alerts/subscriptions/${id}`); },
-    testNotification(subscriptionId) { return this.post(`/api/alerts/subscriptions/${subscriptionId}/test`, {}); }
+    testNotification(subscriptionId) { return this.post(`/api/alerts/subscriptions/${subscriptionId}/test`, {}); },
 
+    // P1 Action Runs (under inspections router for now)
+    getReportActions(reportId) { return this.get(`/api/inspections/reports/${reportId}/actions`); },
+    createActionRun(data) { return this.post('/api/inspections/actions/runs', data); },
+    getActionRun(runId) { return this.get(`/api/inspections/actions/runs/${runId}`); },
+    listActionRuns(params = null) {
+        const qs = params ? `?${new URLSearchParams(params).toString()}` : '';
+        return this.get(`/api/inspections/actions/runs${qs}`);
+    },
+    approveActionRun(runId, comment = '') { return this.post(`/api/inspections/actions/runs/${runId}/approve`, { action: 'approved', comment }); },
+    rejectActionRun(runId, comment = '') { return this.post(`/api/inspections/actions/runs/${runId}/reject`, { action: 'rejected', comment }); },
+    verifyActionRun(runId) { return this.post(`/api/inspections/actions/runs/${runId}/verify`, {}); },
+
+    // Weixin Bot
+    getWeixinBotBindings() { return this.get('/api/integration-bots'); },
+    updateWeixinBotBinding(code, data) { return this.put(`/api/integration-bots/${code}`, data); },
+    getWeixinBotStatus() { return this.get('/api/weixin/bot/binding/status'); },
+    createWeixinLoginQrcode() { return this.post('/api/weixin/bot/login/qrcode', {}); },
+    pollWeixinLoginStatus(qrcode) { return this.post('/api/weixin/bot/login/status', { qrcode }); }
 };

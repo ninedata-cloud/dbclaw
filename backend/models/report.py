@@ -10,13 +10,13 @@ class Report(Base):
     datasource_id = Column(Integer, nullable=False)
     title = Column(String(200), nullable=False)
     report_type = Column(String(50), default="comprehensive")  # comprehensive, performance, security
-    status = Column(String(20), default="generating")  # generating, completed, failed
+    status = Column(String(20), default="generating")  # generating, completed, partial, timed_out, awaiting_confirm, failed
     summary = Column(Text, nullable=True)
     content_md = Column(Text, nullable=True)
     content_html = Column(Text, nullable=True)
     findings = Column(JSON, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
-    completed_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)  # Terminal timestamp once report leaves generating state
 
     # AI-related columns
     ai_analysis = Column(Text, nullable=True)  # Full AI conversation text
@@ -33,8 +33,12 @@ class Report(Base):
     # Inspection trigger columns
     trigger_type = Column(String(20), nullable=True)  # 'scheduled', 'manual', 'anomaly'
     trigger_id = Column(Integer, nullable=True)
+    alert_id = Column(Integer, nullable=True, index=True)
     trigger_reason = Column(String(500), nullable=True)  # e.g., "CPU 95% > 80% for 60s"
 
     # AI inspection columns
     skill_executions = Column(JSON, nullable=True)  # Audit trail of skills called
     ai_conversation_id = Column(Integer, nullable=True)  # Link to diagnostic_session
+
+    # P1: structured action recommendations (list of action specs)
+    recommended_actions = Column(JSON, nullable=True)

@@ -73,6 +73,26 @@
     border-top: 1px solid var(--border-color);
 }
 
+.ai-model-card .datasource-card-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.ai-model-card .datasource-card-actions .btn {
+    padding: 4px 8px;
+    font-size: 11px;
+    gap: 4px;
+}
+
+.ai-model-card .datasource-card-actions .btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.ai-model-card .datasource-card-actions .delete-btn {
+    padding-inline: 6px;
+}
+
 /* === Knowledge Base Cards === */
 .kb-grid {
     display: grid;
@@ -280,6 +300,25 @@
     border-bottom: none;
 }
 
+.data-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+}
+
+.data-table th.sortable:hover {
+    color: var(--text-primary);
+}
+
+.sort-icon {
+    font-size: 10px;
+    margin-left: 4px;
+    opacity: 0.5;
+}
+
+.data-table th.sortable:hover .sort-icon {
+    opacity: 1;
+}
+
 /* === Toast === */
 .toast-container {
     position: fixed;
@@ -383,6 +422,37 @@
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     padding: 16px 20px;
+}
+
+.metric-card-connection-overview {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.connection-overview-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.connection-overview-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.connection-overview-name {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.connection-overview-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
 }
 
 .metric-card-label {

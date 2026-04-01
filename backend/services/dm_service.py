@@ -10,8 +10,14 @@ class DMConnector(DBConnector):
     def _connect(self):
         try:
             import dmPython
+            import socket
             conn_str = f"{self.username}/{self.password}@{self.host}:{self.port}"
-            return dmPython.connect(conn_str)
+            old_timeout = socket.getdefaulttimeout()
+            socket.setdefaulttimeout(5)
+            try:
+                return dmPython.connect(conn_str)
+            finally:
+                socket.setdefaulttimeout(old_timeout)
         except ImportError:
             raise ImportError("dmPython library not installed. Install with: pip install dmPython")
 
@@ -41,6 +47,11 @@ class DMConnector(DBConnector):
                 cursor.execute("SELECT COUNT(*) FROM V$SESSION WHERE STATUS = 'ACTIVE'")
                 active_sessions = cursor.fetchone()[0]
 
+                # Get configured max sessions
+                cursor.execute("SELECT VALUE FROM V$PARAMETER WHERE NAME = 'SESSIONS' AND ROWNUM = 1")
+                max_sessions_row = cursor.fetchone()
+                max_connections = int(max_sessions_row[0]) if max_sessions_row and max_sessions_row[0] is not None else 0
+
                 # Get system statistics
                 cursor.execute(
                     "SELECT NAME, VALUE FROM V$SYSSTAT "
@@ -67,6 +78,9 @@ class DMConnector(DBConnector):
                 return {
                     "session_count": session_count,
                     "active_sessions": active_sessions,
+                    "connections_total": session_count,
+                    "connections_active": active_sessions,
+                    "max_connections": max_connections,
                     "user_commits": int(stats.get("user commits", 0)),
                     "user_rollbacks": int(stats.get("user rollbacks", 0)),
                     "physical_reads": int(stats.get("physical reads", 0)),

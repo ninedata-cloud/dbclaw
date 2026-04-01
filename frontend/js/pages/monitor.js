@@ -1,6 +1,7 @@
 /* Real-time Monitor page */
 const MonitorPage = {
     ws: null,
+    datasourceSelector: null,
     chartIds: ['connections', 'qps', 'cache_hit', 'tps', 'network', 'latency'],
     osChartIds: ['cpu_usage', 'memory_usage', 'disk_usage', 'load_avg', 'disk_io', 'network_io'],
     // Track previous network bytes for rate calculation
@@ -10,6 +11,14 @@ const MonitorPage = {
     // Time range state
     currentTimeRange: 60, // default 1 hour in minutes
     isRealtime: true,
+
+    _getSelectedDatasource() {
+        return this.datasourceSelector?.getValue() || Store.get('currentConnection') || null;
+    },
+
+    _getSelectedDatasourceId() {
+        return this._getSelectedDatasource()?.id || null;
+    },
 
     async render() {
         // Load datasources first if not in store
@@ -34,23 +43,35 @@ const MonitorPage = {
         const headerActions = DOM.el('div', { className: 'flex gap-8', style: { flex: '1', minWidth: '0' } });
 
         // Connection selector
-        const connSelect = DOM.el('select', { className: 'form-select', style: { minWidth: '200px', maxWidth: '300px', flex: '1' } });
-        connSelect.appendChild(DOM.el('option', { value: '', textContent: '选择数据源...' }));
-        for (const c of connections) {
-            const opt = DOM.el('option', { value: c.id, textContent: `${c.name} (${c.db_type})` });
-            if (conn && c.id === conn.id) opt.selected = true;
-            connSelect.appendChild(opt);
-        }
-        connSelect.addEventListener('change', async () => {
-            const id = parseInt(connSelect.value);
-            if (id) {
-                const conns = Store.get('datasources') || [];
-                const selected = conns.find(c => c.id === id);
-                Store.set('currentConnection', selected);
-                this._reloadData(id);
+        const datasourceContainer = DOM.el('div', {
+            id: 'monitor-datasource-selector',
+            style: { minWidth: '280px', maxWidth: '380px', flex: '1' }
+        });
+        headerActions.appendChild(datasourceContainer);
+
+        this.datasourceSelector?.destroy();
+        this.datasourceSelector = new DatasourceSelector({
+            container: datasourceContainer,
+            allowEmpty: false,
+            placeholder: '选择数据源',
+            showStatus: true,
+            showDetails: true,
+            onLoad: (loadedDatasources) => {
+                if ((!conn || !loadedDatasources.some(ds => ds.id === conn.id)) && loadedDatasources.length > 0) {
+                    conn = loadedDatasources[0];
+                    Store.set('currentConnection', conn);
+                }
+                if (conn?.id) {
+                    this.datasourceSelector.setValue(conn.id);
+                }
+            },
+            onChange: (datasource) => {
+                if (!datasource) return;
+                conn = datasource;
+                Store.set('currentConnection', datasource);
+                this._reloadData(datasource.id);
             }
         });
-        headerActions.appendChild(connSelect);
 
         // Time range selector
         const timeRangeSelect = DOM.el('select', {
@@ -83,8 +104,9 @@ const MonitorPage = {
             } else {
                 this.currentTimeRange = parseInt(value);
                 this.isRealtime = true;
-                if (conn) {
-                    this._reloadData(conn.id);
+                const selectedDatasourceId = this._getSelectedDatasourceId();
+                if (selectedDatasourceId) {
+                    this._reloadData(selectedDatasourceId);
                 }
             }
         });
@@ -100,8 +122,9 @@ const MonitorPage = {
             this.isRealtime = !this.isRealtime;
             realtimeBtn.textContent = this.isRealtime ? '实时监控' : '暂停实时';
             realtimeBtn.className = this.isRealtime ? 'btn btn-secondary' : 'btn btn-outline';
-            if (this.isRealtime && conn) {
-                this._startMonitoring(conn.id);
+            const selectedDatasourceId = this._getSelectedDatasourceId();
+            if (this.isRealtime && selectedDatasourceId) {
+                this._startMonitoring(selectedDatasourceId);
             } else {
                 this._stopMonitoring();
             }
@@ -115,18 +138,19 @@ const MonitorPage = {
             innerHTML: '<i data-lucide="refresh-cw"></i> 刷新'
         });
         refreshBtn.addEventListener('click', async () => {
-            if (!conn) return;
+            const selectedDatasourceId = this._getSelectedDatasourceId();
+            if (!selectedDatasourceId) return;
 
             // Disable button and show loading state
             refreshBtn.disabled = true;
             refreshBtn.innerHTML = '<i data-lucide="loader"></i> 采集中...';
 
             try {
-                await API.refreshMetrics(conn.id);
+                await API.refreshMetrics(selectedDatasourceId);
                 // Wait a moment for the metric to be collected and stored
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 // Reload latest data
-                await this._loadLatestData(conn.id);
+                await this._loadLatestData(selectedDatasourceId);
             } catch (e) {
                 console.error('[Monitor] Failed to refresh metrics:', e);
                 alert('刷新失败: ' + e.message);
@@ -168,7 +192,25 @@ const MonitorPage = {
 
         // Database Metric cards row
         const dbMetricsRow = DOM.el('div', { className: 'grid-4 mb-24', id: 'monitor-metrics' });
-        dbMetricsRow.appendChild(MetricCard.create('活跃连接', '--'));
+        const connectionCard = DOM.el('div', { className: 'metric-card metric-card-connection-overview' });
+        connectionCard.innerHTML = `
+            <div class="metric-card-label">活跃连接</div>
+            <div class="connection-overview-grid">
+                <div class="connection-overview-item">
+                    <span class="connection-overview-name">活跃</span>
+                    <span class="connection-overview-value" data-connection-metric="active">--</span>
+                </div>
+                <div class="connection-overview-item">
+                    <span class="connection-overview-name">总数</span>
+                    <span class="connection-overview-value" data-connection-metric="total">--</span>
+                </div>
+                <div class="connection-overview-item">
+                    <span class="connection-overview-name">最大</span>
+                    <span class="connection-overview-value" data-connection-metric="max">--</span>
+                </div>
+            </div>
+        `;
+        dbMetricsRow.appendChild(connectionCard);
         dbMetricsRow.appendChild(MetricCard.create('QPS', '--'));
         dbMetricsRow.appendChild(MetricCard.create('缓存命中率', '--'));
         dbMetricsRow.appendChild(MetricCard.create('运行时间', '--'));
@@ -205,7 +247,7 @@ const MonitorPage = {
         osChartsGrid.appendChild(ChartPanel.create('disk_usage', '磁盘使用率 (%)'));
         osChartsGrid.appendChild(ChartPanel.create('load_avg', '负载平均 (1分钟)'));
         osChartsGrid.appendChild(ChartPanel.create('disk_io', '磁盘 I/O (读/写 操作/秒)'));
-        osChartsGrid.appendChild(ChartPanel.create('network_io', '网络 I/O (接收/发送 KB/s)'));
+        osChartsGrid.appendChild(ChartPanel.create('network_io', '网络 I/O (接收/发送)'));
         content.appendChild(osChartsGrid);
 
         // Init charts after DOM is ready - use requestAnimationFrame to ensure canvas elements are rendered
@@ -220,6 +262,30 @@ const MonitorPage = {
                 // Set max to 100 for percentage charts
                 if (id === 'cache_hit') {
                     config.options = { scales: { y: { max: 100, min: 0 } } };
+                } else if (id === 'connections') {
+                    config.data = {
+                        datasets: [
+                            { label: '总连接数', borderColor: '#2f81f7', backgroundColor: 'rgba(47,129,247,0.1)', borderWidth: 1, data: [] },
+                            { label: '活跃连接数', borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', borderWidth: 1, data: [] }
+                        ]
+                    };
+                    config.options = {
+                        plugins: {
+                            legend: { display: true, position: 'top', labels: { color: '#e6edf3', font: { size: 11 } } }
+                        }
+                    };
+                } else if (id === 'network') {
+                    config.data = {
+                        datasets: [
+                            { label: '接收', borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', borderWidth: 1, data: [] },
+                            { label: '发送', borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.1)', borderWidth: 1, data: [] }
+                        ]
+                    };
+                    config.options = {
+                        plugins: {
+                            legend: { display: true, position: 'top', labels: { color: '#e6edf3', font: { size: 11 } } }
+                        }
+                    };
                 }
                 const chart = ChartPanel.init(id, 'line', config);
                 if (chart) {
@@ -275,15 +341,16 @@ const MonitorPage = {
             console.log(`[Monitor] Chart initialization complete: ${successCount} success, ${failCount} failed`);
 
             // Load initial data and start WS AFTER charts are initialized
-            if (conn) {
+            const selectedDatasourceId = this._getSelectedDatasourceId();
+            if (selectedDatasourceId) {
                 // Load health status first
-                this._loadHealthStatus(conn.id);
+                this._loadHealthStatus(selectedDatasourceId);
                 // Load latest data first for immediate display, then load history
-                this._loadLatestData(conn.id).then(() => {
-                    this._loadHistory(conn.id);
+                this._loadLatestData(selectedDatasourceId).then(() => {
+                    this._loadHistory(selectedDatasourceId);
                 });
                 if (this.isRealtime) {
-                    this._startMonitoring(conn.id);
+                    this._startMonitoring(selectedDatasourceId);
                 }
             }
         });
@@ -447,7 +514,12 @@ const MonitorPage = {
             }
             document.body.removeChild(dialog);
             this.isRealtime = false;
-            this._loadCustomRange(Store.get('currentConnection').id, start, end);
+            const selectedDatasourceId = this._getSelectedDatasourceId();
+            if (!selectedDatasourceId) {
+                alert('请先选择数据源');
+                return;
+            }
+            this._loadCustomRange(selectedDatasourceId, start, end);
             DOM.$('#realtime-toggle').textContent = '暂停实时';
             DOM.$('#realtime-toggle').className = 'btn btn-outline';
         });
@@ -585,9 +657,11 @@ const MonitorPage = {
         const cards = DOM.$$('#monitor-metrics .metric-card');
         if (cards.length < 4) return;
 
-        const active = data.connections_active || data.connected_clients || data.user_sessions || data.connections_current || 0;
-        const qps = data.qps || data.ops_per_sec || data.batch_requests_sec || 0;
-        const hitRate = data.buffer_pool_hit_rate || data.cache_hit_rate || data.hit_rate || 0;
+        const active = data.connections_active ?? data.connected_clients ?? data.user_sessions ?? data.connections_current ?? data.active_sessions ?? 0;
+        const total = data.connections_total;
+        const maxConnections = data.max_connections;
+        const qps = data.qps ?? data.ops_per_sec ?? data.batch_requests_sec ?? 0;
+        const hitRate = data.buffer_pool_hit_rate ?? data.cache_hit_rate ?? data.hit_rate;
 
         // Calculate uptime from boot_time if available
         let uptime = data.uptime || data.uptime_in_seconds || 0;
@@ -597,9 +671,15 @@ const MonitorPage = {
             uptime = Math.floor((now - bootTime) / 1000); // Convert to seconds
         }
 
-        MetricCard.update(cards[0], active);
+        const activeEl = cards[0].querySelector('[data-connection-metric="active"]');
+        const totalEl = cards[0].querySelector('[data-connection-metric="total"]');
+        const maxEl = cards[0].querySelector('[data-connection-metric="max"]');
+        if (activeEl) activeEl.textContent = active?.toLocaleString?.() ?? active;
+        if (totalEl) totalEl.textContent = total !== undefined && total !== null ? total.toLocaleString() : '--';
+        if (maxEl) maxEl.textContent = maxConnections !== undefined && maxConnections !== null && maxConnections !== 0 ? maxConnections.toLocaleString() : '--';
+
         MetricCard.update(cards[1], typeof qps === 'number' ? qps.toFixed(1) : qps);
-        MetricCard.update(cards[2], Format.percent(hitRate));
+        MetricCard.update(cards[2], hitRate !== undefined && hitRate !== null ? Format.percent(hitRate) : '--');
         MetricCard.update(cards[3], Format.uptime(uptime));
 
         // Update OS metric cards
@@ -618,18 +698,20 @@ const MonitorPage = {
     },
 
     _updateCharts(data, time, timestamp) {
-        const active = data.connections_active || data.connected_clients || data.user_sessions || data.connections_current || 0;
-        const qps = data.qps || data.ops_per_sec || data.batch_requests_sec || 0;
-        const hitRate = data.buffer_pool_hit_rate || data.cache_hit_rate || data.hit_rate || 100;
+        const active = data.connections_active ?? data.connected_clients ?? data.user_sessions ?? data.connections_current ?? data.active_sessions ?? 0;
+        const total = data.connections_total;
+        const qps = data.qps ?? data.ops_per_sec ?? data.batch_requests_sec ?? 0;
+        const hitRate = data.buffer_pool_hit_rate ?? data.cache_hit_rate ?? data.hit_rate;
         const tps = data.tps || 0;
-        const netIn = data.bytes_received || data.network_bytes_in || data.input_kbps || 0;
+        const netIn = data.network_rx_rate ?? (data.bytes_received || data.network_bytes_in || data.input_kbps || 0);
+        const netOut = data.network_tx_rate ?? (data.bytes_sent || data.network_bytes_out || data.output_kbps || 0);
         const slow = data.slow_queries || data.deadlocks || 0;
 
-        ChartPanel.update('connections', time, active);
+        ChartPanel.update('connections', time, [parseFloat(total) || 0, parseFloat(active) || 0]);
         ChartPanel.update('qps', time, parseFloat(qps) || 0);
-        ChartPanel.update('cache_hit', time, parseFloat(hitRate) || 0);
+        ChartPanel.update('cache_hit', time, hitRate !== undefined && hitRate !== null ? (parseFloat(hitRate) || 0) : null);
         ChartPanel.update('tps', time, parseFloat(tps) || 0);
-        ChartPanel.update('network', time, netIn);
+        ChartPanel.update('network', time, [netIn, netOut]);
         ChartPanel.update('latency', time, slow);
 
         // Update OS charts
@@ -653,10 +735,44 @@ const MonitorPage = {
             ChartPanel.update('disk_io', time, [reads, writes]);
         }
 
-        // Network IO: Calculate rate from cumulative bytes
+        // Network IO:
+        // - MetricNormalizer 输出：network_rx_rate/network_tx_rate（已经是速率 bytes/秒），直接转 KB/s 使用
+        // - system 直连采集（OS Collector）：network_rx_bytes/network_tx_bytes 累积字节数，需要差分后展示 KB/s
+        // - 云集成采集（如阿里云 RDS）：同名字段可能直接就是速率（KB/s），不能再做差分
+        if (data.network_rx_rate !== undefined && data.network_tx_rate !== undefined) {
+            // MetricNormalizer 已计算好速率（bytes/秒），直接转为 KB/s
+            const rxRate = parseFloat(data.network_rx_rate) / 1024;
+            const txRate = parseFloat(data.network_tx_rate) / 1024;
+            ChartPanel.update('network_io', time, [
+                Math.round(rxRate * 100) / 100,
+                Math.round(txRate * 100) / 100
+            ]);
+            this.prevNetworkRx = null;
+            this.prevNetworkTx = null;
+            this.prevNetworkTime = null;
+            return;
+        }
+
         if (data.network_rx_bytes !== undefined && data.network_tx_bytes !== undefined) {
             const currentRx = parseFloat(data.network_rx_bytes) || 0;
             const currentTx = parseFloat(data.network_tx_bytes) || 0;
+
+            const looksCumulative = currentRx > 10 * 1024 * 1024 || currentTx > 10 * 1024 * 1024;
+            if (!looksCumulative) {
+                // Integration metrics may already be rate values from cloud APIs.
+                // Aliyun RDS MySQL_NetworkTraffic 返回 KB 级速率值，这里按十进制单位换算，
+                // 避免监控页把数值放大约 1000 倍。
+                const rxRate = currentRx / 1000;
+                const txRate = currentTx / 1000;
+                ChartPanel.update('network_io', time, [
+                    Math.round(rxRate * 100) / 100,
+                    Math.round(txRate * 100) / 100
+                ]);
+                this.prevNetworkRx = null;
+                this.prevNetworkTx = null;
+                this.prevNetworkTime = null;
+                return;
+            }
 
             if (this.prevNetworkRx !== null && this.prevNetworkTx !== null && this.prevNetworkTime !== null) {
                 // Calculate time delta in seconds
@@ -674,7 +790,7 @@ const MonitorPage = {
                 }
             }
 
-            // Update previous values
+            // Update previous values (cumulative)
             this.prevNetworkRx = currentRx;
             this.prevNetworkTx = currentTx;
             this.prevNetworkTime = timestamp;
@@ -685,11 +801,13 @@ const MonitorPage = {
         // Prepare batch data for all charts
         const batchData = {
             labels: [],
-            connections: [],
+            connections_active: [],
+            connections_total: [],
             qps: [],
             cache_hit: [],
             tps: [],
-            network: [],
+            network_rx: [],
+            network_tx: [],
             latency: [],
             cpu_usage: [],
             memory_usage: [],
@@ -710,11 +828,17 @@ const MonitorPage = {
             batchData.labels.push(time);
 
             // Database metrics
-            batchData.connections.push(data.connections_active || data.connected_clients || data.user_sessions || data.connections_current || 0);
-            batchData.qps.push(parseFloat(data.qps || data.ops_per_sec || data.batch_requests_sec || 0));
-            batchData.cache_hit.push(parseFloat(data.buffer_pool_hit_rate || data.cache_hit_rate || data.hit_rate || 100));
+            const active = data.connections_active ?? data.connected_clients ?? data.user_sessions ?? data.connections_current ?? data.active_sessions ?? 0;
+            const total = data.connections_total;
+            batchData.connections_active.push(parseFloat(active) || 0);
+            batchData.connections_total.push(parseFloat(total) || 0);
+            batchData.qps.push(parseFloat(data.qps ?? data.ops_per_sec ?? data.batch_requests_sec ?? 0));
+
+            const hitRate = data.buffer_pool_hit_rate ?? data.cache_hit_rate ?? data.hit_rate;
+            batchData.cache_hit.push(hitRate !== undefined && hitRate !== null ? (parseFloat(hitRate) || 0) : null);
             batchData.tps.push(parseFloat(data.tps || 0));
-            batchData.network.push(data.bytes_received || data.network_bytes_in || data.input_kbps || 0);
+            batchData.network_rx.push(data.network_rx_rate ?? (data.bytes_received || data.network_bytes_in || data.input_kbps || 0));
+            batchData.network_tx.push(data.network_tx_rate ?? (data.bytes_sent || data.network_bytes_out || data.output_kbps || 0));
             batchData.latency.push(data.slow_queries || data.deadlocks || 0);
 
             // OS metrics
@@ -727,39 +851,67 @@ const MonitorPage = {
             batchData.disk_io_reads.push(data.disk_reads_per_sec !== undefined ? parseFloat(data.disk_reads_per_sec) || 0 : null);
             batchData.disk_io_writes.push(data.disk_writes_per_sec !== undefined ? parseFloat(data.disk_writes_per_sec) || 0 : null);
 
-            // Network IO rate calculation
-            const currentRx = data.network_rx_bytes !== undefined ? parseFloat(data.network_rx_bytes) || 0 : null;
-            const currentTx = data.network_tx_bytes !== undefined ? parseFloat(data.network_tx_bytes) || 0 : null;
+            // Network IO
+            // 优先使用 MetricNormalizer 已计算的速率（bytes/秒），直接转为 KB/s
+            if (data.network_rx_rate !== undefined && data.network_tx_rate !== undefined) {
+                const rxRate = parseFloat(data.network_rx_rate) / 1024;
+                const txRate = parseFloat(data.network_tx_rate) / 1024;
+                batchData.network_io_rx.push(Math.round(rxRate * 100) / 100);
+                batchData.network_io_tx.push(Math.round(txRate * 100) / 100);
+                this.prevNetworkRx = null;
+                this.prevNetworkTx = null;
+                this.prevNetworkTime = null;
+            } else {
+                const currentRx = data.network_rx_bytes !== undefined ? parseFloat(data.network_rx_bytes) || 0 : null;
+                const currentTx = data.network_tx_bytes !== undefined ? parseFloat(data.network_tx_bytes) || 0 : null;
 
-            if (currentRx !== null && currentTx !== null && this.prevNetworkRx !== null && this.prevNetworkTx !== null && this.prevNetworkTime !== null) {
-                const timeDelta = (timestamp - this.prevNetworkTime) / 1000;
-                if (timeDelta > 0) {
-                    const rxRate = Math.max(0, (currentRx - this.prevNetworkRx) / timeDelta / 1024);
-                    const txRate = Math.max(0, (currentTx - this.prevNetworkTx) / timeDelta / 1024);
-                    batchData.network_io_rx.push(Math.round(rxRate * 100) / 100);
-                    batchData.network_io_tx.push(Math.round(txRate * 100) / 100);
-                } else {
+                if (currentRx === null || currentTx === null) {
                     batchData.network_io_rx.push(null);
                     batchData.network_io_tx.push(null);
+                } else {
+                    const looksCumulative = currentRx > 10 * 1024 * 1024 || currentTx > 10 * 1024 * 1024;
+                    if (!looksCumulative) {
+                        const rxRate = currentRx / 1000;
+                        const txRate = currentTx / 1000;
+                        batchData.network_io_rx.push(Math.round(rxRate * 100) / 100);
+                        batchData.network_io_tx.push(Math.round(txRate * 100) / 100);
+                        this.prevNetworkRx = null;
+                        this.prevNetworkTx = null;
+                        this.prevNetworkTime = null;
+                    } else if (this.prevNetworkRx !== null && this.prevNetworkTx !== null && this.prevNetworkTime !== null) {
+                        const timeDelta = (timestamp - this.prevNetworkTime) / 1000;
+                        if (timeDelta > 0) {
+                            const rxRate = Math.max(0, (currentRx - this.prevNetworkRx) / timeDelta / 1024);
+                            const txRate = Math.max(0, (currentTx - this.prevNetworkTx) / timeDelta / 1024);
+                            batchData.network_io_rx.push(Math.round(rxRate * 100) / 100);
+                            batchData.network_io_tx.push(Math.round(txRate * 100) / 100);
+                        } else {
+                            batchData.network_io_rx.push(null);
+                            batchData.network_io_tx.push(null);
+                        }
+                        this.prevNetworkRx = currentRx;
+                        this.prevNetworkTx = currentTx;
+                        this.prevNetworkTime = timestamp;
+                    } else {
+                        batchData.network_io_rx.push(null);
+                        batchData.network_io_tx.push(null);
+                        this.prevNetworkRx = currentRx;
+                        this.prevNetworkTx = currentTx;
+                        this.prevNetworkTime = timestamp;
+                    }
                 }
-            } else {
-                batchData.network_io_rx.push(null);
-                batchData.network_io_tx.push(null);
-            }
-
-            if (currentRx !== null && currentTx !== null) {
-                this.prevNetworkRx = currentRx;
-                this.prevNetworkTx = currentTx;
-                this.prevNetworkTime = timestamp;
             }
         }
 
         // Batch update all charts
-        ChartPanel.batchUpdate('connections', batchData.labels, batchData.connections);
+        ChartPanel.batchUpdateMulti('connections', batchData.labels, [batchData.connections_total, batchData.connections_active]);
         ChartPanel.batchUpdate('qps', batchData.labels, batchData.qps);
         ChartPanel.batchUpdate('cache_hit', batchData.labels, batchData.cache_hit);
         ChartPanel.batchUpdate('tps', batchData.labels, batchData.tps);
-        ChartPanel.batchUpdate('network', batchData.labels, batchData.network);
+        if (batchData.network_rx.some(v => v !== null) || batchData.network_tx.some(v => v !== null)) {
+            const filtered = this._filterNullValuesMulti(batchData.labels, [batchData.network_rx, batchData.network_tx]);
+            ChartPanel.batchUpdateMulti('network', filtered.labels, filtered.valuesArray);
+        }
         ChartPanel.batchUpdate('latency', batchData.labels, batchData.latency);
 
         // OS charts - filter labels and data together
@@ -818,6 +970,8 @@ const MonitorPage = {
     },
 
     _cleanup() {
+        this.datasourceSelector?.destroy();
+        this.datasourceSelector = null;
         this._stopMonitoring();
         ChartPanel.destroyAll();
         // Reset network tracking

@@ -121,7 +121,7 @@ async def generate_ai_report(
             # Handle error events from conversation
             if event["type"] == "error":
                 yield event
-                await _update_report_status(db, report_id, "failed", error_message=event.get("message", "Unknown error"))
+                await _update_report_status(db, report_id, "failed", error_message=event.get("message") or event.get("content") or "Unknown error")
                 return
 
             # Forward all events to client
@@ -297,18 +297,22 @@ async def generate_ai_report(
         summary = f"已生成专业 DBA 报告。验证发现 {len(rule_based_findings)} 个问题：{critical_count} 个严重，{warning_count} 个警告，{info_count} 个信息。"
 
         # Update report in database
+        final_status = "completed" if full_report_markdown.strip() else "failed"
+        final_error = None if final_status == "completed" else "AI 未生成任何有效报告内容。"
+
         await _update_report_status(
             db=db,
             report_id=report_id,
-            status="completed",
-            summary=summary,
-            content_md=md_content,
-            content_html=html_content,
-            findings=rule_based_findings,
+            status=final_status,
+            summary=summary if final_status == "completed" else "报告生成失败，未产出有效内容。",
+            content_md=md_content if final_status == "completed" else "",
+            content_html=html_content if final_status == "completed" else None,
+            findings=rule_based_findings if final_status == "completed" else None,
             ai_analysis=full_report_markdown,
             ai_model_id=model_id,
             kb_ids=kb_ids,
-            generation_method="ai"
+            generation_method="ai",
+            error_message=final_error,
         )
 
         yield {
@@ -346,7 +350,9 @@ async def _update_report_status(
 
     if report:
         report.status = status
-        if status == "completed":
+        if status == "generating":
+            report.completed_at = None
+        else:
             report.completed_at = now()
 
         for k, v in kwargs.items():

@@ -10,9 +10,6 @@ from backend.database import init_db
 
 logger = logging.getLogger(__name__)
 
-# Global KB processor instance
-kb_processor = None
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -36,10 +33,149 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Connection status migration: {e}")
 
     try:
+        from backend.migrations.add_datasource_tags import migrate as migrate_datasource_tags
+        await migrate_datasource_tags()
+    except Exception as e:
+        logger.warning(f"Datasource tags migration: {e}")
+
+    try:
         from backend.migrations.add_alert_notified_at import migrate as migrate_alert_notified
         await migrate_alert_notified()
     except Exception as e:
         logger.warning(f"Alert notified_at migration: {e}")
+
+    try:
+        from backend.migrations.replace_knowledge_base_with_documents import migrate as migrate_docs
+        await migrate_docs()
+    except Exception as e:
+        logger.warning(f"Document migration: {e}")
+
+    try:
+        from backend.migrations.add_ai_model_context_window import migrate as migrate_ai_model_context_window
+        await migrate_ai_model_context_window()
+    except Exception as e:
+        logger.warning(f"AI model context_window migration: {e}")
+
+    try:
+        from backend.migrations.add_diagnostic_session_token_usage import migrate as migrate_diagnostic_session_token_usage
+        await migrate_diagnostic_session_token_usage()
+    except Exception as e:
+        logger.warning(f"Diagnostic session token usage migration: {e}")
+
+    try:
+        from backend.migrations.add_chat_message_token_usage import migrate as migrate_chat_message_token_usage
+        await migrate_chat_message_token_usage()
+    except Exception as e:
+        logger.warning(f"Chat message token usage migration: {e}")
+
+    try:
+        from backend.migrations.add_report_alert_link import migrate as migrate_report_alert_link
+        await migrate_report_alert_link()
+    except Exception as e:
+        logger.warning(f"Report alert link migration: {e}")
+
+    try:
+        from backend.migrations.add_trigger_alert_link import migrate as migrate_trigger_alert_link
+        await migrate_trigger_alert_link()
+    except Exception as e:
+        logger.warning(f"Trigger alert link migration: {e}")
+
+    try:
+        from backend.migrations.add_user_session_security import migrate as migrate_user_session_security
+        await migrate_user_session_security()
+    except Exception as e:
+        logger.warning(f"User session security migration: {e}")
+
+    try:
+        from backend.migrations.add_feishu_chat_tables import migrate as migrate_feishu_chat_tables
+        await migrate_feishu_chat_tables()
+    except Exception as e:
+        logger.warning(f"Feishu chat tables migration: {e}")
+
+    try:
+        from backend.migrations.fix_feishu_chat_event_dedup_duplicates import migrate as fix_feishu_chat_event_dedup_duplicates
+        await fix_feishu_chat_event_dedup_duplicates()
+    except Exception as e:
+        logger.warning(f"Feishu chat event dedup fix migration: {e}")
+
+    # P1 migrations: structured recommended actions + action run audit
+    try:
+        from backend.migrations.add_report_recommended_actions import migrate as migrate_report_recommended_actions
+        await migrate_report_recommended_actions()
+    except Exception as e:
+        logger.warning(f"Report recommended_actions migration: {e}")
+
+    try:
+        from backend.migrations.create_action_runs import migrate as migrate_action_runs
+        await migrate_action_runs()
+    except Exception as e:
+        logger.warning(f"Action runs migration: {e}")
+
+    try:
+        from backend.migrations.add_subscription_integration_targets import migrate as migrate_subscription_integration_targets
+        await migrate_subscription_integration_targets()
+    except Exception as e:
+        logger.warning(f"Subscription integration_targets migration: {e}")
+
+    try:
+        from backend.migrations.add_datasource_inbound_source import migrate as migrate_datasource_inbound_source
+        await migrate_datasource_inbound_source()
+    except Exception as e:
+        logger.warning(f"Datasource inbound_source migration: {e}")
+
+    try:
+        from backend.migrations.add_diagnostic_session_hidden_and_alert_diagnosis import migrate as migrate_diagnostic_session_hidden_and_alert_diagnosis
+        await migrate_diagnostic_session_hidden_and_alert_diagnosis()
+    except Exception as e:
+        logger.warning(f"Diagnostic session hidden + alert diagnosis migration: {e}")
+
+    try:
+        from backend.migrations.add_bot_bindings import migrate as migrate_bot_bindings
+        await migrate_bot_bindings()
+    except Exception as e:
+        logger.warning(f"Bot bindings migration: {e}")
+
+    try:
+        from backend.migrations.extend_integration_execution_logs_for_targets import migrate as migrate_integration_execution_log_targets
+        await migrate_integration_execution_log_targets()
+    except Exception as e:
+        logger.warning(f"Integration execution log targets migration: {e}")
+
+    try:
+        from backend.migrations.extend_alert_delivery_log_targets import migrate as migrate_alert_delivery_log_targets
+        await migrate_alert_delivery_log_targets()
+    except Exception as e:
+        logger.warning(f"Alert delivery log targets migration: {e}")
+
+    try:
+        from backend.migrations.add_alert_ai_diagnosis_summary import migrate as migrate_alert_ai_diagnosis_summary
+        await migrate_alert_ai_diagnosis_summary()
+    except Exception as e:
+        logger.warning(f"Alert AI diagnosis summary migration: {e}")
+
+    try:
+        from backend.migrations.create_diagnosis_conclusions import migrate as migrate_diagnosis_conclusions
+        await migrate_diagnosis_conclusions()
+    except Exception as e:
+        logger.warning(f"Diagnosis conclusions migration: {e}")
+
+    try:
+        from backend.migrations.migrate_alert_channels_to_subscription_targets import migrate as migrate_alert_channels_to_subscription_targets
+        await migrate_alert_channels_to_subscription_targets()
+    except Exception as e:
+        logger.warning(f"Alert channel to subscription target migration: {e}")
+
+    try:
+        from backend.migrations.migrate_inbound_integrations_to_datasource_sources import migrate as migrate_inbound_integrations_to_datasource_sources
+        await migrate_inbound_integrations_to_datasource_sources()
+    except Exception as e:
+        logger.warning(f"Inbound integration to datasource source migration: {e}")
+
+    try:
+        from backend.migrations.migrate_feishu_bot_channel_to_bot_binding import migrate as migrate_feishu_bot_channel_to_bot_binding
+        await migrate_feishu_bot_channel_to_bot_binding()
+    except Exception as e:
+        logger.warning(f"Feishu bot channel to bot binding migration: {e}")
 
     # Seed default system configs
     from backend.database import async_session as _async_session
@@ -92,6 +228,29 @@ async def lifespan(app: FastAPI):
                     value_type=val_type, description=desc,
                     category="integration"
                 )
+
+        # Seed network probe config
+        _probe_exists = await _db.execute(_select(_SystemConfig).where(_SystemConfig.key == "network_probe_host"))
+        if not _probe_exists.scalar_one_or_none():
+            await _config_service.set_config(
+                _db,
+                key="network_probe_host",
+                value="127.0.0.1",
+                value_type="string",
+                description="网络探针目标地址，采集前用于检测网络连通性（默认 127.0.0.1，可改为网关 IP）",
+                category="monitoring"
+            )
+
+        _external_base_exists = await _db.execute(_select(_SystemConfig).where(_SystemConfig.key == "app_external_base_url"))
+        if not _external_base_exists.scalar_one_or_none():
+            await _config_service.set_config(
+                _db,
+                key="app_external_base_url",
+                value="",
+                value_type="string",
+                description="外部访问基础地址，用于生成飞书等通知中的免登录详情链接，例如 https://dbguard.example.com",
+                category="notification"
+            )
     logger.info("Default system configs seeded")
 
     # Start SSH connection pool
@@ -102,21 +261,6 @@ async def lifespan(app: FastAPI):
     # Start metric collector
     from backend.services.metric_collector import start_scheduler
     start_scheduler(settings.metric_interval)
-
-    # Initialize KB processor
-    from backend.services.vector_store import VectorStore
-    from backend.services.kb_processor import KBProcessor
-
-    global kb_processor
-    vector_store = VectorStore(
-        persist_dir=settings.chroma_persist_dir,
-        embedding_model=settings.embedding_model,
-    )
-    kb_processor = KBProcessor(vector_store)
-
-    # Start background processing
-    asyncio.create_task(kb_processor.start_background_processing())
-    logger.info("KB processor initialized")
 
     # Start Inspection Service
     from backend.services.inspection_service import InspectionService
@@ -149,17 +293,28 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(start_integration_scheduler())
     logger.info("🔄 Integration scheduler started")
 
+    # Start AI Perception Service
+    from backend.services.ai_perception_service import start_perception_service
+    asyncio.create_task(start_perception_service(interval_minutes=5))
+    logger.info("🧠 AI Perception Service started")
+
+    # Start Weixin bot poller
+    from backend.services.weixin_bot_service import start_weixin_bot_poller
+    await start_weixin_bot_poller()
+
     yield
 
     # Shutdown
     from backend.services.metric_collector import stop_scheduler
     from backend.services.ssh_connection_pool import stop_ssh_pool
     from backend.services.integration_scheduler import stop_integration_scheduler
+    from backend.services.weixin_bot_service import stop_weixin_bot_poller
+    from backend.services.ai_perception_service import stop_perception_service
 
     stop_scheduler()
     stop_integration_scheduler()
-    if kb_processor:
-        kb_processor.stop()
+    await stop_weixin_bot_poller()
+    await stop_perception_service()
     await inspection_service.stop()
     await stop_ssh_pool()
     logger.info("Application shutdown complete")
@@ -172,26 +327,19 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Global exception handler for detailed logging
     @app.exception_handler(Exception)
     async def global_exception_handler(request, exc):
         from fastapi.responses import JSONResponse
         import traceback
 
-        # Log detailed error information
-        logger.error(f"Unhandled exception in {request.method} {request.url.path}")
-        logger.error(f"Exception type: {type(exc).__name__}")
-        logger.error(f"Exception message: {str(exc)}")
-        logger.error(f"Traceback:\n{traceback.format_exc()}")
-
-        # Log request details
-        logger.error(f"Request headers: {dict(request.headers)}")
-        try:
-            body = await request.body()
-            if body:
-                logger.error(f"Request body: {body.decode('utf-8')}")
-        except:
-            pass
+        logger.error(
+            "Unhandled exception in %s %s [%s]: %s\n%s",
+            request.method,
+            request.url.path,
+            type(exc).__name__,
+            str(exc),
+            traceback.format_exc(),
+        )
 
         return JSONResponse(
             status_code=500,
@@ -206,7 +354,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     # Register routers
-    from backend.routers import datasources, hosts, metrics, monitor_ws, chat, query, ai_models, knowledge_bases, auth, users, inspections, system_configs, alerts, integrations
+    from backend.routers import datasources, hosts, metrics, monitor_ws, chat, query, ai_models, auth, users, inspections, system_configs, alerts, integrations, documents, feishu_bot, integration_bots, weixin_bot, perception
     from backend.api import skills
     app.include_router(auth.router)
     app.include_router(users.router)
@@ -217,12 +365,16 @@ def create_app() -> FastAPI:
     app.include_router(chat.router)
     app.include_router(query.router)
     app.include_router(ai_models.router)
-    app.include_router(knowledge_bases.router)
+    app.include_router(documents.router)
     app.include_router(skills.router)
     app.include_router(inspections.router)
     app.include_router(system_configs.router)
     app.include_router(alerts.router)
     app.include_router(integrations.router)
+    app.include_router(integration_bots.router)
+    app.include_router(feishu_bot.router)
+    app.include_router(weixin_bot.router)
+    app.include_router(perception.router)
 
     # Serve frontend static files
     app.mount("/css", StaticFiles(directory="frontend/css"), name="css")
@@ -232,6 +384,14 @@ def create_app() -> FastAPI:
 
     @app.get("/")
     async def serve_index():
+        return FileResponse("frontend/index.html")
+
+    @app.get("/public/alerts/{alert_id}")
+    async def serve_public_alert_entry(alert_id: int):
+        return FileResponse("frontend/index.html")
+
+    @app.get("/public/reports/{report_id}")
+    async def serve_public_report_entry(report_id: int):
         return FileResponse("frontend/index.html")
 
     return app

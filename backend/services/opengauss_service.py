@@ -1,3 +1,4 @@
+import asyncio
 import time
 from typing import Any, Dict, List, Optional
 from backend.services.db_connector import DBConnector
@@ -8,12 +9,25 @@ class OpenGaussConnector(DBConnector):
 
     async def _connect(self):
         import asyncpg
-        return await asyncpg.connect(
-            host=self.host, port=self.port,
-            user=self.username, password=self.password or "",
-            database=self.database or "postgres",
-            timeout=10,
-        )
+
+        last_error = None
+        for attempt in range(2):
+            try:
+                return await asyncpg.connect(
+                    host=self.host, port=self.port,
+                    user=self.username, password=self.password or "",
+                    database=self.database or "postgres",
+                    timeout=10,
+                    statement_cache_size=0,
+                )
+            except TimeoutError as e:
+                last_error = e
+                if attempt == 0:
+                    await asyncio.sleep(0.2)
+                    continue
+                raise
+
+        raise last_error
 
     async def test_connection(self) -> str:
         conn = await self._connect()
@@ -27,24 +41,48 @@ class OpenGaussConnector(DBConnector):
         conn = await self._connect()
         try:
             stats = await conn.fetchrow(
-                "SELECT numbackends, xact_commit, xact_rollback, blks_read, "
-                "blks_hit, tup_returned, tup_fetched, tup_inserted, "
-                "tup_updated, tup_deleted, conflicts, deadlocks "
-                "FROM pg_stat_database"
+                """SELECT 
+                        sum(numbackends)::bigint as numbackends, 
+                        sum(xact_commit)::bigint as xact_commit, 
+                        sum(xact_rollback)::bigint as xact_rollback, 
+                        sum(blks_read)::bigint as blks_read, 
+                        sum(blks_hit)::bigint as blks_hit, 
+                        sum(tup_returned)::bigint as tup_returned, 
+                        sum(tup_fetched)::bigint as tup_fetched, 
+                        sum(tup_inserted)::bigint as tup_inserted, 
+                        sum(tup_updated)::bigint as tup_updated, 
+                        sum(tup_deleted)::bigint as tup_deleted, 
+                        sum(conflicts)::bigint as conflicts, 
+                        sum(deadlocks)::bigint as deadlocks 
+                    FROM pg_stat_database"""
             )
             activity = await conn.fetchrow(
                 "SELECT count(*) as total, "
                 "count(CASE WHEN state = 'active' THEN 1 END) as active, "
                 "count(CASE WHEN state = 'idle' THEN 1 END) as idle, "
-                "CASE WHEN waiting = true THEN 1 END) as waiting "
+                "count(CASE WHEN waiting = true THEN 1 END) as waiting "
                 "FROM pg_stat_activity"
             )
+            max_conn = await conn.fetchrow(
+                "SELECT setting::int as max_connections FROM pg_settings WHERE name = 'max_connections'"
+            )
             size = await conn.fetchrow(
-                "SELECT pg_database_size(current_database()) as db_size"
+                "SELECT sum(pg_database_size(datname)) as db_size FROM pg_database"
             )
             # Get database start time
             start_time = await conn.fetchrow(
                 "SELECT pg_postmaster_start_time() as start_time"
+            )
+            # 锁等待数（openGauss/PG 9.2 兼容语法）
+            lock_waiting = await conn.fetchrow(
+                "SELECT count(*) as cnt FROM pg_stat_activity "
+                "WHERE waiting = true"
+            )
+            # 最长事务运行时间（秒）
+            longest_tx = await conn.fetchrow(
+                "SELECT EXTRACT(EPOCH FROM max(now() - xact_start))::int as seconds "
+                "FROM pg_stat_activity "
+                "WHERE xact_start IS NOT NULL AND state != 'idle'"
             )
 
             hit_rate = 0
@@ -66,11 +104,16 @@ class OpenGaussConnector(DBConnector):
             return {
                 "connections_active": activity["active"] if activity else 0,
                 "connections_total": activity["total"] if activity else 0,
+                "max_connections": max_conn["max_connections"] if max_conn else 0,
                 "connections_idle": activity["idle"] if activity else 0,
                 "connections_waiting": activity["waiting"] if activity else 0,
+                "lock_waiting": lock_waiting["cnt"] if lock_waiting else 0,
+                "longest_transaction_sec": longest_tx["seconds"] if longest_tx and longest_tx["seconds"] else 0,
                 "xact_commit": stats["xact_commit"] if stats else 0,
                 "xact_rollback": stats["xact_rollback"] if stats else 0,
                 "cache_hit_rate": hit_rate,
+                "blks_read": stats["blks_read"] if stats else 0,
+                "blks_hit": stats["blks_hit"] if stats else 0,
                 "tup_returned": stats["tup_returned"] if stats else 0,
                 "tup_fetched": stats["tup_fetched"] if stats else 0,
                 "tup_inserted": stats["tup_inserted"] if stats else 0,
@@ -98,8 +141,8 @@ class OpenGaussConnector(DBConnector):
         try:
             rows = await conn.fetch(
                 "SELECT pid, usename, client_addr, datname, state, "
-                "query_start, wait_event_type, wait_event, query "
-                "FROM pg_stat_activity"
+                "query_start, waiting, query "
+                "FROM pg_stat_activity "
                 "ORDER BY query_start DESC NULLS LAST LIMIT 50"
             )
             return [dict(r) for r in rows]

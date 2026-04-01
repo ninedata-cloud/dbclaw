@@ -26,9 +26,9 @@ class OSMetricsService:
 
         # CPU
         try:
-            metrics["cpu_usage_percent"] = float(outputs[0].strip() or "0")
+            metrics["cpu_usage"] = float(outputs[0].strip() or "0")
         except (ValueError, IndexError):
-            metrics["cpu_usage_percent"] = 0.0
+            metrics["cpu_usage"] = 0.0
 
         # Memory
         try:

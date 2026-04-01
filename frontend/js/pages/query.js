@@ -1,9 +1,17 @@
 /* Query execution page */
 const QueryPage = {
     currentAbortController: null,
+    datasourceSelector: null,
+
+    _getSelectedDatasource() {
+        return this.datasourceSelector?.getValue() || Store.get('currentConnection') || null;
+    },
+
+    _getSelectedDatasourceId() {
+        return this._getSelectedDatasource()?.id || null;
+    },
 
     async render() {
-        // Load datasources first
         let datasources = Store.get('datasources') || [];
         if (datasources.length === 0) {
             try {
@@ -14,42 +22,47 @@ const QueryPage = {
             }
         }
 
-        // Get or auto-select current connection
         let currentConn = Store.get('currentConnection');
         if (!currentConn && datasources.length > 0) {
             currentConn = datasources[0];
             Store.set('currentConnection', currentConn);
         }
 
-        // Header
         const headerActions = DOM.el('div', { className: 'flex gap-8', style: { flex: '1', minWidth: '0' } });
-        const connSelect = DOM.el('select', { className: 'form-select', id: 'query-conn-select', style: { minWidth: '200px', maxWidth: '300px', flex: '1' } });
-        connSelect.appendChild(DOM.el('option', { value: '', textContent: '选择数据源...' }));
+        const datasourceContainer = DOM.el('div', {
+            id: 'query-datasource-selector',
+            style: { minWidth: '280px', maxWidth: '380px', flex: '1' }
+        });
+        headerActions.appendChild(datasourceContainer);
+        Header.render('SQL 查询', headerActions);
 
-        for (const c of datasources) {
-            const opt = DOM.el('option', { value: c.id, textContent: `${c.name} (${c.db_type})` });
-            if (currentConn && c.id === currentConn.id) opt.selected = true;
-            connSelect.appendChild(opt);
-        }
-
-        connSelect.addEventListener('change', () => {
-            const id = parseInt(connSelect.value);
-            if (id) {
-                const conns = Store.get('datasources') || [];
-                Store.set('currentConnection', conns.find(c => c.id === id));
-                // Load schema for autocomplete
-                this._loadSchemaForDatasource(id);
+        this.datasourceSelector?.destroy();
+        this.datasourceSelector = new DatasourceSelector({
+            container: datasourceContainer,
+            allowEmpty: false,
+            placeholder: '选择数据源',
+            showStatus: true,
+            showDetails: true,
+            onLoad: (loadedDatasources) => {
+                if ((!currentConn || !loadedDatasources.some(ds => ds.id === currentConn.id)) && loadedDatasources.length > 0) {
+                    currentConn = loadedDatasources[0];
+                    Store.set('currentConnection', currentConn);
+                }
+                if (currentConn?.id) {
+                    this.datasourceSelector.setValue(currentConn.id);
+                }
+            },
+            onChange: (datasource) => {
+                if (!datasource) return;
+                Store.set('currentConnection', datasource);
+                this._loadSchemaForDatasource(datasource.id);
             }
         });
-
-        headerActions.appendChild(connSelect);
-        Header.render('SQL 查询', headerActions);
 
         const content = DOM.$('#page-content');
         content.innerHTML = '';
         const container = DOM.el('div', { className: 'query-container' });
 
-        // Toolbar
         const toolbar = DOM.el('div', { className: 'query-toolbar' });
         const executeBtn = DOM.el('button', {
             className: 'btn btn-primary',
@@ -93,23 +106,20 @@ const QueryPage = {
         toolbar.appendChild(hint);
         container.appendChild(toolbar);
 
-        // Editor
         QueryEditor.create(container, 'SELECT 1;');
         QueryEditor.onExecute = () => this._executeQuery();
 
-        // Load schema for current connection if available (wait for editor to be ready)
         setTimeout(() => {
-            if (currentConn?.id) {
-                this._loadSchemaForDatasource(currentConn.id);
+            const connId = this._getSelectedDatasourceId();
+            if (connId) {
+                this._loadSchemaForDatasource(connId);
             }
         }, 500);
 
-        // Status bar
         const statusBar = DOM.el('div', { className: 'query-status-bar', id: 'query-status' });
         statusBar.innerHTML = '<div class="status-info"><span class="text-muted">就绪</span></div>';
         container.appendChild(statusBar);
 
-        // Results area
         const results = DOM.el('div', { className: 'query-results', id: 'query-results' });
         results.innerHTML = `
             <div class="empty-state" style="padding:40px">
@@ -124,6 +134,8 @@ const QueryPage = {
         DOM.createIcons();
 
         return () => {
+            this.datasourceSelector?.destroy();
+            this.datasourceSelector = null;
             this._cancelQuery();
             QueryEditor.destroy();
         };
@@ -138,15 +150,12 @@ const QueryPage = {
     },
 
     async _refreshSchema() {
-        const conn = Store.get('currentConnection');
-        const connSelect = DOM.$('#query-conn-select');
-        const connId = conn?.id || parseInt(connSelect?.value);
+        const connId = this._getSelectedDatasourceId();
         if (!connId) {
             Toast.warning('请先选择数据源');
             return;
         }
 
-        // Invalidate cache and reload
         window.SchemaCache.invalidate(connId);
         await this._loadSchemaForDatasource(connId);
         Toast.success('结构已刷新');
@@ -174,7 +183,6 @@ const QueryPage = {
     },
 
     async _executeQuery() {
-        // Get selected text or full query
         const selectedSql = QueryEditor.getSelectedText();
         const sql = (selectedSql || QueryEditor.getValue()).trim();
 
@@ -183,9 +191,7 @@ const QueryPage = {
             return;
         }
 
-        const conn = Store.get('currentConnection');
-        const connSelect = DOM.$('#query-conn-select');
-        const connId = conn?.id || parseInt(connSelect?.value);
+        const connId = this._getSelectedDatasourceId();
         if (!connId) {
             Toast.warning('请先选择数据源');
             return;
@@ -196,13 +202,11 @@ const QueryPage = {
         const executeBtn = DOM.$('#execute-btn');
         const cancelBtn = DOM.$('#cancel-btn');
 
-        // Show executing state
         status.innerHTML = '<div class="status-info"><span><div class="spinner" style="display:inline-block;width:14px;height:14px;margin-right:8px"></div>执行中...</span></div>';
         results.innerHTML = '';
         executeBtn.disabled = true;
         cancelBtn.style.display = 'inline-flex';
 
-        // Create abort controller for cancellation
         this.currentAbortController = new AbortController();
 
         try {
@@ -222,7 +226,6 @@ const QueryPage = {
             status.innerHTML = `<div class="status-info"><span style="color:var(--accent-green)">${statusText}</span></div>`;
         } catch (err) {
             if (err.name === 'AbortError') {
-                // Query was cancelled, status already updated in _cancelQuery
                 return;
             }
             results.innerHTML = `<div style="padding:20px;color:var(--accent-red);font-family:var(--font-mono);font-size:13px;white-space:pre-wrap">${err.message}</div>`;
@@ -235,7 +238,6 @@ const QueryPage = {
     },
 
     async _explainQuery() {
-        // Get selected text or full query
         const selectedSql = QueryEditor.getSelectedText();
         const sql = (selectedSql || QueryEditor.getValue()).trim();
 
@@ -244,9 +246,7 @@ const QueryPage = {
             return;
         }
 
-        const conn = Store.get('currentConnection');
-        const connSelect = DOM.$('#query-conn-select');
-        const connId = conn?.id || parseInt(connSelect?.value);
+        const connId = this._getSelectedDatasourceId();
         if (!connId) {
             Toast.warning('请先选择数据源');
             return;

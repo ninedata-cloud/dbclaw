@@ -32,7 +32,7 @@ code: |
       if not datasource:
           return {"success": False, "error": "Datasource not found"}
 
-      if datasource.db_type != "oceanbase":
+      if datasource.db_type not in ("oceanbase", "oceanbase_mysql"):
           return {"success": False, "error": "Not an OceanBase datasource"}
 
       # Decrypt password
