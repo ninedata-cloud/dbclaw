@@ -14,7 +14,7 @@ from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
 
-MAX_TOOL_ROUNDS = 30
+MAX_TOOL_ROUNDS = 1000
 
 READ_ONLY_SQL_KEYWORDS = {'SELECT', 'SHOW', 'EXPLAIN', 'EXEC', 'EXECUTE', 'DESCRIBE', 'DESC', 'WITH'}
 DANGEROUS_SQL_KEYWORDS = {'INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'TRUNCATE', 'CREATE', 'GRANT', 'REVOKE', 'CALL'}
@@ -577,19 +577,9 @@ async def generate_report_with_skills(
     db: Any,
     user_id: int = 1,
     model_id: Optional[int] = None,
-    timeout_seconds: int = 300,
-) -> Dict[str, Any]:
-    """Generate inspection report using AI with skill calls.
-
-    Returns a structured result:
-    {
-      status: completed|partial|timed_out|awaiting_confirm|failed,
-      content_md,
-      summary,
-      error_message,
-      skill_executions,
-    }
-    """
+    timeout_seconds: int = 600
+) -> tuple[str, list]:
+    """Generate inspection report using AI with skill calls. Returns (markdown, skill_executions)."""
     import asyncio
 
     skill_executions: list[dict[str, Any]] = []

@@ -20,6 +20,33 @@ from backend.utils.encryption import decrypt_value
 logger = logging.getLogger(__name__)
 
 
+def _format_query_error(error: Exception) -> Dict[str, Any]:
+    """Format database query errors into a user-friendly payload."""
+    message = str(error).strip()
+    if not message:
+        message = getattr(error, "message", None) or repr(error)
+
+    payload = {
+        "success": False,
+        "error": message,
+        "error_type": type(error).__name__,
+    }
+
+    sqlstate = getattr(error, "sqlstate", None)
+    if sqlstate:
+        payload["sqlstate"] = sqlstate
+
+    detail = getattr(error, "detail", None)
+    if detail:
+        payload["detail"] = detail
+
+    hint = getattr(error, "hint", None)
+    if hint:
+        payload["hint"] = hint
+
+    return payload
+
+
 async def execute_query(datasource: Datasource, query: str, allow_write: bool = False) -> Dict[str, Any]:
     """Execute a query on a database datasource
 
@@ -148,6 +175,5 @@ async def execute_query(datasource: Datasource, query: str, allow_write: bool = 
 
     except Exception as e:
         logger.error(f"Failed to execute query on datasource {datasource.id} ({datasource.name}): {e}", exc_info=True)
-        error_message = str(e).strip() or type(e).__name__ or "Query execution failed"
-        return {"success": False, "error": error_message}
+        return _format_query_error(e)
 
