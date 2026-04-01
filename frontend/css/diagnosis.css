@@ -275,7 +275,7 @@
 }
 
 #tool-panel-content {
-    padding: 16px;
+    padding: 8px;
 }
 
 #tool-panel-content::-webkit-scrollbar {
