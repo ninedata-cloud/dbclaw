@@ -75,6 +75,11 @@ class DatasourceResponse(BaseModel):
     connection_error: Optional[str] = None
     connection_checked_at: Optional[datetime] = None
 
+    # 最新指标数据
+    cpu_usage: Optional[float] = None
+    qps: Optional[float] = None
+    connections_active: Optional[int] = None
+
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

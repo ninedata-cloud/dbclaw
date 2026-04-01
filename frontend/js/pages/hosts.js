@@ -5,6 +5,10 @@ const HostsPage = {
     _filters: {
         search: ''
     },
+    _sort: {
+        field: 'name',
+        direction: 'asc'
+    },
 
     async render() {
         const content = DOM.$('#page-content');
@@ -13,6 +17,7 @@ const HostsPage = {
         try {
             this.allHosts = await API.getHosts();
             this.filteredHosts = [...this.allHosts];
+            this._applySort();
             Store.set('hosts', this.allHosts);
 
             Header.render('主机管理', this._buildHeaderActions());
@@ -85,7 +90,49 @@ const HostsPage = {
                    h.host.toLowerCase().includes(this._filters.search);
         });
 
+        this._applySort();
         this._renderTable();
+    },
+
+    _toggleSort(field) {
+        if (this._sort.field === field) {
+            this._sort.direction = this._sort.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+            this._sort.field = field;
+            this._sort.direction = 'asc';
+        }
+        this._applySort();
+    },
+
+    _applySort() {
+        const { field, direction } = this._sort;
+        this.filteredHosts.sort((a, b) => {
+            let va = a[field];
+            let vb = b[field];
+            const vaNull = va == null;
+            const vbNull = vb == null;
+            if (vaNull) va = direction === 'asc' ? Infinity : -Infinity;
+            if (vbNull) vb = direction === 'asc' ? Infinity : -Infinity;
+            if (typeof va === 'string') va = va.toLowerCase();
+            if (typeof vb === 'string') vb = vb.toLowerCase();
+            if (vaNull && vbNull) return 0;
+            if (vaNull) return 1;
+            if (vbNull) return -1;
+            if (va < vb) return direction === 'asc' ? -1 : 1;
+            if (va > vb) return direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+    },
+
+    _updateSortIcons() {
+        document.querySelectorAll('.sort-icon').forEach(icon => {
+            const field = icon.dataset.field;
+            if (field === this._sort.field) {
+                icon.textContent = this._sort.direction === 'asc' ? '▲' : '▼';
+            } else {
+                icon.textContent = '';
+            }
+        });
     },
 
     _renderTable() {
@@ -96,13 +143,13 @@ const HostsPage = {
             <table class="data-table">
                 <thead>
                     <tr>
-                        <th>名称</th>
-                        <th>主机</th>
-                        <th>端口</th>
-                        <th>状态</th>
-                        <th>CPU</th>
-                        <th>内存</th>
-                        <th>磁盘</th>
+                        <th class="sortable" data-sort="name">名称 <span class="sort-icon" data-field="name"></span></th>
+                        <th class="sortable" data-sort="host">主机 <span class="sort-icon" data-field="host"></span></th>
+                        <th class="sortable" data-sort="port">端口 <span class="sort-icon" data-field="port"></span></th>
+                        <th class="sortable" data-sort="status">状态 <span class="sort-icon" data-field="status"></span></th>
+                        <th class="sortable" data-sort="cpu_usage">CPU <span class="sort-icon" data-field="cpu_usage"></span></th>
+                        <th class="sortable" data-sort="memory_usage">内存 <span class="sort-icon" data-field="memory_usage"></span></th>
+                        <th class="sortable" data-sort="disk_usage">磁盘 <span class="sort-icon" data-field="disk_usage"></span></th>
                         <th>操作</th>
                     </tr>
                 </thead>
@@ -111,6 +158,14 @@ const HostsPage = {
                 </tbody>
             </table>
         `;
+        this._updateSortIcons();
+        container.querySelectorAll('th.sortable').forEach(th => {
+            th.addEventListener('click', () => {
+                const field = th.dataset.sort;
+                this._toggleSort(field);
+                this._renderTable();
+            });
+        });
         DOM.createIcons();
     },
 

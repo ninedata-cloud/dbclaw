@@ -477,9 +477,6 @@ const ChatWidget = {
         if (toolCallId) toolMsg.setAttribute('data-tool-call-id', toolCallId);
         this._appendSystemCard(toolMsg);
         this.pendingTools.set(toolCallId || toolName, toolId);
-
-        // Also add inline step in chat stream
-        this.addInlineToolStep(toolName, '执行中', toolCallId);
     },
 
     addToolResult(toolName, result, executionTimeMs = null, toolCallId = null, metadata = {}) {
@@ -532,9 +529,6 @@ const ChatWidget = {
         this.pendingTools.delete(toolCallId || toolName);
         DOM.createIcons();
         this._scrollToolPanelToBottom();
-
-        // Also update inline step
-        this.updateInlineToolStep(toolCallId, isError ? '失败' : '完成', result, executionTimeMs, metadata);
     },
 
     addInlineToolStep(toolName, status, toolCallId = null) {

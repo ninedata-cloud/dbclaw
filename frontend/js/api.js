@@ -129,6 +129,9 @@ const API = {
     // Bulk status check for datasources
     checkAllDatasourceStatus() { return this.post('/api/datasources/check-status'); },
 
+    // Get latest metrics for all datasources (lightweight)
+    getDatasourcesLatestMetrics() { return this.get('/api/datasources/latest-metrics'); },
+
     // Host endpoints
     getHosts() { return this.get('/api/hosts'); },
     createHost(data) { return this.post('/api/hosts', data); },

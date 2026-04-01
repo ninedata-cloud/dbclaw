@@ -1,5 +1,7 @@
 /* Sidebar component */
 const Sidebar = {
+    _collapsed: false,
+
     _maskPhone(phone) {
         if (!phone) return '-';
         const trimmed = String(phone).trim();
@@ -132,6 +134,50 @@ const Sidebar = {
             footer.parentNode.insertBefore(userInfo, footer);
             DOM.createIcons();
         }
+
+        // Add toggle button
+        this._renderToggleButton();
+    },
+
+    _renderToggleButton() {
+        const footer = DOM.$('.sidebar-footer');
+        if (!footer) return;
+
+        // Remove existing toggle button
+        const existingBtn = DOM.$('.sidebar-toggle');
+        if (existingBtn) existingBtn.remove();
+
+        const toggleBtn = DOM.el('button', {
+            className: 'sidebar-toggle',
+            title: this._collapsed ? '展开侧边栏' : '收起侧边栏',
+            innerHTML: `<i data-lucide="chevrons-left"></i>`,
+            onClick: () => this.toggle()
+        });
+        footer.appendChild(toggleBtn);
+        DOM.createIcons();
+    },
+
+    toggle() {
+        this._collapsed = !this._collapsed;
+        const sidebar = DOM.$('#sidebar');
+        const mainContent = DOM.$('#main-content');
+
+        if (this._collapsed) {
+            sidebar.classList.add('collapsed');
+            mainContent.style.marginLeft = 'var(--sidebar-collapsed-width)';
+        } else {
+            sidebar.classList.remove('collapsed');
+            mainContent.style.marginLeft = 'var(--sidebar-width)';
+        }
+
+        // Update toggle button title
+        const toggleBtn = DOM.$('.sidebar-toggle');
+        if (toggleBtn) {
+            toggleBtn.title = this._collapsed ? '展开侧边栏' : '收起侧边栏';
+        }
+
+        // Re-render icons after toggle
+        DOM.createIcons();
     },
 
     _toggleUserMenu(event) {

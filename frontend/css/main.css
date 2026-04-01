@@ -26,7 +26,8 @@
     --radius-lg: 12px;
     --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
-    --sidebar-width: 260px;
+    --sidebar-width: 240px;
+    --sidebar-collapsed-width: 64px;
     --header-height: 56px;
     --transition: 0.2s ease;
 }
