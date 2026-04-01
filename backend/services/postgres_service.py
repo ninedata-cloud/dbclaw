@@ -1,20 +1,6 @@
-import asyncio
 import time
 from typing import Any, Dict, List, Optional
 from backend.services.db_connector import DBConnector
-
-
-def _statement_returns_rows(statement: Any) -> bool:
-    attributes = statement.get_attributes()
-    return bool(attributes)
-
-
-def _parse_command_tag_row_count(command_tag: str) -> int:
-    parts = command_tag.split()
-    for token in reversed(parts):
-        if token.isdigit():
-            return int(token)
-    return 0
 
 
 class PostgreSQLConnector(DBConnector):
@@ -187,33 +173,18 @@ class PostgreSQLConnector(DBConnector):
         conn = await self._connect()
         try:
             start = time.time()
-            prepared = await conn.prepare(sql)
-
-            if _statement_returns_rows(prepared):
-                async with conn.transaction():
-                    cursor = conn.cursor(sql)
-                    rows = await cursor.fetch(max_rows + 1)
-                elapsed = round((time.time() - start) * 1000, 2)
-                columns = [attribute.name for attribute in prepared.get_attributes()]
-                truncated = len(rows) > max_rows
-                limited = rows[:max_rows]
-                return {
-                    "columns": columns,
-                    "rows": [list(r.values()) for r in limited],
-                    "row_count": len(limited),
-                    "execution_time_ms": elapsed,
-                    "truncated": truncated,
-                }
-
-            command_tag = await conn.execute(sql)
+            # Use fetch with LIMIT for truncation detection
+            rows = await conn.fetch(f"{sql.strip().rstrip(';')} LIMIT {max_rows + 1}")
             elapsed = round((time.time() - start) * 1000, 2)
+            columns = [d[0] for d in rows[0].keys()] if rows else []
+            truncated = len(rows) > max_rows
+            limited = rows[:max_rows]
             return {
-                "columns": [],
-                "rows": [],
-                "row_count": _parse_command_tag_row_count(command_tag),
+                "columns": columns,
+                "rows": [list(r.values()) for r in limited],
+                "row_count": len(limited),
                 "execution_time_ms": elapsed,
-                "truncated": False,
-                "message": command_tag,
+                "truncated": truncated,
             }
         finally:
             await conn.close()
