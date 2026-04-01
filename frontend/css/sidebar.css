@@ -113,9 +113,113 @@
 .sidebar-footer {
     padding: 12px 20px;
     border-top: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }
 
 .sidebar-version {
     font-size: 11px;
     color: var(--text-muted);
+}
+
+.sidebar-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all var(--transition);
+}
+
+.sidebar-toggle:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.sidebar-toggle svg {
+    width: 18px;
+    height: 18px;
+    transition: transform 0.3s ease;
+}
+
+/* Collapsed sidebar */
+.sidebar.collapsed {
+    width: var(--sidebar-collapsed-width);
+}
+
+.sidebar.collapsed .sidebar-header {
+    padding: 16px 8px;
+    justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-logo {
+    width: 32px;
+    height: 32px;
+}
+
+.sidebar.collapsed .sidebar-title {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-nav {
+    padding: 8px 4px;
+}
+
+.sidebar.collapsed .nav-section-title {
+    display: none;
+}
+
+.sidebar.collapsed .nav-item {
+    justify-content: center;
+    padding: 10px 8px;
+}
+
+.sidebar.collapsed .nav-item svg {
+    margin: 0;
+}
+
+.sidebar.collapsed .nav-item span {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-footer {
+    padding: 12px 8px;
+    justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-version {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-toggle svg {
+    transform: rotate(180deg);
+}
+
+/* User section in collapsed mode */
+.sidebar.collapsed .sidebar-user {
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 8px;
+}
+
+.sidebar.collapsed .sidebar-user-avatar {
+    margin: 0;
+}
+
+.sidebar.collapsed .sidebar-user-info {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-user-menu {
+    display: none !important;
+}
+
+/* Main content adjustment when sidebar collapsed */
+.sidebar.collapsed ~ .main-content {
+    margin-left: var(--sidebar-collapsed-width);
 }

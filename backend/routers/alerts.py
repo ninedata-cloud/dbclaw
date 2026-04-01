@@ -79,6 +79,7 @@ async def _build_alert_response(db: AsyncSession, alert) -> AlertMessageResponse
 
     # Fetch root_cause from alert event if available
     root_cause = None
+    diagnosis_summary = None
     if alert.event_id:
         from backend.models.alert_event import AlertEvent
         event_result = await db.execute(select(AlertEvent).where(AlertEvent.id == alert.event_id))

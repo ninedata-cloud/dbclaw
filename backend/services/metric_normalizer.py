@@ -2,6 +2,7 @@
 Metric Normalizer Service
 指标标准化服务 - 将不同数据库的指标映射到统一格式
 """
+from decimal import Decimal
 from typing import Dict, Any, Optional
 from datetime import datetime
 from backend.utils.datetime_helper import now
@@ -40,7 +41,18 @@ class MetricNormalizer:
         elif db_type == 'oracle':
             normalized.update(cls._normalize_oracle(datasource_id, raw_metrics))
 
-        return normalized
+        return cls._convert_decimals(normalized)
+
+    @classmethod
+    def _convert_decimals(cls, data: Any) -> Any:
+        """递归将 Dict 中的 Decimal 转换为 float，确保 JSON 可序列化"""
+        if isinstance(data, dict):
+            return {k: cls._convert_decimals(v) for k, v in data.items()}
+        elif isinstance(data, (list, tuple)):
+            return [cls._convert_decimals(item) for item in data]
+        elif isinstance(data, Decimal):
+            return float(data)
+        return data
 
     @classmethod
     def _normalize_postgresql(cls, datasource_id: int, metrics: Dict[str, Any]) -> Dict[str, Any]:

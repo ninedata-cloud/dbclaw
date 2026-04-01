@@ -86,6 +86,34 @@ async def list_datasources(
     return datasources
 
 
+@router.get("/latest-metrics")
+async def get_datasources_latest_metrics(
+    db: AsyncSession = Depends(get_db)
+):
+    """获取所有数据源的最新指标（轻量级接口，列表页使用）"""
+    from sqlalchemy import select, desc
+    from backend.models.metric_snapshot import MetricSnapshot
+
+    # Get all datasources with their latest db_status metric
+    result = await db.execute(
+        select(MetricSnapshot)
+        .where(MetricSnapshot.metric_type == 'db_status')
+        .order_by(MetricSnapshot.datasource_id, desc(MetricSnapshot.collected_at))
+        .distinct(MetricSnapshot.datasource_id)
+    )
+    metrics = result.scalars().all()
+
+    # Return as dict keyed by datasource_id
+    return {
+        m.datasource_id: {
+            'cpu_usage': m.data.get('cpu_usage') if m.data else None,
+            'qps': m.data.get('qps') if m.data else None,
+            'connections_active': m.data.get('connections_active') if m.data else None,
+        }
+        for m in metrics
+    }
+
+
 @router.post("/check-status")
 async def check_all_datasource_status(db: AsyncSession = Depends(get_db)):
     """批量检测所有数据源的连接状态"""

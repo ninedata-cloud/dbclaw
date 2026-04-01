@@ -300,6 +300,25 @@
     border-bottom: none;
 }
 
+.data-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+}
+
+.data-table th.sortable:hover {
+    color: var(--text-primary);
+}
+
+.sort-icon {
+    font-size: 10px;
+    margin-left: 4px;
+    opacity: 0.5;
+}
+
+.data-table th.sortable:hover .sort-icon {
+    opacity: 1;
+}
+
 /* === Toast === */
 .toast-container {
     position: fixed;
