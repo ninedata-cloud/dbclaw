@@ -1,0 +1,1972 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DbGuard - 新一代交互体验</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg-primary: #0A0A0F;
+            --bg-secondary: #12121A;
+            --bg-tertiary: #1A1A24;
+            --bg-card: #16161F;
+            --bg-hover: #1E1E2A;
+            --border-color: #252532;
+            --border-light: #323242;
+            --text-primary: #F1F5F9;
+            --text-secondary: #94A3B8;
+            --text-muted: #64748B;
+            --accent: #6366F1;
+            --accent-hover: #818CF8;
+            --accent-glow: rgba(99, 102, 241, 0.2);
+            --success: #22C55E;
+            --success-glow: rgba(34, 197, 94, 0.15);
+            --warning: #F59E0B;
+            --warning-glow: rgba(245, 158, 11, 0.15);
+            --danger: #EF4444;
+            --danger-glow: rgba(239, 68, 68, 0.15);
+            --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-mono: 'Geist Mono', 'SF Mono', monospace;
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --radius-xl: 24px;
+        }
+
+        html, body {
+            height: 100%;
+            font-family: var(--font-sans);
+            font-size: 14px;
+            color: var(--text-primary);
+            background: var(--bg-primary);
+            -webkit-font-smoothing: antialiased;
+            overflow: hidden;
+        }
+
+        /* === App Layout === */
+        .app {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* === Sidebar === */
+        .sidebar {
+            width: 72px;
+            height: 100%;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            padding: 16px 12px;
+            gap: 8px;
+            flex-shrink: 0;
+            position: relative;
+            z-index: 100;
+        }
+
+        .sidebar-logo {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--accent), #A78BFA);
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 16px var(--accent-glow);
+        }
+
+        .sidebar-logo svg { width: 24px; height: 24px; color: white; }
+
+        .nav-item {
+            width: 48px;
+            height: 48px;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 200ms ease;
+            position: relative;
+            color: var(--text-muted);
+        }
+
+        .nav-item:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .nav-item.active {
+            background: var(--accent-glow);
+            color: var(--accent);
+        }
+
+        .nav-item.active::before {
+            content: '';
+            position: absolute;
+            left: -12px;
+            width: 3px;
+            height: 24px;
+            background: var(--accent);
+            border-radius: 0 2px 2px 0;
+        }
+
+        .nav-item svg { width: 22px; height: 22px; }
+
+        .nav-item .badge {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            width: 8px;
+            height: 8px;
+            background: var(--danger);
+            border-radius: 50%;
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.8; }
+        }
+
+        .sidebar-spacer { flex: 1; }
+        .sidebar-bottom { display: flex; flex-direction: column; gap: 8px; }
+
+        /* === Main === */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* === Header === */
+        .header {
+            height: 64px;
+            padding: 0 24px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(10, 10, 15, 0.6);
+            backdrop-filter: blur(12px);
+        }
+
+        .header-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            letter-spacing: -0.01em;
+        }
+
+        .search-container {
+            flex: 1;
+            max-width: 520px;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            height: 40px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-xl);
+            padding: 0 16px 0 44px;
+            font-family: var(--font-sans);
+            font-size: 13px;
+            color: var(--text-primary);
+            transition: all 200ms ease;
+        }
+
+        .search-input::placeholder { color: var(--text-muted); }
+        .search-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 18px;
+            height: 18px;
+            color: var(--text-muted);
+            pointer-events: none;
+        }
+
+        .header-actions { display: flex; align-items: center; gap: 8px; }
+
+        .header-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: var(--radius-sm);
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 200ms ease;
+        }
+
+        .header-btn:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .header-btn svg { width: 18px; height: 18px; }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #6366F1, #A78BFA);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 13px;
+            color: white;
+            cursor: pointer;
+        }
+
+        /* === Content === */
+        .content {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .page {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            display: none;
+            animation: fadeIn 300ms ease;
+        }
+
+        .page.active { display: block; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* === Ambient Banner === */
+        .ambient-banner {
+            padding: 10px 24px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12px;
+        }
+
+        .ambient-status { display: flex; align-items: center; gap: 8px; color: var(--text-muted); }
+
+        .ambient-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--success);
+            animation: breathe 3s ease-in-out infinite;
+        }
+
+        .ambient-dot.warning {
+            background: var(--warning);
+            animation: pulse-dot 1.5s ease-in-out infinite;
+        }
+
+        .ambient-dot.danger {
+            background: var(--danger);
+            animation: pulse-dot 1s ease-in-out infinite;
+        }
+
+        @keyframes breathe {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        .ambient-stats { display: flex; gap: 20px; }
+        .ambient-stat { display: flex; align-items: center; gap: 6px; }
+        .ambient-stat-value { color: var(--text-secondary); font-weight: 500; }
+
+        /* === Page Header === */
+        .page-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .page-title { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
+        .page-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+
+        /* === Buttons === */
+        .btn {
+            padding: 8px 16px;
+            border-radius: var(--radius-sm);
+            font-family: var(--font-sans);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 200ms ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border: none;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px var(--accent-glow);
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border-color: var(--border-light);
+        }
+
+        .btn svg { width: 16px; height: 16px; }
+
+        /* === Cards === */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 20px;
+            transition: all 200ms ease;
+        }
+
+        .card:hover {
+            border-color: var(--border-light);
+        }
+
+        /* === Dashboard Grid === */
+        .dash-overview {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--accent);
+            opacity: 0;
+            transition: opacity 200ms ease;
+        }
+
+        .stat-card:hover::before { opacity: 1; }
+
+        .stat-card.success::before { background: var(--success); opacity: 1; }
+        .stat-card.warning::before { background: var(--warning); opacity: 1; }
+        .stat-card.danger::before { background: var(--danger); opacity: 1; }
+
+        .stat-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: var(--radius-sm);
+            background: var(--bg-tertiary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
+            color: var(--text-muted);
+        }
+
+        .stat-card.success .stat-icon { background: var(--success-glow); color: var(--success); }
+        .stat-card.warning .stat-icon { background: var(--warning-glow); color: var(--warning); }
+        .stat-card.danger .stat-icon { background: var(--danger-glow); color: var(--danger); }
+
+        .stat-icon svg { width: 20px; height: 20px; }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            font-family: var(--font-mono);
+            letter-spacing: -0.02em;
+            margin-bottom: 4px;
+        }
+
+        .stat-label { font-size: 13px; color: var(--text-muted); }
+        .stat-change { font-size: 12px; margin-top: 8px; }
+        .stat-change.up { color: var(--success); }
+        .stat-change.down { color: var(--danger); }
+
+        /* === Resource List === */
+        .resource-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .resource-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 14px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all 200ms ease;
+        }
+
+        .resource-row:hover {
+            background: var(--bg-hover);
+            border-color: var(--border-light);
+            transform: translateX(4px);
+        }
+
+        .resource-row.healthy { border-left: 3px solid var(--success); }
+        .resource-row.warning { border-left: 3px solid var(--warning); }
+        .resource-row.critical {
+            border-left: 3px solid var(--danger);
+            animation: rowPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes rowPulse {
+            0%, 100% { box-shadow: none; }
+            50% { box-shadow: 0 0 20px var(--danger-glow); }
+        }
+
+        .resource-status {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .resource-status.healthy { background: var(--success); animation: breathe 3s ease-in-out infinite; }
+        .resource-status.warning { background: var(--warning); animation: pulse-dot 1.5s ease-in-out infinite; }
+        .resource-status.critical { background: var(--danger); animation: pulse-dot 1s ease-in-out infinite; }
+
+        .resource-info { flex: 1; min-width: 0; }
+        .resource-name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .resource-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+        .resource-badge {
+            font-size: 11px;
+            font-weight: 500;
+            padding: 4px 10px;
+            border-radius: 6px;
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+
+        .resource-metrics {
+            display: flex;
+            gap: 24px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .resource-metric { display: flex; align-items: center; gap: 4px; }
+        .resource-metric-value { font-weight: 600; font-family: var(--font-mono); color: var(--text-secondary); }
+
+        /* === Alert List === */
+        .alert-list { display: flex; flex-direction: column; gap: 8px; }
+
+        .alert-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all 200ms ease;
+        }
+
+        .alert-row:hover {
+            background: var(--bg-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+        }
+
+        .alert-severity {
+            width: 4px;
+            height: 48px;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+
+        .alert-severity.critical { background: var(--danger); }
+        .alert-severity.warning { background: var(--warning); }
+        .alert-severity.info { background: var(--accent); }
+
+        .alert-content { flex: 1; }
+        .alert-title { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+        .alert-meta { font-size: 12px; color: var(--text-muted); display: flex; gap: 16px; }
+        .alert-time { color: var(--text-muted); }
+
+        .alert-actions { display: flex; gap: 8px; }
+
+        /* === Metric Cards === */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin: 20px 0;
+        }
+
+        .metric-card {
+            background: var(--bg-tertiary);
+            padding: 16px;
+            border-radius: var(--radius-sm);
+        }
+
+        .metric-card-value {
+            font-size: 24px;
+            font-weight: 700;
+            font-family: var(--font-mono);
+        }
+
+        .metric-card-value.warning { color: var(--warning); }
+        .metric-card-value.danger { color: var(--danger); }
+
+        .metric-card-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* === DataSources Table === */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .data-table th {
+            text-align: left;
+            padding: 12px 16px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .data-table td {
+            padding: 14px 16px;
+            font-size: 13px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .data-table tr {
+            transition: background 150ms ease;
+        }
+
+        .data-table tbody tr:hover {
+            background: var(--bg-hover);
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-pill.healthy {
+            background: var(--success-glow);
+            color: var(--success);
+        }
+
+        .status-pill.warning {
+            background: var(--warning-glow);
+            color: var(--warning);
+        }
+
+        .status-pill.critical {
+            background: var(--danger-glow);
+            color: var(--danger);
+        }
+
+        .status-pill::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .type-tag {
+            font-size: 11px;
+            font-weight: 500;
+            padding: 3px 8px;
+            border-radius: 4px;
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        /* === Skills Grid === */
+        .skills-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 16px;
+        }
+
+        .skill-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 20px;
+            cursor: pointer;
+            transition: all 200ms ease;
+        }
+
+        .skill-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-4px);
+            box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+        }
+
+        .skill-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .skill-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: var(--radius-sm);
+            background: var(--accent-glow);
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .skill-icon svg { width: 20px; height: 20px; }
+
+        .skill-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+        .skill-desc { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+        .skill-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+        .skill-tag {
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            background: var(--bg-tertiary);
+            color: var(--text-muted);
+        }
+
+        /* === Chat Messages === */
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .message {
+            display: flex;
+            gap: 12px;
+            max-width: 75%;
+        }
+
+        .message.user {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+
+        .message-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+
+        .message.user .message-avatar {
+            background: linear-gradient(135deg, #6366F1, #A78BFA);
+            color: white;
+        }
+
+        .message.assistant .message-avatar {
+            background: var(--bg-tertiary);
+            color: var(--accent);
+        }
+
+        .message-bubble {
+            padding: 12px 16px;
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .message.user .message-bubble {
+            background: var(--accent);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant .message-bubble {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-bottom-left-radius: 4px;
+        }
+
+        /* === Diagnostic Card === */
+        .diagnostic-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            margin-top: 12px;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .card-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .card-icon.danger { background: var(--danger-glow); color: var(--danger); }
+        .card-icon svg { width: 20px; height: 20px; }
+
+        .card-title { font-size: 15px; font-weight: 600; }
+        .card-subtitle { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+        .progress-bar {
+            height: 6px;
+            background: var(--bg-tertiary);
+            border-radius: 3px;
+            overflow: hidden;
+            margin: 16px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--danger), #F87171);
+            border-radius: 3px;
+            transition: width 1s ease;
+        }
+
+        .card-actions { display: flex; gap: 10px; margin-top: 16px; }
+
+        /* === Chat Input === */
+        .chat-input-area {
+            padding: 16px 24px 20px;
+            background: linear-gradient(to top, var(--bg-primary) 50%, transparent);
+        }
+
+        .input-container {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .input-wrapper { flex: 1; position: relative; }
+
+        .chat-input {
+            width: 100%;
+            min-height: 44px;
+            max-height: 100px;
+            padding: 10px 14px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            font-family: var(--font-sans);
+            font-size: 13px;
+            color: var(--text-primary);
+            resize: none;
+            transition: all 200ms ease;
+        }
+
+        .chat-input::placeholder { color: var(--text-muted); }
+        .chat-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        .input-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: var(--radius-md);
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 200ms ease;
+        }
+
+        .input-btn.attach {
+            background: var(--bg-tertiary);
+            color: var(--text-muted);
+        }
+
+        .input-btn.attach:hover {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+
+        .input-btn.send {
+            background: var(--accent);
+            color: white;
+        }
+
+        .input-btn.send:hover {
+            background: var(--accent-hover);
+            transform: scale(1.05);
+        }
+
+        .input-btn svg { width: 18px; height: 18px; }
+
+        /* === Integrations === */
+        .integration-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 16px;
+        }
+
+        .integration-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 20px;
+            transition: all 200ms ease;
+        }
+
+        .integration-card:hover {
+            border-color: var(--border-light);
+            transform: translateY(-2px);
+        }
+
+        .integration-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .integration-logo {
+            width: 40px;
+            height: 40px;
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .integration-name { font-size: 14px; font-weight: 600; }
+        .integration-type { font-size: 12px; color: var(--text-muted); }
+
+        .integration-status {
+            font-size: 12px;
+            margin-top: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .integration-status.active { color: var(--success); }
+        .integration-status.inactive { color: var(--text-muted); }
+
+        /* === Scrollbar === */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+
+        /* === Section Title === */
+        .section-title {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-muted);
+            margin-bottom: 16px;
+        }
+
+        /* === Empty State === */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 20px;
+            text-align: center;
+        }
+
+        .empty-icon {
+            width: 64px;
+            height: 64px;
+            border-radius: var(--radius-lg);
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            color: var(--text-muted);
+        }
+
+        .empty-icon svg { width: 28px; height: 28px; }
+        .empty-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+        .empty-desc { font-size: 13px; color: var(--text-muted); max-width: 300px; }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                    <path d="M2 17l10 5 10-5"/>
+                    <path d="M2 12l10 5 10-5"/>
+                </svg>
+            </div>
+
+            <div class="nav-item active" data-page="overview" onclick="navigateTo('overview')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7" rx="1"/>
+                    <rect x="14" y="3" width="7" height="7" rx="1"/>
+                    <rect x="3" y="14" width="7" height="7" rx="1"/>
+                    <rect x="14" y="14" width="7" height="7" rx="1"/>
+                </svg>
+            </div>
+
+            <div class="nav-item" data-page="chat" onclick="navigateTo('chat')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span class="badge"></span>
+            </div>
+
+            <div class="nav-item" data-page="datasources" onclick="navigateTo('datasources')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                    <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                </svg>
+            </div>
+
+            <div class="nav-item" data-page="alerts" onclick="navigateTo('alerts')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/>
+                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                <span class="badge"></span>
+            </div>
+
+            <div class="nav-item" data-page="skills" onclick="navigateTo('skills')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                </svg>
+            </div>
+
+            <div class="nav-item" data-page="integrations" onclick="navigateTo('integrations')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+            </div>
+
+            <div class="sidebar-spacer"></div>
+
+            <div class="sidebar-bottom">
+                <div class="nav-item" onclick="navigateTo('settings')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    </svg>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main -->
+        <main class="main">
+            <!-- Header -->
+            <header class="header">
+                <div class="header-title" id="page-title">总览</div>
+
+                <div class="search-container">
+                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <input type="text" class="search-input" placeholder="搜索或提问...例如：MySQL 连接数异常">
+                </div>
+
+                <div class="header-actions">
+                    <button class="header-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                        </svg>
+                    </button>
+                    <div class="user-avatar">W</div>
+                </div>
+            </header>
+
+            <!-- Ambient Banner -->
+            <div class="ambient-banner">
+                <div class="ambient-status">
+                    <span class="ambient-dot"></span>
+                    <span>系统安静运行中</span>
+                </div>
+                <div class="ambient-stats">
+                    <div class="ambient-stat">
+                        <span>数据源</span>
+                        <span class="ambient-stat-value">23</span>
+                    </div>
+                    <div class="ambient-stat">
+                        <span>健康</span>
+                        <span class="ambient-stat-value" style="color: var(--success);">21</span>
+                    </div>
+                    <div class="ambient-stat">
+                        <span>活跃告警</span>
+                        <span class="ambient-stat-value" style="color: var(--warning);">2</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Content -->
+            <div class="content">
+                <!-- Overview Page -->
+                <div class="page active" id="page-overview">
+                    <div class="page-head">
+                        <div>
+                            <div class="page-title">资源总览</div>
+                            <div class="page-subtitle">实时监控所有数据库资源状态</div>
+                        </div>
+                        <button class="btn btn-primary">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                            添加数据源
+                        </button>
+                    </div>
+
+                    <div class="dash-overview">
+                        <div class="stat-card success">
+                            <div class="stat-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                                    <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                                    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                                </svg>
+                            </div>
+                            <div class="stat-value">23</div>
+                            <div class="stat-label">数据源总数</div>
+                            <div class="stat-change up">↑ 2 本月新增</div>
+                        </div>
+
+                        <div class="stat-card success">
+                            <div class="stat-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                                    <polyline points="22 4 12 14.01 9 11.01"/>
+                                </svg>
+                            </div>
+                            <div class="stat-value">21</div>
+                            <div class="stat-label">健康运行</div>
+                            <div class="stat-change up">91% 健康率</div>
+                        </div>
+
+                        <div class="stat-card warning">
+                            <div class="stat-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                                    <line x1="12" y1="9" x2="12" y2="13"/>
+                                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                                </svg>
+                            </div>
+                            <div class="stat-value">2</div>
+                            <div class="stat-label">需要关注</div>
+                            <div class="stat-change down">↓ 1 较昨日改善</div>
+                        </div>
+
+                        <div class="stat-card danger">
+                            <div class="stat-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <line x1="12" y1="8" x2="12" y2="12"/>
+                                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                                </svg>
+                            </div>
+                            <div class="stat-value">0</div>
+                            <div class="stat-label">紧急告警</div>
+                            <div class="stat-change up">无异常</div>
+                        </div>
+                    </div>
+
+                    <div class="section-title">需要关注</div>
+                    <div class="resource-list">
+                        <div class="resource-row warning" onclick="navigateTo('datasources')">
+                            <span class="resource-status warning"></span>
+                            <div class="resource-info">
+                                <div class="resource-name">PostgreSQL-账务库</div>
+                                <div class="resource-meta">db-finance-01 · 连接数接近上限</div>
+                            </div>
+                            <span class="resource-badge">postgresql</span>
+                            <div class="resource-metrics">
+                                <div class="resource-metric">
+                                    <span>连接</span>
+                                    <span class="resource-metric-value" style="color: var(--warning);">87%</span>
+                                </div>
+                                <div class="resource-metric">
+                                    <span>QPS</span>
+                                    <span class="resource-metric-value">12.4K</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="resource-row critical" onclick="navigateTo('datasources')">
+                            <span class="resource-status critical"></span>
+                            <div class="resource-info">
+                                <div class="resource-name">TiDB-分析库</div>
+                                <div class="resource-meta">tidb-analytics-01 · 查询延迟异常</div>
+                            </div>
+                            <span class="resource-badge">tidb</span>
+                            <div class="resource-metrics">
+                                <div class="resource-metric">
+                                    <span>延迟</span>
+                                    <span class="resource-metric-value" style="color: var(--danger);">2.3s</span>
+                                </div>
+                                <div class="resource-metric">
+                                    <span>CPU</span>
+                                    <span class="resource-metric-value" style="color: var(--danger);">94%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 24px;">
+                        <div class="section-title">其他资源</div>
+                        <div class="resource-list">
+                            <div class="resource-row healthy">
+                                <span class="resource-status healthy"></span>
+                                <div class="resource-info">
+                                    <div class="resource-name">MySQL-生产库</div>
+                                    <div class="resource-meta">db-prod-01 · 运行正常</div>
+                                </div>
+                                <span class="resource-badge">mysql</span>
+                                <div class="resource-metrics">
+                                    <div class="resource-metric">
+                                        <span>QPS</span>
+                                        <span class="resource-metric-value">45.2K</span>
+                                    </div>
+                                    <div class="resource-metric">
+                                        <span>CPU</span>
+                                        <span class="resource-metric-value">32%</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="resource-row healthy">
+                                <span class="resource-status healthy"></span>
+                                <div class="resource-info">
+                                    <div class="resource-name">Redis-缓存集群</div>
+                                    <div class="resource-meta">redis-prod-01 · 运行正常</div>
+                                </div>
+                                <span class="resource-badge">redis</span>
+                                <div class="resource-metrics">
+                                    <div class="resource-metric">
+                                        <span>内存</span>
+                                        <span class="resource-metric-value">67%</span>
+                                    </div>
+                                    <div class="resource-metric">
+                                        <span>命中</span>
+                                        <span class="resource-metric-value">99.2%</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="resource-row healthy">
+                                <span class="resource-status healthy"></span>
+                                <div class="resource-info">
+                                    <div class="resource-name">OceanBase-交易库</div>
+                                    <div class="resource-meta">ob-trade-01 · 运行正常</div>
+                                </div>
+                                <span class="resource-badge">oceanbase</span>
+                                <div class="resource-metrics">
+                                    <div class="resource-metric">
+                                        <span>TPS</span>
+                                        <span class="resource-metric-value">28.6K</span>
+                                    </div>
+                                    <div class="resource-metric">
+                                        <span>延迟</span>
+                                        <span class="resource-metric-value">0.8ms</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Page -->
+                <div class="page" id="page-chat">
+                    <div class="chat-messages" id="chat-messages">
+                        <div class="empty-state">
+                            <div class="empty-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                                    <path d="M2 17l10 5 10-5"/>
+                                    <path d="M2 12l10 5 10-5"/>
+                                </svg>
+                            </div>
+                            <div class="empty-title">DbGuard 智能助手</div>
+                            <div class="empty-desc">用自然语言描述问题，AI 自动诊断并提供解决方案</div>
+                        </div>
+                    </div>
+
+                    <div class="chat-input-area">
+                        <div class="input-container">
+                            <div class="input-wrapper">
+                                <textarea class="chat-input" id="chat-input" placeholder="描述你的问题或需求..." rows="1"></textarea>
+                            </div>
+                            <button class="input-btn attach">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                                </svg>
+                            </button>
+                            <button class="input-btn send" onclick="sendMessage()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="22" y1="2" x2="11" y2="13"/>
+                                    <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DataSources Page -->
+                <div class="page" id="page-datasources">
+                    <div class="page-head">
+                        <div>
+                            <div class="page-title">数据源管理</div>
+                            <div class="page-subtitle">管理所有数据库连接和配置</div>
+                        </div>
+                        <button class="btn btn-primary">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                            添加数据源
+                        </button>
+                    </div>
+
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>名称</th>
+                                <th>类型</th>
+                                <th>主机</th>
+                                <th>状态</th>
+                                <th>连接数</th>
+                                <th>QPS</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>MySQL-生产库</strong></td>
+                                <td><span class="type-tag">mysql</span></td>
+                                <td style="color: var(--text-muted);">db-prod-01:3306</td>
+                                <td><span class="status-pill healthy">健康</span></td>
+                                <td style="font-family: var(--font-mono);">1,247</td>
+                                <td style="font-family: var(--font-mono);">45.2K</td>
+                                <td>
+                                    <div style="display: flex; gap: 6px;">
+                                        <button class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;">诊断</button>
+                                        <button class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;">详情</button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>PostgreSQL-账务库</strong></td>
+                                <td><span class="type-tag">postgresql</span></td>
+                                <td style="color: var(--text-muted);">db-finance-01:5432</td>
+                                <td><span class="status-pill warning">警告</span></td>
+                                <td style="font-family: var(--font-mono); color: var(--warning);">847/900</td>
+                                <td style="font-family: var(--font-mono);">12.4K</td>
+                                <td>
+                                    <div style="display: flex; gap: 6px;">
+                                        <button class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;">诊断</button>
+                                        <button class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;">详情</button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>TiDB-分析库</strong></td>
+                                <td><span class="type-tag">tidb</span></td>
+                                <td style="color: var(--text-muted);">tidb-analytics-01:4000</td>
+                                <td><span class="status-pill critical">异常</span></td>
+                                <td style="font-family: var(--font-mono); color: var(--danger);">2.3s</td>
+                                <td style="font-family: var(--font-mono);">—</td>
+                                <td>
+                                    <div style="display: flex; gap: 6px;">
+                                        <button class="btn btn-primary" style="padding: 5px 10px; font-size: 12px;">立即诊断</button>
+                                        <button class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;">详情</button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Redis-缓存集群</strong></td>
+                                <td><span class="type-tag">redis</span></td>
+                                <td style="color: var(--text-muted);">redis-prod-01:6379</td>
+                                <td><span class="status-pill healthy">健康</span></td>
+                                <td style="font-family: var(--font-mono);">3,421</td>
+                                <td style="font-family: var(--font-mono);">—</td>
+                                <td>
+                                    <div style="display: flex; gap: 6px;">
+                                        <button class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;">诊断</button>
+                                        <button class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;">详情</button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>OceanBase-交易库</strong></td>
+                                <td><span class="type-tag">oceanbase</span></td>
+                                <td style="color: var(--text-muted);">ob-trade-01:2881</td>
+                                <td><span class="status-pill healthy">健康</span></td>
+                                <td style="font-family: var(--font-mono);">892</td>
+                                <td style="font-family: var(--font-mono);">28.6K</td>
+                                <td>
+                                    <div style="display: flex; gap: 6px;">
+                                        <button class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;">诊断</button>
+                                        <button class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;">详情</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Alerts Page -->
+                <div class="page" id="page-alerts">
+                    <div class="page-head">
+                        <div>
+                            <div class="page-title">告警中心</div>
+                            <div class="page-subtitle">实时监控和历史告警记录</div>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn btn-secondary">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                                </svg>
+                                活跃告警
+                            </button>
+                            <button class="btn btn-secondary">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <polyline points="12 6 12 12 16 14"/>
+                                </svg>
+                                历史记录
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="section-title">活跃告警 · 2</div>
+                    <div class="alert-list">
+                        <div class="alert-row">
+                            <div class="alert-severity critical"></div>
+                            <div class="alert-content">
+                                <div class="alert-title">TiDB 连接超时 - 查询响应超过 2 秒</div>
+                                <div class="alert-meta">
+                                    <span>tidb-analytics-01</span>
+                                    <span>5 分钟前</span>
+                                    <span style="color: var(--danger);">持续 12 分钟</span>
+                                </div>
+                            </div>
+                            <div class="alert-actions">
+                                <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;">诊断</button>
+                                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">忽略</button>
+                            </div>
+                        </div>
+
+                        <div class="alert-row">
+                            <div class="alert-severity warning"></div>
+                            <div class="alert-content">
+                                <div class="alert-title">PostgreSQL 连接池使用率超过 80%</div>
+                                <div class="alert-meta">
+                                    <span>db-finance-01</span>
+                                    <span>23 分钟前</span>
+                                    <span style="color: var(--warning);">持续 1 小时</span>
+                                </div>
+                            </div>
+                            <div class="alert-actions">
+                                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">一键优化</button>
+                                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">详情</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 32px;">
+                        <div class="section-title">最近解决的告警</div>
+                        <div class="alert-list" style="opacity: 0.7;">
+                            <div class="alert-row" style="border-left: 3px solid var(--success);">
+                                <div class="alert-severity" style="background: var(--success);"></div>
+                                <div class="alert-content">
+                                    <div class="alert-title">MySQL 主从延迟超过阈值</div>
+                                    <div class="alert-meta">
+                                        <span>db-prod-01</span>
+                                        <span>2 小时前已解决</span>
+                                        <span style="color: var(--success);">自动恢复</span>
+                                    </div>
+                                </div>
+                                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">查看报告</button>
+                            </div>
+
+                            <div class="alert-row" style="border-left: 3px solid var(--success);">
+                                <div class="alert-severity" style="background: var(--success);"></div>
+                                <div class="alert-content">
+                                    <div class="alert-title">Redis 内存使用率超过 85%</div>
+                                    <div class="alert-meta">
+                                        <span>redis-prod-01</span>
+                                        <span>4 小时前已解决</span>
+                                        <span style="color: var(--success);">手动处理</span>
+                                    </div>
+                                </div>
+                                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">查看报告</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Skills Page -->
+                <div class="page" id="page-skills">
+                    <div class="page-head">
+                        <div>
+                            <div class="page-title">智能技能</div>
+                            <div class="page-subtitle">AI 驱动的数据库诊断技能库</div>
+                        </div>
+                        <button class="btn btn-primary">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                            创建技能
+                        </button>
+                    </div>
+
+                    <div class="skills-grid">
+                        <div class="skill-card">
+                            <div class="skill-header">
+                                <div class="skill-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                                        <line x1="12" y1="9" x2="12" y2="13"/>
+                                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <div class="skill-title">连接问题诊断</div>
+                                </div>
+                            </div>
+                            <div class="skill-desc">自动分析数据库连接异常、超时、连接池耗尽等问题</div>
+                            <div class="skill-tags">
+                                <span class="skill-tag">mysql</span>
+                                <span class="skill-tag">postgresql</span>
+                                <span class="skill-tag">诊断</span>
+                            </div>
+                        </div>
+
+                        <div class="skill-card">
+                            <div class="skill-header">
+                                <div class="skill-icon" style="background: var(--success-glow); color: var(--success);">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <div class="skill-title">慢查询分析</div>
+                                </div>
+                            </div>
+                            <div class="skill-desc">识别性能瓶颈，提供索引优化建议和查询改写方案</div>
+                            <div class="skill-tags">
+                                <span class="skill-tag">mysql</span>
+                                <span class="skill-tag">tidb</span>
+                                <span class="skill-tag">性能</span>
+                            </div>
+                        </div>
+
+                        <div class="skill-card">
+                            <div class="skill-header">
+                                <div class="skill-icon" style="background: var(--warning-glow); color: var(--warning);">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                                        <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                                        <line x1="6" y1="6" x2="6.01" y2="6"/>
+                                        <line x1="6" y1="18" x2="6.01" y2="18"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <div class="skill-title">OS 指标监控</div>
+                                </div>
+                            </div>
+                            <div class="skill-desc">监控 CPU、内存、磁盘 IO、网络等主机层指标</div>
+                            <div class="skill-tags">
+                                <span class="skill-tag">主机</span>
+                                <span class="skill-tag">监控</span>
+                            </div>
+                        </div>
+
+                        <div class="skill-card">
+                            <div class="skill-header">
+                                <div class="skill-icon" style="background: var(--accent-glow); color: var(--accent);">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                                        <line x1="12" y1="22.08" x2="12" y2="12"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <div class="skill-title">空间分析</div>
+                                </div>
+                            </div>
+                            <div class="skill-desc">分析表空间、索引膨胀、归档日志等存储问题</div>
+                            <div class="skill-tags">
+                                <span class="skill-tag">存储</span>
+                                <span class="skill-tag">oracle</span>
+                                <span class="skill-tag">postgresql</span>
+                            </div>
+                        </div>
+
+                        <div class="skill-card">
+                            <div class="skill-header">
+                                <div class="skill-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <div class="skill-title">权限审计</div>
+                                </div>
+                            </div>
+                            <div class="skill-desc">检查账户权限配置，发现潜在安全风险</div>
+                            <div class="skill-tags">
+                                <span class="skill-tag">安全</span>
+                                <span class="skill-tag">审计</span>
+                            </div>
+                        </div>
+
+                        <div class="skill-card">
+                            <div class="skill-header">
+                                <div class="skill-icon" style="background: var(--success-glow); color: var(--success);">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                        <polyline points="14 2 14 8 20 8"/>
+                                        <line x1="16" y1="13" x2="8" y2="13"/>
+                                        <line x1="16" y1="17" x2="8" y2="17"/>
+                                        <polyline points="10 9 9 9 8 9"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <div class="skill-title">日志分析</div>
+                                </div>
+                            </div>
+                            <div class="skill-desc">解析错误日志、慢查询日志、审计日志</div>
+                            <div class="skill-tags">
+                                <span class="skill-tag">mongodb</span>
+                                <span class="skill-tag">mysql</span>
+                                <span class="skill-tag">分析</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Integrations Page -->
+                <div class="page" id="page-integrations">
+                    <div class="page-head">
+                        <div>
+                            <div class="page-title">集成中心</div>
+                            <div class="page-subtitle">连接告警渠道和第三方系统</div>
+                        </div>
+                        <button class="btn btn-primary">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                            添加集成
+                        </button>
+                    </div>
+
+                    <div class="integration-grid">
+                        <div class="integration-card">
+                            <div class="integration-header">
+                                <div class="integration-logo" style="background: #07C160;">💬</div>
+                                <div>
+                                    <div class="integration-name">企业微信</div>
+                                    <div class="integration-type">即时通讯</div>
+                                </div>
+                            </div>
+                            <div class="integration-status active">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                                    <polyline points="22 4 12 14.01 9 11.01"/>
+                                </svg>
+                                已连接 · 接收 12 条告警
+                            </div>
+                        </div>
+
+                        <div class="integration-card">
+                            <div class="integration-header">
+                                <div class="integration-logo" style="background: #FF6A00;">🔔</div>
+                                <div>
+                                    <div class="integration-name">钉钉</div>
+                                    <div class="integration-type">即时通讯</div>
+                                </div>
+                            </div>
+                            <div class="integration-status active">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                                    <polyline points="22 4 12 14.01 9 11.01"/>
+                                </svg>
+                                已连接 · 接收 8 条告警
+                            </div>
+                        </div>
+
+                        <div class="integration-card">
+                            <div class="integration-header">
+                                <div class="integration-logo" style="background: #4A90E2;">📨</div>
+                                <div>
+                                    <div class="integration-name">飞书</div>
+                                    <div class="integration-type">即时通讯</div>
+                                </div>
+                            </div>
+                            <div class="integration-status active">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                                    <polyline points="22 4 12 14.01 9 11.01"/>
+                                </svg>
+                                已连接 · 接收 5 条告警
+                            </div>
+                        </div>
+
+                        <div class="integration-card">
+                            <div class="integration-header">
+                                <div class="integration-logo" style="background: #E4402F;">🔔</div>
+                                <div>
+                                    <div class="integration-name">Slack</div>
+                                    <div class="integration-type">即时通讯</div>
+                                </div>
+                            </div>
+                            <div class="integration-status inactive">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <line x1="15" y1="9" x2="9" y2="15"/>
+                                    <line x1="9" y1="9" x2="15" y2="15"/>
+                                </svg>
+                                未连接
+                            </div>
+                        </div>
+
+                        <div class="integration-card">
+                            <div class="integration-header">
+                                <div class="integration-logo" style="background: #FF6A00;">🪝</div>
+                                <div>
+                                    <div class="integration-name">Webhook</div>
+                                    <div class="integration-type">自定义回调</div>
+                                </div>
+                            </div>
+                            <div class="integration-status active">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                                    <polyline points="22 4 12 14.01 9 11.01"/>
+                                </svg>
+                                已配置 · 2 个端点
+                            </div>
+                        </div>
+
+                        <div class="integration-card">
+                            <div class="integration-header">
+                                <div class="integration-logo" style="background: #50E3C2;">📧</div>
+                                <div>
+                                    <div class="integration-name">邮件告警</div>
+                                    <div class="integration-type">SMTP</div>
+                                </div>
+                            </div>
+                            <div class="integration-status inactive">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <line x1="15" y1="9" x2="9" y2="15"/>
+                                    <line x1="9" y1="9" x2="15" y2="15"/>
+                                </svg>
+                                未配置
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings Page -->
+                <div class="page" id="page-settings">
+                    <div class="page-head">
+                        <div>
+                            <div class="page-title">系统设置</div>
+                            <div class="page-subtitle">配置告警阈值、通知规则和用户权限</div>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 240px 1fr; gap: 24px;">
+                        <div class="card" style="height: fit-content;">
+                            <div class="section-title" style="margin-bottom: 12px;">设置分类</div>
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                <div style="padding: 10px 12px; border-radius: 6px; background: var(--accent-glow); color: var(--accent); cursor: pointer; font-weight: 500;">告警规则</div>
+                                <div style="padding: 10px 12px; border-radius: 6px; color: var(--text-secondary); cursor: pointer;">通知渠道</div>
+                                <div style="padding: 10px 12px; border-radius: 6px; color: var(--text-secondary); cursor: pointer;">巡检计划</div>
+                                <div style="padding: 10px 12px; border-radius: 6px; color: var(--text-secondary); cursor: pointer;">用户管理</div>
+                                <div style="padding: 10px 12px; border-radius: 6px; color: var(--text-secondary); cursor: pointer;">AI 模型</div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="card">
+                                <div class="section-title">告警阈值配置</div>
+
+                                <div style="margin-top: 16px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                        <span style="font-size: 13px;">CPU 使用率告警</span>
+                                        <span style="font-size: 13px; color: var(--text-muted);">> 80%</span>
+                                    </div>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" style="width: 80%; background: linear-gradient(90deg, var(--warning), var(--danger));"></div>
+                                    </div>
+                                </div>
+
+                                <div style="margin-top: 16px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                        <span style="font-size: 13px;">连接数告警</span>
+                                        <span style="font-size: 13px; color: var(--text-muted);">> 90%</span>
+                                    </div>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" style="width: 90%; background: linear-gradient(90deg, var(--danger), #F87171);"></div>
+                                    </div>
+                                </div>
+
+                                <div style="margin-top: 16px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                        <span style="font-size: 13px;">查询延迟告警</span>
+                                        <span style="font-size: 13px; color: var(--text-muted);">> 1s</span>
+                                    </div>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" style="width: 60%; background: linear-gradient(90deg, var(--success), var(--warning));"></div>
+                                    </div>
+                                </div>
+
+                                <div style="margin-top: 16px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                        <span style="font-size: 13px;">磁盘使用率告警</span>
+                                        <span style="font-size: 13px; color: var(--text-muted);">> 85%</span>
+                                    </div>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" style="width: 85%; background: linear-gradient(90deg, var(--warning), var(--danger));"></div>
+                                    </div>
+                                </div>
+
+                                <div style="margin-top: 20px; display: flex; gap: 10px;">
+                                    <button class="btn btn-primary">保存配置</button>
+                                    <button class="btn btn-secondary">重置默认</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Navigation
+        function navigateTo(page) {
+            // Update nav items
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.remove('active');
+                if (item.dataset.page === page) {
+                    item.classList.add('active');
+                }
+            });
+
+            // Update pages
+            document.querySelectorAll('.page').forEach(p => {
+                p.classList.remove('active');
+            });
+            document.getElementById('page-' + page).classList.add('active');
+
+            // Update title
+            const titles = {
+                overview: '总览',
+                chat: '智能助手',
+                datasources: '数据源管理',
+                alerts: '告警中心',
+                skills: '智能技能',
+                integrations: '集成中心',
+                settings: '系统设置'
+            };
+            document.getElementById('page-title').textContent = titles[page] || '总览';
+        }
+
+        // Chat functionality
+        function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const message = input.value.trim();
+            if (!message) return;
+
+            const messages = document.getElementById('chat-messages');
+
+            // Clear empty state
+            const emptyState = messages.querySelector('.empty-state');
+            if (emptyState) emptyState.remove();
+
+            // Add user message
+            const userMsg = document.createElement('div');
+            userMsg.className = 'message user';
+            userMsg.innerHTML = `
+                <div class="message-avatar">W</div>
+                <div class="message-bubble">${message}</div>
+            `;
+            messages.appendChild(userMsg);
+
+            // Clear input
+            input.value = '';
+
+            // Scroll
+            messages.scrollTop = messages.scrollHeight;
+
+            // Simulate AI response
+            setTimeout(() => {
+                const assistantMsg = document.createElement('div');
+                assistantMsg.className = 'message assistant';
+                assistantMsg.innerHTML = `
+                    <div class="message-avatar">AI</div>
+                    <div class="message-bubble">
+                        正在分析你的问题...
+                    </div>
+                `;
+                messages.appendChild(assistantMsg);
+                messages.scrollTop = messages.scrollHeight;
+
+                // Show diagnostic card after delay
+                setTimeout(() => {
+                    const card = document.createElement('div');
+                    card.className = 'message assistant';
+                    card.innerHTML = `
+                        <div class="message-avatar">AI</div>
+                        <div>
+                            <div class="message-bubble">
+                                <strong>诊断结果：</strong>发现 TiDB-分析库 存在严重的连接池问题。
+                                <div class="diagnostic-card">
+                                    <div class="card-header">
+                                        <div class="card-icon danger">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                                                <line x1="12" y1="9" x2="12" y2="13"/>
+                                                <line x1="12" y1="17" x2="12.01" y2="17"/>
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <div class="card-title">连接池使用率 94%</div>
+                                            <div class="card-subtitle">建议立即优化配置</div>
+                                        </div>
+                                    </div>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" style="width: 94%;"></div>
+                                    </div>
+                                    <div class="card-actions">
+                                        <button class="btn btn-primary">一键优化</button>
+                                        <button class="btn btn-secondary">查看详情</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    messages.appendChild(card);
+                    messages.scrollTop = messages.scrollHeight;
+                }, 1500);
+            }, 800);
+        }
+
+        // Auto-resize input
+        const input = document.getElementById('chat-input');
+        if (input) {
+            input.addEventListener('input', function() {
+                this.style.height = 'auto';
+                this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+            });
+
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+        }
+    </script>
+</body>
+</html>

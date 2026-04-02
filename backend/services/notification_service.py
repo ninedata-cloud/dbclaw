@@ -148,7 +148,7 @@ class NotificationService:
             msg = MIMEMultipart()
             msg['From'] = smtp_from
             msg['To'] = recipient
-            msg['Subject'] = f"[{alert.severity.upper()}] {alert.title}"
+            msg['Subject'] = f"[{NotificationService._map_severity(alert.severity)}] {alert.title}"
 
             ds_info = ""
             if datasource:
@@ -163,8 +163,8 @@ class NotificationService:
             body = f"""
 告警详情：
 --------------
-严重程度：{alert.severity.upper()}
-告警类型：{alert.alert_type}
+严重程度：{NotificationService._map_severity(alert.severity)}
+告警类型：{NotificationService._map_alert_type(alert.alert_type)}
 {ds_info}
 {alert.content}
 
@@ -231,7 +231,7 @@ class NotificationService:
                 async with aiohttp.ClientSession() as session:
                     payload = {
                         "phone": recipient,
-                        "message": f"[{alert.severity.upper()}告警] {ds_prefix}{alert.title}: {alert.content[:100]}"
+                        "message": f"[{NotificationService._map_severity(alert.severity)}告警] {ds_prefix}{alert.title}: {alert.content[:100]}"
                     }
                     async with session.post(webhook_url, json=payload) as response:
                         if response.status != 200:
@@ -291,7 +291,7 @@ class NotificationService:
                 async with aiohttp.ClientSession() as session:
                     payload = {
                         "phone": recipient,
-                        "message": f"[告警] {ds_prefix}{alert.title}，严重程度：{alert.severity}"
+                        "message": f"[告警] {ds_prefix}{alert.title}，严重程度：{NotificationService._map_severity(alert.severity)}"
                     }
                     async with session.post(webhook_url, json=payload) as response:
                         if response.status != 200:
@@ -414,8 +414,8 @@ class NotificationService:
             body = f"""
 告警已恢复：
 --------------
-严重程度：{alert.severity.upper()}
-告警类型：{alert.alert_type}
+严重程度：{NotificationService._map_severity(alert.severity)}
+告警类型：{NotificationService._map_alert_type(alert.alert_type)}
 {ds_info}
 {alert.content}
 
@@ -551,9 +551,12 @@ class NotificationService:
     @staticmethod
     def _build_feishu_recovery_payload(alert: AlertMessage, datasource=None) -> dict:
         """Build Feishu card message payload for alert recovery"""
+        severity_label = NotificationService._map_severity(alert.severity)
+        alert_type_label = NotificationService._map_alert_type(alert.alert_type)
         resolved_at = alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else 'N/A'
         content_lines = [f"**告警标题：** {alert.title}"]
-        content_lines.append(f"**告警类型：** {alert.alert_type}")
+        content_lines.append(f"**严重程度：** {severity_label}")
+        content_lines.append(f"**告警类型：** {alert_type_label}")
         if alert.metric_name and alert.metric_value is not None:
             recovery_val = alert.resolved_value if alert.resolved_value is not None else alert.metric_value
             content_lines.append(f"**恢复时指标：** {alert.metric_name} = {recovery_val:.2f}")
@@ -758,6 +761,22 @@ class NotificationService:
         return 'oapi.dingtalk.com' in url
 
     @staticmethod
+    def _map_severity(severity: str) -> str:
+        """Map severity code to Chinese label"""
+        labels = {'critical': '严重', 'high': '高', 'medium': '中', 'low': '低'}
+        return labels.get(severity, severity)
+
+    @staticmethod
+    def _map_alert_type(alert_type: str) -> str:
+        """Map alert_type code to Chinese label"""
+        labels = {
+            'threshold_violation': '超过阈值',
+            'custom_expression': '自定义表达式',
+            'system_error': '系统错误'
+        }
+        return labels.get(alert_type, alert_type)
+
+    @staticmethod
     def _build_dingtalk_url(webhook_url: str, secret: Optional[str]) -> str:
         """Build signed DingTalk webhook URL if secret provided"""
         if not secret:
@@ -775,17 +794,12 @@ class NotificationService:
     @staticmethod
     def _build_dingtalk_payload(alert: AlertMessage, datasource=None) -> dict:
         """Build DingTalk markdown message payload"""
-        severity_labels = {
-            'critical': '严重',
-            'high': '高',
-            'medium': '中',
-            'low': '低'
-        }
-        severity_label = severity_labels.get(alert.severity, alert.severity)
+        severity_label = NotificationService._map_severity(alert.severity)
+        alert_type_label = NotificationService._map_alert_type(alert.alert_type)
         lines = [f'### [{severity_label}] {alert.title}']
         if datasource:
             lines.append(f'**数据库：** {datasource.name} ({datasource.db_type.upper()}) {datasource.host}:{datasource.port}')
-        lines.append(f'**告警类型：** {alert.alert_type}')
+        lines.append(f'**告警类型：** {alert_type_label}')
         if alert.metric_name and alert.metric_value is not None:
             lines.append(f'**指标：** {alert.metric_name} = {alert.metric_value:.2f}')
         if alert.threshold_value is not None:
@@ -804,11 +818,14 @@ class NotificationService:
     @staticmethod
     def _build_dingtalk_recovery_payload(alert: AlertMessage, datasource=None) -> dict:
         """Build DingTalk markdown message payload for alert recovery"""
+        severity_label = NotificationService._map_severity(alert.severity)
+        alert_type_label = NotificationService._map_alert_type(alert.alert_type)
         resolved_at = alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else 'N/A'
         lines = [f'### [已恢复] {alert.title}']
         if datasource:
             lines.append(f'**数据库：** {datasource.name} ({datasource.db_type.upper()}) {datasource.host}:{datasource.port}')
-        lines.append(f'**告警类型：** {alert.alert_type}')
+        lines.append(f'**严重程度：** {severity_label}')
+        lines.append(f'**告警类型：** {alert_type_label}')
         if alert.metric_name and alert.metric_value is not None:
             recovery_val = alert.resolved_value if alert.resolved_value is not None else alert.metric_value
             lines.append(f'**恢复时指标：** {alert.metric_name} = {recovery_val:.2f}')
@@ -834,14 +851,9 @@ class NotificationService:
             'medium': 'orange',
             'low': 'orange'
         }
-        severity_labels = {
-            'critical': '严重',
-            'high': '高',
-            'medium': '中',
-            'low': '低'
-        }
         color = severity_colors.get(severity, 'blue')
-        severity_label = severity_labels.get(severity, alert.severity)
+        severity_label = NotificationService._map_severity(alert.severity)
+        alert_type_label = NotificationService._map_alert_type(alert.alert_type)
 
         elements = []
 
@@ -849,7 +861,7 @@ class NotificationService:
         alert_info = [
             f"**告警标题：** {alert.title}",
             f"**严重程度：** {severity_label}",
-            f"**告警类型：** {alert.alert_type}",
+            f"**告警类型：** {alert_type_label}",
         ]
         if alert.metric_name and alert.metric_value is not None:
             alert_info.append(f"**指标：** {alert.metric_name} = {alert.metric_value:.2f}")

@@ -1221,6 +1221,22 @@ async def test_postgres_explain_analyze_uses_bounded_cursor_fetch_via_prepared_m
 
 
 @pytest.mark.asyncio
+async def test_postgres_connect_retries_after_timeout():
+    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbguard")
+    successful_connection = object()
+    connect_mock = AsyncMock(side_effect=[TimeoutError("first timeout"), successful_connection])
+
+    asyncpg_module = MagicMock()
+    asyncpg_module.connect = connect_mock
+
+    with patch.dict("sys.modules", {"asyncpg": asyncpg_module}):
+        result = await connector._connect()
+
+    assert result is successful_connection
+    assert connect_mock.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_opengauss_select_returns_result_set_contract():
     connector = OpenGaussConnector(host="localhost", port=5432, username="tester", password="secret", database="dbguard")
     conn = AsyncMock()

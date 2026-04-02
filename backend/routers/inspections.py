@@ -8,6 +8,7 @@ from pydantic import BaseModel
 import logging
 
 from backend.database import get_db
+from backend.utils.security import escape_html
 from backend.models.inspection_config import InspectionConfig
 from backend.models.inspection_trigger import InspectionTrigger
 from backend.models.report import Report
@@ -233,7 +234,7 @@ async def list_all_reports(
     total_result = await db.execute(count_query)
     total = total_result.scalar()
 
-    query = query.order_by(desc(Report.created_at)).limit(limit).offset(offset)
+    query = query.order_by(Report.created_at.desc()).limit(limit).offset(offset)
     result = await db.execute(query)
     rows = result.all()
 
@@ -267,7 +268,7 @@ async def list_reports(
     if trigger_type:
         query = query.where(Report.trigger_type == trigger_type)
 
-    query = query.order_by(desc(Report.created_at)).limit(limit)
+    query = query.order_by(Report.created_at.desc()).limit(limit)
 
     result = await db.execute(query)
     reports = result.scalars().all()
@@ -366,24 +367,19 @@ async def public_report_page(
         ai_root_cause = report.trigger_reason
 
     # Escape HTML in datasource fields
-    def esc(s):
-        if s is None:
-            return ''
-        return str(s).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
-
-    ds_name = esc(datasource.name if datasource else '-')
-    ds_type = esc(datasource.db_type if datasource else '-')
-    ds_host_esc = esc(ds_host)
-    ds_db_esc = esc(ds_db)
-    ds_remark_esc = esc(ds_remark)
-    ds_level_esc = esc(ds_level)
-    ds_tags_esc = esc(ds_tags)
+    ds_name = escape_html(datasource.name if datasource else '-')
+    ds_type = escape_html(datasource.db_type if datasource else '-')
+    ds_host_esc = escape_html(ds_host)
+    ds_db_esc = escape_html(ds_db)
+    ds_remark_esc = escape_html(ds_remark)
+    ds_level_esc = escape_html(ds_level)
+    ds_tags_esc = escape_html(ds_tags)
 
     severity_badge = ''
     if alert_event:
         sev = alert_event.severity or ''
         sev_color = {'critical': '#dc2626', 'high': '#ea580c', 'medium': '#ca8a04', 'low': '#16a34a'}.get(sev.lower(), '#6b7280')
-        severity_badge = '<span style="background:' + sev_color + ';color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;">' + esc(sev.upper()) + '</span>'
+        severity_badge = '<span style="background:' + sev_color + ';color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;">' + escape_html(sev.upper()) + '</span>'
 
     report_html = report.content_html or f"<pre>{report.content_md or '暂无内容'}</pre>"
     return f"""
@@ -392,7 +388,7 @@ async def public_report_page(
     <head>
         <meta charset=\"UTF-8\">
         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-        <title>{esc(report.title)}</title>
+        <title>{escape_html(report.title)}</title>
         <style>
                         body {{ font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#f5f7fa; margin:0; padding:24px; color:#1f2937; }}
                         .card {{ max-width:1200px; margin:0 auto; background:#fff; border-radius:12px; padding:24px; box-shadow:0 8px 24px rgba(0,0,0,.08); }}
@@ -417,14 +413,14 @@ async def public_report_page(
     </head>
     <body>
         <div class=\"card\">
-            <h1>{esc(report.title)}</h1>
+            <h1>{escape_html(report.title)}</h1>
             <div class=\"meta\">
-                <span>状态：{esc(report.status)}</span>
-                <span>触发类型：{esc(report.trigger_type or '-')}</span>
+                <span>状态：{escape_html(report.status)}</span>
+                <span>触发类型：{escape_html(report.trigger_type or '-')}</span>
                 <span>创建时间：{report.created_at}</span>
                 {severity_badge}
             </div>
-            {f'<div class="trigger">触发原因：{esc(report.trigger_reason)}</div>' if report.trigger_reason else ''}
+            {f'<div class="trigger">触发原因：{escape_html(report.trigger_reason)}</div>' if report.trigger_reason else ''}
 
             <!-- 数据源配置信息 -->
             <div class="ds-card">
@@ -446,9 +442,9 @@ async def public_report_page(
             {"".join([
                 '<div class="ai-card">'
                 + '<div class="ai-title"><span>&#129514;</span> AI 诊断结论</div>'
-                + ('<div class="ai-section"><div class="ai-label">诊断摘要</div><div class="ai-value">' + esc(ai_summary) + '</div></div>' if ai_summary else '')
-                + ('<div class="ai-section"><div class="ai-label">根因分析</div><div class="ai-value root-cause">' + esc(ai_root_cause) + '</div></div>' if ai_root_cause else '')
-                + ('<div class="ai-section"><div class="ai-label">建议措施</div><div class="ai-value actions">' + esc(ai_actions) + '</div></div>' if ai_actions else '')
+                + ('<div class="ai-section"><div class="ai-label">诊断摘要</div><div class="ai-value">' + escape_html(ai_summary) + '</div></div>' if ai_summary else '')
+                + ('<div class="ai-section"><div class="ai-label">根因分析</div><div class="ai-value root-cause">' + escape_html(ai_root_cause) + '</div></div>' if ai_root_cause else '')
+                + ('<div class="ai-section"><div class="ai-label">建议措施</div><div class="ai-value actions">' + escape_html(ai_actions) + '</div></div>' if ai_actions else '')
                 + '</div>'
             ]) if (ai_summary or ai_root_cause or ai_actions) else ''}
 

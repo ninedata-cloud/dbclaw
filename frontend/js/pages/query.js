@@ -2,6 +2,10 @@
 const QueryPage = {
     currentAbortController: null,
     datasourceSelector: null,
+    editorHeight: 400,
+    isResizing: false,
+    startY: 0,
+    startHeight: 0,
 
     _getSelectedDatasource() {
         return this.datasourceSelector?.getValue() || Store.get('currentConnection') || null;
@@ -106,6 +110,10 @@ const QueryPage = {
         toolbar.appendChild(hint);
         container.appendChild(toolbar);
 
+        // Resizer between editor and results (appended at end, positioned via CSS order)
+        const resizer = DOM.el('div', { className: 'query-resizer', id: 'query-resizer' });
+        resizer.addEventListener('mousedown', (e) => this._startResize(e));
+
         QueryEditor.create(container, 'SELECT 1;');
         QueryEditor.onExecute = () => this._executeQuery();
 
@@ -128,6 +136,7 @@ const QueryPage = {
                 <p>执行查询后结果将显示在这里</p>
             </div>
         `;
+        container.appendChild(resizer);
         container.appendChild(results);
 
         content.appendChild(container);
@@ -138,6 +147,7 @@ const QueryPage = {
             this.datasourceSelector = null;
             this._cancelQuery();
             QueryEditor.destroy();
+            DataTable.destroy();
         };
     },
 
@@ -202,6 +212,8 @@ const QueryPage = {
         const executeBtn = DOM.$('#execute-btn');
         const cancelBtn = DOM.$('#cancel-btn');
 
+        if (!results || !status || !executeBtn || !cancelBtn) return;
+
         status.innerHTML = '<div class="status-info"><span><div class="spinner" style="display:inline-block;width:14px;height:14px;margin-right:8px"></div>执行中...</span></div>';
         results.innerHTML = '';
         executeBtn.disabled = true;
@@ -216,24 +228,41 @@ const QueryPage = {
             );
 
             if (result.columns && result.columns.length > 0) {
-                results.innerHTML = '';
-                results.appendChild(DataTable.create(result.columns, result.rows));
+                const freshResults = DOM.$('#query-results');
+                if (freshResults) {
+                    freshResults.innerHTML = '';
+                    try {
+                        freshResults.appendChild(DataTable.create(result.columns, result.rows));
+                    } catch (err) {
+                        console.error('[Query] DataTable.create failed:', err);
+                        freshResults.innerHTML = `<div style="padding:20px;color:var(--accent-red)">表格渲染失败</div>`;
+                    }
+                }
             } else if (result.message) {
-                results.innerHTML = `<div class="empty-state" style="padding:20px"><p>${result.message}</p></div>`;
+                const freshResults = DOM.$('#query-results');
+                if (freshResults) freshResults.innerHTML = `<div class="empty-state" style="padding:20px"><p>${result.message}</p></div>`;
             }
 
-            const statusText = `${result.row_count} 行 | ${result.execution_time_ms}ms${result.truncated ? ' | 已截断至10000行' : ''}`;
-            status.innerHTML = `<div class="status-info"><span style="color:var(--accent-green)">${statusText}</span></div>`;
+            if (status.parentNode) {
+                const statusText = `${result.row_count} 行 | ${result.execution_time_ms}ms${result.truncated ? ' | 已截断至10000行' : ''}`;
+                status.innerHTML = `<div class="status-info"><span style="color:var(--accent-green)">${statusText}</span></div>`;
+            }
         } catch (err) {
             if (err.name === 'AbortError') {
                 return;
             }
-            results.innerHTML = `<div style="padding:20px;color:var(--accent-red);font-family:var(--font-mono);font-size:13px;white-space:pre-wrap">${err.message}</div>`;
-            status.innerHTML = '<div class="status-info"><span style="color:var(--accent-red)">错误</span></div>';
+            const errResults = DOM.$('#query-results');
+            if (errResults) {
+                errResults.innerHTML = `<div style="padding:20px;color:var(--accent-red);font-family:var(--font-mono);font-size:13px;white-space:pre-wrap">${err.message}</div>`;
+            }
+            const errStatus = DOM.$('#query-status');
+            if (errStatus) {
+                errStatus.innerHTML = '<div class="status-info"><span style="color:var(--accent-red)">错误</span></div>';
+            }
         } finally {
             this.currentAbortController = null;
-            executeBtn.disabled = false;
-            cancelBtn.style.display = 'none';
+            if (executeBtn) executeBtn.disabled = false;
+            if (cancelBtn) cancelBtn.style.display = 'none';
         }
     },
 
@@ -253,24 +282,64 @@ const QueryPage = {
         }
 
         const results = DOM.$('#query-results');
+        if (!results) return;
         results.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
         try {
             const result = await API.explainQuery({ datasource_id: connId, sql });
-            results.innerHTML = '';
+            const freshResults = DOM.$('#query-results');
+            if (!freshResults) return;
+            freshResults.innerHTML = '';
 
             if (result.columns && result.rows) {
-                results.appendChild(DataTable.create(result.columns, result.rows));
+                try {
+                    freshResults.appendChild(DataTable.create(result.columns, result.rows));
+                } catch (err) {
+                    console.error('[Query] DataTable.create failed:', err);
+                    freshResults.innerHTML = `<div style="padding:20px;color:var(--accent-red)">表格渲染失败</div>`;
+                }
             } else if (result.plan) {
                 const pre = DOM.el('div', { className: 'explain-panel', textContent: JSON.stringify(result.plan, null, 2) });
-                results.appendChild(pre);
+                freshResults.appendChild(pre);
             } else {
                 const pre = DOM.el('div', { className: 'explain-panel', textContent: JSON.stringify(result, null, 2) });
+                freshResults.appendChild(pre);
                 results.appendChild(pre);
             }
         } catch (err) {
             results.innerHTML = `<div style="padding:20px;color:var(--accent-red)">${err.message}</div>`;
         }
+    },
+
+    _startResize(e) {
+        this.isResizing = true;
+        this.startY = e.clientY;
+        const wrapper = DOM.$('.query-editor-wrapper');
+        this.startHeight = wrapper ? wrapper.offsetHeight : 400;
+        document.body.style.cursor = 'row-resize';
+        document.body.style.userSelect = 'none';
+        const resizer = DOM.$('#query-resizer');
+        if (resizer) resizer.classList.add('dragging');
+
+        const onMouseMove = (e) => {
+            if (!this.isResizing) return;
+            const delta = e.clientY - this.startY;
+            const newHeight = Math.max(100, Math.min(this.startHeight + delta, window.innerHeight - 200));
+            QueryEditor.setHeight(newHeight);
+        };
+
+        const onMouseUp = () => {
+            this.isResizing = false;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            const resizer = DOM.$('#query-resizer');
+            if (resizer) resizer.classList.remove('dragging');
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+        };
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
     },
 
     async _showHistory() {

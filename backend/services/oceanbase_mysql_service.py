@@ -1,7 +1,10 @@
 import asyncio
+import logging
 from typing import Any, Dict, List, Optional
 
 from backend.services.db_connector import DBConnector
+
+logger = logging.getLogger(__name__)
 
 
 class OceanBaseMySQLConnector(DBConnector):
@@ -45,7 +48,8 @@ class OceanBaseMySQLConnector(DBConnector):
                     await cur.execute("SELECT * FROM oceanbase.gv$ob_servers LIMIT 10")
                     server_rows = await cur.fetchall()
                     server_count = len(server_rows)
-                except Exception:
+                except Exception as e:
+                    logger.debug("Failed to query oceanbase gv$ob_servers: %s", e)
                     server_count = 0
 
                 await cur.execute("SELECT CONNECTION_ID()")
@@ -73,7 +77,8 @@ class OceanBaseMySQLConnector(DBConnector):
                     candidate = self._safe_int(max_conn_row[1]) if max_conn_row and len(max_conn_row) > 1 else 0
                     if 0 < candidate < 2147483647:
                         max_connections = candidate
-                except Exception:
+                except Exception as e:
+                    logger.debug("Failed to get max_connections: %s", e)
                     max_connections = None
 
                 cache_hit_rate = self._calc_cache_hit_rate(status)
@@ -137,7 +142,8 @@ class OceanBaseMySQLConnector(DBConnector):
                 )
                 rows = await cur.fetchall()
                 return [dict(r) for r in rows]
-        except Exception:
+        except Exception as e:
+            logger.debug("DictCursor failed for process list, falling back to tuple cursor: %s", e)
             async with conn.cursor() as cur:
                 await cur.execute("SHOW PROCESSLIST")
                 rows = await cur.fetchall()
@@ -174,7 +180,8 @@ class OceanBaseMySQLConnector(DBConnector):
                         }
                         for r in rows
                     ]
-                except Exception:
+                except Exception as e:
+                    logger.debug("SQL audit table not accessible: %s", e)
                     return [{"message": "SQL audit table not accessible"}]
         finally:
             conn.close()
@@ -264,8 +271,8 @@ class OceanBaseMySQLConnector(DBConnector):
                                 for r in rows[:10]
                             ]
                         }
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Table locations query failed: %s", e)
                 return {"status": "not configured"}
         finally:
             conn.close()

@@ -7,6 +7,7 @@ import hashlib
 import logging
 
 from backend.database import get_db
+from backend.utils.security import escape_html
 from backend.services.alert_service import AlertService
 from backend.services.alert_event_service import AlertEventService
 from backend.services.notification_service import NotificationService
@@ -390,17 +391,11 @@ async def public_alert_page(
     )
     report = result.scalar_one_or_none()
 
-    # Escape HTML
-    def esc(s):
-        if s is None:
-            return ''
-        return str(s).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
-
     # Severity badge
     sev = alert.severity or ''
     sev_color = {'critical': '#dc2626', 'high': '#ea580c', 'medium': '#ca8a04', 'low': '#16a34a'}.get(sev.lower(), '#6b7280')
     sev_label = {'critical': '严重', 'high': '高', 'medium': '中', 'low': '低'}.get(sev.lower(), sev)
-    severity_badge = f'<span class="sev-badge" style="background:{sev_color};color:#fff;padding:2px 10px;border-radius:4px;font-size:12px;font-weight:600;">{esc(sev_label)}</span>'
+    severity_badge = f'<span class="sev-badge" style="background:{sev_color};color:#fff;padding:2px 10px;border-radius:4px;font-size:12px;font-weight:600;">{escape_html(sev_label)}</span>'
 
     # Status label
     status_label = {'active': '活跃', 'acknowledged': '已确认', 'resolved': '已解决'}.get(alert.status or '', alert.status or '-')
@@ -410,16 +405,16 @@ async def public_alert_page(
     alert_type_label = {'threshold_violation': '超过阈值', 'custom_expression': '自定义表达式', 'system_error': '系统错误'}.get(alert.alert_type or '', alert.alert_type or '-')
 
     # Datasource info
-    ds_name = esc(datasource.name if datasource else '-')
-    ds_type = esc(datasource.db_type.upper() if datasource and datasource.db_type else '-')
-    ds_host = esc(datasource.host if datasource else '-')
+    ds_name = escape_html(datasource.name if datasource else '-')
+    ds_type = escape_html(datasource.db_type.upper() if datasource and datasource.db_type else '-')
+    ds_host = escape_html(datasource.host if datasource else '-')
     ds_port = datasource.port if datasource else '-'
-    ds_db = esc(datasource.database if datasource else '-')
+    ds_db = escape_html(datasource.database if datasource else '-')
     ds_level = datasource.importance_level if datasource else 'production'
     ds_level_label = {'core': '核心', 'production': '生产', 'development': '开发', 'temporary': '临时'}.get(ds_level, ds_level)
     ds_level_color = {'core': '#dc2626', 'production': '#2563eb', 'development': '#7c3aed', 'temporary': '#6b7280'}.get(ds_level, '#6b7280')
     ds_interval = datasource.monitoring_interval if datasource else 60
-    ds_remark = esc(datasource.remark if datasource and datasource.remark else '')
+    ds_remark = escape_html(datasource.remark if datasource and datasource.remark else '')
     ds_status = datasource.connection_status if datasource else 'unknown'
     ds_status_label = {'normal': '正常', 'warning': '警告', 'failed': '失败', 'unknown': '未知'}.get(ds_status, ds_status)
     ds_status_color = {'normal': '#16a34a', 'warning': '#ca8a04', 'failed': '#dc2626', 'unknown': '#6b7280'}.get(ds_status, '#6b7280')
@@ -435,8 +430,8 @@ async def public_alert_page(
                 <span class="section-title">AI 诊断分析</span>
             </div>
             <div class="section-body">
-                {"<div class=\"diag-block root-cause\"><div class=\"diag-label\">🔍 根本原因</div><div class=\"diag-content\">" + esc(ai_root_cause) + "</div></div>" if ai_root_cause else ""}
-                {"<div class=\"diag-block actions\"><div class=\"diag-label\">🛠 建议措施</div><div class=\"diag-content\">" + esc(ai_actions) + "</div></div>" if ai_actions else ""}
+                {"<div class=\"diag-block root-cause\"><div class=\"diag-label\">🔍 根本原因</div><div class=\"diag-content\">" + escape_html(ai_root_cause) + "</div></div>" if ai_root_cause else ""}
+                {"<div class=\"diag-block actions\"><div class=\"diag-label\">🛠 建议措施</div><div class=\"diag-content\">" + escape_html(ai_actions) + "</div></div>" if ai_actions else ""}
             </div>
         </div>'''
 
@@ -455,7 +450,7 @@ async def public_alert_page(
                 <div class="report-info">
                     <div class="report-meta">
                         <span class="report-time">{report.created_at}</span>
-                        <span class="report-title">{esc(report.title or f"报告 #{report.id}")}</span>
+                        <span class="report-title">{escape_html(report.title or f"报告 #{report.id}")}</span>
                         <span class="report-status">{report_status_label}</span>
                     </div>
                     <a class="btn btn-secondary" href="/api/inspections/reports/public/{report.id}/page?token={report_token}">查看报告</a>
@@ -471,7 +466,7 @@ async def public_alert_page(
         md.enable('table')
         content_html = md.render(content_md)
     except Exception:
-        content_html = f"<pre>{esc(content_md)}</pre>"
+        content_html = f"<pre>{escape_html(content_md)}</pre>"
 
     return f"""
     <!DOCTYPE html>
@@ -479,7 +474,7 @@ async def public_alert_page(
     <head>
         <meta charset=\"UTF-8\">
         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-        <title>{esc(alert.title)} - 告警详情</title>
+        <title>{escape_html(alert.title)} - 告警详情</title>
         <link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/github-markdown@2.10.0/github-markdown.min.css\">
         <style>
             :root {{
@@ -554,7 +549,7 @@ async def public_alert_page(
     </head>
     <body>
         <div class="container">
-            <h1 class="alert-title">{esc(alert.title)}</h1>
+            <h1 class="alert-title">{escape_html(alert.title)}</h1>
 
             <div class="meta-row">
                 <span class="meta-item">{severity_badge}</span>
@@ -562,7 +557,7 @@ async def public_alert_page(
                 <span class="meta-item">触发时间：{alert.created_at}</span>
             </div>
 
-            {f'<div class="trigger-block">触发原因：{esc(alert.trigger_reason)}</div>' if alert.trigger_reason else ''}
+            {f'<div class="trigger-block">触发原因：{escape_html(alert.trigger_reason)}</div>' if alert.trigger_reason else ''}
 
             <!-- 数据库配置信息 -->
             <div class="section">
@@ -625,7 +620,7 @@ async def public_alert_page(
                         </div>
                         <div class="field">
                             <div class="field-label">指标名称</div>
-                            <div class="field-value">{esc(alert.metric_name or '-')}</div>
+                            <div class="field-value">{escape_html(alert.metric_name or '-')}</div>
                         </div>
                         <div class="field">
                             <div class="field-label">当前值</div>

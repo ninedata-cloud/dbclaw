@@ -1,4 +1,12 @@
 from datetime import datetime, timedelta, timezone
+from html import escape as _escape
+
+
+def escape_html(s: str | None) -> str:
+    """Escape HTML special characters to prevent XSS."""
+    if s is None:
+        return ''
+    return _escape(str(s), quote=True)
 import hashlib
 import secrets
 import uuid

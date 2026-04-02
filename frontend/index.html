@@ -35,6 +35,25 @@
     <!-- Lucide Icons -->
     <script src="/lib/lucide/dist/umd/lucide.js"></script>
 
+    <!-- AG Grid Community Edition -->
+    <link rel="stylesheet" href="/lib/ag-grid-community/styles/ag-grid.css"/>
+    <link rel="stylesheet" href="/lib/ag-grid-community/styles/ag-theme-alpine.css"/>
+
+    <!-- AG Grid JS (load before Monaco AMD loader, disable AMD to force window.agGrid) -->
+    <script>
+        if (typeof define === 'function' && define.amd) {
+            window._agDefine_backup = define;
+            define = undefined;
+        }
+    </script>
+    <script src="/lib/ag-grid-community/dist/ag-grid-community.min.js"></script>
+    <script>
+        if (typeof window._agDefine_backup !== 'undefined') {
+            define = window._agDefine_backup;
+            window._agDefine_backup = undefined;
+        }
+    </script>
+
     <!-- Monaco Editor -->
     <script src="/lib/monaco-editor/min/vs/loader.js"></script>
 
@@ -66,7 +85,7 @@
     <link rel="stylesheet" href="/css/chat-attachments.css">
     <link rel="stylesheet" href="/css/diagnosis.css">
     <link rel="stylesheet" href="/css/dashboard.css">
-    <link rel="stylesheet" href="/css/query.css">
+    <link rel="stylesheet" href="/css/query.css?v=2">
     <link rel="stylesheet" href="/css/skills.css">
     <link rel="stylesheet" href="/css/inspection.css">
     <link rel="stylesheet" href="/css/system-configs.css">
@@ -121,7 +140,7 @@
     <script src="/js/components/header.js"></script>
     <script src="/js/components/metric-card.js"></script>
     <script src="/js/components/chart-panel.js"></script>
-    <script src="/js/components/table.js"></script>
+    <script src="/js/components/table.js?v=3"></script>
     <script src="/js/components/datasource-form.js"></script>
     <script src="/js/components/datasource-selector.js"></script>
     <script src="/js/components/chat-widget.js"></script>
