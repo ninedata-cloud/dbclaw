@@ -433,14 +433,29 @@ async def _send_recovery_via_integrations(db, alert, subscription):
         elif alert.metric_name and alert.metric_value is not None:
             recovery_metric_line = f"\n恢复时指标：{alert.metric_name} = {alert.metric_value:.2f}"
 
+        # Map alert_type and severity to Chinese labels for display
+        alert_type_labels = {
+            'threshold_violation': '超过阈值',
+            'custom_expression': '自定义表达式',
+            'system_error': '系统错误'
+        }
+        severity_labels = {'critical': '严重', 'high': '高', 'medium': '中', 'low': '低'}
+        alert_type_display = alert_type_labels.get(alert.alert_type, alert.alert_type)
+        severity_display = severity_labels.get(alert.severity, alert.severity)
+
         payload = {
             "title": f"【已恢复】{datasource.name if datasource else '未知数据源'} 告警已恢复",
-            "content": f"{alert.content}{recovery_metric_line}\n\n告警时间：{alert.created_at.strftime('%Y-%m-%d %H:%M:%S') if alert.created_at else '未知'}\n恢复时间：{resolved_at_str}",
-            "severity": "info",
+            "content": f"告警类型：{alert_type_display}\n严重程度：{severity_display}\n\n{alert.content}{recovery_metric_line}\n\n告警时间：{alert.created_at.strftime('%Y-%m-%d %H:%M:%S') if alert.created_at else '未知'}\n恢复时间：{resolved_at_str}",
+            "severity": alert.severity,
+            "alert_type": alert.alert_type,
             "datasource_name": datasource.name if datasource else "未知数据源",
             "alert_id": alert.id,
             "timestamp": resolved_at_str,
-            "status": "resolved"
+            "status": "resolved",
+            "metric_name": alert.metric_name,
+            "metric_value": alert.metric_value,
+            "threshold_value": alert.threshold_value,
+            "trigger_reason": alert.trigger_reason,
         }
 
         params = target.get("params") or {}

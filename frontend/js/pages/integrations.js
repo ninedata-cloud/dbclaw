@@ -31,10 +31,6 @@ class IntegrationsPage {
                     </div>
                 </div>
 
-                <div class="alert alert-info" style="margin-bottom: 16px; padding: 12px 16px; border-radius: 8px; background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe;">
-                    现在只保留 Integration 概念：通知目标参数在告警订阅中配置，入站采集参数在数据源中配置，Bot 参数在 Bot 绑定中配置。
-                </div>
-
                 <div id="bot-bindings-summary"></div>
 
                 <div id="integrations-list"></div>

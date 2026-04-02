@@ -10,6 +10,7 @@ const DiagnosisPage = {
     highRiskTools: [],
     availableModels: [],
     sessionTokenUsage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+    _toolCheckboxes: null,
 
     _getSelectedDatasource() {
         return this.datasourceSelector?.getValue() || Store.get('currentDatasource') || null;
@@ -344,7 +345,8 @@ const DiagnosisPage = {
         });
 
         // Add live badge toggle on checkbox change
-        document.querySelectorAll('.tool-toggle').forEach(cb => {
+        this._toolCheckboxes = document.querySelectorAll('.tool-toggle');
+        this._toolCheckboxes.forEach(cb => {
             cb.addEventListener('change', () => {
                 const badge = document.getElementById(`badge-${cb.dataset.tool}`);
                 if (badge) {
@@ -356,8 +358,8 @@ const DiagnosisPage = {
     },
 
     _applyToolSafety() {
-        const checkboxes = document.querySelectorAll('.tool-toggle');
         this.disabledTools = [];
+        const checkboxes = this._toolCheckboxes || document.querySelectorAll('.tool-toggle');
         checkboxes.forEach(cb => {
             if (!cb.checked) {
                 this.disabledTools.push(cb.dataset.tool);

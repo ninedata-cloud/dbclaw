@@ -36,8 +36,8 @@ async def check_network(host: str) -> bool:
         if proc is not None:
             try:
                 proc.kill()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to kill ping process: %s", e)
         return False
     except Exception as e:
         logger.warning(f"Network probe error for host {host}: {e}")

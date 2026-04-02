@@ -498,51 +498,53 @@ const InspectionPage = {
         this.pollInterval = setInterval(() => this.loadReports(), 5000);
     },
 
+    _errorTooltipHandler: null,
+
     setupErrorTooltips() {
-        const errorIcons = document.querySelectorAll('.error-icon');
-        let tooltip = null;
+        const container = DOM.$('#reportList');
+        if (!container) return;
 
-        errorIcons.forEach(icon => {
-            icon.addEventListener('mouseenter', (e) => {
+        // Remove old handler before adding new one
+        if (this._errorTooltipHandler) {
+            container.removeEventListener('mouseenter', this._errorTooltipHandler, true);
+            container.removeEventListener('mouseleave', this._errorTooltipHandler, true);
+        }
+
+        let currentTooltip = null;
+        this._errorTooltipHandler = (e) => {
+            const icon = e.target.closest('.error-icon');
+            if (!icon) return;
+
+            if (e.type === 'mouseenter') {
                 const errorMessage = icon.getAttribute('data-error');
+                currentTooltip = document.createElement('div');
+                currentTooltip.className = 'error-tooltip';
+                currentTooltip.textContent = errorMessage;
+                document.body.appendChild(currentTooltip);
 
-                // Create tooltip
-                tooltip = document.createElement('div');
-                tooltip.className = 'error-tooltip';
-                tooltip.textContent = errorMessage;
-                document.body.appendChild(tooltip);
-
-                // Position tooltip
                 const rect = icon.getBoundingClientRect();
-                const tooltipRect = tooltip.getBoundingClientRect();
+                const tooltipRect = currentTooltip.getBoundingClientRect();
 
-                // Position above the icon
                 let top = rect.top - tooltipRect.height - 10;
                 let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
 
-                // Adjust if tooltip goes off screen
-                if (top < 10) {
-                    top = rect.bottom + 10; // Show below if not enough space above
-                }
-                if (left < 10) {
-                    left = 10;
-                }
+                if (top < 10) top = rect.bottom + 10;
+                if (left < 10) left = 10;
                 if (left + tooltipRect.width > window.innerWidth - 10) {
                     left = window.innerWidth - tooltipRect.width - 10;
                 }
 
-                tooltip.style.top = top + 'px';
-                tooltip.style.left = left + 'px';
-                tooltip.style.opacity = '1';
-            });
+                currentTooltip.style.top = top + 'px';
+                currentTooltip.style.left = left + 'px';
+                currentTooltip.style.opacity = '1';
+            } else if (e.type === 'mouseleave' && currentTooltip) {
+                currentTooltip.remove();
+                currentTooltip = null;
+            }
+        };
 
-            icon.addEventListener('mouseleave', () => {
-                if (tooltip) {
-                    tooltip.remove();
-                    tooltip = null;
-                }
-            });
-        });
+        container.addEventListener('mouseenter', this._errorTooltipHandler, true);
+        container.addEventListener('mouseleave', this._errorTooltipHandler, true);
     },
 
     confirmDelete(reportId) {
@@ -661,6 +663,15 @@ const InspectionPage = {
         if (this.datasourceSelector) {
             this.datasourceSelector.destroy();
             this.datasourceSelector = null;
+        }
+        // Cleanup tooltip event listeners
+        if (this._errorTooltipHandler) {
+            const container = DOM.$('#reportList');
+            if (container) {
+                container.removeEventListener('mouseenter', this._errorTooltipHandler, true);
+                container.removeEventListener('mouseleave', this._errorTooltipHandler, true);
+            }
+            this._errorTooltipHandler = null;
         }
     }
 

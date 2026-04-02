@@ -19,6 +19,14 @@ const QueryEditor = {
         return wrapper;
     },
 
+    setHeight(height) {
+        const wrapper = DOM.$('.query-editor-wrapper');
+        if (wrapper) {
+            wrapper.style.height = height + 'px';
+            wrapper.style.flex = '0 0 ' + height + 'px';
+        }
+    },
+
     _initMonaco(container, defaultValue) {
         // Wait for Monaco loader to be available
         if (typeof require === 'undefined' || typeof require.config === 'undefined') {

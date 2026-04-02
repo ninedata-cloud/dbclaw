@@ -344,5 +344,5 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
             await websocket.send_json({"type": "error", "content": str(e)})
             # Then close with error code and reason
             await websocket.close(code=1011, reason=f"Server error: {str(e)[:100]}")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to send error message to WebSocket: %s", e)

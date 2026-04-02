@@ -13,7 +13,7 @@
     Router.register('skills', () => SkillsPage.render());
     Router.register('system-configs', () => SystemConfigsPage.render());
     Router.register('users', () => UsersPage.render());
-    Router.register('inspection', () => InspectionPage.render());
+    Router.register('inspection', () => { InspectionPage.render(); return () => InspectionPage.cleanup(); });
     Router.register('alerts', () => AlertsPage.init());
     Router.register('integrations', () => integrationsPage.init());
 

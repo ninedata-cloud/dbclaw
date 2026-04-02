@@ -1,3 +1,4 @@
+import asyncio
 import time
 from typing import Any, Dict, List, Optional
 from backend.services.db_connector import DBConnector
@@ -176,7 +177,7 @@ class PostgreSQLConnector(DBConnector):
             # Use fetch with LIMIT for truncation detection
             rows = await conn.fetch(f"{sql.strip().rstrip(';')} LIMIT {max_rows + 1}")
             elapsed = round((time.time() - start) * 1000, 2)
-            columns = [d[0] for d in rows[0].keys()] if rows else []
+            columns = list(rows[0].keys()) if rows else []
             truncated = len(rows) > max_rows
             limited = rows[:max_rows]
             return {

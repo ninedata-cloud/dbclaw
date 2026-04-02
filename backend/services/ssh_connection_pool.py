@@ -142,11 +142,13 @@ class SSHConnectionPool:
                     key_file = StringIO(private_key_str)
                     try:
                         private_key = paramiko.RSAKey.from_private_key(key_file)
-                    except Exception:
+                    except Exception as e:
+                        logger.debug("RSA key parse failed, trying Ed25519: %s", e)
                         key_file.seek(0)
                         try:
                             private_key = paramiko.Ed25519Key.from_private_key(key_file)
-                        except Exception:
+                        except Exception as e:
+                            logger.debug("Ed25519 key parse failed, trying ECDSA: %s", e)
                             key_file.seek(0)
                             private_key = paramiko.ECDSAKey.from_private_key(key_file)
                     await loop.run_in_executor(
@@ -203,8 +205,8 @@ class SSHConnectionPool:
                         async with self._get_lock(host_id):
                             try:
                                 conn.client.close()
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.debug("Error closing SSH connection during health check: %s", e)
                             del self._connections[host_id]
                         continue
                     
@@ -240,8 +242,8 @@ class SSHConnectionPool:
                 if conn is not None:
                     try:
                         conn.client.close()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("Error closing unhealthy SSH connection: %s", e)
                 
                 conn = await self._create_connection(db, host_id)
                 if conn is None:
