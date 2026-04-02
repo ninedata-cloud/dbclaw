@@ -14,6 +14,7 @@ from backend.models.chat_event_dedup import ChatEventDedup
 from backend.models.diagnostic_session import ChatMessage, DiagnosticSession
 from backend.models.integration import Integration
 from backend.models.integration_bot_binding import IntegrationBotBinding
+from backend.models.soft_delete import alive_filter
 from backend.services.chat_orchestration_service import prepare_user_turn, process_stream_events, resolve_pending_approval
 from backend.services.feishu_service import format_reply_text
 from backend.services.weixin_service import weixin_service
@@ -34,7 +35,11 @@ class WeixinBotService:
     @staticmethod
     async def get_bot_integration(db: AsyncSession) -> Optional[Integration]:
         result = await db.execute(
-            select(Integration).where(Integration.integration_id == "builtin_weixin_bot", Integration.enabled == True)
+            select(Integration).where(
+                Integration.integration_id == "builtin_weixin_bot",
+                Integration.enabled == True,
+                alive_filter(Integration),
+            )
         )
         return result.scalar_one_or_none()
 

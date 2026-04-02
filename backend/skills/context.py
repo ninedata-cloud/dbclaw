@@ -4,6 +4,7 @@ Skill execution context - provides safe API for skills to access system resource
 from typing import Dict, Any, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.utils.datetime_helper import now
+from backend.models.soft_delete import alive_filter
 
 
 class SkillContext:
@@ -37,10 +38,11 @@ class SkillContext:
         if check_permission:
             self._check_permission("execute_query")
         from backend.models.datasource import Datasource
+        from backend.models.soft_delete import alive_filter
         from sqlalchemy import select
 
         result = await self.db.execute(
-            select(Datasource).where(Datasource.id == datasource_id)
+            select(Datasource).where(Datasource.id == datasource_id, alive_filter(Datasource))
         )
         datasource = result.scalar_one_or_none()
         if not datasource:

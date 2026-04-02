@@ -13,6 +13,7 @@ from backend.models.inspection_config import InspectionConfig
 from backend.models.inspection_trigger import InspectionTrigger
 from backend.models.report import Report
 from backend.models.datasource import Datasource
+from backend.models.soft_delete import alive_filter, get_alive_by_id
 from backend.services.inspection_service import InspectionService
 from backend.services.public_share_service import PublicShareService
 
@@ -203,8 +204,8 @@ async def list_all_reports(
     from backend.models.datasource import Datasource
 
     query = select(Report, Datasource.name.label('datasource_name')).join(
-        Datasource, Report.datasource_id == Datasource.id, isouter=True
-    )
+        Datasource, and_(Report.datasource_id == Datasource.id, alive_filter(Datasource)), isouter=True
+    ).where(alive_filter(Report))
 
     if datasource_id:
         query = query.where(Report.datasource_id == datasource_id)
@@ -219,7 +220,7 @@ async def list_all_reports(
 
     # Count total
     from sqlalchemy import func
-    count_query = select(func.count()).select_from(Report)
+    count_query = select(func.count()).select_from(Report).where(alive_filter(Report))
     if datasource_id:
         count_query = count_query.where(Report.datasource_id == datasource_id)
     if trigger_type:
@@ -263,7 +264,7 @@ async def list_reports(
     db: AsyncSession = Depends(get_db)
 ):
     """List inspection reports for a datasource"""
-    query = select(Report).where(Report.datasource_id == datasource_id)
+    query = select(Report).where(Report.datasource_id == datasource_id, alive_filter(Report))
 
     if trigger_type:
         query = query.where(Report.trigger_type == trigger_type)
@@ -290,8 +291,7 @@ async def list_reports(
 @router.get("/reports/detail/{report_id}")
 async def get_report_detail(report_id: int, db: AsyncSession = Depends(get_db)):
     """Get full report details"""
-    result = await db.execute(select(Report).where(Report.id == report_id))
-    report = result.scalar_one_or_none()
+    report = await get_alive_by_id(db, Report, report_id)
     if not report:
         raise HTTPException(status_code=404, detail="报告不存在")
 
@@ -339,7 +339,7 @@ async def public_report_page(
     report = await PublicShareService.get_report_or_404(db, report_id)
 
     # Fetch datasource info
-    datasource = await db.get(Datasource, report.datasource_id)
+    datasource = await get_alive_by_id(db, Datasource, report.datasource_id)
     ds_host = datasource.host if datasource else '-'
     ds_port = datasource.port if datasource else '-'
     ds_db = datasource.database if datasource else '-'
@@ -461,8 +461,7 @@ async def public_report_page(
 @router.get("/reports/export/{report_id}/markdown")
 async def export_report_markdown(report_id: int, db: AsyncSession = Depends(get_db)):
     """Export report as Markdown file"""
-    result = await db.execute(select(Report).where(Report.id == report_id))
-    report = result.scalar_one_or_none()
+    report = await get_alive_by_id(db, Report, report_id)
     if not report:
         raise HTTPException(status_code=404, detail="报告不存在")
 
@@ -486,8 +485,7 @@ async def export_report_markdown(report_id: int, db: AsyncSession = Depends(get_
 @router.get("/reports/export/{report_id}/pdf")
 async def export_report_pdf(report_id: int, db: AsyncSession = Depends(get_db)):
     """Export report as PDF file"""
-    result = await db.execute(select(Report).where(Report.id == report_id))
-    report = result.scalar_one_or_none()
+    report = await get_alive_by_id(db, Report, report_id)
     if not report:
         raise HTTPException(status_code=404, detail="报告不存在")
 
@@ -524,8 +522,7 @@ async def export_report_pdf(report_id: int, db: AsyncSession = Depends(get_db)):
 @router.delete("/reports/{report_id}")
 async def delete_report(report_id: int, db: AsyncSession = Depends(get_db)):
     """Delete an inspection report and clean up related triggers"""
-    result = await db.execute(select(Report).where(Report.id == report_id))
-    report = result.scalar_one_or_none()
+    report = await get_alive_by_id(db, Report, report_id)
     if not report:
         raise HTTPException(status_code=404, detail="报告不存在")
 
@@ -537,8 +534,7 @@ async def delete_report(report_id: int, db: AsyncSession = Depends(get_db)):
         .values(report_id=None)
     )
 
-    # Delete the report
-    await db.delete(report)
+    report.soft_delete(None)
     await db.commit()
 
     return {"message": "报告已删除", "report_id": report_id}
@@ -559,7 +555,7 @@ async def batch_delete_reports(
 
     # Verify all reports exist
     result = await db.execute(
-        select(Report).where(Report.id.in_(request.report_ids))
+        select(Report).where(Report.id.in_(request.report_ids), alive_filter(Report))
     )
     reports = result.scalars().all()
     found_ids = {r.id for r in reports}
@@ -572,17 +568,16 @@ async def batch_delete_reports(
         )
 
     # Clean up related inspection triggers
-    from sqlalchemy import update, delete as sql_delete
+    from sqlalchemy import update
     await db.execute(
         update(InspectionTrigger)
         .where(InspectionTrigger.report_id.in_(request.report_ids))
         .values(report_id=None)
     )
 
-    # Delete all reports
-    await db.execute(
-        sql_delete(Report).where(Report.id.in_(request.report_ids))
-    )
+    for report in reports:
+        report.soft_delete(None)
+
     await db.commit()
 
     return {

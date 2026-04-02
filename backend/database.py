@@ -59,6 +59,9 @@ async def init_db():
     settings = get_settings()
 
     if settings.database_url.startswith("postgresql"):
+        from backend.migrations.add_soft_delete_columns import migrate as migrate_soft_delete_columns
+        await migrate_soft_delete_columns()
+
         try:
             from backend.migrations.add_user_session_security import migrate as migrate_user_session_security
             await migrate_user_session_security()
@@ -67,6 +70,7 @@ async def init_db():
 
     # Seed default admin user if no users exist
     from backend.models.user import User
+    from backend.models.soft_delete import alive_filter
     from backend.utils.security import hash_password
     from sqlalchemy import select
 
@@ -76,7 +80,7 @@ async def init_db():
         raise RuntimeError("PUBLIC_SHARE_SECRET_KEY 未配置，拒绝使用默认分享密钥启动")
 
     async with async_session() as session:
-        result = await session.execute(select(User).limit(1))
+        result = await session.execute(select(User).where(alive_filter(User)).limit(1))
         if result.scalar_one_or_none() is None:
             if not settings.initial_admin_password:
                 raise RuntimeError("INITIAL_ADMIN_PASSWORD 未配置，无法初始化管理员账号")

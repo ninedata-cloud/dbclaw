@@ -1,9 +1,10 @@
 from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, JSON
 from sqlalchemy.sql import func
 from backend.database import Base
+from backend.models.soft_delete import SoftDeleteMixin
 
 
-class Datasource(Base):
+class Datasource(SoftDeleteMixin, Base):
     __tablename__ = "datasources"
 
     id = Column(Integer, primary_key=True, autoincrement=True)

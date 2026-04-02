@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import async_session
 from backend.models.datasource import Datasource
+from backend.models.soft_delete import alive_filter
 from backend.models.metric_snapshot import MetricSnapshot
 from backend.services.ai_agent import get_ai_client
 from backend.agent.prompts import (
@@ -310,7 +311,7 @@ async def _run_perception_cycle():
     async with async_session() as db:
         # Get all active datasources
         result = await db.execute(
-            select(Datasource).where(Datasource.is_active == True)
+            select(Datasource).where(Datasource.is_active == True, alive_filter(Datasource))
         )
         datasources = result.scalars().all()
 

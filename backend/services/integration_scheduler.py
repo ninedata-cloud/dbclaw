@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.database import async_session
 from backend.models.integration import Integration, IntegrationExecutionLog
 from backend.models.datasource import Datasource
+from backend.models.soft_delete import get_alive_by_id, alive_filter
 from backend.services.integration_executor import IntegrationExecutor
 from backend.services.metric_collector import _push_to_subscribers
 from backend.utils.datetime_helper import now
@@ -37,7 +38,7 @@ async def execute_integration(datasource_id: int):
 
     async with async_session() as session:
         try:
-            datasource = await session.get(Datasource, datasource_id)
+            datasource = await get_alive_by_id(session, Datasource, datasource_id)
             if not datasource or not datasource.is_active:
                 logger.warning(f"数据源 {datasource_id} 不存在或未启用")
                 return
@@ -51,7 +52,7 @@ async def execute_integration(datasource_id: int):
                 logger.warning(f"数据源 {datasource_id} 未配置 inbound_source.integration_id")
                 return
 
-            integration = await session.get(Integration, int(integration_id))
+            integration = await get_alive_by_id(session, Integration, int(integration_id))
             if not integration or not integration.enabled:
                 logger.warning(f"集成 {integration_id} 不存在或未启用")
                 return
@@ -165,7 +166,8 @@ async def schedule_all_integrations():
             select(Datasource).where(
                 and_(
                     Datasource.metric_source == 'integration',
-                    Datasource.is_active == True
+                    Datasource.is_active == True,
+                    alive_filter(Datasource)
                 )
             )
         )

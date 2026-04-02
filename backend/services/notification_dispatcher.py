@@ -11,6 +11,7 @@ from backend.database import async_session
 from backend.services.alert_service import AlertService
 from backend.services.notification_service import NotificationService
 from backend.services.aggregation_engine import AggregationEngine
+from backend.models.soft_delete import alive_filter, get_alive_by_id
 from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
@@ -65,7 +66,9 @@ async def _process_pending_alerts():
                     # Check if datasource exists (may have been deleted)
                     from backend.models.datasource import Datasource
                     from sqlalchemy import select
-                    ds_result = await db.execute(select(Datasource).where(Datasource.id == alert.datasource_id))
+                    ds_result = await db.execute(
+                        select(Datasource).where(Datasource.id == alert.datasource_id, alive_filter(Datasource))
+                    )
                     datasource = ds_result.scalar_one_or_none()
 
                     # Pre-diagnosis: run sync diagnosis before sending notifications (max 60s timeout)
@@ -190,7 +193,9 @@ async def _send_via_integrations(db, alert, subscription, diagnosis_result=None)
 
     datasource = None
     if alert.datasource_id:
-        ds_result = await db.execute(select(Datasource).where(Datasource.id == alert.datasource_id))
+        ds_result = await db.execute(
+            select(Datasource).where(Datasource.id == alert.datasource_id, alive_filter(Datasource))
+        )
         datasource = ds_result.scalar_one_or_none()
 
     settings = get_settings()
@@ -218,7 +223,7 @@ async def _send_via_integrations(db, alert, subscription, diagnosis_result=None)
         if not integration_id:
             continue
 
-        integration = await db.get(Integration, int(integration_id))
+        integration = await get_alive_by_id(db, Integration, int(integration_id))
         if not integration or not integration.enabled:
             logger.warning(f"Integration {integration_id} 不存在或已禁用")
             continue
@@ -406,7 +411,9 @@ async def _send_recovery_via_integrations(db, alert, subscription):
 
     datasource = None
     if alert.datasource_id:
-        ds_result = await db.execute(select(Datasource).where(Datasource.id == alert.datasource_id))
+        ds_result = await db.execute(
+            select(Datasource).where(Datasource.id == alert.datasource_id, alive_filter(Datasource))
+        )
         datasource = ds_result.scalar_one_or_none()
 
     for target in (subscription.integration_targets or []):
@@ -421,7 +428,7 @@ async def _send_recovery_via_integrations(db, alert, subscription):
         if not integration_id:
             continue
 
-        integration = await db.get(Integration, int(integration_id))
+        integration = await get_alive_by_id(db, Integration, int(integration_id))
         if not integration or not integration.enabled:
             logger.warning(f"Integration {integration_id} 不存在或已禁用")
             continue
@@ -592,7 +599,7 @@ async def _is_datasource_silenced(db, datasource_id: int) -> bool:
     from backend.utils.datetime_helper import now
 
     result = await db.execute(
-        select(Datasource).where(Datasource.id == datasource_id)
+        select(Datasource).where(Datasource.id == datasource_id, alive_filter(Datasource))
     )
     datasource = result.scalar_one_or_none()
 

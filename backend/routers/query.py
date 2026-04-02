@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from backend.database import get_db
 from backend.models.datasource import Datasource
+from backend.models.soft_delete import alive_filter
 from backend.schemas.query import (
     QueryExecuteRequest, QueryExplainRequest, QueryResult,
     SchemaInfo, TableInfo, ColumnInfo
@@ -34,7 +35,7 @@ def _is_safe_query(sql: str) -> bool:
 
 
 async def _get_connector_for(datasource_id: int, db: AsyncSession):
-    result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
+    result = await db.execute(select(Datasource).where(Datasource.id == datasource_id, alive_filter(Datasource)))
     datasource = result.scalar_one_or_none()
     if not datasource:
         raise HTTPException(status_code=404, detail="Datasource not found")

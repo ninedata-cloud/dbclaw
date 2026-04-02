@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agent.conversation_skills import execute_skill_call, run_conversation_with_skills
 from backend.models.diagnostic_session import ChatMessage, DiagnosticSession
+from backend.models.soft_delete import alive_filter, alive_select
 
 logger = logging.getLogger(__name__)
 
@@ -188,7 +189,7 @@ async def _load_pending_approval_from_db(
     user_id: int | None,
 ) -> dict[str, Any] | None:
     result = await db.execute(
-        select(ChatMessage)
+        alive_select(ChatMessage)
         .where(
             ChatMessage.session_id == session_id,
             ChatMessage.role == "approval_request",
@@ -209,7 +210,9 @@ async def _load_pending_approval_from_db(
     if data.get("status") not in {None, "pending"}:
         return None
 
-    session_result = await db.execute(select(DiagnosticSession).where(DiagnosticSession.id == session_id))
+    session_result = await db.execute(
+        alive_select(DiagnosticSession).where(DiagnosticSession.id == session_id)
+    )
     session = session_result.scalar_one_or_none()
 
     return {
@@ -234,7 +237,7 @@ async def _load_pending_approval_from_db(
 
 
 async def _accumulate_usage(db: AsyncSession, session_id: int, user_id: int | None, usage: dict[str, Any]) -> None:
-    query = select(DiagnosticSession).where(DiagnosticSession.id == session_id)
+    query = alive_select(DiagnosticSession).where(DiagnosticSession.id == session_id)
     if user_id is not None:
         query = query.where(DiagnosticSession.user_id == user_id)
     session_result = await db.execute(query)
@@ -350,7 +353,7 @@ async def prepare_user_turn(
     )
     db.add(msg)
 
-    query = select(DiagnosticSession).where(DiagnosticSession.id == session_id)
+    query = alive_select(DiagnosticSession).where(DiagnosticSession.id == session_id)
     if user_id is not None:
         query = query.where(DiagnosticSession.user_id == user_id)
     session_result = await db.execute(query)
@@ -380,7 +383,7 @@ async def prepare_user_turn(
     await db.commit()
 
     msgs_result = await db.execute(
-        select(ChatMessage)
+        alive_select(ChatMessage)
         .where(ChatMessage.session_id == session_id)
         .order_by(ChatMessage.created_at)
     )
@@ -402,7 +405,7 @@ async def continue_conversation_after_tool(
     on_event: EventCallback = None,
 ) -> tuple[str, dict[str, int], bool]:
     msgs_result = await db.execute(
-        select(ChatMessage)
+        alive_select(ChatMessage)
         .where(ChatMessage.session_id == session_id)
         .order_by(ChatMessage.created_at)
     )

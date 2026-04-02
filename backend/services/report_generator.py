@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from backend.models.datasource import Datasource
 from backend.models.report import Report
+from backend.models.soft_delete import alive_filter, get_alive_by_id
 from backend.agent.prompts import REPORT_GENERATION_PROMPT
 from backend.database import async_session
 from backend.agent.conversation_skills import generate_report_with_skills
@@ -57,8 +58,7 @@ async def generate_report(report_id: int, datasource_id: int, report_type: str =
 
 async def _update_report_status(report_id: int, status: str, **kwargs):
     async with async_session() as db:
-        result = await db.execute(select(Report).where(Report.id == report_id))
-        report = result.scalar_one_or_none()
+        report = await get_alive_by_id(db, Report, report_id)
         if report:
             report.status = status
             if status == "generating":
@@ -85,7 +85,7 @@ class ReportGenerator:
         result = await self.db.execute(select(InspectionTrigger).where(InspectionTrigger.id == trigger_id))
         trigger = result.scalar_one()
 
-        result = await self.db.execute(select(Datasource).where(Datasource.id == trigger.datasource_id))
+        result = await self.db.execute(select(Datasource).where(Datasource.id == trigger.datasource_id, alive_filter(Datasource)))
         datasource = result.scalar_one()
 
         result = await self.db.execute(select(InspectionConfig).where(InspectionConfig.datasource_id == trigger.datasource_id))

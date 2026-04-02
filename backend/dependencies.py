@@ -5,6 +5,7 @@ from sqlalchemy import select
 from backend.config import get_settings
 from backend.database import get_db
 from backend.models.user import User
+from backend.models.soft_delete import alive_filter
 from backend.services.session_service import SessionService
 
 
@@ -16,7 +17,7 @@ async def get_current_user(
     raw_session_id = request.cookies.get(settings.session_cookie_name)
     session = await SessionService.get_active_session(db, raw_session_id)
     if session:
-        result = await db.execute(select(User).where(User.id == session.user_id))
+        result = await db.execute(select(User).where(User.id == session.user_id, alive_filter(User)))
         user = result.scalar_one_or_none()
         if user is None:
             await SessionService.revoke_session(db, session, "user_not_found")

@@ -298,8 +298,9 @@ async def run_conversation_with_skills(
     if datasource_id and db:
         from backend.models.datasource import Datasource
         from backend.models.host import Host
+        from backend.models.soft_delete import alive_filter
         from sqlalchemy import select
-        result = await db.execute(select(Datasource).filter(Datasource.id == datasource_id))
+        result = await db.execute(select(Datasource).filter(Datasource.id == datasource_id, alive_filter(Datasource)))
         datasource = result.scalar_one_or_none()
         if datasource:
             datasource_db_type = datasource.db_type
@@ -592,9 +593,10 @@ async def generate_report_with_skills(
     try:
         from backend.models.datasource import Datasource
         from backend.models.host import Host
+        from backend.models.soft_delete import alive_filter
         from sqlalchemy import select
 
-        ds_result = await db.execute(select(Datasource).filter(Datasource.id == datasource_id))
+        ds_result = await db.execute(select(Datasource).filter(Datasource.id == datasource_id, alive_filter(Datasource)))
         ds = ds_result.scalar_one_or_none()
         if ds and ds.host_id:
             host_result = await db.execute(select(Host).filter(Host.id == ds.host_id))

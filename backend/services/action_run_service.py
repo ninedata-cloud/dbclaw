@@ -10,6 +10,7 @@ from backend.models.action_run import ActionRun
 from backend.models.datasource import Datasource
 from backend.models.diagnostic_session import DiagnosticSession
 from backend.models.report import Report
+from backend.models.soft_delete import alive_filter, get_alive_by_id
 from backend.skills.registry import SkillRegistry
 from backend.utils.datetime_helper import now
 
@@ -91,7 +92,7 @@ def _extract_text_summary(content_md: Optional[str]) -> str:
 
 
 async def _build_default_action_spec(db: AsyncSession, report: Report) -> list[dict[str, Any]]:
-    datasource = await db.get(Datasource, report.datasource_id)
+    datasource = await get_alive_by_id(db, Datasource, report.datasource_id)
     db_type = datasource.db_type if datasource else None
     verify_skill = READ_ONLY_VERIFY_SKILLS.get(db_type or "")
 
@@ -189,7 +190,7 @@ async def create_action_run(
     user_id: Optional[int] = None,
     session_id: Optional[int] = None,
 ) -> ActionRun:
-    report = await db.get(Report, report_id)
+    report = await get_alive_by_id(db, Report, report_id)
     if not report:
         raise ValueError("报告不存在")
 
@@ -200,11 +201,11 @@ async def create_action_run(
 
     session = None
     if session_id is not None:
-        session = await db.get(DiagnosticSession, session_id)
+        session = await get_alive_by_id(db, DiagnosticSession, session_id)
         if not session:
             raise ValueError("会话不存在")
     elif report.ai_conversation_id:
-        session = await db.get(DiagnosticSession, report.ai_conversation_id)
+        session = await get_alive_by_id(db, DiagnosticSession, report.ai_conversation_id)
         session_id = session.id if session else None
 
     step = (action.get("steps") or [{}])[0]

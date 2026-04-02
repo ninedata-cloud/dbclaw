@@ -7,6 +7,7 @@ from sqlalchemy import select
 from backend.config import get_settings
 from backend.database import async_session
 from backend.models.user import User
+from backend.models.soft_delete import alive_filter
 from backend.services.config_service import get_config
 from backend.services.metric_collector import subscribe, unsubscribe
 from backend.services.session_service import SessionService
@@ -39,7 +40,7 @@ async def _authenticate_websocket(websocket: WebSocket) -> User | None:
         session = await SessionService.get_active_session(db, session_id)
         if not session:
             return None
-        result = await db.execute(select(User).where(User.id == session.user_id))
+        result = await db.execute(select(User).where(User.id == session.user_id, alive_filter(User)))
         user = result.scalar_one_or_none()
         if not user or not user.is_active:
             return None

@@ -13,6 +13,7 @@ from markdown_it import MarkdownIt
 
 from backend.models.datasource import Datasource
 from backend.models.report import Report
+from backend.models.soft_delete import alive_filter, get_alive_by_id
 from backend.agent.conversation_skills import run_conversation_with_skills
 from backend.agent.prompts import DIAGNOSTIC_PROMPT, REPORT_GENERATION_PROMPT
 from backend.utils.datetime_helper import now
@@ -50,7 +51,7 @@ async def generate_ai_report(
         yield {"type": "status", "message": "正在初始化诊断会话..."}
 
         # Load datasource configuration
-        datasource_result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
+        datasource_result = await db.execute(select(Datasource).where(Datasource.id == datasource_id, alive_filter(Datasource)))
         datasource = datasource_result.scalar_one_or_none()
 
         if not datasource:
@@ -345,8 +346,7 @@ async def _update_report_status(
     **kwargs
 ):
     """Update report status and fields in database"""
-    result = await db.execute(select(Report).where(Report.id == report_id))
-    report = result.scalar_one_or_none()
+    report = await get_alive_by_id(db, Report, report_id)
 
     if report:
         report.status = status

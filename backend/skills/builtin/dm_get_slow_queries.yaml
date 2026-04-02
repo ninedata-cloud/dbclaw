@@ -24,7 +24,7 @@ code: |
       from backend.utils.encryption import decrypt_value
 
       # Get datasource
-      datasource = await context.db.get(Datasource, datasource_id)
+      datasource = await context.get_connection(datasource_id)
       if not datasource:
           return {"success": False, "error": "Datasource not found"}
 

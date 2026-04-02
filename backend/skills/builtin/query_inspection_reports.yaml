@@ -39,16 +39,14 @@ code: |
   async def execute(context, params):
       from backend.models.report import Report
       from backend.models.datasource import Datasource
+      from backend.models.soft_delete import alive_filter, get_alive_by_id
       from sqlalchemy import select, desc
       
       report_id = params.get('report_id')
       
       # Detail mode (when report_id provided)
       if report_id:
-          result = await context.db.execute(
-              select(Report).where(Report.id == report_id)
-          )
-          report = result.scalar_one_or_none()
+          report = await get_alive_by_id(context.db, Report, report_id)
           
           if not report:
               return {"success": False, "error": f"Report {report_id} not found"}
@@ -56,10 +54,7 @@ code: |
           # Get datasource name
           datasource_name = None
           if report.datasource_id:
-              ds_result = await context.db.execute(
-                  select(Datasource).where(Datasource.id == report.datasource_id)
-              )
-              datasource = ds_result.scalar_one_or_none()
+              datasource = await get_alive_by_id(context.db, Datasource, report.datasource_id)
               if datasource:
                   datasource_name = datasource.name
           
@@ -89,8 +84,8 @@ code: |
       
       # Build query with join
       query = select(Report, Datasource.name.label('datasource_name')).join(
-          Datasource, Report.datasource_id == Datasource.id, isouter=True
-      )
+          Datasource, (Report.datasource_id == Datasource.id) & alive_filter(Datasource), isouter=True
+      ).where(alive_filter(Report))
       
       if datasource_id:
           query = query.where(Report.datasource_id == datasource_id)

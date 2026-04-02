@@ -1,9 +1,10 @@
 from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Boolean
 from sqlalchemy.sql import func
 from backend.database import Base
+from backend.models.soft_delete import SoftDeleteMixin
 
 
-class DiagnosticSession(Base):
+class DiagnosticSession(SoftDeleteMixin, Base):
     __tablename__ = "diagnostic_sessions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -21,7 +22,7 @@ class DiagnosticSession(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
-class ChatMessage(Base):
+class ChatMessage(SoftDeleteMixin, Base):
     __tablename__ = "chat_messages"
 
     id = Column(Integer, primary_key=True, autoincrement=True)

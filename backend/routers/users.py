@@ -5,6 +5,7 @@ from typing import List
 
 from backend.database import get_db
 from backend.models.user import User
+from backend.models.soft_delete import alive_filter, alive_select, get_alive_by_id
 from backend.models.login_log import LoginLog
 from backend.schemas.auth import (
     UserCreate, UserUpdate, UserResponse, ResetPasswordRequest, LoginLogResponse,
@@ -20,13 +21,13 @@ router = APIRouter(prefix="/api/users", tags=["users"], dependencies=[Depends(ge
 
 @router.get("", response_model=List[UserResponse])
 async def list_users(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).order_by(User.id))
+    result = await db.execute(alive_select(User).order_by(User.id))
     return result.scalars().all()
 
 
 @router.post("", response_model=UserResponse)
 async def create_user(data: UserCreate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.username == data.username))
+    result = await db.execute(select(User).where(User.username == data.username, alive_filter(User)))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="用户名已存在")
 
@@ -46,8 +47,7 @@ async def create_user(data: UserCreate, db: AsyncSession = Depends(get_db)):
 
 @router.put("/{user_id}", response_model=UserResponse)
 async def update_user(user_id: int, data: UserUpdate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
+    user = await get_alive_by_id(db, User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
 
@@ -69,12 +69,13 @@ async def delete_user(
     if current_admin.id == user_id:
         raise HTTPException(status_code=400, detail="不能删除自己")
 
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
+    user = await get_alive_by_id(db, User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
 
-    await db.delete(user)
+    user.soft_delete(current_admin.id)
+    user.session_version += 1
+    await SessionService.revoke_user_sessions(db, user.id, "user_deleted")
     await db.commit()
     return {"message": "User deleted"}
 
@@ -86,8 +87,7 @@ async def reset_password(
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin),
 ):
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
+    user = await get_alive_by_id(db, User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
     if user.username == "admin" and current_admin.id != user.id:
@@ -110,8 +110,7 @@ async def toggle_status(
     if current_admin.id == user_id:
         raise HTTPException(status_code=400, detail="Cannot change your own status")
 
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
+    user = await get_alive_by_id(db, User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
 

@@ -9,6 +9,7 @@ from sqlalchemy import select
 
 from backend.database import get_db
 from backend.models.datasource import Datasource
+from backend.models.soft_delete import alive_filter, get_alive_by_id
 from backend.services.ai_perception_service import (
     get_perception_status,
     get_datasource_health,
@@ -68,7 +69,7 @@ async def get_perception_status_api(
             return 85, "warning"
 
     # Enrich with datasource info
-    result = await db.execute(select(Datasource).where(Datasource.is_active == True))
+    result = await db.execute(select(Datasource).where(Datasource.is_active == True, alive_filter(Datasource)))
     datasources = result.scalars().all()
 
     enriched_datasources = []
@@ -117,10 +118,7 @@ async def get_datasource_insights(
     Get AI-generated health insights for a specific datasource.
     """
     # Verify datasource exists
-    result = await db.execute(
-        select(Datasource).where(Datasource.id == datasource_id)
-    )
-    ds = result.scalar_one_or_none()
+    ds = await get_alive_by_id(db, Datasource, datasource_id)
     if not ds:
         raise HTTPException(status_code=404, detail="Datasource not found")
 
@@ -145,7 +143,7 @@ async def list_datasources_health(
     """
     Get health status for all datasources (alias for status endpoint).
     """
-    result = await db.execute(select(Datasource).where(Datasource.is_active == True))
+    result = await db.execute(select(Datasource).where(Datasource.is_active == True, alive_filter(Datasource)))
     datasources = result.scalars().all()
 
     return [

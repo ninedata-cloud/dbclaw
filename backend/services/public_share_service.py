@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.alert_message import AlertMessage
 from backend.models.report import Report
+from backend.models.soft_delete import alive_filter, get_alive_by_id
 from backend.services.config_service import get_config
 from backend.utils.security import create_public_share_token, decode_public_share_token
 
@@ -56,7 +57,7 @@ class PublicShareService:
     @staticmethod
     async def get_report_by_alert_id(db: AsyncSession, alert_id: int) -> Report | None:
         result = await db.execute(
-            select(Report).where(Report.alert_id == alert_id).order_by(Report.created_at.desc()).limit(1)
+            select(Report).where(Report.alert_id == alert_id, alive_filter(Report)).order_by(Report.created_at.desc()).limit(1)
         )
         return result.scalar_one_or_none()
 
@@ -69,7 +70,7 @@ class PublicShareService:
 
     @staticmethod
     async def get_report_or_404(db: AsyncSession, report_id: int) -> Report:
-        report = await db.get(Report, report_id)
+        report = await get_alive_by_id(db, Report, report_id)
         if not report:
             raise HTTPException(status_code=404, detail="报告不存在")
         return report

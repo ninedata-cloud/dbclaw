@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 
 from backend.models.document import DocCategory, DocDocument
+from backend.models.soft_delete import alive_filter, get_alive_by_id
 from backend.schemas.document import DocDocumentCreate, DocDocumentUpdate
 
 
@@ -38,7 +39,7 @@ async def get_category_tree(db: AsyncSession, db_type: Optional[str] = None):
 async def list_documents_by_category(db: AsyncSession, category_id: int):
     result = await db.execute(
         select(DocDocument)
-        .where(DocDocument.category_id == category_id, DocDocument.is_active == True)
+        .where(DocDocument.category_id == category_id, DocDocument.is_active == True, alive_filter(DocDocument))
         .order_by(DocDocument.sort_order)
     )
     return result.scalars().all()
@@ -49,7 +50,7 @@ async def list_documents_for_ai(db: AsyncSession, db_type: Optional[str] = None)
     q = (
         select(DocDocument, DocCategory.name.label("cat_name"), DocCategory.db_type.label("cat_db_type"))
         .join(DocCategory, DocDocument.category_id == DocCategory.id)
-        .where(DocDocument.is_active == True)
+        .where(DocDocument.is_active == True, alive_filter(DocDocument))
     )
     if db_type:
         q = q.where(DocCategory.db_type == db_type)
@@ -68,8 +69,7 @@ async def list_documents_for_ai(db: AsyncSession, db_type: Optional[str] = None)
 
 
 async def get_document(db: AsyncSession, doc_id: int) -> DocDocument:
-    result = await db.execute(select(DocDocument).where(DocDocument.id == doc_id))
-    doc = result.scalar_one_or_none()
+    doc = await get_alive_by_id(db, DocDocument, doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="文档不存在")
     return doc
@@ -103,9 +103,9 @@ async def update_document(db: AsyncSession, doc_id: int, data: DocDocumentUpdate
     return doc
 
 
-async def delete_document(db: AsyncSession, doc_id: int):
+async def delete_document(db: AsyncSession, doc_id: int, user_id: int | None = None):
     doc = await get_document(db, doc_id)
     if doc.is_builtin:
         raise HTTPException(status_code=403, detail="内置文档不可删除")
-    await db.delete(doc)
+    doc.soft_delete(user_id)
     await db.commit()

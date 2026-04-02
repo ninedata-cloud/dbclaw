@@ -10,6 +10,7 @@ from backend.models.chat_channel_binding import ChatChannelBinding
 from backend.models.chat_event_dedup import ChatEventDedup
 from backend.models.diagnostic_session import ChatMessage, DiagnosticSession
 from backend.models.integration import Integration
+from backend.models.soft_delete import alive_filter, alive_select
 from backend.services.chat_orchestration_service import prepare_user_turn, process_stream_events, resolve_pending_approval
 from backend.services.feishu_service import feishu_service, format_reply_text
 
@@ -235,7 +236,7 @@ async def _build_followup_event_handler(
 
 async def _get_latest_approval_request(db: AsyncSession, session_id: int, approval_id: str) -> ChatMessage | None:
     result = await db.execute(
-        select(ChatMessage)
+        alive_select(ChatMessage)
         .where(
             ChatMessage.session_id == session_id,
             ChatMessage.role == "approval_request",
@@ -250,7 +251,11 @@ class FeishuBotService:
     @staticmethod
     async def get_bot_integration(db: AsyncSession) -> Optional[Integration]:
         result = await db.execute(
-            select(Integration).where(Integration.integration_id == "builtin_feishu_bot", Integration.enabled == True)
+            select(Integration).where(
+                Integration.integration_id == "builtin_feishu_bot",
+                Integration.enabled == True,
+                alive_filter(Integration),
+            )
         )
         return result.scalar_one_or_none()
 
@@ -532,7 +537,7 @@ class FeishuBotService:
                     return _toast_response("已批准执行，结果已返回。", "success")
 
                 follow_up_result = await db.execute(
-                    select(ChatMessage)
+                    alive_select(ChatMessage)
                     .where(
                         ChatMessage.session_id == int(session_id),
                         ChatMessage.role == "assistant",

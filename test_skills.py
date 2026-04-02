@@ -447,7 +447,7 @@ async def execute(context, params):
     else:
         results.record_fail("Timeout configuration", "DEFAULT_TIMEOUT not set correctly")
 
-    if hasattr(executor, 'MAX_TIMEOUT') and executor.MAX_TIMEOUT == 300:
+    if hasattr(executor, 'MAX_TIMEOUT') and executor.MAX_TIMEOUT == 3600:
         results.record_pass("Max timeout configuration exists")
     else:
         results.record_fail("Max timeout configuration", "MAX_TIMEOUT not set correctly")

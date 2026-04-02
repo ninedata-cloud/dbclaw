@@ -6,6 +6,7 @@ import logging
 
 from backend.database import get_db
 from backend.models.host import Host
+from backend.models.soft_delete import alive_filter, alive_select, get_alive_by_id
 from backend.schemas.host import (
     HostCreate, HostUpdate, HostResponse, SSHTestResult
 )
@@ -23,7 +24,7 @@ async def list_hosts(db: AsyncSession = Depends(get_db)):
     from sqlalchemy import desc
     from datetime import datetime, timezone
 
-    result = await db.execute(select(Host).order_by(Host.id.desc()))
+    result = await db.execute(alive_select(Host).order_by(Host.id.desc()))
     hosts = result.scalars().all()
 
     response = []
@@ -139,8 +140,7 @@ async def create_host(data: HostCreate, db: AsyncSession = Depends(get_db)):
 
 @router.put("/{host_id}", response_model=HostResponse)
 async def update_host(host_id: int, data: HostUpdate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Host).where(Host.id == host_id))
-    host = result.scalar_one_or_none()
+    host = await get_alive_by_id(db, Host, host_id)
     if not host:
         raise HTTPException(status_code=404, detail="SSH host not found")
 
@@ -173,20 +173,22 @@ async def update_host(host_id: int, data: HostUpdate, db: AsyncSession = Depends
 
 
 @router.delete("/{host_id}")
-async def delete_host(host_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Host).where(Host.id == host_id))
-    host = result.scalar_one_or_none()
+async def delete_host(
+    host_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    host = await get_alive_by_id(db, Host, host_id)
     if not host:
         raise HTTPException(status_code=404, detail="SSH host not found")
-    await db.delete(host)
+    host.soft_delete(current_user.id)
     await db.commit()
     return {"message": "SSH host deleted"}
 
 
 @router.post("/{host_id}/test", response_model=SSHTestResult)
 async def test_host(host_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Host).where(Host.id == host_id))
-    host = result.scalar_one_or_none()
+    host = await get_alive_by_id(db, Host, host_id)
     if not host:
         raise HTTPException(status_code=404, detail="SSH host not found")
 

@@ -7,7 +7,9 @@ import hashlib
 import logging
 
 from backend.database import get_db
-from backend.utils.security import escape_html
+from backend.dependencies import get_current_user
+from backend.models.user import User
+from backend.models.soft_delete import alive_filter, get_alive_by_id
 from backend.services.alert_service import AlertService
 from backend.services.alert_event_service import AlertEventService
 from backend.services.notification_service import NotificationService
@@ -51,11 +53,11 @@ def _extract_recommended_action(text: Optional[str]) -> Optional[str]:
 
 
 async def _build_alert_response(db: AsyncSession, alert) -> AlertMessageResponse:
-    datasource = await db.get(Datasource, alert.datasource_id)
+    datasource = await get_alive_by_id(db, Datasource, alert.datasource_id)
 
     report_result = await db.execute(
         select(Report)
-        .where(Report.alert_id == alert.id)
+        .where(Report.alert_id == alert.id, alive_filter(Report))
         .order_by(Report.created_at.desc())
         .limit(1)
     )
@@ -64,7 +66,11 @@ async def _build_alert_response(db: AsyncSession, alert) -> AlertMessageResponse
     if not report and alert.event_id:
         event_alerts_result = await db.execute(
             select(Report)
-            .where(Report.datasource_id == alert.datasource_id, Report.trigger_type.in_(["anomaly", "connection_failure"]))
+            .where(
+                Report.datasource_id == alert.datasource_id,
+                Report.trigger_type.in_(["anomaly", "connection_failure"]),
+                alive_filter(Report),
+            )
             .order_by(Report.created_at.desc())
             .limit(1)
         )
@@ -325,7 +331,7 @@ async def get_public_alert(
     alert = await PublicShareService.get_alert_or_404(db, alert_id)
 
     result = await db.execute(
-        select(Report).where(Report.alert_id == alert_id).order_by(Report.created_at.desc()).limit(1)
+        select(Report).where(Report.alert_id == alert_id, alive_filter(Report)).order_by(Report.created_at.desc()).limit(1)
     )
     report = result.scalar_one_or_none()
 
@@ -369,7 +375,7 @@ async def public_alert_page(
     alert = await PublicShareService.get_alert_or_404(db, alert_id)
 
     # Fetch datasource info
-    datasource = await db.get(Datasource, alert.datasource_id)
+    datasource = await get_alive_by_id(db, Datasource, alert.datasource_id)
 
     # Fetch alert event for AI diagnosis
     alert_event = None
@@ -387,7 +393,7 @@ async def public_alert_page(
 
     # Fetch linked report
     result = await db.execute(
-        select(Report).where(Report.alert_id == alert_id).order_by(Report.created_at.desc()).limit(1)
+        select(Report).where(Report.alert_id == alert_id, alive_filter(Report)).order_by(Report.created_at.desc()).limit(1)
     )
     report = result.scalar_one_or_none()
 
@@ -727,10 +733,11 @@ async def update_subscription(
 @router.delete("/subscriptions/{subscription_id}")
 async def delete_subscription(
     subscription_id: int,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Delete an alert subscription"""
-    success = await AlertService.delete_subscription(db, subscription_id)
+    success = await AlertService.delete_subscription(db, subscription_id, current_user.id)
     if not success:
         raise HTTPException(status_code=404, detail="Subscription not found")
 
@@ -746,8 +753,9 @@ async def test_notification(
     # Get subscription (including disabled ones for testing)
     from sqlalchemy import select as sa_select
     from backend.models.alert_subscription import AlertSubscription
+    from backend.models.soft_delete import alive_filter
     sub_result = await db.execute(
-        sa_select(AlertSubscription).where(AlertSubscription.id == subscription_id)
+        sa_select(AlertSubscription).where(AlertSubscription.id == subscription_id, alive_filter(AlertSubscription))
     )
     subscription = sub_result.scalar_one_or_none()
 

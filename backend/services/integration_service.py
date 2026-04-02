@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
 from backend.models.integration import Integration
+from backend.models.soft_delete import alive_filter, alive_select, get_alive_by_id
 from backend.schemas.integration import IntegrationCreate, IntegrationUpdate
 from backend.services.integration_executor import IntegrationExecutor
 from backend.utils.encryption import encrypt_value
@@ -37,7 +38,7 @@ class IntegrationService:
     @staticmethod
     async def create_integration(db: AsyncSession, data: IntegrationCreate) -> Integration:
         """创建 Integration"""
-        result = await db.execute(select(Integration).where(Integration.integration_id == data.integration_id))
+        result = await db.execute(select(Integration).where(Integration.integration_id == data.integration_id, alive_filter(Integration)))
         existing = result.scalar_one_or_none()
         if existing:
             raise ValueError(f"Integration ID '{data.integration_id}' 已存在")
@@ -63,7 +64,7 @@ class IntegrationService:
     @staticmethod
     async def update_integration(db: AsyncSession, integration_id: int, data: IntegrationUpdate) -> Integration:
         """更新 Integration"""
-        integration = await db.get(Integration, integration_id)
+        integration = await get_alive_by_id(db, Integration, integration_id)
         if not integration:
             raise ValueError("Integration 不存在")
 
@@ -103,13 +104,13 @@ class IntegrationService:
     @staticmethod
     async def delete_integration(db: AsyncSession, integration_id: int) -> None:
         """删除 Integration"""
-        integration = await db.get(Integration, integration_id)
+        integration = await get_alive_by_id(db, Integration, integration_id)
         if not integration:
             raise ValueError("Integration 不存在")
         if integration.is_builtin:
             raise ValueError("不能删除内置模板")
 
-        await db.delete(integration)
+        integration.soft_delete(None)
         await db.commit()
         logger.info("删除 Integration: %s", integration.name)
 
@@ -122,7 +123,7 @@ class IntegrationService:
         is_builtin: Optional[bool] = None,
     ) -> List[Integration]:
         """查询 Integration 列表"""
-        query = select(Integration)
+        query = alive_select(Integration)
         conditions = []
 
         if integration_type:
@@ -143,11 +144,11 @@ class IntegrationService:
 
     @staticmethod
     async def get_integration(db: AsyncSession, integration_id: int) -> Optional[Integration]:
-        return await db.get(Integration, integration_id)
+        return await get_alive_by_id(db, Integration, integration_id)
 
     @staticmethod
     async def get_integration_by_integration_id(db: AsyncSession, integration_id: str) -> Optional[Integration]:
-        result = await db.execute(select(Integration).where(Integration.integration_id == integration_id))
+        result = await db.execute(select(Integration).where(Integration.integration_id == integration_id, alive_filter(Integration)))
         return result.scalar_one_or_none()
 
     @staticmethod
@@ -159,7 +160,7 @@ class IntegrationService:
         datasource_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """测试 Integration"""
-        integration = await db.get(Integration, integration_id)
+        integration = await get_alive_by_id(db, Integration, integration_id)
         if not integration:
             raise ValueError("Integration 不存在")
         if not integration.enabled:
@@ -185,11 +186,11 @@ class IntegrationService:
             from backend.models.datasource import Datasource
 
             if datasource_id:
-                test_datasource = await db.get(Datasource, datasource_id)
+                test_datasource = await get_alive_by_id(db, Datasource, datasource_id)
                 if not test_datasource:
                     return {"success": False, "message": f"数据源 ID {datasource_id} 不存在"}
             else:
-                ds_result = await db.execute(select(Datasource).limit(1))
+                ds_result = await db.execute(alive_select(Datasource).limit(1))
                 test_datasource = ds_result.scalar_one_or_none()
                 if not test_datasource:
                     return {

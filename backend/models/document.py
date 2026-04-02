@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey
 from sqlalchemy.sql import func
 from backend.database import Base
+from backend.models.soft_delete import SoftDeleteMixin
 
 
 class DocCategory(Base):
@@ -15,7 +16,7 @@ class DocCategory(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
-class DocDocument(Base):
+class DocDocument(SoftDeleteMixin, Base):
     __tablename__ = "doc_documents"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
