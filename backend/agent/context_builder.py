@@ -5,7 +5,9 @@ from typing import Any, Dict, Optional
 from sqlalchemy import select, desc
 from backend.database import async_session
 from backend.models.datasource import Datasource
+from backend.models.soft_delete import alive_filter
 from backend.models.metric_snapshot import MetricSnapshot
+from backend.models.host import Host
 from backend.models.host import Host
 from backend.services.db_connector import get_connector
 from backend.services.ssh_service import SSHService
@@ -17,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 async def _get_connection(datasource_id: int):
     async with async_session() as db:
-        result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
+        result = await db.execute(select(Datasource).where(Datasource.id == datasource_id, alive_filter(Datasource)))
         return result.scalar_one_or_none()
 
 
@@ -246,7 +248,7 @@ async def _tool_get_metric_history(args):
 
 async def _tool_list_connections(args):
     async with async_session() as db:
-        result = await db.execute(select(Datasource).where(Datasource.is_active == True))
+        result = await db.execute(select(Datasource).where(Datasource.is_active == True, alive_filter(Datasource)))
         conns = result.scalars().all()
         return [
             {"id": c.id, "name": c.name, "db_type": c.db_type,

@@ -2,9 +2,10 @@
 from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, JSON
 from sqlalchemy.sql import func
 from backend.database import Base
+from backend.models.soft_delete import SoftDeleteMixin
 
 
-class Integration(Base):
+class Integration(SoftDeleteMixin, Base):
     """外部集成配置表"""
     __tablename__ = "integrations"
 

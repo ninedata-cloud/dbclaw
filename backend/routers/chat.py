@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from datetime import datetime
@@ -11,6 +12,7 @@ from backend.database import get_db, async_session
 from backend.config import get_settings
 from backend.models.diagnostic_session import DiagnosticSession, ChatMessage
 from backend.models.user import User
+from backend.models.soft_delete import alive_filter, alive_select, get_alive_by_id
 from backend.schemas.chat import ChatSessionCreate, ChatSessionResponse, ChatMessageResponse, ChatApprovalResolveRequest
 from backend.agent.tools import HIGH_RISK_TOOLS
 
@@ -29,6 +31,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
 ACTIVE_CHAT_SOCKETS: dict[int, list[WebSocket]] = {}
 PENDING_APPROVALS: dict[int, dict[str, dict]] = {}
+# session_id -> running asyncio.Task for AI stream
+ACTIVE_STREAM_TASKS: dict[int, asyncio.Task] = {}
 
 
 def _register_socket(session_id: int, websocket: WebSocket) -> None:
@@ -84,7 +88,7 @@ async def _continue_conversation_after_tool(
 
 async def _get_owned_session(db: AsyncSession, session_id: int, user: User) -> DiagnosticSession:
     result = await db.execute(
-        select(DiagnosticSession).where(DiagnosticSession.id == session_id, DiagnosticSession.user_id == user.id)
+        alive_select(DiagnosticSession).where(DiagnosticSession.id == session_id, DiagnosticSession.user_id == user.id)
     )
     session = result.scalar_one_or_none()
     if not session:
@@ -116,12 +120,12 @@ async def _authenticate_websocket_session(websocket: WebSocket, session_id: int)
         user_session = await SessionService.get_active_session(db, session_cookie)
         if not user_session:
             return None, None
-        user_result = await db.execute(select(User).where(User.id == user_session.user_id))
+        user_result = await db.execute(select(User).where(User.id == user_session.user_id, alive_filter(User)))
         user = user_result.scalar_one_or_none()
         if not user or not user.is_active:
             return None, None
         chat_session_result = await db.execute(
-            select(DiagnosticSession).where(DiagnosticSession.id == session_id, DiagnosticSession.user_id == user.id)
+            alive_select(DiagnosticSession).where(DiagnosticSession.id == session_id, DiagnosticSession.user_id == user.id)
         )
         chat_session = chat_session_result.scalar_one_or_none()
         if not chat_session:
@@ -140,7 +144,7 @@ async def get_high_risk_tools(user=Depends(get_current_user)):
 @router.get("/api/chat/sessions", response_model=List[ChatSessionResponse])
 async def list_sessions(db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     result = await db.execute(
-        select(DiagnosticSession)
+        alive_select(DiagnosticSession)
         .where(
             DiagnosticSession.user_id == user.id,
             DiagnosticSession.is_hidden == False  # Exclude system-generated hidden sessions
@@ -199,7 +203,7 @@ async def upload_attachment(
 async def get_messages(session_id: int, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     await _get_owned_session(db, session_id, user)
     result = await db.execute(
-        select(ChatMessage)
+        alive_select(ChatMessage)
         .where(ChatMessage.session_id == session_id)
         .order_by(ChatMessage.created_at)
     )
@@ -209,19 +213,13 @@ async def get_messages(session_id: int, db: AsyncSession = Depends(get_db), user
 @router.delete("/api/chat/sessions/{session_id}")
 async def delete_session(session_id: int, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     """Delete a chat session and all its messages."""
-    await _get_owned_session(db, session_id, user)
+    session = await _get_owned_session(db, session_id, user)
     result = await db.execute(
-        select(ChatMessage).where(ChatMessage.session_id == session_id)
+        alive_select(ChatMessage).where(ChatMessage.session_id == session_id)
     )
     for msg in result.scalars().all():
-        await db.delete(msg)
-    # Delete session
-    result = await db.execute(
-        select(DiagnosticSession).where(DiagnosticSession.id == session_id, DiagnosticSession.user_id == user.id)
-    )
-    session = result.scalar_one_or_none()
-    if session:
-        await db.delete(session)
+        msg.soft_delete(user.id)
+    session.soft_delete(user.id)
     PENDING_APPROVALS.pop(session_id, None)
     await db.commit()
     return {"message": "Session deleted"}
@@ -230,23 +228,17 @@ async def delete_session(session_id: int, db: AsyncSession = Depends(get_db), us
 @router.delete("/api/chat/sessions/{session_id}/messages")
 async def clear_session_messages(session_id: int, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     """Clear all messages in a session but keep the session itself."""
-    await _get_owned_session(db, session_id, user)
+    session = await _get_owned_session(db, session_id, user)
     result = await db.execute(
-        select(ChatMessage).where(ChatMessage.session_id == session_id)
+        alive_select(ChatMessage).where(ChatMessage.session_id == session_id)
     )
     for msg in result.scalars().all():
-        await db.delete(msg)
-    # Reset session title
-    result = await db.execute(
-        select(DiagnosticSession).where(DiagnosticSession.id == session_id, DiagnosticSession.user_id == user.id)
-    )
-    session = result.scalar_one_or_none()
-    if session:
-        session.title = "新建会话"
-        session.input_tokens = 0
-        session.output_tokens = 0
-        session.total_tokens = 0
-        session.updated_at = datetime.utcnow()
+        msg.soft_delete(user.id)
+    session.title = "新建会话"
+    session.input_tokens = 0
+    session.output_tokens = 0
+    session.total_tokens = 0
+    session.updated_at = datetime.utcnow()
     PENDING_APPROVALS.pop(session_id, None)
     await db.commit()
     return {"message": "Messages cleared"}
@@ -293,9 +285,31 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
     _register_socket(session_id, websocket)
     logger.info(f"Chat WebSocket connected for session {session_id}, user {user.id}")
 
+    # If there's an active stream task for this session, notify the client
+    active_task = ACTIVE_STREAM_TASKS.get(session_id)
+    if active_task and not active_task.done():
+        try:
+            await websocket.send_json({"type": "stream_resuming", "message": "AI 正在生成中..."})
+        except Exception:
+            pass
+
     try:
         while True:
             data = await websocket.receive_json()
+
+            # Handle cancel command
+            msg_type = data.get("type")
+            if msg_type == "cancel":
+                task = ACTIVE_STREAM_TASKS.get(session_id)
+                if task and not task.done():
+                    task.cancel()
+                    logger.info(f"Stream task cancel requested for session {session_id}")
+                    try:
+                        await websocket.send_json({"type": "cancel_ack"})
+                    except Exception:
+                        pass
+                continue
+
             refreshed_user, refreshed_session = await _authenticate_websocket_session(websocket, session_id)
             if not refreshed_user or not refreshed_session:
                 await websocket.close(code=1008, reason="Session expired")
@@ -309,40 +323,80 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
             if not user_message and not attachments:
                 continue
 
-            async with async_session() as db:
-                messages, effective_datasource_id, model_id, kb_ids, disabled_tools = await prepare_user_turn(
-                    db,
-                    session_id=session_id,
-                    user_id=user.id,
-                    user_message=user_message,
-                    attachments=attachments,
-                    payload_datasource_id=payload_datasource_id,
-                    model_id=model_id,
-                )
+            # If there's already a running task for this session, reject new messages
+            existing_task = ACTIVE_STREAM_TASKS.get(session_id)
+            if existing_task and not existing_task.done():
+                try:
+                    await websocket.send_json({
+                        "type": "error",
+                        "content": "AI 正在生成中，请等待完成或点击停止按钮。",
+                    })
+                except Exception:
+                    pass
+                continue
 
-                await process_stream_events(
-                    db,
-                    session_id=session_id,
-                    user_id=user.id,
-                    messages=messages,
-                    datasource_id=effective_datasource_id,
-                    model_id=model_id,
-                    kb_ids=kb_ids,
-                    disabled_tools=disabled_tools,
-                    pending_approvals=PENDING_APPROVALS,
-                    on_event=websocket.send_json,
-                )
+            async def _run_stream(
+                sid=session_id,
+                uid=user.id,
+                msg=user_message,
+                atts=attachments,
+                ds_id=payload_datasource_id,
+                m_id=model_id,
+            ):
+                try:
+                    async with async_session() as db:
+                        messages, effective_datasource_id, m_id_resolved, kb_ids, disabled_tools = await prepare_user_turn(
+                            db,
+                            session_id=sid,
+                            user_id=uid,
+                            user_message=msg,
+                            attachments=atts,
+                            payload_datasource_id=ds_id,
+                            model_id=m_id,
+                        )
+
+                        await process_stream_events(
+                            db,
+                            session_id=sid,
+                            user_id=uid,
+                            messages=messages,
+                            datasource_id=effective_datasource_id,
+                            model_id=m_id_resolved,
+                            kb_ids=kb_ids,
+                            disabled_tools=disabled_tools,
+                            pending_approvals=PENDING_APPROVALS,
+                            on_event=lambda payload: _broadcast_to_session(sid, payload),
+                        )
+                except asyncio.CancelledError:
+                    logger.info(f"Stream task cancelled for session {sid}")
+                    try:
+                        await _broadcast_to_session(sid, {
+                            "type": "content",
+                            "content": "\n\n[用户已停止生成]",
+                        })
+                        await _broadcast_to_session(sid, {"type": "done"})
+                    except Exception:
+                        pass
+                except Exception as e:
+                    logger.error(f"Stream task error for session {sid}: {e}", exc_info=True)
+                    await _broadcast_to_session(sid, {
+                        "type": "error",
+                        "content": f"AI 会话出错: {str(e)}",
+                    })
+                finally:
+                    ACTIVE_STREAM_TASKS.pop(sid, None)
+
+            task = asyncio.create_task(_run_stream())
+            ACTIVE_STREAM_TASKS[session_id] = task
 
     except WebSocketDisconnect:
         _unregister_socket(session_id, websocket)
-        logger.info(f"Chat WebSocket disconnected for session {session_id}")
+        logger.info(f"Chat WebSocket disconnected for session {session_id} (task continues in background)")
     except Exception as e:
         _unregister_socket(session_id, websocket)
         logger.error(f"Chat WebSocket error: {e}", exc_info=True)
         try:
-            # Try to send error message first
             await websocket.send_json({"type": "error", "content": str(e)})
-            # Then close with error code and reason
             await websocket.close(code=1011, reason=f"Server error: {str(e)[:100]}")
         except Exception as e:
             logger.debug("Failed to send error message to WebSocket: %s", e)

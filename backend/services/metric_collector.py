@@ -9,6 +9,7 @@ from sqlalchemy import select, and_, desc
 
 from backend.database import async_session
 from backend.models.datasource import Datasource
+from backend.models.soft_delete import alive_filter
 from backend.models.metric_snapshot import MetricSnapshot
 from backend.models.inspection_trigger import InspectionTrigger
 from backend.models.alert_message import AlertMessage
@@ -82,7 +83,7 @@ async def collect_metrics_for_connection(datasource_id: int):
     try:
         async with async_session() as db:
                 result = await db.execute(
-                    select(Datasource).where(Datasource.id == datasource_id, Datasource.is_active == True)
+                    select(Datasource).where(Datasource.id == datasource_id, Datasource.is_active == True, alive_filter(Datasource))
                 )
                 datasource = result.scalar_one_or_none()
                 if not datasource:
@@ -299,7 +300,7 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
     try:
         # 检查数据源是否在静默期内
         result = await db.execute(
-            select(Datasource).where(Datasource.id == datasource_id)
+            select(Datasource).where(Datasource.id == datasource_id, alive_filter(Datasource))
         )
         datasource = result.scalar_one_or_none()
         if datasource and datasource.silence_until:

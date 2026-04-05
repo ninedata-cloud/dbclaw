@@ -11,6 +11,7 @@ from backend.models.inspection_trigger import InspectionTrigger
 from backend.models.datasource import Datasource
 from backend.models.metric_snapshot import MetricSnapshot
 from backend.models.report import Report
+from backend.models.soft_delete import alive_select, get_alive_by_id
 from backend.utils.datetime_helper import now as get_now
 
 logger = logging.getLogger(__name__)
@@ -42,7 +43,7 @@ class InspectionService:
 
     async def initialize_all_configs(self, db: AsyncSession):
         """Create default inspection configs for datasources that don't have one"""
-        result = await db.execute(select(Datasource))
+        result = await db.execute(alive_select(Datasource))
         datasources = result.scalars().all()
 
         for ds in datasources:
@@ -148,7 +149,7 @@ class InspectionService:
         trigger.processed = True
         trigger.report_id = report_id
 
-        report = await db.get(Report, report_id)
+        report = await get_alive_by_id(db, Report, report_id)
         if report and trigger.alert_id:
             report.alert_id = trigger.alert_id
 

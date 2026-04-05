@@ -120,15 +120,13 @@ class OracleConnector(DBConnector):
 
             # 7. 最长活跃事务时间（秒）
             await cursor.execute(
-                "SELECT MAX((SYSDATE - start_date) * 86400) as seconds "
-                "FROM v$transaction"
+                "SELECT MAX((SYSDATE - start_date) * 86400) as seconds FROM v$transaction"
             )
             longest_tx_row = await cursor.fetchone()
 
             cursor.close()
 
             return {
-                # 连接指标
                 "connections_active": session_stats[1] if session_stats else 0,
                 "connections_total": session_stats[0] if session_stats else 0,
                 "max_connections": max_connections,
@@ -136,24 +134,18 @@ class OracleConnector(DBConnector):
                 "connections_waiting": session_stats[3] if session_stats else 0,
                 "lock_waiting": lock_row[0] if lock_row else 0,
                 "longest_transaction_sec": int(longest_tx_row[0]) if longest_tx_row and longest_tx_row[0] else 0,
-                # 吞吐量（累积值，由 normalizer 计算速率）
                 "user_calls": sysstat.get('user calls', 0),
                 "user_commits": sysstat.get('user commits', 0),
                 "user_rollbacks": sysstat.get('user rollbacks', 0),
                 "execute_count": sysstat.get('execute count', 0),
                 "parse_count": sysstat.get('parse count (total)', 0),
-                # 磁盘 IO（累积值）
                 "physical_reads": sysstat.get('physical reads', 0),
                 "physical_writes": sysstat.get('physical writes', 0),
                 "redo_writes": sysstat.get('redo writes', 0),
-                # 网络 IO（累积字节数）
                 "network_bytes_sent": sysstat.get('bytes sent via SQL*Net to client', 0),
                 "network_bytes_received": sysstat.get('bytes received via SQL*Net from client', 0),
-                # 缓存
                 "cache_hit_rate": cache_hit_rate,
-                # 数据库大小
                 "db_size_bytes": size_row[0] if size_row and size_row[0] else 0,
-                # 运行时间
                 "uptime": uptime,
                 "boot_time": boot_time.isoformat() if boot_time else None,
             }
@@ -175,15 +167,17 @@ class OracleConnector(DBConnector):
         conn = await self._connect()
         try:
             cursor = conn.cursor()
+            # Oracle 11g兼容：使用ROWNUM代替FETCH FIRST N ROWS ONLY
             await cursor.execute(
-                "SELECT s.sid, s.serial#, s.username, s.status, s.osuser, "
-                "s.machine, s.program, s.sql_id, s.logon_time, "
-                "sq.sql_text "
-                "FROM v$session s "
-                "LEFT JOIN v$sql sq ON s.sql_id = sq.sql_id "
-                "WHERE s.type = 'USER' "
-                "ORDER BY s.logon_time DESC "
-                "FETCH FIRST 50 ROWS ONLY"
+                "SELECT sid, serial#, username, status, osuser, "
+                "machine, program, sql_id, logon_time "
+                "FROM ("
+                "  SELECT s.sid, s.serial#, s.username, s.status, s.osuser, "
+                "  s.machine, s.program, s.sql_id, s.logon_time "
+                "  FROM v$session s "
+                "  WHERE s.type = 'USER' "
+                "  ORDER BY s.logon_time DESC"
+                ") WHERE ROWNUM <= 50"
             )
             rows = await cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]
@@ -197,15 +191,19 @@ class OracleConnector(DBConnector):
         conn = await self._connect()
         try:
             cursor = conn.cursor()
+            # Oracle 11g兼容：使用ROWNUM代替FETCH FIRST N ROWS ONLY
             await cursor.execute(
                 "SELECT sql_id, sql_text, executions, "
                 "elapsed_time / 1000000 as elapsed_time_sec, "
                 "cpu_time / 1000000 as cpu_time_sec, "
                 "disk_reads, buffer_gets, rows_processed "
-                "FROM v$sql "
-                "WHERE executions > 0 "
-                "ORDER BY elapsed_time / executions DESC "
-                "FETCH FIRST 20 ROWS ONLY"
+                "FROM ("
+                "  SELECT sql_id, sql_text, executions, "
+                "  elapsed_time, cpu_time, disk_reads, buffer_gets, rows_processed, "
+                "  ROW_NUMBER() OVER (ORDER BY elapsed_time / executions DESC) as rn "
+                "  FROM v$sql "
+                "  WHERE executions > 0"
+                ") WHERE rn <= 20"
             )
             rows = await cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]
@@ -282,13 +280,17 @@ class OracleConnector(DBConnector):
         conn = await self._connect()
         try:
             cursor = conn.cursor()
+            # Oracle 11g兼容：使用ROWNUM代替FETCH FIRST N ROWS ONLY
             await cursor.execute(
                 "SELECT owner, table_name, num_rows, blocks, "
                 "avg_row_len, last_analyzed "
-                "FROM dba_tables "
-                "WHERE owner NOT IN ('SYS', 'SYSTEM', 'OUTLN', 'DBSNMP') "
-                "ORDER BY num_rows DESC NULLS LAST "
-                "FETCH FIRST 50 ROWS ONLY"
+                "FROM ("
+                "  SELECT owner, table_name, num_rows, blocks, "
+                "  avg_row_len, last_analyzed "
+                "  FROM dba_tables "
+                "  WHERE owner NOT IN ('SYS', 'SYSTEM', 'OUTLN', 'DBSNMP') "
+                "  ORDER BY num_rows DESC NULLS LAST"
+                ") WHERE ROWNUM <= 50"
             )
             rows = await cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]
@@ -304,15 +306,13 @@ class OracleConnector(DBConnector):
             cursor = conn.cursor()
 
             await cursor.execute(
-                "SELECT database_role, protection_mode, protection_level "
-                "FROM v$database"
+                "SELECT database_role, protection_mode, protection_level FROM v$database"
             )
             row = await cursor.fetchone()
 
             if row and row[0] != 'PRIMARY':
                 await cursor.execute(
-                    "SELECT process, status, thread#, sequence# "
-                    "FROM v$managed_standby"
+                    "SELECT process, status, thread#, sequence# FROM v$managed_standby"
                 )
                 standby_rows = await cursor.fetchall()
                 columns = [desc[0] for desc in cursor.description]

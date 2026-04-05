@@ -1,9 +1,10 @@
 from sqlalchemy import Column, Integer, Text, Boolean, DateTime, JSON
 from sqlalchemy.sql import func
 from backend.database import Base
+from backend.models.soft_delete import SoftDeleteMixin
 
 
-class AlertSubscription(Base):
+class AlertSubscription(SoftDeleteMixin, Base):
     __tablename__ = "alert_subscriptions"
 
     id = Column(Integer, primary_key=True, index=True)

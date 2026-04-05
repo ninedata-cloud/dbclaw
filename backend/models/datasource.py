@@ -1,9 +1,10 @@
 from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, JSON
 from sqlalchemy.sql import func
 from backend.database import Base
+from backend.models.soft_delete import SoftDeleteMixin
 
 
-class Datasource(Base):
+class Datasource(SoftDeleteMixin, Base):
     __tablename__ = "datasources"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -34,6 +35,9 @@ class Datasource(Base):
     # 临时静默配置（用于临时关闭监控和告警）
     silence_until = Column(DateTime, nullable=True)  # 静默截止时间，为空表示未静默
     silence_reason = Column(String(500), nullable=True)  # 静默原因
+
+    # 版本信息
+    db_version = Column(String(255), nullable=True)  # 数据库版本信息
 
     # 连接状态
     connection_status = Column(String(20), default='unknown')  # normal, warning, failed, unknown

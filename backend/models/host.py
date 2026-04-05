@@ -1,9 +1,10 @@
 from sqlalchemy import Column, Integer, String, DateTime, Text
 from sqlalchemy.sql import func
 from backend.database import Base
+from backend.models.soft_delete import SoftDeleteMixin
 
 
-class Host(Base):
+class Host(SoftDeleteMixin, Base):
     __tablename__ = "hosts"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -14,5 +15,6 @@ class Host(Base):
     auth_type = Column(String(20), default="password")  # password, key, or agent
     password_encrypted = Column(Text, nullable=True)
     private_key_encrypted = Column(Text, nullable=True)
+    os_version = Column(String(255), nullable=True)  # 操作系统版本信息
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

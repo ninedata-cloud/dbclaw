@@ -24,10 +24,7 @@ code: |
       from backend.models.datasource import Datasource
       from sqlalchemy import select
 
-      result = await context.db.execute(
-          select(Datasource).where(Datasource.id == datasource_id)
-      )
-      datasource = result.scalar_one_or_none()
+      datasource = await context.get_connection(datasource_id)
 
       if not datasource:
           return {

@@ -70,6 +70,9 @@ class DatasourceResponse(BaseModel):
     silence_until: Optional[datetime] = None
     silence_reason: Optional[str] = None
 
+    # 版本信息
+    db_version: Optional[str] = None
+
     # 连接状态
     connection_status: str = 'unknown'
     connection_error: Optional[str] = None

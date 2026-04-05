@@ -141,9 +141,10 @@ class IntegrationContext:
             数据源信息字典，如果不存在返回 None
         """
         from backend.models.datasource import Datasource
+        from backend.models.soft_delete import alive_filter
 
         result = await self.db.execute(
-            select(Datasource).where(Datasource.id == datasource_id)
+            select(Datasource).where(Datasource.id == datasource_id, alive_filter(Datasource))
         )
         ds = result.scalar_one_or_none()
 

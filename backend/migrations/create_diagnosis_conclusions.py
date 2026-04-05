@@ -17,8 +17,14 @@ async def migrate():
                 id SERIAL PRIMARY KEY,
                 session_id INTEGER NOT NULL,
                 datasource_id INTEGER,
+                run_id VARCHAR(64),
+                summary TEXT,
+                confidence DOUBLE PRECISION,
+                final_markdown TEXT,
                 findings JSON,
                 action_items JSON,
+                evidence_refs JSON,
+                knowledge_refs JSON,
                 resolved BOOLEAN DEFAULT FALSE,
                 resolved_at TIMESTAMP,
                 resolved_by INTEGER,
@@ -27,4 +33,5 @@ async def migrate():
             )
         """))
         await conn.execute(text("CREATE INDEX ix_diagnosis_conclusions_session ON diagnosis_conclusions(session_id)"))
+        await conn.execute(text("CREATE INDEX ix_diagnosis_conclusions_run_id ON diagnosis_conclusions(run_id)"))
         print("Created diagnosis_conclusions table")

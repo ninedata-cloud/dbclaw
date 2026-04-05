@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 from backend.database import get_db
 from backend.models.metric_snapshot import MetricSnapshot
+from backend.models.soft_delete import alive_filter, get_alive_by_id
 from backend.models.inspection_config import InspectionConfig
 from backend.schemas.metrics import MetricResponse
 from backend.dependencies import get_current_user
@@ -74,7 +75,7 @@ async def get_metrics(
     # 检查数据源是否使用集成采集
     from backend.models.datasource import Datasource
     ds_result = await db.execute(
-        select(Datasource).where(Datasource.id == conn_id)
+        select(Datasource).where(Datasource.id == conn_id, alive_filter(Datasource))
     )
     datasource = ds_result.scalar_one_or_none()
 
@@ -125,7 +126,7 @@ async def get_latest_metric(
     # 检查数据源是否使用集成采集
     from backend.models.datasource import Datasource
     ds_result = await db.execute(
-        select(Datasource).where(Datasource.id == conn_id)
+        select(Datasource).where(Datasource.id == conn_id, alive_filter(Datasource))
     )
     datasource = ds_result.scalar_one_or_none()
 
@@ -161,7 +162,7 @@ async def get_batch_dashboard(
 
     # 批量查询数据源配置（metric_source 字段）
     ds_result = await db.execute(
-        select(Datasource).where(Datasource.id.in_(conn_ids))
+        select(Datasource).where(Datasource.id.in_(conn_ids), alive_filter(Datasource))
     )
     datasources = {ds.id: ds for ds in ds_result.scalars().all()}
 
@@ -255,7 +256,7 @@ async def get_datasource_health(
     # 检查数据源是否使用集成采集
     from backend.models.datasource import Datasource
     ds_result = await db.execute(
-        select(Datasource).where(Datasource.id == conn_id)
+        select(Datasource).where(Datasource.id == conn_id, alive_filter(Datasource))
     )
     datasource = ds_result.scalar_one_or_none()
 
@@ -470,10 +471,7 @@ async def refresh_metrics(
     """
     # Verify datasource exists
     from backend.models.datasource import Datasource
-    result = await db.execute(
-        select(Datasource).where(Datasource.id == conn_id)
-    )
-    datasource = result.scalar_one_or_none()
+    datasource = await get_alive_by_id(db, Datasource, conn_id)
 
     if not datasource:
         raise HTTPException(status_code=404, detail="数据源不存在")

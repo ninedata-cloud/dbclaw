@@ -1,0 +1,98 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - img "数据库智能卫士" [ref=e5]
+        - generic [ref=e6]:
+          - generic [ref=e7]: NineData
+          - generic [ref=e8]: 数据库智能卫士
+      - navigation [ref=e9]:
+        - generic [ref=e10] [cursor=pointer]:
+          - img [ref=e1595]
+          - generic [ref=e16]: 资源大盘
+        - generic [ref=e17] [cursor=pointer]:
+          - img [ref=e1600]
+          - generic [ref=e22]: 智能巡检
+        - generic [ref=e23] [cursor=pointer]:
+          - img [ref=e1604]
+          - generic [ref=e27]: AI 诊断
+        - generic [ref=e28] [cursor=pointer]:
+          - img [ref=e1607]
+          - generic [ref=e31]: 性能监控
+        - generic [ref=e32] [cursor=pointer]:
+          - img [ref=e1609]
+          - generic [ref=e36]: 告警管理
+        - generic [ref=e37] [cursor=pointer]:
+          - img [ref=e1612]
+          - generic [ref=e41]: SQL 查询
+        - generic [ref=e42]:
+          - generic [ref=e43]: AI 智能体配置
+          - generic [ref=e44] [cursor=pointer]:
+            - img [ref=e1615]
+            - generic [ref=e48]: AI 大模型管理
+          - generic [ref=e49] [cursor=pointer]:
+            - img [ref=e1618]
+            - generic [ref=e52]: 技能管理
+          - generic [ref=e53] [cursor=pointer]:
+            - img [ref=e1620]
+            - generic [ref=e57]: 知识库
+        - generic [ref=e58]:
+          - generic [ref=e59]: 系统配置
+          - generic [ref=e60] [cursor=pointer]:
+            - img [ref=e1623]
+            - generic [ref=e65]: 数据源管理
+          - generic [ref=e66] [cursor=pointer]:
+            - img [ref=e1627]
+            - generic [ref=e69]: 主机管理
+          - generic [ref=e70] [cursor=pointer]:
+            - img [ref=e1629]
+            - generic [ref=e75]: 外部集成管理
+          - generic [ref=e76] [cursor=pointer]:
+            - img [ref=e1633]
+            - generic [ref=e80]: 系统参数配置
+          - generic [ref=e81] [cursor=pointer]:
+            - img [ref=e1636]
+            - generic [ref=e87]: 用户管理
+      - generic [ref=e88]:
+        - generic [ref=e89]: A
+        - button "Administrator 管理员" [ref=e90] [cursor=pointer]:
+          - generic [ref=e91]: Administrator
+          - generic [ref=e92]: 管理员
+      - generic [ref=e93]:
+        - generic [ref=e94]: v1.0.0
+        - button "收起侧边栏" [ref=e95] [cursor=pointer]:
+          - img [ref=e1641]
+    - main [ref=e99]:
+      - generic [ref=e100]:
+        - heading "SQL 查询" [level=1] [ref=e1644]
+        - button "选择数据源" [ref=e1648] [cursor=pointer]:
+          - generic [ref=e1650]: 选择数据源
+          - img [ref=e1651]
+      - generic [ref=e1653]:
+        - generic [ref=e1654]:
+          - button "执行 (Ctrl+Enter)" [ref=e1655] [cursor=pointer]:
+            - img [ref=e1656]
+            - text: 执行 (Ctrl+Enter)
+          - button "执行计划" [ref=e1658] [cursor=pointer]:
+            - img [ref=e1659]
+            - text: 执行计划
+          - button "历史记录" [ref=e1662] [cursor=pointer]:
+            - img [ref=e1663]
+            - text: 历史记录
+          - button "刷新结构" [ref=e1667] [cursor=pointer]:
+            - img [ref=e1668]
+            - text: 刷新结构
+          - generic [ref=e1673]: "提示: 选中SQL后执行将只执行选中部分 | 最多返回10000行"
+        - code [ref=e1676]:
+          - generic [ref=e1677]:
+            - generic [ref=e1682]: "1"
+            - generic [ref=e1688]: S
+            - textbox "Editor content;Press Alt+F1 for Accessibility Options." [ref=e1690]
+        - generic [ref=e1698]: 就绪
+        - generic [ref=e1701]:
+          - img [ref=e1702]
+          - heading "暂无结果" [level=3] [ref=e1704]
+          - paragraph [ref=e1705]: 执行查询后结果将显示在这里
+  - generic [ref=e211]:
+    - alert
+    - alert

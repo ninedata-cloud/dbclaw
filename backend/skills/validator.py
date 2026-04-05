@@ -10,9 +10,12 @@ class SkillValidator:
     """Validates skill code for security and correctness"""
 
     FORBIDDEN_IMPORTS = {
+        "os",
+        "subprocess",
     }
 
     FORBIDDEN_BUILTINS = {
+        "eval",
     }
 
     @staticmethod

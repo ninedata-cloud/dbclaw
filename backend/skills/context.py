@@ -4,6 +4,7 @@ Skill execution context - provides safe API for skills to access system resource
 from typing import Dict, Any, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.utils.datetime_helper import now
+from backend.models.soft_delete import alive_filter
 
 
 class SkillContext:
@@ -32,15 +33,19 @@ class SkillContext:
         if permission not in self.permissions:
             raise PermissionError(f"Skill does not have permission: {permission}")
 
-    async def get_connection(self, datasource_id: int, check_permission: bool = True):
-        """Get a database datasource object"""
-        if check_permission:
-            self._check_permission("execute_query")
+    async def get_connection(self, datasource_id: int):
+        """Get a database datasource object from the local meta-database.
+
+        Note: This method only reads metadata from the local meta-database.
+        It does not connect to or query the target datasource itself,
+        so no execute_query permission is required.
+        """
         from backend.models.datasource import Datasource
+        from backend.models.soft_delete import alive_filter
         from sqlalchemy import select
 
         result = await self.db.execute(
-            select(Datasource).where(Datasource.id == datasource_id)
+            select(Datasource).where(Datasource.id == datasource_id, alive_filter(Datasource))
         )
         datasource = result.scalar_one_or_none()
         if not datasource:
@@ -56,7 +61,7 @@ class SkillContext:
 
         from backend.utils.db_connector import execute_query as db_execute_query
 
-        datasource = await self.get_connection(datasource_id, check_permission=False)
+        datasource = await self.get_connection(datasource_id)
         result = await db_execute_query(datasource, query, allow_write=allow_write)
         return result
 
@@ -76,7 +81,7 @@ class SkillContext:
 
         from backend.utils.host_executor import execute_host_command
 
-        datasource = await self.get_connection(datasource_id, check_permission=False)
+        datasource = await self.get_connection(datasource_id)
         if not datasource.host_id:
             raise ValueError(f"Datasource {datasource_id} has no host configured")
 

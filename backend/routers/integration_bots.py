@@ -7,6 +7,7 @@ from backend.dependencies import get_current_user
 from backend.models.integration import Integration
 from backend.models.integration_bot_binding import IntegrationBotBinding
 from backend.models.user import User
+from backend.models.soft_delete import alive_filter
 from backend.schemas.integration import IntegrationBotBindingResponse, IntegrationBotBindingUpdate
 from backend.services.integration_service import IntegrationService
 
@@ -41,6 +42,7 @@ async def _get_or_create_binding(db: AsyncSession, code: str) -> IntegrationBotB
         select(Integration).where(
             Integration.integration_id == metadata["integration_id"],
             Integration.enabled == True,
+            alive_filter(Integration),
         )
     )
     integration = integration_result.scalar_one_or_none()

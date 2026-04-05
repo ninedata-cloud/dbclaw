@@ -20,6 +20,7 @@ from backend.models.alert_delivery_log import AlertDeliveryLog
 from backend.models.user import User
 from backend.models.system_config import SystemConfig
 from backend.models.datasource import Datasource
+from backend.models.soft_delete import alive_filter
 
 logger = logging.getLogger(__name__)
 
@@ -325,7 +326,7 @@ class NotificationService:
         Uses 'recovery' channel in delivery logs to track sends.
         """
         user_result = await db.execute(
-            select(User).where(User.id == subscription.user_id)
+            select(User).where(User.id == subscription.user_id, alive_filter(User))
         )
         user = user_result.scalar_one_or_none()
 
@@ -336,7 +337,7 @@ class NotificationService:
         datasource = None
         if alert.datasource_id:
             ds_result = await db.execute(
-                select(Datasource).where(Datasource.id == alert.datasource_id)
+                select(Datasource).where(Datasource.id == alert.datasource_id, alive_filter(Datasource))
             )
             datasource = ds_result.scalar_one_or_none()
 

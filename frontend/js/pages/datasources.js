@@ -233,9 +233,9 @@ const DatasourcesPage = {
                         <th class="sortable" data-sort="name">名称 <span class="sort-icon" data-field="name"></span></th>
                         <th class="sortable" data-sort="db_type">类型 <span class="sort-icon" data-field="db_type"></span></th>
                         <th>标签</th>
-                        <th class="sortable" data-sort="connection_status">连接状态 <span class="sort-icon" data-field="connection_status"></span></th>
                         <th class="sortable" data-sort="host">主机 <span class="sort-icon" data-field="host"></span></th>
                         <th class="sortable" data-sort="database">数据库 <span class="sort-icon" data-field="database"></span></th>
+                        <th class="sortable" data-sort="connection_status">连接状态 <span class="sort-icon" data-field="connection_status"></span></th>
                         <th class="sortable" data-sort="cpu_usage">CPU <span class="sort-icon" data-field="cpu_usage"></span></th>
                         <th class="sortable" data-sort="qps">QPS <span class="sort-icon" data-field="qps"></span></th>
                         <th class="sortable" data-sort="connections_active">活跃连接 <span class="sort-icon" data-field="connections_active"></span></th>
@@ -249,9 +249,9 @@ const DatasourcesPage = {
                                 <td><strong>${conn.name}</strong></td>
                                 <td><span class="badge badge-info">${conn.db_type}</span></td>
                                 <td>${this._renderTags(conn.tags || [])}</td>
-                                <td>${this._getStatusBadge(conn)}</td>
                                 <td>${conn.host}:${conn.port}</td>
                                 <td>${conn.database || '-'}</td>
+                                <td>${this._getStatusBadge(conn)}</td>
                                 ${this._renderMetricsCell(conn)}
                                 <td>
                                     <div style="display:flex;gap:4px;align-items:center;">

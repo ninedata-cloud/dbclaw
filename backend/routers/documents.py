@@ -10,6 +10,7 @@ from backend.database import get_db
 from backend.dependencies import get_current_user
 from backend.models.user import User
 from backend.models.document import DocCategory, DocDocument
+from backend.models.soft_delete import alive_filter
 from backend.services import document_service
 from backend.schemas.document import (
     DocCategoryResponse, DocCategoryCreate,
@@ -38,7 +39,7 @@ async def get_categories(
         for ch in children:
             count_result = await db.execute(
                 select(func.count(DocDocument.id))
-                .where(DocDocument.category_id == ch.id, DocDocument.is_active == True)
+                .where(DocDocument.category_id == ch.id, DocDocument.is_active == True, alive_filter(DocDocument))
             )
             ch_count = count_result.scalar() or 0
             children_resp.append(DocCategoryResponse.model_validate({
@@ -47,7 +48,7 @@ async def get_categories(
             }))
         count_result = await db.execute(
             select(func.count(DocDocument.id))
-            .where(DocDocument.category_id == cat.id, DocDocument.is_active == True)
+            .where(DocDocument.category_id == cat.id, DocDocument.is_active == True, alive_filter(DocDocument))
         )
         cat_count = count_result.scalar() or 0
         response.append(DocCategoryResponse.model_validate({
@@ -97,6 +98,10 @@ async def update_document(
 
 
 @router.delete("/{doc_id}")
-async def delete_document(doc_id: int, db: AsyncSession = Depends(get_db)):
-    await document_service.delete_document(db, doc_id)
+async def delete_document(
+    doc_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await document_service.delete_document(db, doc_id, current_user.id)
     return {"message": "文档已删除"}

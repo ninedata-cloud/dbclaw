@@ -11,6 +11,7 @@ from backend.utils.datetime_helper import now
 
 from backend.models.alert_message import AlertMessage
 from backend.models.alert_subscription import AlertSubscription
+from backend.models.soft_delete import alive_filter, alive_select, get_alive_by_id
 from backend.models.alert_delivery_log import AlertDeliveryLog
 from backend.schemas.alert import (
     AlertMessageCreate,
@@ -270,7 +271,7 @@ class AlertService:
     async def get_all_subscriptions(db: AsyncSession) -> List[AlertSubscription]:
         """Get all active subscriptions"""
         result = await db.execute(
-            select(AlertSubscription).where(AlertSubscription.enabled == True)
+            alive_select(AlertSubscription).where(AlertSubscription.enabled == True)
         )
         return result.scalars().all()
 
@@ -281,7 +282,7 @@ class AlertService:
     ) -> List[AlertSubscription]:
         """Get all subscriptions for a user"""
         result = await db.execute(
-            select(AlertSubscription).where(AlertSubscription.user_id == user_id)
+            alive_select(AlertSubscription).where(AlertSubscription.user_id == user_id)
         )
         return result.scalars().all()
 
@@ -319,10 +320,7 @@ class AlertService:
         update_data: Dict[str, Any]
     ) -> Optional[AlertSubscription]:
         """Update an alert subscription"""
-        result = await db.execute(
-            select(AlertSubscription).where(AlertSubscription.id == subscription_id)
-        )
-        subscription = result.scalar_one_or_none()
+        subscription = await get_alive_by_id(db, AlertSubscription, subscription_id)
 
         if not subscription:
             return None
@@ -355,27 +353,20 @@ class AlertService:
     @staticmethod
     async def delete_subscription(
         db: AsyncSession,
-        subscription_id: int
+        subscription_id: int,
+        user_id: int | None = None
     ) -> bool:
-        """Delete an alert subscription and its delivery logs"""
-        result = await db.execute(
-            select(AlertSubscription).where(AlertSubscription.id == subscription_id)
-        )
-        subscription = result.scalar_one_or_none()
+        """Soft delete an alert subscription"""
+        subscription = await get_alive_by_id(db, AlertSubscription, subscription_id)
 
         if not subscription:
             return False
 
-        # Delete related delivery logs first (foreign key constraint)
-        from sqlalchemy import delete as sa_delete
-        await db.execute(
-            sa_delete(AlertDeliveryLog).where(AlertDeliveryLog.subscription_id == subscription_id)
-        )
-
-        await db.delete(subscription)
+        subscription.soft_delete(user_id)
+        subscription.updated_at = now()
         await db.commit()
 
-        logger.info(f"Deleted subscription {subscription_id} and its delivery logs")
+        logger.info(f"Soft deleted subscription {subscription_id}")
         return True
 
     @staticmethod
@@ -481,6 +472,7 @@ class AlertService:
         from backend.models.alert_event import AlertEvent
         from backend.models.diagnostic_session import DiagnosticSession
         from backend.models.datasource import Datasource
+        from backend.models.soft_delete import alive_filter
         from backend.database import async_session as db_session_factory
 
         # Get alert event
@@ -490,8 +482,27 @@ class AlertService:
             logger.warning(f"Alert event {alert_event_id} not found for auto-diagnosis")
             return None
 
+        # Skip if diagnosis already completed
+        if event.diagnosis_status == "completed" and event.ai_diagnosis_summary:
+            logger.info(f"Auto-diagnosis skipped for event {alert_event_id}: already completed")
+            return event.ai_diagnosis_summary
+
+        # Dedup: check if another event for the same datasource+metric was diagnosed recently
+        recent_diagnosis = await _find_recent_diagnosis(db, event)
+        if recent_diagnosis:
+            logger.info(
+                f"Auto-diagnosis: reusing recent diagnosis from event {recent_diagnosis.id} "
+                f"for alert event {alert_event_id}"
+            )
+            event.ai_diagnosis_summary = recent_diagnosis.ai_diagnosis_summary
+            event.root_cause = recent_diagnosis.root_cause
+            event.recommended_actions = recent_diagnosis.recommended_actions
+            event.diagnosis_status = "completed"
+            await db.commit()
+            return event.ai_diagnosis_summary
+
         # Get datasource
-        result = await db.execute(select(Datasource).where(Datasource.id == event.datasource_id))
+        result = await db.execute(select(Datasource).where(Datasource.id == event.datasource_id, alive_filter(Datasource)))
         ds = result.scalar_one_or_none()
         if not ds:
             logger.warning(f"Datasource {event.datasource_id} not found for auto-diagnosis")
@@ -637,6 +648,53 @@ def _extract_diagnosis_parts(full_text: str) -> tuple[Optional[str], Optional[st
     return root_cause, recommended_actions, summary
 
 
+async def _find_recent_diagnosis(db: AsyncSession, current_event) -> Optional["AlertEvent"]:
+    """
+    Check if there's a recently completed diagnosis for the same datasource + metric
+    within the inspection_dedup_window_minutes window.
+
+    Returns the recent AlertEvent with completed diagnosis, or None.
+    """
+    from backend.models.alert_event import AlertEvent
+    from backend.services.config_service import get_config
+    from backend.config import get_settings
+
+    # Read dedup window from system config (fallback to settings default)
+    dedup_minutes = await get_config(
+        db, "inspection_dedup_window_minutes",
+        default=get_settings().inspection_dedup_window_minutes
+    )
+    if not dedup_minutes or dedup_minutes <= 0:
+        return None
+
+    time_threshold = now() - timedelta(minutes=int(dedup_minutes))
+
+    # Build query: same datasource, same metric, completed diagnosis, within window
+    filters = [
+        AlertEvent.id != current_event.id,
+        AlertEvent.datasource_id == current_event.datasource_id,
+        AlertEvent.diagnosis_status == "completed",
+        AlertEvent.ai_diagnosis_summary.isnot(None),
+        AlertEvent.last_updated >= time_threshold,
+    ]
+
+    # Match by metric_name if available, otherwise by alert_type
+    if current_event.metric_name:
+        filters.append(AlertEvent.metric_name == current_event.metric_name)
+    elif current_event.alert_type:
+        filters.append(AlertEvent.alert_type == current_event.alert_type)
+    else:
+        return None
+
+    result = await db.execute(
+        select(AlertEvent)
+        .where(and_(*filters))
+        .order_by(AlertEvent.last_updated.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 async def run_sync_diagnosis(
     db: AsyncSession,
     alert_event_id: int,
@@ -676,8 +734,28 @@ async def run_sync_diagnosis(
             "status": "completed",
         }
 
+    # Dedup: check if another event for the same datasource+metric was diagnosed recently
+    recent_diagnosis = await _find_recent_diagnosis(db, event)
+    if recent_diagnosis:
+        logger.info(
+            f"Reusing recent diagnosis from event {recent_diagnosis.id} for alert event {alert_event_id} "
+            f"(datasource={event.datasource_id}, metric={event.metric_name})"
+        )
+        # Copy diagnosis results to current event
+        event.ai_diagnosis_summary = recent_diagnosis.ai_diagnosis_summary
+        event.root_cause = recent_diagnosis.root_cause
+        event.recommended_actions = recent_diagnosis.recommended_actions
+        event.diagnosis_status = "completed"
+        await db.commit()
+        return {
+            "root_cause": recent_diagnosis.root_cause,
+            "recommended_actions": recent_diagnosis.recommended_actions,
+            "summary": recent_diagnosis.ai_diagnosis_summary,
+            "status": "completed",
+        }
+
     # Get datasource
-    result = await db.execute(select(Datasource).where(Datasource.id == event.datasource_id))
+    result = await db.execute(select(Datasource).where(Datasource.id == event.datasource_id, alive_filter(Datasource)))
     ds = result.scalar_one_or_none()
     if not ds:
         logger.warning(f"Datasource {event.datasource_id} not found for sync diagnosis")
@@ -811,7 +889,7 @@ async def _run_diagnosis_coro(
 
         # Build messages for AI
         result = await db.execute(
-            select(ChatMessage)
+            alive_select(ChatMessage)
             .where(ChatMessage.session_id == session_id)
             .order_by(ChatMessage.created_at)
         )

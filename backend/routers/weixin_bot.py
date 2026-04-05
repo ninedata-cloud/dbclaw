@@ -18,6 +18,7 @@ from backend.dependencies import get_current_user
 from backend.models.integration import Integration
 from backend.models.integration_bot_binding import IntegrationBotBinding
 from backend.models.user import User
+from backend.models.soft_delete import alive_filter
 from backend.schemas.weixin import WeixinLoginQrcodeResponse, WeixinLoginStatusResponse, WeixinBotBindingStatusResponse
 from backend.services.integration_service import IntegrationService
 from backend.services.weixin_service import weixin_service
@@ -45,6 +46,7 @@ async def _get_or_create_binding(db: AsyncSession) -> IntegrationBotBinding:
         select(Integration).where(
             Integration.integration_id == "builtin_weixin_bot",
             Integration.enabled == True,
+            alive_filter(Integration),
         )
     )
     integration = result.scalar_one_or_none()

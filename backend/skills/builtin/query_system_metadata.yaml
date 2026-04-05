@@ -181,8 +181,9 @@ code: |
       # Users mode
       if query_type == 'users':
           from backend.models.user import User
-          
-          result = await context.db.execute(select(User))
+          from backend.models.soft_delete import alive_select
+
+          result = await context.db.execute(alive_select(User))
           users = result.scalars().all()
           
           return {

@@ -8,6 +8,7 @@ from backend.config import get_settings
 from backend.database import get_db
 from backend.models.user import User
 from backend.models.login_log import LoginLog
+from backend.models.soft_delete import alive_filter
 from backend.schemas.auth import LoginRequest, LoginResponse, ChangePasswordRequest, CurrentUserUpdateRequest, UserResponse
 from backend.utils.security import verify_password, hash_password
 from backend.dependencies import get_current_user
@@ -41,7 +42,7 @@ def _clear_session_cookie(response: Response) -> None:
 
 @router.post("/login", response_model=LoginResponse)
 async def login(data: LoginRequest, request: Request, response: Response, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.username == data.username))
+    result = await db.execute(select(User).where(User.username == data.username, alive_filter(User)))
     user = result.scalar_one_or_none()
 
     ip_address = request.client.host if request.client else None

@@ -7,6 +7,7 @@ import logging
 
 from backend.database import get_db
 from backend.models.datasource import Datasource
+from backend.models.soft_delete import alive_filter, alive_select, get_alive_by_id
 from backend.schemas.datasource import (
     DatasourceCreate, DatasourceUpdate, DatasourceResponse, DatasourceTestResult, DatasourceTestRequest,
     DatasourceSilenceRequest, DatasourceSilenceResponse
@@ -47,7 +48,7 @@ async def list_datasources(
     tags: str | None = None,
     db: AsyncSession = Depends(get_db)
 ):
-    query = select(Datasource)
+    query = alive_select(Datasource)
     filters = []
 
     if q and q.strip():
@@ -119,7 +120,7 @@ async def check_all_datasource_status(db: AsyncSession = Depends(get_db)):
     """批量检测所有数据源的连接状态"""
     from backend.utils.datetime_helper import now
 
-    result = await db.execute(select(Datasource).order_by(Datasource.id.desc()))
+    result = await db.execute(alive_select(Datasource).order_by(Datasource.id.desc()))
     datasources = result.scalars().all()
     diagnostic_service = ConnectionDiagnosticService(db)
 
@@ -156,6 +157,27 @@ async def check_all_datasource_status(db: AsyncSession = Depends(get_db)):
 async def create_datasource(data: DatasourceCreate, db: AsyncSession = Depends(get_db)):
     logger.info(f"Creating datasource: {data.name}")
 
+    # 先测试连接并获取版本信息
+    db_version = None
+    try:
+        diagnostic_service = ConnectionDiagnosticService(db)
+        result = await diagnostic_service.diagnose_connection_params(
+            db_type=data.db_type,
+            host=data.host,
+            port=data.port,
+            username=data.username,
+            password=data.password,
+            database=data.database,
+            extra_params=data.extra_params,
+            datasource_id=None,
+            include_host_checks=False,
+            include_tcp_checks=False,
+        )
+        if result.success:
+            db_version = result.version
+    except Exception as e:
+        logger.warning(f"Failed to get version for datasource {data.name}: {e}")
+
     datasource = Datasource(
         name=data.name,
         db_type=data.db_type,
@@ -172,6 +194,7 @@ async def create_datasource(data: DatasourceCreate, db: AsyncSession = Depends(g
         metric_source=data.metric_source,
         external_instance_id=data.external_instance_id,
         inbound_source=data.inbound_source,
+        db_version=db_version,
     )
     db.add(datasource)
     await db.commit()
@@ -183,8 +206,7 @@ async def create_datasource(data: DatasourceCreate, db: AsyncSession = Depends(g
 
 @router.get("/{datasource_id}", response_model=DatasourceResponse)
 async def get_datasource(datasource_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
-    datasource = result.scalar_one_or_none()
+    datasource = await get_alive_by_id(db, Datasource, datasource_id)
     if not datasource:
         raise HTTPException(status_code=404, detail="数据源不存在")
     return datasource
@@ -194,8 +216,7 @@ async def get_datasource(datasource_id: int, db: AsyncSession = Depends(get_db))
 async def update_datasource(datasource_id: int, data: DatasourceUpdate, db: AsyncSession = Depends(get_db)):
     logger.info(f"Updating datasource {datasource_id}")
 
-    result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
-    datasource = result.scalar_one_or_none()
+    datasource = await get_alive_by_id(db, Datasource, datasource_id)
     if not datasource:
         raise HTTPException(status_code=404, detail="数据源不存在")
 
@@ -211,6 +232,33 @@ async def update_datasource(datasource_id: int, data: DatasourceUpdate, db: Asyn
     for key, value in update_data.items():
         setattr(datasource, key, value)
 
+    # 如果连接相关参数变化，重新采集版本信息
+    connection_params_changed = any(k in update_data for k in ['host', 'port', 'username', 'password', 'database', 'db_type', 'extra_params'])
+    if connection_params_changed:
+        try:
+            # 获取密码（可能是新密码或已加密的密码）
+            password = update_data.get('password')
+            if password is None and data.password is None:
+                password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
+
+            diagnostic_service = ConnectionDiagnosticService(db)
+            result = await diagnostic_service.diagnose_connection_params(
+                db_type=update_data.get('db_type', datasource.db_type),
+                host=update_data.get('host', datasource.host),
+                port=update_data.get('port', datasource.port),
+                username=update_data.get('username', datasource.username),
+                password=password,
+                database=update_data.get('database', datasource.database),
+                extra_params=update_data.get('extra_params', datasource.extra_params),
+                datasource_id=datasource_id,
+                include_host_checks=False,
+                include_tcp_checks=False,
+            )
+            if result.success:
+                datasource.db_version = result.version
+        except Exception as e:
+            logger.warning(f"Failed to get version for datasource {datasource_id}: {e}")
+
     await db.commit()
     await db.refresh(datasource)
 
@@ -219,18 +267,21 @@ async def update_datasource(datasource_id: int, data: DatasourceUpdate, db: Asyn
 
 
 @router.delete("/{datasource_id}")
-async def delete_datasource(datasource_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_datasource(
+    datasource_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     logger.info(f"Deleting datasource {datasource_id}")
 
-    result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
-    datasource = result.scalar_one_or_none()
+    datasource = await get_alive_by_id(db, Datasource, datasource_id)
     if not datasource:
         raise HTTPException(status_code=404, detail="数据源不存在")
 
-    await db.delete(datasource)
+    datasource.soft_delete(current_user.id)
     await db.commit()
 
-    logger.info(f"Deleted datasource {datasource_id}")
+    logger.info(f"Soft deleted datasource {datasource_id}")
     return {"message": "Datasource deleted"}
 
 
@@ -243,7 +294,7 @@ async def test_datasource_connection(data: DatasourceTestRequest, db: AsyncSessi
 
         # If datasource_id is provided and password is None, use saved password
         if data.datasource_id is not None and password is None:
-            result = await db.execute(select(Datasource).where(Datasource.id == data.datasource_id))
+            result = await db.execute(select(Datasource).where(Datasource.id == data.datasource_id, alive_filter(Datasource)))
             datasource = result.scalar_one_or_none()
             if datasource and datasource.password_encrypted:
                 password = decrypt_value(datasource.password_encrypted)
@@ -270,8 +321,7 @@ async def test_datasource(datasource_id: int, db: AsyncSession = Depends(get_db)
     """Test database connection using saved datasource configuration"""
     from backend.utils.datetime_helper import now
 
-    result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
-    datasource = result.scalar_one_or_none()
+    datasource = await get_alive_by_id(db, Datasource, datasource_id)
     if not datasource:
         raise HTTPException(status_code=404, detail="数据源不存在")
 
@@ -285,6 +335,11 @@ async def test_datasource(datasource_id: int, db: AsyncSession = Depends(get_db)
     datasource.connection_status = 'normal' if diagnosis.get('success') else 'failed'
     datasource.connection_error = None if diagnosis.get('success') else diagnosis.get('summary') or diagnosis.get('message')
     datasource.connection_checked_at = now()
+
+    # 更新版本信息
+    if diagnosis.get('success') and diagnosis.get('version'):
+        datasource.db_version = diagnosis.get('version')
+
     await db.commit()
 
     return diagnosis
@@ -300,8 +355,7 @@ async def set_datasource_silence(
     from datetime import timedelta
     from backend.utils.datetime_helper import now
 
-    result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
-    datasource = result.scalar_one_or_none()
+    datasource = await get_alive_by_id(db, Datasource, datasource_id)
     if not datasource:
         raise HTTPException(status_code=404, detail="数据源不存在")
 
@@ -332,8 +386,7 @@ async def cancel_datasource_silence(
     db: AsyncSession = Depends(get_db)
 ):
     """取消数据源静默，恢复监控和告警"""
-    result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
-    datasource = result.scalar_one_or_none()
+    datasource = await get_alive_by_id(db, Datasource, datasource_id)
     if not datasource:
         raise HTTPException(status_code=404, detail="数据源不存在")
 
@@ -363,8 +416,7 @@ async def get_datasource_silence_status(
     """获取数据源静默状态"""
     from backend.utils.datetime_helper import now
 
-    result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
-    datasource = result.scalar_one_or_none()
+    datasource = await get_alive_by_id(db, Datasource, datasource_id)
     if not datasource:
         raise HTTPException(status_code=404, detail="数据源不存在")
 

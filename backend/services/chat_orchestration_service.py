@@ -1,5 +1,7 @@
+import asyncio
 import json
 import logging
+import re
 from datetime import datetime
 from typing import Any, AsyncGenerator, Awaitable, Callable, Optional
 
@@ -7,7 +9,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agent.conversation_skills import execute_skill_call, run_conversation_with_skills
+from backend.models.diagnosis_conclusion import DiagnosisConclusion
+from backend.models.diagnosis_event import DiagnosisEvent
 from backend.models.diagnostic_session import ChatMessage, DiagnosticSession
+from backend.models.soft_delete import alive_filter, alive_select
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +90,10 @@ async def rebuild_llm_messages(all_msgs):
 
 async def _emit(event: dict[str, Any], on_event: EventCallback = None):
     if on_event:
-        await on_event(event)
+        try:
+            await on_event(event)
+        except Exception:
+            pass  # WebSocket may be disconnected; task continues in background
 
 
 async def _store_tool_call(db: AsyncSession, session_id: int, event: dict[str, Any]) -> None:
@@ -188,7 +196,7 @@ async def _load_pending_approval_from_db(
     user_id: int | None,
 ) -> dict[str, Any] | None:
     result = await db.execute(
-        select(ChatMessage)
+        alive_select(ChatMessage)
         .where(
             ChatMessage.session_id == session_id,
             ChatMessage.role == "approval_request",
@@ -209,7 +217,9 @@ async def _load_pending_approval_from_db(
     if data.get("status") not in {None, "pending"}:
         return None
 
-    session_result = await db.execute(select(DiagnosticSession).where(DiagnosticSession.id == session_id))
+    session_result = await db.execute(
+        alive_select(DiagnosticSession).where(DiagnosticSession.id == session_id)
+    )
     session = session_result.scalar_one_or_none()
 
     return {
@@ -234,7 +244,7 @@ async def _load_pending_approval_from_db(
 
 
 async def _accumulate_usage(db: AsyncSession, session_id: int, user_id: int | None, usage: dict[str, Any]) -> None:
-    query = select(DiagnosticSession).where(DiagnosticSession.id == session_id)
+    query = alive_select(DiagnosticSession).where(DiagnosticSession.id == session_id)
     if user_id is not None:
         query = query.where(DiagnosticSession.user_id == user_id)
     session_result = await db.execute(query)
@@ -245,6 +255,133 @@ async def _accumulate_usage(db: AsyncSession, session_id: int, user_id: int | No
         session.total_tokens += int(usage.get("total_tokens") or 0)
         session.updated_at = datetime.utcnow()
         await db.commit()
+
+
+def _strip_markdown_text(text: str) -> str:
+    if not text:
+        return ""
+    text = re.sub(r"```[\s\S]*?```", " ", text)
+    text = re.sub(r"`([^`]*)`", r"\1", text)
+    text = re.sub(r"^#{1,6}\s*", "", text, flags=re.MULTILINE)
+    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+    text = re.sub(r"\*([^*]+)\*", r"\1", text)
+    text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def _extract_section_lines(content: str, heading_keywords: list[str]) -> list[str]:
+    lines = [line.rstrip() for line in (content or "").splitlines()]
+    captured: list[str] = []
+    in_section = False
+    for line in lines:
+        plain = _strip_markdown_text(line)
+        if not plain:
+            if in_section and captured:
+                break
+            continue
+        is_heading = line.lstrip().startswith("#") or plain.endswith("：") or plain.endswith(":")
+        if any(keyword in plain for keyword in heading_keywords) and is_heading:
+            in_section = True
+            continue
+        if in_section and is_heading and captured:
+            break
+        if in_section:
+            captured.append(plain.lstrip("-•*1234567890. ").strip())
+    return [line for line in captured if line]
+
+
+async def _upsert_diagnosis_conclusion(
+    db: AsyncSession,
+    *,
+    session_id: int,
+    user_id: int | None,
+    run_id: str | None,
+    content: str,
+) -> dict[str, Any] | None:
+    plain = _strip_markdown_text(content)
+    if not plain:
+        return None
+
+    session_query = alive_select(DiagnosticSession).where(DiagnosticSession.id == session_id)
+    if user_id is not None:
+        session_query = session_query.where(DiagnosticSession.user_id == user_id)
+    session_result = await db.execute(session_query)
+    session = session_result.scalar_one_or_none()
+    if not session:
+        return None
+
+    summary = plain[:220]
+    findings = _extract_section_lines(content, ["问题判断", "结论", "诊断结论", "根因", "现象"])
+    action_items = _extract_section_lines(content, ["建议动作", "建议", "处理建议", "行动建议", "下一步"])
+    evidence_lines = _extract_section_lines(content, ["关键证据", "证据", "依据"])
+    risk_lines = _extract_section_lines(content, ["风险提示", "风险", "注意事项"])
+
+    evidence_refs = [{"type": "text", "detail": line} for line in evidence_lines[:10]]
+    if risk_lines:
+        evidence_refs.extend({"type": "risk", "detail": line} for line in risk_lines[:10])
+
+    knowledge_refs: list[dict[str, Any]] = []
+    if run_id:
+        event_result = await db.execute(
+            alive_select(DiagnosisEvent)
+            .where(
+                DiagnosisEvent.session_id == session_id,
+                DiagnosisEvent.run_id == run_id,
+                DiagnosisEvent.event_type.in_(["kb_document_selected", "kb_document_read"]),
+            )
+            .order_by(DiagnosisEvent.sequence_no)
+        )
+        seen_refs: set[tuple[Any, Any]] = set()
+        for event in event_result.scalars().all():
+            payload = event.payload or {}
+            key = (payload.get("document_id"), payload.get("title") or payload.get("document_title"))
+            if key in seen_refs:
+                continue
+            seen_refs.add(key)
+            knowledge_refs.append({
+                "document_id": payload.get("document_id"),
+                "title": payload.get("title") or payload.get("document_title") or "未命名文档",
+            })
+
+    result = await db.execute(
+        select(DiagnosisConclusion)
+        .where(DiagnosisConclusion.session_id == session_id)
+        .order_by(DiagnosisConclusion.created_at.desc(), DiagnosisConclusion.id.desc())
+    )
+    conclusion = result.scalars().first()
+    if conclusion is None:
+        conclusion = DiagnosisConclusion(session_id=session_id)
+        db.add(conclusion)
+
+    conclusion.datasource_id = session.datasource_id
+    conclusion.run_id = run_id
+    conclusion.summary = summary
+    conclusion.confidence = 0.8
+    conclusion.final_markdown = content
+    conclusion.findings = [{"description": item} for item in findings[:10]] if findings else []
+    conclusion.action_items = [{"title": item, "priority": "medium", "description": item} for item in action_items[:10]] if action_items else []
+    conclusion.evidence_refs = evidence_refs
+    conclusion.knowledge_refs = knowledge_refs
+    conclusion.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(conclusion)
+
+    return {
+        "id": conclusion.id,
+        "session_id": conclusion.session_id,
+        "datasource_id": conclusion.datasource_id,
+        "run_id": conclusion.run_id,
+        "summary": conclusion.summary,
+        "confidence": conclusion.confidence,
+        "final_markdown": conclusion.final_markdown,
+        "findings": conclusion.findings or [],
+        "action_items": conclusion.action_items or [],
+        "evidence_refs": conclusion.evidence_refs or [],
+        "knowledge_refs": conclusion.knowledge_refs or [],
+        "created_at": conclusion.created_at.isoformat() if conclusion.created_at else None,
+        "updated_at": conclusion.updated_at.isoformat() if conclusion.updated_at else None,
+    }
 
 
 async def process_stream_events(
@@ -259,58 +396,111 @@ async def process_stream_events(
     disabled_tools,
     pending_approvals: PendingApprovalsStore,
     on_event: EventCallback = None,
+    system_prompt_override: str | None = None,
+    run_id: str | None = None,
+    skip_approval: bool = False,
 ) -> tuple[str, dict[str, int], bool]:
     full_response = ""
     usage_totals = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
     paused_for_approval = False
 
-    async for event in run_conversation_with_skills(
-        messages,
-        datasource_id,
-        model_id,
-        kb_ids,
-        db,
-        user_id=user_id,
-        session_id=session_id,
-        disabled_tools=disabled_tools,
-    ):
-        event_type = event.get("type")
+    try:
+        async with asyncio.timeout(600):
+            async for event in run_conversation_with_skills(
+                messages,
+                datasource_id,
+                model_id,
+                kb_ids,
+                db,
+                user_id=user_id,
+                session_id=session_id,
+                disabled_tools=disabled_tools,
+                system_prompt_override=system_prompt_override,
+                skip_approval=skip_approval,
+            ):
+                event_type = event.get("type")
 
-        if event_type == "content":
-            full_response += event["content"]
-            await _emit({"type": "content", "content": event["content"]}, on_event)
-        elif event_type == "tool_call":
-            await _store_tool_call(db, session_id, event)
-            await _emit({
-                "type": "tool_call",
-                "tool_name": event["tool_name"],
-                "tool_args": event["tool_args"],
-                "tool_call_id": event.get("tool_call_id"),
-            }, on_event)
-        elif event_type == "tool_result":
-            await _store_tool_result(db, session_id, event)
-            await _emit({
-                "type": "tool_result",
-                "tool_name": event["tool_name"],
-                "result": event["result"],
-                "execution_time_ms": event.get("execution_time_ms"),
-                "tool_call_id": event.get("tool_call_id"),
-                "skill_execution_id": event.get("skill_execution_id"),
-            }, on_event)
-        elif event_type == "usage":
-            usage = event.get("usage", {}) or {}
-            usage_totals["input_tokens"] += int(usage.get("input_tokens") or 0)
-            usage_totals["output_tokens"] += int(usage.get("output_tokens") or 0)
-            usage_totals["total_tokens"] += int(usage.get("total_tokens") or 0)
-            await _accumulate_usage(db, session_id, user_id, usage)
-            await _emit({"type": "usage", "usage": usage}, on_event)
-        elif event_type == "done":
-            await _emit({"type": "done"}, on_event)
-        elif event_type == "error":
-            await _emit({
-                "type": "error",
-                "content": event.get("content") or event.get("message", "Unknown error"),
-            }, on_event)
+                if event_type == "content":
+                    full_response += event["content"]
+                    await _emit({"type": "content", "content": event["content"]}, on_event)
+                elif event_type == "tool_call":
+                    await _store_tool_call(db, session_id, event)
+                    await _emit({
+                        "type": "tool_call",
+                        "tool_name": event["tool_name"],
+                        "tool_args": event["tool_args"],
+                        "tool_call_id": event.get("tool_call_id"),
+                    }, on_event)
+                elif event_type == "tool_result":
+                    await _store_tool_result(db, session_id, event)
+                    await _emit({
+                        "type": "tool_result",
+                        "tool_name": event["tool_name"],
+                        "result": event["result"],
+                        "execution_time_ms": event.get("execution_time_ms"),
+                        "tool_call_id": event.get("tool_call_id"),
+                        "skill_execution_id": event.get("skill_execution_id"),
+                    }, on_event)
+                elif event_type == "approval_request":
+                    paused_for_approval = True
+                    await _store_approval_request(
+                        db,
+                        session_id,
+                        event,
+                        pending_approvals,
+                        datasource_id,
+                        model_id,
+                        kb_ids,
+                        disabled_tools,
+                        user_id,
+                    )
+                    await _emit(event, on_event)
+                elif event_type == "usage":
+                    usage = event.get("usage", {}) or {}
+                    usage_totals["input_tokens"] += int(usage.get("input_tokens") or 0)
+                    usage_totals["output_tokens"] += int(usage.get("output_tokens") or 0)
+                    usage_totals["total_tokens"] += int(usage.get("total_tokens") or 0)
+                    await _accumulate_usage(db, session_id, user_id, usage)
+                    await _emit({"type": "usage", "usage": usage}, on_event)
+                elif event_type in ("thinking_start", "thinking_phase", "thinking_complete"):
+                    logger.info(f"[THINKING] Emitting thinking event: {event}")
+                    await _emit(event, on_event)
+                elif event_type == "plan_step_status":
+                    await _emit(event, on_event)
+                elif event_type == "done":
+                    await _emit({"type": "done"}, on_event)
+                elif event_type == "error":
+                    await _emit({
+                        "type": "error",
+                        "content": event.get("content") or event.get("message", "Unknown error"),
+                    }, on_event)
+    except TimeoutError:
+        logger.error(f"Conversation stream timed out for session {session_id}")
+        if full_response:
+            await _emit({"type": "content", "content": "\n\n[会话超时，以上为部分结果]"}, on_event)
+            full_response += "\n\n[会话超时，以上为部分结果]"
+        await _emit({"type": "error", "content": "AI 会话超时（600秒），请稍后重试或简化问题。"}, on_event)
+        await _emit({"type": "done"}, on_event)
+    except asyncio.CancelledError:
+        logger.info(f"Conversation stream cancelled for session {session_id}")
+        if full_response:
+            full_response += "\n\n[用户已停止生成]"
+        # Save partial result before re-raising
+        if full_response and not paused_for_approval:
+            try:
+                assistant_msg = ChatMessage(
+                    session_id=session_id,
+                    role="assistant",
+                    content=full_response,
+                    input_tokens=usage_totals["input_tokens"],
+                    output_tokens=usage_totals["output_tokens"],
+                    total_tokens=usage_totals["total_tokens"],
+                )
+                db.add(assistant_msg)
+                await db.commit()
+            except Exception as save_err:
+                logger.error(f"Failed to save partial response on cancel: {save_err}")
+        raise
 
     if full_response and not paused_for_approval:
         assistant_msg = ChatMessage(
@@ -323,6 +513,15 @@ async def process_stream_events(
         )
         db.add(assistant_msg)
         await db.commit()
+        conclusion_payload = await _upsert_diagnosis_conclusion(
+            db,
+            session_id=session_id,
+            user_id=user_id,
+            run_id=run_id,
+            content=full_response,
+        )
+        if conclusion_payload:
+            await _emit({"type": "diagnosis_conclusion", **conclusion_payload}, on_event)
 
     return full_response, usage_totals, paused_for_approval
 
@@ -350,7 +549,7 @@ async def prepare_user_turn(
     )
     db.add(msg)
 
-    query = select(DiagnosticSession).where(DiagnosticSession.id == session_id)
+    query = alive_select(DiagnosticSession).where(DiagnosticSession.id == session_id)
     if user_id is not None:
         query = query.where(DiagnosticSession.user_id == user_id)
     session_result = await db.execute(query)
@@ -380,7 +579,7 @@ async def prepare_user_turn(
     await db.commit()
 
     msgs_result = await db.execute(
-        select(ChatMessage)
+        alive_select(ChatMessage)
         .where(ChatMessage.session_id == session_id)
         .order_by(ChatMessage.created_at)
     )
@@ -402,7 +601,7 @@ async def continue_conversation_after_tool(
     on_event: EventCallback = None,
 ) -> tuple[str, dict[str, int], bool]:
     msgs_result = await db.execute(
-        select(ChatMessage)
+        alive_select(ChatMessage)
         .where(ChatMessage.session_id == session_id)
         .order_by(ChatMessage.created_at)
     )
@@ -419,6 +618,7 @@ async def continue_conversation_after_tool(
         disabled_tools=disabled_tools,
         pending_approvals=pending_approvals,
         on_event=on_event,
+        run_id=f"resume_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{session_id}",
     )
 
 

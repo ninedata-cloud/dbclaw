@@ -11,10 +11,10 @@ permissions: []
 code: |
   async def execute(context, params):
       from backend.models.datasource import Datasource
-      from sqlalchemy import select
+      from backend.models.soft_delete import alive_select
 
       # Get all datasources
-      result = await context.db.execute(select(Datasource))
+      result = await context.db.execute(alive_select(Datasource))
       datasources = result.scalars().all()
 
       # Format datasource info

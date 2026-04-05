@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.datasource import Datasource
+from backend.models.soft_delete import alive_filter
 from backend.services.db_connector import get_connector
 from backend.utils.encryption import decrypt_value
 from backend.utils.host_executor import execute_host_command
@@ -22,7 +23,7 @@ class ConnectionDiagnosticService:
         include_host_checks: bool = True,
         include_tcp_checks: bool = True,
     ) -> Dict[str, Any]:
-        result = await self.db.execute(select(Datasource).where(Datasource.id == datasource_id))
+        result = await self.db.execute(select(Datasource).where(Datasource.id == datasource_id, alive_filter(Datasource)))
         datasource = result.scalar_one_or_none()
         if not datasource:
             return self._finalize_result(

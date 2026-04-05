@@ -31,7 +31,7 @@ async def execute_host_command(db: AsyncSession, host_id: int, command: str, all
                 'kill', 'pkill', 'killall',
                 'shutdown', 'reboot', 'halt', 'poweroff',
                 'mkfs', 'fdisk', 'parted',
-                'dd ', 'format',
+                'dd ',
                 'iptables', 'firewall',
                 'useradd', 'userdel', 'usermod',
                 'groupadd', 'groupdel',

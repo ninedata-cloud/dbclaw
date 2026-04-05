@@ -3,7 +3,12 @@ const ChatWidget = {
     ws: null,
     currentContent: '',
     isStreaming: false,
+    isThinking: false,
+    thinkingPhase: null,
+    thinkingMessage: '',
     attachments: [],
+    _streamTimeoutTimer: null,
+    _streamTimeoutMs: 600 * 1000,
 
     createMessagesContainer() {
         return DOM.el('div', { className: 'chat-messages', id: 'chat-messages' });
@@ -298,6 +303,9 @@ const ChatWidget = {
         if (!messages) return;
         this.currentContent = '';
         this.isStreaming = true;
+        this.isThinking = false;
+        this.thinkingPhase = null;
+        this.thinkingMessage = '';
         const msg = DOM.el('div', { className: 'chat-message assistant', id: 'streaming-message' });
         msg.innerHTML = `
             <div class="chat-avatar">AI</div>
@@ -305,11 +313,79 @@ const ChatWidget = {
         `;
         messages.appendChild(msg);
         this._updateSendButton(true);
+        this._resetStreamTimeout();
         this._scrollToBottom();
+    },
+
+    startThinkingMessage(phase, message) {
+        const streamingMsg = DOM.$('#streaming-message');
+        if (!streamingMsg) return;
+        this.isThinking = true;
+        this.thinkingPhase = phase;
+        this.thinkingMessage = message;
+        const bubble = streamingMsg.querySelector('.chat-bubble');
+        bubble.innerHTML = `
+            <div class="thinking-status">
+                <div class="thinking-dots">
+                    <span class="thinking-dot"></span>
+                    <span class="thinking-dot"></span>
+                    <span class="thinking-dot"></span>
+                </div>
+                <div class="thinking-text">${this._escapeHtml(message)}</div>
+            </div>
+        `;
+        this._scrollToBottom();
+    },
+
+    showThinkingIndicator(phase, message) {
+        const messages = DOM.$('#chat-messages');
+        if (!messages) return;
+
+        // Remove existing thinking indicator if any
+        this.hideThinkingIndicator();
+
+        this.thinkingPhase = phase;
+        this.thinkingMessage = message;
+
+        const indicator = DOM.el('div', {
+            className: 'chat-message assistant thinking-indicator',
+            id: 'thinking-indicator',
+            style: { padding: '8px 12px', borderLeft: '3px solid var(--accent-purple)', margin: '4px 0 4px 48px' }
+        });
+
+        indicator.innerHTML = `
+            <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary);">
+                <span style="font-weight:500;color:var(--text-primary);">${this._escapeHtml(message)}</span>
+            </div>
+        `;
+        messages.appendChild(indicator);
+        this._scrollToBottom();
+    },
+
+    updateThinkingIndicator(phase, message) {
+        this.thinkingPhase = phase;
+        this.thinkingMessage = message;
+        const indicator = DOM.$('#thinking-indicator');
+        if (indicator) {
+            const text = indicator.querySelector('span:last-child');
+            if (text) {
+                text.textContent = message;
+            }
+        }
+    },
+
+    hideThinkingIndicator() {
+        const indicator = DOM.$('#thinking-indicator');
+        if (indicator) {
+            indicator.remove();
+        }
+        this.thinkingPhase = null;
+        this.thinkingMessage = '';
     },
 
     appendContent(text) {
         this.currentContent += text;
+        this._resetStreamTimeout();
         const streamingMsg = DOM.$('#streaming-message');
         if (streamingMsg) {
             const bubble = streamingMsg.querySelector('.chat-bubble');
@@ -330,6 +406,9 @@ const ChatWidget = {
 
     finishAssistantMessage() {
         this.isStreaming = false;
+        this.isThinking = false;
+        this._clearStreamTimeout();
+        this.hideThinkingIndicator();
         const streamingMsg = DOM.$('#streaming-message');
         if (streamingMsg) {
             streamingMsg.removeAttribute('id');
@@ -472,6 +551,7 @@ const ChatWidget = {
 
     addToolCall(toolName, args, toolCallId = null) {
         this._ensureMaps();
+        this._resetStreamTimeout();
         const toolId = `tool-${toolCallId || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`}`;
         const toolMsg = this._buildToolCard(toolId, toolName, args, '执行中', 'running');
         if (toolCallId) toolMsg.setAttribute('data-tool-call-id', toolCallId);
@@ -481,6 +561,7 @@ const ChatWidget = {
 
     addToolResult(toolName, result, executionTimeMs = null, toolCallId = null, metadata = {}) {
         this._ensureMaps();
+        this._resetStreamTimeout();
         const toolId = this.pendingTools.get(toolCallId || toolName);
         if (!toolId) return;
 
@@ -502,7 +583,7 @@ const ChatWidget = {
             resultStr = JSON.stringify(result, null, 2);
         }
 
-        const isError = parsedResult && ((typeof parsedResult === 'object' && parsedResult.error) || (typeof result === 'string' && result.toLowerCase().includes('error')));
+        const isError = parsedResult && typeof parsedResult === 'object' && parsedResult.success === false;
         const status = toolMsg.querySelector('.chat-tool-status');
         if (status) {
             status.className = `chat-tool-status ${isError ? 'error' : 'success'}`;
@@ -623,8 +704,13 @@ const ChatWidget = {
     },
 
     showError(message) {
+        // Remove the streaming message first (with spinner) before adding error
+        const streamingMsg = DOM.$('#streaming-message');
+        if (streamingMsg) streamingMsg.remove();
         this.addError(message);
-        this.finishAssistantMessage();
+        this.isStreaming = false;
+        this._clearStreamTimeout();
+        this._updateSendButton(false);
     },
 
     loadMessages(messages) {
@@ -683,6 +769,19 @@ const ChatWidget = {
                 } catch (e) {
                     console.error('Failed to parse tool_result message:', e);
                 }
+            } else if (msg.role === 'approval_request') {
+                try {
+                    const data = JSON.parse(msg.content);
+                    // Check if this approval has been resolved
+                    const resolved = messages.some(m =>
+                        m.role === 'approval_response' && m.content && m.content.includes(data.approval_id)
+                    );
+                    if (this.onApprovalRequest) {
+                        this.onApprovalRequest(data, resolved);
+                    }
+                } catch (e) {
+                    console.error('Failed to parse approval_request message:', e);
+                }
             }
         }
 
@@ -739,6 +838,28 @@ const ChatWidget = {
         }
 
         requestAnimationFrame(() => DOM.createIcons());
+    },
+
+    _resetStreamTimeout() {
+        if (this._streamTimeoutTimer) {
+            clearTimeout(this._streamTimeoutTimer);
+            this._streamTimeoutTimer = null;
+        }
+        if (this.isStreaming) {
+            this._streamTimeoutTimer = setTimeout(() => {
+                if (this.isStreaming) {
+                    console.warn('Stream timeout: no events received for', this._streamTimeoutMs / 1000, 'seconds');
+                    this.showError('AI 响应超时，长时间未收到数据。请重新发送消息或刷新页面。');
+                }
+            }, this._streamTimeoutMs);
+        }
+    },
+
+    _clearStreamTimeout() {
+        if (this._streamTimeoutTimer) {
+            clearTimeout(this._streamTimeoutTimer);
+            this._streamTimeoutTimer = null;
+        }
     },
 
     _scrollToBottom() {
