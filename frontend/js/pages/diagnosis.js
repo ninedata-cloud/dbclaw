@@ -583,9 +583,12 @@ const DiagnosisPage = {
             });
         }
 
-        // Load messages
+        // Load messages and structured diagnosis insights
         try {
-            const messages = await API.getSessionMessages(sessionId);
+            const [messages, insights] = await Promise.all([
+                API.getSessionMessages(sessionId),
+                API.getSessionInsights(sessionId).catch(() => null)
+            ]);
             this.sessionTokenUsage = this._getSessionTokenUsage(sessionId);
             this._updateTokenUsageDisplay();
             console.log(`Loaded ${messages.length} messages for session ${sessionId}`, messages);
@@ -605,6 +608,10 @@ const DiagnosisPage = {
                     `;
                     DOM.createIcons();
                 }
+            }
+            if (insights) {
+                ChatWidget.loadDiagnosticInsights(insights);
+            } else if (!messages || messages.length === 0) {
                 ChatWidget.resetToolPanel();
             }
         } catch (e) {
@@ -788,7 +795,25 @@ const DiagnosisPage = {
                 ChatWidget.addToolCall(data.tool_name, data.tool_args, data.tool_call_id);
                 break;
             case 'tool_result':
-                ChatWidget.addToolResult(data.tool_name, data.result, data.execution_time_ms, data.tool_call_id);
+                ChatWidget.addToolResult(data.tool_name, data.result, data.execution_time_ms, data.tool_call_id, {
+                    skill_execution_id: data.skill_execution_id,
+                    action_run_id: data.action_run_id,
+                    action_title: data.action_title,
+                    phase: data.phase,
+                });
+                break;
+            case 'diagnosis_state':
+                ChatWidget.updateDiagnosisState(data);
+                break;
+            case 'plan_created':
+                ChatWidget.updateDiagnosisPlan(data);
+                break;
+            case 'kb_document_selected':
+            case 'kb_document_read':
+                ChatWidget.addKnowledgeReference(data);
+                break;
+            case 'diagnosis_conclusion':
+                ChatWidget.updateDiagnosisConclusion(data);
                 break;
             case 'approval_request':
                 ChatWidget.hideThinkingIndicator();

@@ -373,6 +373,193 @@
     font-size: 13px;
 }
 
+.thinking-indicator {
+    margin: 4px 0 4px 48px;
+    max-width: min(640px, calc(100% - 48px));
+}
+
+.thinking-card {
+    position: relative;
+    display: flex;
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px;
+    background:
+        radial-gradient(circle at top right, rgba(255,255,255,0.05), transparent 38%),
+        linear-gradient(135deg, rgba(20,24,34,0.98), rgba(17,22,31,0.94));
+    box-shadow: 0 10px 28px rgba(0,0,0,0.24);
+}
+
+.thinking-card-compact {
+    margin-top: 4px;
+}
+
+.thinking-card-accent {
+    width: 4px;
+    flex-shrink: 0;
+    background: linear-gradient(180deg, var(--thinking-accent), var(--thinking-accent-soft));
+}
+
+.thinking-card-main {
+    flex: 1;
+    min-width: 0;
+    padding: 14px 16px 12px;
+}
+
+.thinking-card-topline {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.thinking-card-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,0.06);
+    color: var(--thinking-accent);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+}
+
+.thinking-card-icon svg {
+    width: 17px;
+    height: 17px;
+}
+
+.thinking-card-copy {
+    flex: 1;
+    min-width: 0;
+}
+
+.thinking-card-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.thinking-card-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.01em;
+}
+
+.thinking-card-badge {
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--thinking-accent);
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.05);
+    white-space: nowrap;
+}
+
+.thinking-card-subtitle {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.thinking-card-message {
+    margin-top: 10px;
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--text-secondary);
+}
+
+.thinking-card-progress {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 12px;
+}
+
+.thinking-card-progress-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--thinking-accent);
+    opacity: 0.35;
+    animation: thinkingCardPulse 1.4s ease-in-out infinite;
+}
+
+.thinking-card-progress-dot:nth-child(2) {
+    animation-delay: 0.18s;
+}
+
+.thinking-card-progress-dot:nth-child(3) {
+    animation-delay: 0.36s;
+}
+
+.thinking-tone-violet {
+    --thinking-accent: #b48cff;
+    --thinking-accent-soft: #6f58ff;
+}
+
+.thinking-tone-blue {
+    --thinking-accent: #7cc8ff;
+    --thinking-accent-soft: #2f81f7;
+}
+
+.thinking-tone-cyan {
+    --thinking-accent: #58e0d0;
+    --thinking-accent-soft: #1ea7a1;
+}
+
+.thinking-tone-amber {
+    --thinking-accent: #f3c86b;
+    --thinking-accent-soft: #d29922;
+}
+
+.thinking-tone-green {
+    --thinking-accent: #69db8b;
+    --thinking-accent-soft: #2ea043;
+}
+
+@keyframes thinkingCardPulse {
+    0%, 80%, 100% {
+        opacity: 0.28;
+        transform: translateY(0) scale(0.9);
+    }
+    40% {
+        opacity: 1;
+        transform: translateY(-1px) scale(1);
+    }
+}
+
+@media (max-width: 768px) {
+    .thinking-indicator {
+        margin-left: 0;
+        max-width: 100%;
+    }
+
+    .thinking-card-main {
+        padding: 12px 14px 10px;
+    }
+
+    .thinking-card-topline {
+        gap: 10px;
+    }
+
+    .thinking-card-icon {
+        width: 30px;
+        height: 30px;
+        border-radius: 9px;
+    }
+
+    .thinking-card-title-row {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}
+
 .chat-send-btn {
     width: 42px;
     height: 42px;

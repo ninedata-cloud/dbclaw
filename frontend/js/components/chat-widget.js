@@ -9,6 +9,7 @@ const ChatWidget = {
     attachments: [],
     _streamTimeoutTimer: null,
     _streamTimeoutMs: 600 * 1000,
+    diagnosticInsights: null,
 
     createMessagesContainer() {
         return DOM.el('div', { className: 'chat-messages', id: 'chat-messages' });
@@ -324,16 +325,8 @@ const ChatWidget = {
         this.thinkingPhase = phase;
         this.thinkingMessage = message;
         const bubble = streamingMsg.querySelector('.chat-bubble');
-        bubble.innerHTML = `
-            <div class="thinking-status">
-                <div class="thinking-dots">
-                    <span class="thinking-dot"></span>
-                    <span class="thinking-dot"></span>
-                    <span class="thinking-dot"></span>
-                </div>
-                <div class="thinking-text">${this._escapeHtml(message)}</div>
-            </div>
-        `;
+        bubble.innerHTML = this._buildThinkingMarkup(phase, message, true);
+        DOM.createIcons();
         this._scrollToBottom();
     },
 
@@ -349,16 +342,12 @@ const ChatWidget = {
 
         const indicator = DOM.el('div', {
             className: 'chat-message assistant thinking-indicator',
-            id: 'thinking-indicator',
-            style: { padding: '8px 12px', borderLeft: '3px solid var(--accent-purple)', margin: '4px 0 4px 48px' }
+            id: 'thinking-indicator'
         });
 
-        indicator.innerHTML = `
-            <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary);">
-                <span style="font-weight:500;color:var(--text-primary);">${this._escapeHtml(message)}</span>
-            </div>
-        `;
+        indicator.innerHTML = this._buildThinkingMarkup(phase, message);
         messages.appendChild(indicator);
+        DOM.createIcons();
         this._scrollToBottom();
     },
 
@@ -367,10 +356,8 @@ const ChatWidget = {
         this.thinkingMessage = message;
         const indicator = DOM.$('#thinking-indicator');
         if (indicator) {
-            const text = indicator.querySelector('span:last-child');
-            if (text) {
-                text.textContent = message;
-            }
+            indicator.innerHTML = this._buildThinkingMarkup(phase, message);
+            DOM.createIcons();
         }
     },
 
@@ -472,13 +459,170 @@ const ChatWidget = {
     },
 
     _appendSystemCard(cardElement) {
-        const content = DOM.$('#tool-panel-content');
+        const content = DOM.$('#tool-log-section');
         if (!content) return;
         const placeholder = content.querySelector('.tool-panel-empty');
         if (placeholder) placeholder.remove();
         content.appendChild(cardElement);
         DOM.createIcons();
         this._scrollToolPanelToBottom();
+    },
+
+    _ensureInsightState() {
+        if (!this.diagnosticInsights) {
+            this.diagnosticInsights = {
+                state: null,
+                plan: null,
+                conclusion: null,
+                evidence: [],
+                knowledgeRefs: [],
+            };
+        }
+    },
+
+    _setToolPanelScaffold() {
+        const content = DOM.$('#tool-panel-content');
+        if (!content) return;
+        content.innerHTML = `
+            <div id="diagnostic-insights-panel" style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
+                <div id="diagnostic-overview-section"></div>
+                <div id="diagnostic-evidence-section"></div>
+                <div id="diagnostic-kb-section"></div>
+                <div id="diagnostic-actions-section"></div>
+            </div>
+            <div id="tool-log-section">
+                <div class="tool-panel-empty" style="color: var(--text-muted); font-size: 13px;">当前会话的 skill 调用记录会显示在这里</div>
+            </div>
+        `;
+    },
+
+    _renderInfoCard(title, bodyHtml) {
+        return `
+            <div style="border:1px solid var(--border-color);border-radius:8px;padding:10px;background:var(--bg-primary);">
+                <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;">${title}</div>
+                ${bodyHtml}
+            </div>
+        `;
+    },
+
+    _renderSimpleList(items, formatter) {
+        if (!items || items.length === 0) {
+            return '<div style="font-size:12px;color:var(--text-muted);">暂无</div>';
+        }
+        return `<div style="display:flex;flex-direction:column;gap:6px;">${items.map(formatter).join('')}</div>`;
+    },
+
+    _renderDiagnosticInsights() {
+        this._ensureInsightState();
+        const overviewEl = DOM.$('#diagnostic-overview-section');
+        const evidenceEl = DOM.$('#diagnostic-evidence-section');
+        const kbEl = DOM.$('#diagnostic-kb-section');
+        const actionsEl = DOM.$('#diagnostic-actions-section');
+        if (!overviewEl || !evidenceEl || !kbEl || !actionsEl) return;
+
+        const state = this.diagnosticInsights.state;
+        const plan = this.diagnosticInsights.plan;
+        const conclusion = this.diagnosticInsights.conclusion;
+        const evidence = this.diagnosticInsights.evidence || [];
+        const knowledgeRefs = this.diagnosticInsights.knowledgeRefs || [];
+        const actionItems = conclusion?.action_items || [];
+
+        if (!state && !conclusion && !plan && evidence.length === 0 && knowledgeRefs.length === 0) {
+            overviewEl.innerHTML = this._renderInfoCard('诊断概览', '<div style="font-size:12px;color:var(--text-muted);">AI 开始诊断后，这里会显示预诊断简报、关键证据和建议动作。</div>');
+            evidenceEl.innerHTML = '';
+            kbEl.innerHTML = '';
+            actionsEl.innerHTML = '';
+            return;
+        }
+
+        const categoryLabel = state?.issue_category_label || state?.issue_category;
+        const category = categoryLabel ? `<span style="display:inline-flex;padding:2px 8px;border-radius:999px;background:rgba(47,129,247,0.12);color:var(--accent-blue);font-size:12px;">${this._escapeHtml(categoryLabel)}</span>` : '';
+        const confidence = typeof state?.confidence === 'number' ? `<span style="font-size:12px;color:var(--text-secondary);">置信度 ${(state.confidence * 100).toFixed(0)}%</span>` : '';
+        const focusHtml = this._renderSimpleList(state?.focus_areas || [], item => `<div style="font-size:12px;color:var(--text-primary);">- ${this._escapeHtml(item)}</div>`);
+        const recentConclusion = conclusion?.summary ? `<div style="margin-top:8px;font-size:12px;color:var(--text-secondary);">${this._escapeHtml(conclusion.summary)}</div>` : '';
+        overviewEl.innerHTML = this._renderInfoCard(
+            '诊断概览',
+            `
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                    <div style="font-weight:600;color:var(--text-primary);">${this._escapeHtml(state?.overview || plan?.summary || '诊断已启动')}</div>
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${category}${confidence}</div>
+                </div>
+                ${state?.datasource_name ? `<div style="margin-top:6px;font-size:12px;color:var(--text-secondary);">数据源：${this._escapeHtml(state.datasource_name)}</div>` : ''}
+                ${plan?.summary ? `<div style="margin-top:6px;font-size:12px;color:var(--text-secondary);">${this._escapeHtml(plan.summary)}</div>` : ''}
+                <div style="margin-top:8px;">${focusHtml}</div>
+                ${recentConclusion}
+            `
+        );
+
+        evidenceEl.innerHTML = this._renderInfoCard(
+            '关键证据',
+            this._renderSimpleList(evidence.slice(0, 8), item => {
+                const detail = item?.detail || item?.summary || '';
+                return `<div style="font-size:12px;color:var(--text-primary);">- ${this._escapeHtml(detail)}</div>`;
+            })
+        );
+
+        kbEl.innerHTML = this._renderInfoCard(
+            '知识库参考',
+            this._renderSimpleList(knowledgeRefs.slice(0, 6), item => {
+                const title = item?.title || `文档 #${item?.document_id || ''}`;
+                return `<div style="font-size:12px;color:var(--text-primary);">- ${this._escapeHtml(title)}</div>`;
+            })
+        );
+
+        actionsEl.innerHTML = this._renderInfoCard(
+            '建议动作',
+            this._renderSimpleList(actionItems.slice(0, 6), item => {
+                const title = item?.title || item?.description || '';
+                return `<div style="font-size:12px;color:var(--text-primary);">- ${this._escapeHtml(title)}</div>`;
+            })
+        );
+    },
+
+    updateDiagnosisState(state) {
+        this._ensureInsightState();
+        this.diagnosticInsights.state = { ...(this.diagnosticInsights.state || {}), ...(state || {}) };
+        this._renderDiagnosticInsights();
+    },
+
+    updateDiagnosisPlan(plan) {
+        this._ensureInsightState();
+        this.diagnosticInsights.plan = plan || null;
+        this._renderDiagnosticInsights();
+    },
+
+    updateDiagnosisConclusion(conclusion) {
+        this._ensureInsightState();
+        this.diagnosticInsights.conclusion = conclusion || null;
+        this.diagnosticInsights.evidence = conclusion?.evidence_refs || this.diagnosticInsights.evidence;
+        if (Array.isArray(conclusion?.knowledge_refs)) {
+            this.diagnosticInsights.knowledgeRefs = conclusion.knowledge_refs;
+        }
+        this._renderDiagnosticInsights();
+    },
+
+    addKnowledgeReference(ref) {
+        this._ensureInsightState();
+        const title = ref?.title || ref?.document_title;
+        if (!title) return;
+        const exists = this.diagnosticInsights.knowledgeRefs.some(item => item.title === title && item.document_id === ref.document_id);
+        if (!exists) {
+            this.diagnosticInsights.knowledgeRefs.push({
+                document_id: ref.document_id || null,
+                title,
+            });
+        }
+        this._renderDiagnosticInsights();
+    },
+
+    loadDiagnosticInsights(insights) {
+        this._ensureInsightState();
+        this.diagnosticInsights.state = insights?.latest_state || null;
+        this.diagnosticInsights.plan = insights?.latest_plan || null;
+        this.diagnosticInsights.conclusion = insights?.latest_conclusion || null;
+        this.diagnosticInsights.evidence = insights?.evidence || insights?.latest_conclusion?.evidence_refs || [];
+        this.diagnosticInsights.knowledgeRefs = insights?.knowledge_refs || insights?.latest_conclusion?.knowledge_refs || [];
+        this._renderDiagnosticInsights();
     },
 
     _stringifyData(data) {
@@ -790,22 +934,29 @@ const ChatWidget = {
     },
 
     showToolPanelLoading() {
-        const content = DOM.$('#tool-panel-content');
-        if (content) {
-            content.innerHTML = `
+        this._setToolPanelScaffold();
+        const toolLog = DOM.$('#tool-log-section');
+        if (toolLog) {
+            toolLog.innerHTML = `
                 <div class="tool-panel-empty" style="color: var(--text-muted); font-size: 13px; display:flex; align-items:center; gap:8px;">
                     <div class="spinner" style="width:14px;height:14px;"></div>
                     <span>正在加载当前会话的 skill 调用记录...</span>
                 </div>
             `;
         }
+        this._renderDiagnosticInsights();
     },
 
     resetToolPanel() {
-        const content = DOM.$('#tool-panel-content');
-        if (content) {
-            content.innerHTML = '<div class="tool-panel-empty" style="color: var(--text-muted); font-size: 13px;">当前会话的 skill 调用记录会显示在这里</div>';
-        }
+        this.diagnosticInsights = {
+            state: null,
+            plan: null,
+            conclusion: null,
+            evidence: [],
+            knowledgeRefs: [],
+        };
+        this._setToolPanelScaffold();
+        this._renderDiagnosticInsights();
     },
 
     toggleToolPanel() {
@@ -888,6 +1039,88 @@ const ChatWidget = {
         const div = document.createElement('div');
         div.textContent = text == null ? '' : String(text);
         return div.innerHTML;
+    },
+
+    _getThinkingMeta(phase, message) {
+        const phaseMap = {
+            intent_detection: {
+                title: '问题分析中',
+                subtitle: '识别意图和故障类型',
+                icon: 'search',
+                tone: 'violet',
+                badge: '分析',
+            },
+            context_building: {
+                title: '上下文装配中',
+                subtitle: '汇总数据源、历史结论和环境信息',
+                icon: 'database',
+                tone: 'blue',
+                badge: '上下文',
+            },
+            skill_selection: {
+                title: '诊断路径规划中',
+                subtitle: '选择合适的诊断技能和排查顺序',
+                icon: 'git-branch',
+                tone: 'cyan',
+                badge: '规划',
+            },
+            tool_execution: {
+                title: '证据收集中',
+                subtitle: '正在调用数据库或主机诊断工具',
+                icon: 'wrench',
+                tone: 'amber',
+                badge: '执行',
+            },
+            llm_thinking: {
+                title: '结论生成中',
+                subtitle: '交叉整理证据并形成诊断结论',
+                icon: 'sparkles',
+                tone: 'green',
+                badge: '总结',
+            },
+        };
+
+        const meta = phaseMap[phase] || {
+            title: 'AI 思考中',
+            subtitle: '正在处理当前诊断步骤',
+            icon: 'bot',
+            tone: 'violet',
+            badge: '处理中',
+        };
+        return {
+            ...meta,
+            message: message || meta.subtitle,
+        };
+    },
+
+    _buildThinkingMarkup(phase, message, compact = false) {
+        const meta = this._getThinkingMeta(phase, message);
+        const compactClass = compact ? ' thinking-card-compact' : '';
+        return `
+            <div class="thinking-card thinking-tone-${meta.tone}${compactClass}">
+                <div class="thinking-card-accent"></div>
+                <div class="thinking-card-main">
+                    <div class="thinking-card-topline">
+                        <div class="thinking-card-icon">
+                            <i data-lucide="${meta.icon}"></i>
+                        </div>
+                        <div class="thinking-card-copy">
+                            <div class="thinking-card-title-row">
+                                <div class="thinking-card-title">${this._escapeHtml(meta.title)}</div>
+                                <span class="thinking-card-badge">${this._escapeHtml(meta.badge)}</span>
+                            </div>
+                            <div class="thinking-card-subtitle">${this._escapeHtml(meta.subtitle)}</div>
+                        </div>
+                    </div>
+                    <div class="thinking-card-message">${this._escapeHtml(meta.message)}</div>
+                    <div class="thinking-card-progress">
+                        <span class="thinking-card-progress-dot"></span>
+                        <span class="thinking-card-progress-dot"></span>
+                        <span class="thinking-card-progress-dot"></span>
+                    </div>
+                </div>
+            </div>
+        `;
     },
 
     _highlightCode(element) {

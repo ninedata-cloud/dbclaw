@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from backend.models.datasource import Datasource
-from backend.schemas.query import QueryExecuteRequest
+from backend.schemas.query import QueryExecuteRequest, QueryExplainRequest
 from backend.services.opengauss_service import OpenGaussConnector
 from backend.services.oracle_service import OracleConnector
 from backend.services.postgres_service import PostgreSQLConnector
@@ -292,7 +292,7 @@ async def test_query_router_consumes_unified_contract_without_breaking_message_a
     with patch("backend.routers.query._get_connector_for", fake_get_connector_for), \
          patch("backend.utils.db_connector.decrypt_value", return_value="secret"), \
          patch("backend.utils.db_connector.PostgreSQLConnector", FakePostgreSQLConnector):
-        result = await query_router.execute_query(req, db=None)
+        result = await query_router.execute_query(req, db=None, current_user=MagicMock(id=7))
 
     assert result.columns == ["id", "payload"]
     assert result.rows == [[1, "{'nested': True}"]]
@@ -300,6 +300,36 @@ async def test_query_router_consumes_unified_contract_without_breaking_message_a
     assert result.execution_time_ms == 8.2
     assert result.message == "Query executed successfully (1 row, already truncated)"
     assert result.truncated is True
+
+
+@pytest.mark.asyncio
+async def test_query_router_rejects_multi_statement_bypass_before_connector_execution():
+    async def fake_get_connector_for(datasource_id: int, db):
+        raise AssertionError("connector should not be created for blocked multi-statement query")
+
+    req = QueryExecuteRequest(datasource_id=1, sql="SELECT 1; DROP TABLE users", max_rows=10)
+
+    with patch("backend.routers.query._get_connector_for", fake_get_connector_for):
+        with pytest.raises(Exception) as exc_info:
+            await query_router.execute_query(req, db=None, current_user=MagicMock(id=7))
+
+    assert exc_info.value.status_code == 400
+    assert "Only read-only queries are allowed" in exc_info.value.detail
+
+
+@pytest.mark.asyncio
+async def test_query_router_explain_rejects_write_operation_before_connector_execution():
+    async def fake_get_connector_for(datasource_id: int, db):
+        raise AssertionError("connector should not be created for blocked explain write query")
+
+    req = QueryExplainRequest(datasource_id=1, sql="EXPLAIN ANALYZE UPDATE users SET active = true")
+
+    with patch("backend.routers.query._get_connector_for", fake_get_connector_for):
+        with pytest.raises(Exception) as exc_info:
+            await query_router.explain_query(req, db=None)
+
+    assert exc_info.value.status_code == 400
+    assert "Only read-only queries can be explained" in exc_info.value.detail
 
 
 

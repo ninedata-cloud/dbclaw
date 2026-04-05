@@ -152,6 +152,7 @@ const API = {
     deleteChatSession(id) { return this.delete(`/api/chat/sessions/${id}`); },
     clearSessionMessages(id) { return this.delete(`/api/chat/sessions/${id}/messages`); },
     getSessionMessages(sessionId) { return this.get(`/api/chat/sessions/${sessionId}/messages`); },
+    getSessionInsights(sessionId) { return this.get(`/api/chat/sessions/${sessionId}/insights`); },
     getHighRiskTools() { return this.get('/api/chat/high-risk-tools'); },
     resolveChatApproval(sessionId, approvalId, data) { return this.post(`/api/chat/sessions/${sessionId}/approvals/${approvalId}/resolve`, data); },
 

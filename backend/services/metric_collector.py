@@ -80,6 +80,7 @@ async def _push_to_subscribers(datasource_id: int, data: Dict[str, Any]):
 
 async def collect_metrics_for_connection(datasource_id: int):
     """Collect and store metrics for a single datasource."""
+    connector = None
     try:
         async with async_session() as db:
                 result = await db.execute(
@@ -173,11 +174,14 @@ async def collect_metrics_for_connection(datasource_id: int):
                     "data": normalized_status,
                     "collected_at": now().isoformat(),
                 })
-
-                await connector.close()
-
     except Exception as e:
         logger.error(f"Error collecting metrics for datasource {datasource_id}: {e}")
+    finally:
+        if connector is not None:
+            try:
+                await connector.close()
+            except Exception:
+                logger.debug("Failed to close connector for datasource %s", datasource_id, exc_info=True)
 
 
 async def _auto_resolve_connection_alerts(db, datasource_id: int):
@@ -612,4 +616,3 @@ async def _collect_os_metrics(db, host_id: int) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error in _collect_os_metrics: {e}")
         return {}
-

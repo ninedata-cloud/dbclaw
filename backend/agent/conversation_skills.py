@@ -8,8 +8,9 @@ import re
 import uuid
 from typing import AsyncGenerator, List, Dict, Any, Optional
 
+from backend.agent.diagnosis_context import build_diagnostic_brief, render_diagnostic_brief_for_prompt
 from backend.agent.prompts import DIAGNOSTIC_PROMPT, INFORMATIONAL_PROMPT, ADMINISTRATIVE_PROMPT
-from backend.agent.intent_detector import detect_query_intent
+from backend.agent.intent_detector import analyze_query_intent
 from backend.agent.skill_selector import get_available_skills_as_tools
 from backend.agent.tools import get_filtered_tools
 from backend.agent.context_builder import execute_tool
@@ -46,6 +47,37 @@ READ_ONLY_COMMAND_HINTS = [
     'df', 'du', 'free', 'ps', 'top', 'htop', 'iostat', 'vmstat', 'sar', 'ss', 'netstat',
     'journalctl', 'tail', 'cat', 'uptime', 'hostname', 'lsblk', 'mount', 'dmesg', 'sysctl',
 ]
+
+ISSUE_CATEGORY_LABELS = {
+    "performance": "性能问题",
+    "connectivity": "连接问题",
+    "locking": "锁等待/阻塞",
+    "replication": "复制问题",
+    "capacity": "容量问题",
+    "sql": "SQL 优化",
+    "resource": "主机资源",
+    "configuration": "配置问题",
+    "error": "错误诊断",
+    "general": "综合诊断",
+}
+
+
+def _build_plan_summary(intent: str, issue_category: str | None, focus_areas: list[str]) -> str:
+    if intent != "diagnostic":
+        if intent == "administrative":
+            return "执行计划已启动：确认操作对象和风险、必要时收集信息、输出可执行步骤。"
+        return "查询计划已启动：理解需求、检索必要信息、整理结果并回答问题。"
+
+    label = ISSUE_CATEGORY_LABELS.get(issue_category or "general", "综合诊断")
+    plan_steps = [
+        f"识别为{label}",
+        "先核对整体状态和上下文",
+        "按异常信号选择数据库/主机工具收集证据",
+        "交叉验证根因后输出建议动作",
+    ]
+    if focus_areas:
+        plan_steps.append(f"本轮重点：{focus_areas[0]}")
+    return "诊断计划已启动：" + "、".join(plan_steps) + "。"
 
 
 def _normalize_sql_keyword(sql: str) -> str:
@@ -317,6 +349,10 @@ async def execute_skill_call(
             execution_time = int((time.time() - start_time) * 1000)
             return json.dumps({"error": f"Skill '{skill_id}' is disabled"}), execution_time, None
 
+        if not skill.is_builtin:
+            execution_time = int((time.time() - start_time) * 1000)
+            return json.dumps({"error": "Custom skill execution is disabled until a safer sandbox is implemented"}), execution_time, None
+
         from backend.skills.executor import SkillExecutor
         if timeout is None:
             timeout = skill.timeout if skill.timeout else SkillExecutor.DEFAULT_TIMEOUT
@@ -397,14 +433,28 @@ async def run_conversation_with_skills(
 
     # 阶段1: 意图检测
     yield {"type": "thinking_phase", "phase": "intent_detection", "message": "正在分析您的问题..."}
-    intent = detect_query_intent(intent_text)
+    intent_analysis = analyze_query_intent(intent_text)
+    intent = intent_analysis.intent
+    issue_category = intent_analysis.issue_category
 
     intent_message_map = {
         "diagnostic": "检测到诊断意图，正在分析数据库问题...",
         "informational": "检测到查询意图，正在准备信息检索...",
         "administrative": "检测到操作意图，正在准备执行任务...",
     }
-    yield {"type": "thinking_phase", "phase": "intent_detection", "message": intent_message_map.get(intent, "正在分析..."), "intent": intent}
+    if intent == "diagnostic" and issue_category:
+        category_label = ISSUE_CATEGORY_LABELS.get(issue_category, issue_category)
+        detail_message = f"{intent_message_map.get(intent, '正在分析...')} 当前更像 {category_label}。"
+    else:
+        detail_message = intent_message_map.get(intent, "正在分析...")
+    yield {
+        "type": "thinking_phase",
+        "phase": "intent_detection",
+        "message": detail_message,
+        "intent": intent,
+        "issue_category": issue_category,
+        "confidence": intent_analysis.confidence,
+    }
 
     if system_prompt_override:
         system_msg = system_prompt_override
@@ -417,6 +467,8 @@ async def run_conversation_with_skills(
 
     datasource_db_type = None
     host_configured_for_tools = None
+    datasource_name = None
+    diagnostic_brief = None
 
     if datasource_id and db:
         from backend.models.datasource import Datasource
@@ -426,6 +478,7 @@ async def run_conversation_with_skills(
         result = await db.execute(select(Datasource).filter(Datasource.id == datasource_id, alive_filter(Datasource)))
         datasource = result.scalar_one_or_none()
         if datasource:
+            datasource_name = datasource.name
             datasource_db_type = datasource.db_type
             host_id = datasource.host_id
             host_configured = host_id is not None
@@ -519,6 +572,32 @@ async def run_conversation_with_skills(
     if kb_ids:
         system_msg += f"\n\nKnowledge bases are enabled for this session (IDs: {kb_ids}). Use list_documents tool to browse available documentation, then read_document to fetch full content."
 
+    if intent == "diagnostic" and datasource_id and db:
+        diagnostic_brief = await build_diagnostic_brief(
+            db,
+            datasource_id=datasource_id,
+            user_message=intent_text,
+            issue_category=issue_category,
+        )
+        if diagnostic_brief:
+            system_msg += "\n\n" + render_diagnostic_brief_for_prompt(diagnostic_brief)
+            yield {
+                "type": "diagnosis_state",
+                "intent": intent,
+                "issue_category": issue_category,
+                "issue_category_label": ISSUE_CATEGORY_LABELS.get(issue_category or "general", "综合诊断"),
+                "confidence": intent_analysis.confidence,
+                "datasource_id": datasource_id,
+                "datasource_name": datasource_name,
+                "overview": diagnostic_brief.get("triage_summary"),
+                "focus_areas": diagnostic_brief.get("focus_areas", []),
+                "abnormal_signals": diagnostic_brief.get("abnormal_signals", []),
+                "active_alerts": diagnostic_brief.get("active_alerts", []),
+                "user_symptoms": diagnostic_brief.get("user_symptoms", []),
+                "recent_report": diagnostic_brief.get("recent_report"),
+                "recent_conclusion": diagnostic_brief.get("recent_conclusion"),
+            }
+
     # 阶段2: 数据源上下文构建完成
     datasource_info = ""
     datasource_ctx = None
@@ -585,9 +664,18 @@ async def run_conversation_with_skills(
                     ):
                         if not emitted_plan and round_num == 0:
                             emitted_plan = True
+                            plan_summary = _build_plan_summary(
+                                intent,
+                                issue_category,
+                                (diagnostic_brief or {}).get("focus_areas", []),
+                            )
                             yield {
                                 "type": "plan_created",
-                                "summary": "诊断计划已启动：理解问题、必要时阅读知识库、调用诊断技能收集证据、输出结论。",
+                                "summary": plan_summary,
+                                "intent": intent,
+                                "issue_category": issue_category,
+                                "issue_category_label": ISSUE_CATEGORY_LABELS.get(issue_category or "general", "综合诊断"),
+                                "focus_areas": (diagnostic_brief or {}).get("focus_areas", []),
                             }
                         if kb_ids and not emitted_kb_hint and round_num == 0:
                             emitted_kb_hint = True

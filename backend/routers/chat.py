@@ -19,6 +19,7 @@ from backend.agent.tools import HIGH_RISK_TOOLS
 from backend.dependencies import get_current_user
 from backend.services.chat_orchestration_service import (
     continue_conversation_after_tool,
+    get_session_insights,
     prepare_user_turn,
     process_stream_events,
     rebuild_llm_messages,
@@ -208,6 +209,12 @@ async def get_messages(session_id: int, db: AsyncSession = Depends(get_db), user
         .order_by(ChatMessage.created_at)
     )
     return result.scalars().all()
+
+
+@router.get("/api/chat/sessions/{session_id}/insights")
+async def get_session_diagnostic_insights(session_id: int, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
+    await _get_owned_session(db, session_id, user)
+    return await get_session_insights(db, session_id=session_id, user_id=user.id)
 
 
 @router.delete("/api/chat/sessions/{session_id}")

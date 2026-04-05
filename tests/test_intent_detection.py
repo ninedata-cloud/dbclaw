@@ -1,7 +1,7 @@
 """
 Test intent detection functionality
 """
-from backend.agent.intent_detector import detect_query_intent
+from backend.agent.intent_detector import analyze_query_intent, detect_query_intent
 
 
 def test_diagnostic_queries():
@@ -17,11 +17,9 @@ def test_diagnostic_queries():
         ("connection timeout error", "diagnostic"),
     ]
 
-    print("Testing Diagnostic Queries:")
     for query, expected in test_cases:
         result = detect_query_intent(query)
-        status = "✓" if result == expected else "✗"
-        print(f"  {status} '{query}' -> {result} (expected: {expected})")
+        assert result == expected
 
 
 def test_informational_queries():
@@ -38,11 +36,9 @@ def test_informational_queries():
         ("get database status", "informational"),
     ]
 
-    print("\nTesting Informational Queries:")
     for query, expected in test_cases:
         result = detect_query_intent(query)
-        status = "✓" if result == expected else "✗"
-        print(f"  {status} '{query}' -> {result} (expected: {expected})")
+        assert result == expected
 
 
 def test_administrative_queries():
@@ -57,11 +53,9 @@ def test_administrative_queries():
         ("modify the configuration", "administrative"),
     ]
 
-    print("\nTesting Administrative Queries:")
     for query, expected in test_cases:
         result = detect_query_intent(query)
-        status = "✓" if result == expected else "✗"
-        print(f"  {status} '{query}' -> {result} (expected: {expected})")
+        assert result == expected
 
 
 def test_edge_cases():
@@ -72,11 +66,24 @@ def test_edge_cases():
         ("", "informational"),  # Empty string, should default to informational
     ]
 
-    print("\nTesting Edge Cases:")
     for query, expected in test_cases:
         result = detect_query_intent(query)
-        status = "✓" if result == expected else "✗"
-        print(f"  {status} '{query}' -> {result} (expected: {expected})")
+        assert result == expected
+
+
+def test_issue_category_classification():
+    analysis = analyze_query_intent("数据库有锁等待，很多会话被阻塞了")
+    assert analysis.intent == "diagnostic"
+    assert analysis.issue_category == "locking"
+    assert analysis.confidence >= 0.7
+
+    analysis = analyze_query_intent("数据库连接超时，应用登不上去")
+    assert analysis.intent == "diagnostic"
+    assert analysis.issue_category == "connectivity"
+
+    analysis = analyze_query_intent("CPU 很高，磁盘 io 也很高")
+    assert analysis.intent == "diagnostic"
+    assert analysis.issue_category == "resource"
 
 
 if __name__ == "__main__":

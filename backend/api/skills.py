@@ -26,6 +26,11 @@ from sqlalchemy import select, func
 router = APIRouter(prefix="/api/skills", tags=["skills"])
 
 
+def _require_admin(current_user: User) -> None:
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Only admins can manage or execute skills")
+
+
 @router.get("", response_model=List[SkillResponse])
 async def list_skills(
     category: Optional[str] = None,
@@ -88,6 +93,7 @@ async def create_skill(
     current_user: User = Depends(get_current_user),
 ):
     """Create a new skill"""
+    _require_admin(current_user)
     registry = SkillRegistry(db)
     try:
         skill = await registry.register_skill(
@@ -106,22 +112,12 @@ async def update_skill(
     current_user: User = Depends(get_current_user),
 ):
     """Update an existing skill"""
+    _require_admin(current_user)
     registry = SkillRegistry(db)
     skill = await registry.get_skill(skill_id)
 
     if not skill:
         raise HTTPException(status_code=404, detail="Skill not found")
-
-    # Check permissions
-    if skill.is_builtin and not current_user.is_admin:
-        raise HTTPException(
-            status_code=403, detail="Only admins can modify built-in skills"
-        )
-
-    if skill.author_id != current_user.id and not current_user.is_admin:
-        raise HTTPException(
-            status_code=403, detail="You can only modify your own skills"
-        )
 
     # Update fields
     if skill_update.name is not None:
@@ -155,6 +151,7 @@ async def delete_skill(
     current_user: User = Depends(get_current_user),
 ):
     """Delete a skill"""
+    _require_admin(current_user)
     registry = SkillRegistry(db)
     skill = await registry.get_skill(skill_id)
 
@@ -163,11 +160,6 @@ async def delete_skill(
 
     if skill.is_builtin:
         raise HTTPException(status_code=403, detail="Cannot delete built-in skills")
-
-    if skill.author_id != current_user.id and not current_user.is_admin:
-        raise HTTPException(
-            status_code=403, detail="You can only delete your own skills"
-        )
 
     try:
         await registry.unregister_skill(skill_id)
@@ -184,11 +176,14 @@ async def test_skill(
     current_user: User = Depends(get_current_user),
 ):
     """Test a skill execution"""
+    _require_admin(current_user)
     registry = SkillRegistry(db)
     skill = await registry.get_skill(skill_id)
 
     if not skill:
         raise HTTPException(status_code=404, detail="Skill not found")
+    if not skill.is_builtin:
+        raise HTTPException(status_code=403, detail="Custom skill execution is disabled until a safer sandbox is implemented")
 
     # Determine timeout for testing (use skill timeout or default)
     from backend.skills.executor import SkillExecutor
@@ -228,6 +223,7 @@ async def import_skill(
     current_user: User = Depends(get_current_user),
 ):
     """Import a skill from YAML file"""
+    _require_admin(current_user)
     if not file.filename.endswith((".yaml", ".yml")):
         raise HTTPException(status_code=400, detail="File must be YAML format")
 

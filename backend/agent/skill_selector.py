@@ -207,7 +207,7 @@ async def get_available_skills_as_tools(
     from backend.skills.registry import SkillRegistry
 
     registry = SkillRegistry(db)
-    skills = await registry.list_skills(is_enabled=True)
+    skills = await registry.list_skills(is_enabled=True, is_builtin=True)
 
     disabled_set = set(disabled_tools) if disabled_tools else set()
 
@@ -217,6 +217,8 @@ async def get_available_skills_as_tools(
 
     if not normalized_db_type:
         for skill in skills:
+            if not getattr(skill, "is_builtin", False):
+                continue
             if skill.id not in disabled_set:
                 kept.append(skill)
 
@@ -236,6 +238,8 @@ async def get_available_skills_as_tools(
         )
 
     for skill in skills:
+        if not getattr(skill, "is_builtin", False):
+            continue
         if skill.id in disabled_set:
             continue
 
