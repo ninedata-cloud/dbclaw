@@ -11,6 +11,10 @@ const DiagnosisPage = {
     availableModels: [],
     sessionTokenUsage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
     _toolCheckboxes: null,
+    _modelSelectEl: null,
+    _kbButtonEl: null,
+    _kbDropdownEl: null,
+    _availableKBs: [],
 
     _getSelectedDatasource() {
         return this.datasourceSelector?.getValue() || Store.get('currentDatasource') || null;
@@ -59,6 +63,7 @@ const DiagnosisPage = {
 
         // Model selector
         const modelSelect = DOM.el('select', { className: 'form-select', style: { minWidth: '150px', maxWidth: '200px', flex: '0 1 auto' } });
+        this._modelSelectEl = modelSelect;
         modelSelect.appendChild(DOM.el('option', { value: '', textContent: '默认模型' }));
 
         try {
@@ -66,7 +71,10 @@ const DiagnosisPage = {
             this.availableModels = models;
             for (const m of models) {
                 const opt = DOM.el('option', { value: m.id, textContent: m.name });
-                if (m.is_default) opt.selected = true;
+                if (m.is_default) {
+                    opt.selected = true;
+                    this.selectedModelId = m.id;
+                }
                 modelSelect.appendChild(opt);
             }
         } catch (e) { /* ignore */ }
@@ -87,16 +95,19 @@ const DiagnosisPage = {
             type: 'button',
             innerHTML: '<span class="kb-selector-text">选择 0项</span><i data-lucide="chevron-down" style="width:16px;height:16px;"></i>'
         });
+        this._kbButtonEl = kbButton;
 
         const kbDropdown = DOM.el('div', {
             className: 'kb-selector-dropdown',
             style: { display: 'none' }
         });
+        this._kbDropdownEl = kbDropdown;
 
         let availableKBs = [];
         try {
             const kbs = await API.getKnowledgeBases();
             availableKBs = kbs.filter(k => k.is_active);
+            this._availableKBs = availableKBs;
 
             if (availableKBs.length === 0) {
                 kbDropdown.innerHTML = '<div class="kb-selector-empty">暂无可用知识库</div>';
@@ -271,6 +282,15 @@ const DiagnosisPage = {
 
         ChatWidget.onStop = () => this._stopGeneration();
         ChatWidget.onClear = () => this._clearSession();
+        ChatWidget.onApprovalRequest = (data, resolved) => {
+            if (!resolved) {
+                this._showApprovalRequest(data);
+            } else {
+                // Show resolved approval as a static card
+                this._showApprovalRequest(data);
+                this._removeApprovalUI(data.approval_id);
+            }
+        };
         layout.appendChild(sidebar);
         layout.appendChild(chatContainer);
         content.appendChild(layout);
@@ -500,8 +520,49 @@ const DiagnosisPage = {
         };
     },
 
+    _restoreSessionContext(sessionId) {
+        const sessions = Store.get('chatSessions') || [];
+        const session = sessions.find(s => s.id === sessionId);
+        if (!session) return;
+
+        // 恢复数据源
+        if (session.datasource_id != null) {
+            this.datasourceSelector.setValue(session.datasource_id);
+            Store.set('currentDatasource', this.datasourceSelector.getSelectedDatasource() || null);
+        } else {
+            this.datasourceSelector.setValue(null);
+            Store.set('currentDatasource', null);
+        }
+
+        // 恢复 AI 模型
+        if (session.ai_model_id != null) {
+            this.selectedModelId = session.ai_model_id;
+        } else {
+            const defaultModel = this.availableModels.find(m => m.is_default);
+            this.selectedModelId = defaultModel?.id || null;
+        }
+        if (this._modelSelectEl) {
+            this._modelSelectEl.value = this.selectedModelId != null ? String(this.selectedModelId) : '';
+        }
+
+        // 恢复知识库选择
+        this.selectedKBIds = session.kb_ids || [];
+        if (this._kbDropdownEl) {
+            this._kbDropdownEl.querySelectorAll('.kb-selector-checkbox').forEach(cb => {
+                cb.checked = this.selectedKBIds.includes(parseInt(cb.value));
+            });
+        }
+        if (this._kbButtonEl) {
+            this._updateKBButtonText(this._kbButtonEl, this._availableKBs);
+        }
+
+        // 恢复禁用工具
+        this.disabledTools = session.disabled_tools || [];
+    },
+
     async _switchSession(sessionId) {
         this.currentSessionId = sessionId;
+        this._restoreSessionContext(sessionId);
         this._connectWebSocket(sessionId);
         ChatWidget.loadMessages([]);
         ChatWidget.showToolPanelLoading();
@@ -682,8 +743,45 @@ const DiagnosisPage = {
     },
 
     _handleWSMessage(data) {
+        console.log('[WS]', data.type, data);
         switch (data.type) {
+            case 'thinking_start':
+                console.log('[WS] calling showThinkingIndicator', data.phase, data.message);
+                ChatWidget.showThinkingIndicator(data.phase, data.message);
+                break;
+            case 'thinking_phase':
+                console.log('[WS] calling updateThinkingIndicator', data.phase, data.message);
+                // If indicator doesn't exist yet (no thinking_start was sent), create it first
+                if (!document.getElementById('thinking-indicator')) {
+                    ChatWidget.showThinkingIndicator(data.phase, data.message);
+                } else {
+                    ChatWidget.updateThinkingIndicator(data.phase, data.message);
+                }
+                break;
+            case 'thinking_complete':
+                // Model is about to be called — show "thinking" status instead of hiding
+                if (!document.getElementById('thinking-indicator')) {
+                    ChatWidget.showThinkingIndicator('llm_thinking', '正在思考分析...');
+                } else {
+                    ChatWidget.updateThinkingIndicator('llm_thinking', '正在思考分析...');
+                }
+                break;
+            case 'plan_step_status':
+                if (data.status === 'running') {
+                    // Reuse thinking indicator to show current tool execution status
+                    const msg = `正在执行 ${data.tool_name}...`;
+                    if (!document.getElementById('thinking-indicator')) {
+                        ChatWidget.showThinkingIndicator('tool_execution', msg);
+                    } else {
+                        ChatWidget.updateThinkingIndicator('tool_execution', msg);
+                    }
+                } else {
+                    // Tool finished — hide indicator, next running/content event will take over
+                    ChatWidget.hideThinkingIndicator();
+                }
+                break;
             case 'content':
+                ChatWidget.hideThinkingIndicator();
                 ChatWidget.appendContent(data.content);
                 break;
             case 'tool_call':
@@ -691,6 +789,14 @@ const DiagnosisPage = {
                 break;
             case 'tool_result':
                 ChatWidget.addToolResult(data.tool_name, data.result, data.execution_time_ms, data.tool_call_id);
+                break;
+            case 'approval_request':
+                ChatWidget.hideThinkingIndicator();
+                this._showApprovalRequest(data);
+                break;
+            case 'confirmation_resolved':
+                // Approval was resolved (approved/rejected), remove the approval UI
+                this._removeApprovalUI(data.approval_id);
                 break;
             case 'usage':
                 this.sessionTokenUsage.input_tokens += data.usage?.input_tokens || 0;
@@ -703,9 +809,103 @@ const DiagnosisPage = {
                 // Refresh session list to update title after first message
                 this._loadSessions();
                 break;
+            case 'stream_resuming':
+                // Reconnected while AI is still generating — restore streaming UI
+                ChatWidget.startAssistantMessage();
+                ChatWidget.isStreaming = true;
+                ChatWidget.showThinkingIndicator('llm_thinking', data.message || 'AI 正在生成中...');
+                break;
+            case 'cancel_ack':
+                // Server acknowledged cancel, UI already handled in _stopGeneration
+                break;
             case 'error':
                 ChatWidget.showError(data.content);
                 break;
+        }
+    },
+
+    _showApprovalRequest(data) {
+        const messages = DOM.$('#chat-messages');
+        if (!messages) return;
+
+        // Finish streaming state so user can interact
+        ChatWidget.finishAssistantMessage();
+
+        const card = DOM.el('div', {
+            className: 'chat-message assistant',
+            id: `approval-${data.approval_id}`,
+            'data-approval-id': data.approval_id,
+        });
+
+        const riskColor = data.risk_level === 'destructive' ? 'var(--accent-red)' : '#d29922';
+        const riskLabel = data.risk_level === 'destructive' ? '危险操作' : '高风险操作';
+
+        card.innerHTML = `
+            <div class="chat-avatar" style="background:${riskColor};color:#fff;">!</div>
+            <div class="chat-bubble" style="border:1px solid ${riskColor};border-radius:8px;padding:12px;">
+                <div style="font-weight:600;color:${riskColor};margin-bottom:8px;">${riskLabel}：需要您的确认</div>
+                <div style="margin-bottom:8px;">
+                    <strong>技能：</strong><code>${ChatWidget._escapeHtml(data.tool_name)}</code>
+                </div>
+                ${data.risk_reason ? `<div style="margin-bottom:8px;color:var(--text-secondary);">${ChatWidget._escapeHtml(data.risk_reason)}</div>` : ''}
+                <div style="display:flex;gap:8px;margin-top:12px;">
+                    <button class="btn btn-sm" style="background:var(--accent-green);color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;"
+                        onclick="DiagnosisPage._resolveApproval('${data.approval_id}', 'approved')">
+                        批准执行
+                    </button>
+                    <button class="btn btn-sm" style="background:var(--accent-red);color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;"
+                        onclick="DiagnosisPage._resolveApproval('${data.approval_id}', 'rejected')">
+                        拒绝
+                    </button>
+                </div>
+            </div>
+        `;
+        messages.appendChild(card);
+        ChatWidget._scrollToBottom();
+    },
+
+    _removeApprovalUI(approvalId) {
+        const card = DOM.$(`#approval-${approvalId}`);
+        if (card) {
+            const buttons = card.querySelector('div[style*="display:flex"]');
+            if (buttons) {
+                buttons.innerHTML = '<span style="color:var(--text-muted);">已处理</span>';
+            }
+        }
+    },
+
+    async _resolveApproval(approvalId, action) {
+        if (!this.currentSessionId) return;
+        const card = DOM.$(`#approval-${approvalId}`);
+        // Disable buttons immediately
+        if (card) {
+            const buttons = card.querySelectorAll('button');
+            buttons.forEach(btn => { btn.disabled = true; btn.style.opacity = '0.5'; });
+        }
+        try {
+            await API.resolveChatApproval(this.currentSessionId, approvalId, {
+                action: action,
+                comment: null,
+            });
+            if (card) {
+                const statusText = action === 'approved' ? '已批准，正在执行...' : '已拒绝';
+                const statusColor = action === 'approved' ? 'var(--accent-green)' : 'var(--accent-red)';
+                const buttonsDiv = card.querySelector('div[style*="display:flex"]');
+                if (buttonsDiv) {
+                    buttonsDiv.innerHTML = `<span style="color:${statusColor};font-weight:500;">${statusText}</span>`;
+                }
+            }
+            if (action === 'approved') {
+                // The backend will continue the conversation and send events via WebSocket
+                ChatWidget.startAssistantMessage();
+            }
+        } catch (e) {
+            Toast.error('操作失败: ' + e.message);
+            // Re-enable buttons on error
+            if (card) {
+                const buttons = card.querySelectorAll('button');
+                buttons.forEach(btn => { btn.disabled = false; btn.style.opacity = '1'; });
+            }
         }
     },
 
@@ -725,6 +925,8 @@ const DiagnosisPage = {
                         await API.clearSessionMessages(this.currentSessionId);
                         this.sessionTokenUsage = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
                         ChatWidget.resetTokenUsage();
+                        ChatWidget.resetToolPanel();
+                        ChatWidget.pendingTools = new Map();
                         const container = DOM.$('#chat-messages');
                         if (container) {
                             container.innerHTML = `
@@ -748,11 +950,10 @@ const DiagnosisPage = {
 
     _stopGeneration() {
         if (this.ws) {
-            this.ws.disconnect();
-            this._connectWebSocket(this.currentSessionId);
+            this.ws.send({ type: 'cancel' });
         }
         ChatWidget.finishAssistantMessage();
-        Toast.info('Generation stopped');
+        Toast.info('已停止生成');
     },
 
     async _deleteSession() {
@@ -871,5 +1072,9 @@ const DiagnosisPage = {
             this.ws = null;
         }
         this.currentSessionId = null;
+        this._modelSelectEl = null;
+        this._kbButtonEl = null;
+        this._kbDropdownEl = null;
+        this._availableKBs = [];
     }
 };

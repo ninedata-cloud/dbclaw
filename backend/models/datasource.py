@@ -36,6 +36,9 @@ class Datasource(SoftDeleteMixin, Base):
     silence_until = Column(DateTime, nullable=True)  # 静默截止时间，为空表示未静默
     silence_reason = Column(String(500), nullable=True)  # 静默原因
 
+    # 版本信息
+    db_version = Column(String(255), nullable=True)  # 数据库版本信息
+
     # 连接状态
     connection_status = Column(String(20), default='unknown')  # normal, warning, failed, unknown
     connection_error = Column(Text, nullable=True)  # 连接失败时的错误信息

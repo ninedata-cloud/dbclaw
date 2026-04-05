@@ -18,6 +18,31 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/hosts", tags=["hosts"], dependencies=[Depends(get_current_user)])
 
 
+async def _get_os_version_via_ssh(host: str, port: int, username: str, password: str = None, private_key: str = None, use_agent: bool = False) -> str | None:
+    """通过 SSH 获取操作系统版本"""
+    try:
+        from backend.services.ssh_service import SSHService
+        ssh = SSHService(
+            host=host,
+            port=port,
+            username=username,
+            password=password,
+            private_key=private_key,
+            use_agent=use_agent,
+        )
+        # 尝试获取 OS 版本信息
+        output = ssh.execute("cat /etc/os-release 2>/dev/null | grep PRETTY_NAME || uname -a")
+        if output:
+            # 解析 PRETTY_NAME=xxx 格式
+            for line in output.strip().split('\n'):
+                if 'PRETTY_NAME' in line:
+                    return line.split('=')[1].strip().strip('"')
+            return output.strip()[:255]  # fallback to uname output
+    except Exception as e:
+        logger.warning(f"Failed to get OS version for {host}: {e}")
+    return None
+
+
 @router.get("", response_model=List[HostResponse])
 async def list_hosts(db: AsyncSession = Depends(get_db)):
     from backend.models.host_metric import HostMetric
@@ -36,6 +61,7 @@ async def list_hosts(db: AsyncSession = Depends(get_db)):
             "port": host.port,
             "username": host.username,
             "auth_type": host.auth_type,
+            "os_version": host.os_version,
             "created_at": host.created_at,
             "updated_at": host.updated_at,
             "cpu_usage": None,
@@ -126,6 +152,23 @@ async def create_host(data: HostCreate, db: AsyncSession = Depends(get_db)):
     await db.commit()
     await db.refresh(host)
 
+    # 获取 OS 版本信息
+    try:
+        os_version = await _get_os_version_via_ssh(
+            host=data.host,
+            port=data.port,
+            username=data.username,
+            password=data.password,
+            private_key=data.private_key,
+            use_agent=(data.auth_type == "agent"),
+        )
+        if os_version:
+            host.os_version = os_version
+            await db.commit()
+            await db.refresh(host)
+    except Exception as e:
+        logger.warning(f"Failed to get OS version for host {host.name}: {e}")
+
     # Immediately collect metrics for the new host
     try:
         from backend.services.host_collector import _collect_host_metrics
@@ -156,6 +199,30 @@ async def update_host(host_id: int, data: HostUpdate, db: AsyncSession = Depends
 
     for key, value in update_data.items():
         setattr(host, key, value)
+
+    # 如果连接参数变化，重新获取 OS 版本
+    connection_params_changed = any(k in update_data for k in ['host', 'port', 'username', 'password', 'private_key', 'auth_type'])
+    if connection_params_changed:
+        try:
+            password = update_data.get('password')
+            if password is None and data.password is None:
+                password = decrypt_value(host.password_encrypted) if host.password_encrypted else None
+            private_key = update_data.get('private_key')
+            if private_key is None and data.private_key is None:
+                private_key = decrypt_value(host.private_key_encrypted) if host.private_key_encrypted else None
+
+            os_version = await _get_os_version_via_ssh(
+                host=update_data.get('host', host.host),
+                port=update_data.get('port', host.port),
+                username=update_data.get('username', host.username),
+                password=password,
+                private_key=private_key,
+                use_agent=(update_data.get('auth_type', host.auth_type) == "agent"),
+            )
+            if os_version:
+                host.os_version = os_version
+        except Exception as e:
+            logger.warning(f"Failed to get OS version after updating host {host.name}: {e}")
 
     await db.commit()
     await db.refresh(host)
@@ -206,6 +273,23 @@ async def test_host(host_id: int, db: AsyncSession = Depends(get_db)):
             use_agent=use_agent,
         )
         output = ssh.execute("echo 'SSH connection successful'")
+
+        # 更新 OS 版本信息
+        try:
+            os_version = await _get_os_version_via_ssh(
+                host=host.host,
+                port=host.port,
+                username=host.username,
+                password=password,
+                private_key=private_key,
+                use_agent=use_agent,
+            )
+            if os_version:
+                host.os_version = os_version
+                await db.commit()
+                await db.refresh(host)
+        except Exception as e:
+            logger.warning(f"Failed to update OS version for host {host.name}: {e}")
 
         # Immediately collect metrics after successful test
         try:

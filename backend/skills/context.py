@@ -33,10 +33,13 @@ class SkillContext:
         if permission not in self.permissions:
             raise PermissionError(f"Skill does not have permission: {permission}")
 
-    async def get_connection(self, datasource_id: int, check_permission: bool = True):
-        """Get a database datasource object"""
-        if check_permission:
-            self._check_permission("execute_query")
+    async def get_connection(self, datasource_id: int):
+        """Get a database datasource object from the local meta-database.
+
+        Note: This method only reads metadata from the local meta-database.
+        It does not connect to or query the target datasource itself,
+        so no execute_query permission is required.
+        """
         from backend.models.datasource import Datasource
         from backend.models.soft_delete import alive_filter
         from sqlalchemy import select
@@ -58,7 +61,7 @@ class SkillContext:
 
         from backend.utils.db_connector import execute_query as db_execute_query
 
-        datasource = await self.get_connection(datasource_id, check_permission=False)
+        datasource = await self.get_connection(datasource_id)
         result = await db_execute_query(datasource, query, allow_write=allow_write)
         return result
 
@@ -78,7 +81,7 @@ class SkillContext:
 
         from backend.utils.host_executor import execute_host_command
 
-        datasource = await self.get_connection(datasource_id, check_permission=False)
+        datasource = await self.get_connection(datasource_id)
         if not datasource.host_id:
             raise ValueError(f"Datasource {datasource_id} has no host configured")
 

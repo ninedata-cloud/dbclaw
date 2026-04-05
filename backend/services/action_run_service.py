@@ -121,7 +121,7 @@ async def _build_default_action_spec(db: AsyncSession, report: Report) -> list[d
         tool_args = {"datasource_id": report.datasource_id}
         precheck = "执行前请结合当前告警状态确认是否需要人工干预。"
 
-    risk = assess_tool_risk(step_skill, tool_args, ["execute_any_sql", "admin"] if step_skill == "execute_any_sql" else ["execute_query"])
+    risk = await assess_tool_risk(step_skill, tool_args, ["execute_any_sql", "admin"] if step_skill == "execute_any_sql" else ["execute_query"])
 
     verification = None
     if verify_skill:

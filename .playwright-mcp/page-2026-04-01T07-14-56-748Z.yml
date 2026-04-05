@@ -1,0 +1,85 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - img [ref=e5]
+    - img [ref=e10] [cursor=pointer]
+    - img [ref=e16] [cursor=pointer]
+    - img [ref=e20] [cursor=pointer]
+    - img [ref=e25] [cursor=pointer]
+    - img [ref=e31] [cursor=pointer]
+  - main [ref=e34]:
+    - generic [ref=e35]:
+      - heading "总览" [level=1] [ref=e36]
+      - generic [ref=e37]:
+        - img
+        - textbox "询问任何关于数据库的问题...例如：MySQL 连接数异常" [ref=e38]
+      - generic [ref=e39]:
+        - button [ref=e40] [cursor=pointer]:
+          - img [ref=e41]
+        - generic [ref=e44] [cursor=pointer]: W
+    - generic [ref=e45]:
+      - generic [ref=e48]: 系统安静运行中
+      - generic [ref=e49]:
+        - generic [ref=e50]:
+          - generic [ref=e51]: 数据源
+          - generic [ref=e52]: "23"
+        - generic [ref=e53]:
+          - generic [ref=e54]: 全部健康
+          - generic [ref=e55]: "23"
+        - generic [ref=e56]:
+          - generic [ref=e57]: 最近巡检
+          - generic [ref=e58]: 3 小时前
+    - generic [ref=e59]:
+      - generic [ref=e60]:
+        - generic [ref=e61]: 数据源
+        - generic [ref=e62]:
+          - generic [ref=e63] [cursor=pointer]:
+            - generic [ref=e65]:
+              - generic [ref=e66]: MySQL-生产库
+              - generic [ref=e67]: db-prod-01
+            - generic [ref=e68]: mysql
+          - generic [ref=e69] [cursor=pointer]:
+            - generic [ref=e71]:
+              - generic [ref=e72]: PostgreSQL-账务库
+              - generic [ref=e73]: db-finance-01
+            - generic [ref=e74]: postgresql
+          - generic [ref=e75] [cursor=pointer]:
+            - generic [ref=e77]:
+              - generic [ref=e78]: Redis-缓存集群
+              - generic [ref=e79]: redis-prod-01
+            - generic [ref=e80]: redis
+          - generic [ref=e81] [cursor=pointer]:
+            - generic [ref=e83]:
+              - generic [ref=e84]: MongoDB-日志库
+              - generic [ref=e85]: mongo-log-01
+            - generic [ref=e86]: mongodb
+          - generic [ref=e87] [cursor=pointer]:
+            - generic [ref=e89]:
+              - generic [ref=e90]: OceanBase-交易库
+              - generic [ref=e91]: ob-trade-01
+            - generic [ref=e92]: oceanbase
+          - generic [ref=e93] [cursor=pointer]:
+            - generic [ref=e95]:
+              - generic [ref=e96]: TiDB-分析库
+              - generic [ref=e97]: tidb-analytics-01
+            - generic [ref=e98]: tidb
+      - generic [ref=e99]:
+        - generic [ref=e101]:
+          - img [ref=e103]
+          - generic [ref=e107]: DbGuard 智能助手
+          - generic [ref=e108]: 用自然语言描述你的问题，AI 将自动诊断并提供解决方案
+          - generic [ref=e109]:
+            - generic [ref=e110] [cursor=pointer]: MySQL 连接数突然升高怎么办？
+            - generic [ref=e111] [cursor=pointer]: 检查所有数据源健康状态
+            - generic [ref=e112] [cursor=pointer]: PostgreSQL 慢查询分析
+        - generic [ref=e113]:
+          - generic [ref=e114]:
+            - textbox "描述你的问题或需求..." [ref=e116]
+            - generic [ref=e117]:
+              - button [ref=e118] [cursor=pointer]:
+                - img [ref=e119]
+              - button [ref=e121] [cursor=pointer]:
+                - img [ref=e122]
+          - generic [ref=e125]: 按 ⌘ + Enter 发送，↑ 复用上一条消息
+      - generic [ref=e127]:
+        - img [ref=e128]
+        - text: 技能调用

@@ -174,12 +174,20 @@ class PostgreSQLConnector(DBConnector):
         conn = await self._connect()
         try:
             start = time.time()
-            # Use fetch with LIMIT for truncation detection
-            rows = await conn.fetch(f"{sql.strip().rstrip(';')} LIMIT {max_rows + 1}")
+            cleaned = sql.strip().rstrip(';')
+            # Only append LIMIT for simple SELECT without existing LIMIT
+            normalized = cleaned.upper()
+            is_select = normalized.startswith('SELECT') or normalized.startswith('WITH')
+            has_limit = 'LIMIT' in normalized.split(')')[-1]  # check LIMIT outside subqueries
+            if is_select and not has_limit:
+                fetch_sql = f"{cleaned} LIMIT {max_rows + 1}"
+            else:
+                fetch_sql = cleaned
+            rows = await conn.fetch(fetch_sql)
             elapsed = round((time.time() - start) * 1000, 2)
             columns = list(rows[0].keys()) if rows else []
-            truncated = len(rows) > max_rows
-            limited = rows[:max_rows]
+            truncated = is_select and not has_limit and len(rows) > max_rows
+            limited = rows[:max_rows] if truncated else rows
             return {
                 "columns": columns,
                 "rows": [list(r.values()) for r in limited],

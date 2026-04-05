@@ -482,6 +482,25 @@ class AlertService:
             logger.warning(f"Alert event {alert_event_id} not found for auto-diagnosis")
             return None
 
+        # Skip if diagnosis already completed
+        if event.diagnosis_status == "completed" and event.ai_diagnosis_summary:
+            logger.info(f"Auto-diagnosis skipped for event {alert_event_id}: already completed")
+            return event.ai_diagnosis_summary
+
+        # Dedup: check if another event for the same datasource+metric was diagnosed recently
+        recent_diagnosis = await _find_recent_diagnosis(db, event)
+        if recent_diagnosis:
+            logger.info(
+                f"Auto-diagnosis: reusing recent diagnosis from event {recent_diagnosis.id} "
+                f"for alert event {alert_event_id}"
+            )
+            event.ai_diagnosis_summary = recent_diagnosis.ai_diagnosis_summary
+            event.root_cause = recent_diagnosis.root_cause
+            event.recommended_actions = recent_diagnosis.recommended_actions
+            event.diagnosis_status = "completed"
+            await db.commit()
+            return event.ai_diagnosis_summary
+
         # Get datasource
         result = await db.execute(select(Datasource).where(Datasource.id == event.datasource_id, alive_filter(Datasource)))
         ds = result.scalar_one_or_none()
@@ -629,6 +648,53 @@ def _extract_diagnosis_parts(full_text: str) -> tuple[Optional[str], Optional[st
     return root_cause, recommended_actions, summary
 
 
+async def _find_recent_diagnosis(db: AsyncSession, current_event) -> Optional["AlertEvent"]:
+    """
+    Check if there's a recently completed diagnosis for the same datasource + metric
+    within the inspection_dedup_window_minutes window.
+
+    Returns the recent AlertEvent with completed diagnosis, or None.
+    """
+    from backend.models.alert_event import AlertEvent
+    from backend.services.config_service import get_config
+    from backend.config import get_settings
+
+    # Read dedup window from system config (fallback to settings default)
+    dedup_minutes = await get_config(
+        db, "inspection_dedup_window_minutes",
+        default=get_settings().inspection_dedup_window_minutes
+    )
+    if not dedup_minutes or dedup_minutes <= 0:
+        return None
+
+    time_threshold = now() - timedelta(minutes=int(dedup_minutes))
+
+    # Build query: same datasource, same metric, completed diagnosis, within window
+    filters = [
+        AlertEvent.id != current_event.id,
+        AlertEvent.datasource_id == current_event.datasource_id,
+        AlertEvent.diagnosis_status == "completed",
+        AlertEvent.ai_diagnosis_summary.isnot(None),
+        AlertEvent.last_updated >= time_threshold,
+    ]
+
+    # Match by metric_name if available, otherwise by alert_type
+    if current_event.metric_name:
+        filters.append(AlertEvent.metric_name == current_event.metric_name)
+    elif current_event.alert_type:
+        filters.append(AlertEvent.alert_type == current_event.alert_type)
+    else:
+        return None
+
+    result = await db.execute(
+        select(AlertEvent)
+        .where(and_(*filters))
+        .order_by(AlertEvent.last_updated.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 async def run_sync_diagnosis(
     db: AsyncSession,
     alert_event_id: int,
@@ -665,6 +731,26 @@ async def run_sync_diagnosis(
             "root_cause": event.root_cause,
             "recommended_actions": event.recommended_actions,
             "summary": event.ai_diagnosis_summary,
+            "status": "completed",
+        }
+
+    # Dedup: check if another event for the same datasource+metric was diagnosed recently
+    recent_diagnosis = await _find_recent_diagnosis(db, event)
+    if recent_diagnosis:
+        logger.info(
+            f"Reusing recent diagnosis from event {recent_diagnosis.id} for alert event {alert_event_id} "
+            f"(datasource={event.datasource_id}, metric={event.metric_name})"
+        )
+        # Copy diagnosis results to current event
+        event.ai_diagnosis_summary = recent_diagnosis.ai_diagnosis_summary
+        event.root_cause = recent_diagnosis.root_cause
+        event.recommended_actions = recent_diagnosis.recommended_actions
+        event.diagnosis_status = "completed"
+        await db.commit()
+        return {
+            "root_cause": recent_diagnosis.root_cause,
+            "recommended_actions": recent_diagnosis.recommended_actions,
+            "summary": recent_diagnosis.ai_diagnosis_summary,
             "status": "completed",
         }
 

@@ -155,7 +155,6 @@ const API = {
     getHighRiskTools() { return this.get('/api/chat/high-risk-tools'); },
     resolveChatApproval(sessionId, approvalId, data) { return this.post(`/api/chat/sessions/${sessionId}/approvals/${approvalId}/resolve`, data); },
 
-
     // Query endpoints
     executeQuery(data, options = {}) {
         return this.request('/api/query/execute', {

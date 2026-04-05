@@ -153,11 +153,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Alert AI diagnosis summary migration: {e}")
 
-    try:
-        from backend.migrations.create_diagnosis_conclusions import migrate as migrate_diagnosis_conclusions
-        await migrate_diagnosis_conclusions()
-    except Exception as e:
-        logger.warning(f"Diagnosis conclusions migration: {e}")
 
     try:
         from backend.migrations.migrate_alert_channels_to_subscription_targets import migrate as migrate_alert_channels_to_subscription_targets
@@ -176,6 +171,7 @@ async def lifespan(app: FastAPI):
         await migrate_feishu_bot_channel_to_bot_binding()
     except Exception as e:
         logger.warning(f"Feishu bot channel to bot binding migration: {e}")
+
 
     # Seed default system configs
     from backend.database import async_session as _async_session

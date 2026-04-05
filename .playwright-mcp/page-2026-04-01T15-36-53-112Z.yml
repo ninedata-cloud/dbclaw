@@ -1,0 +1,961 @@
+- generic [ref=e2]:
+  - complementary [ref=e18]:
+    - generic [ref=e19]:
+      - img "数据库智能卫士" [ref=e20]
+      - generic [ref=e21]:
+        - generic [ref=e22]: NineData
+        - generic [ref=e23]: 数据库智能卫士
+    - navigation [ref=e24]:
+      - generic [ref=e25] [cursor=pointer]:
+        - img [ref=e3522]
+        - generic [ref=e31]: 资源大盘
+      - generic [ref=e32] [cursor=pointer]:
+        - img [ref=e3527]
+        - generic [ref=e37]: 智能巡检
+      - generic [ref=e38] [cursor=pointer]:
+        - img [ref=e3531]
+        - generic [ref=e42]: AI 诊断
+      - generic [ref=e43] [cursor=pointer]:
+        - img [ref=e3534]
+        - generic [ref=e46]: 性能监控
+      - generic [ref=e47] [cursor=pointer]:
+        - img [ref=e3536]
+        - generic [ref=e51]: 告警管理
+      - generic [ref=e52] [cursor=pointer]:
+        - img [ref=e3539]
+        - generic [ref=e56]: SQL 查询
+      - generic [ref=e57]:
+        - generic [ref=e58]: AI 智能体配置
+        - generic [ref=e59] [cursor=pointer]:
+          - img [ref=e3542]
+          - generic [ref=e63]: AI 大模型管理
+        - generic [ref=e64] [cursor=pointer]:
+          - img [ref=e3545]
+          - generic [ref=e67]: 技能管理
+        - generic [ref=e68] [cursor=pointer]:
+          - img [ref=e3547]
+          - generic [ref=e72]: 知识库
+      - generic [ref=e73]:
+        - generic [ref=e74]: 系统配置
+        - generic [ref=e75] [cursor=pointer]:
+          - img [ref=e3550]
+          - generic [ref=e80]: 数据源管理
+        - generic [ref=e81] [cursor=pointer]:
+          - img [ref=e3554]
+          - generic [ref=e84]: 主机管理
+        - generic [ref=e85] [cursor=pointer]:
+          - img [ref=e3556]
+          - generic [ref=e90]: 外部集成管理
+        - generic [ref=e91] [cursor=pointer]:
+          - img [ref=e3560]
+          - generic [ref=e95]: 系统参数配置
+        - generic [ref=e96] [cursor=pointer]:
+          - img [ref=e3563]
+          - generic [ref=e102]: 用户管理
+    - generic [ref=e103]:
+      - generic [ref=e104]: A
+      - button "Administrator 管理员" [ref=e105] [cursor=pointer]:
+        - generic [ref=e106]: Administrator
+        - generic [ref=e107]: 管理员
+    - generic [ref=e108]:
+      - generic [ref=e109]: v1.0.0
+      - button "收起侧边栏" [ref=e110] [cursor=pointer]:
+        - img [ref=e3568]
+  - main [ref=e3]:
+    - generic [ref=e114]:
+      - heading "数据源管理" [level=1] [ref=e1129]
+      - generic [ref=e1130]:
+        - generic [ref=e1131]:
+          - textbox "搜索名称/IP/主机名/数据库名..." [ref=e1132]
+          - textbox "标签筛选（逗号分隔，可组合）" [ref=e1133]
+          - combobox [ref=e1134] [cursor=pointer]:
+            - option "所有类型" [selected]
+            - option "MySQL"
+            - option "PostgreSQL"
+            - option "Oracle"
+            - option "SQL Server"
+            - option "DM"
+            - option "MongoDB"
+            - option "Redis"
+        - button "New Datasource" [ref=e1135] [cursor=pointer]:
+          - img [ref=e3571]
+          - text: New Datasource
+    - table [ref=e3572]:
+      - rowgroup [ref=e3573]:
+        - row "名称 类型 标签 连接状态 主机 数据库 ▲ CPU QPS 活跃连接 操作" [ref=e3574]:
+          - columnheader "名称" [ref=e3575] [cursor=pointer]: 名称
+          - columnheader "类型" [ref=e3576] [cursor=pointer]: 类型
+          - columnheader "标签" [ref=e3577]
+          - columnheader "连接状态" [ref=e3578] [cursor=pointer]: 连接状态
+          - columnheader "主机" [ref=e3579] [cursor=pointer]: 主机
+          - columnheader "数据库 ▲" [ref=e3580] [cursor=pointer]
+          - columnheader "CPU" [ref=e3581] [cursor=pointer]: CPU
+          - columnheader "QPS" [ref=e3582] [cursor=pointer]: QPS
+          - columnheader "活跃连接" [ref=e3583] [cursor=pointer]: 活跃连接
+          - columnheader "操作" [ref=e3584]
+      - rowgroup [ref=e3585]:
+        - row "mysql_10.11(mariadb)(88:3307) mysql - ✓ 正常 192.168.2.88:3307 - 2.4% 0.4 0" [ref=e3586]:
+          - cell "mysql_10.11(mariadb)(88:3307)" [ref=e3587]:
+            - strong [ref=e3588]: mysql_10.11(mariadb)(88:3307)
+          - cell "mysql" [ref=e3589]:
+            - generic [ref=e3590]: mysql
+          - cell "-" [ref=e3591]
+          - cell "✓ 正常" [ref=e3592]:
+            - generic "连接正常" [ref=e3593]: ✓ 正常
+          - cell "192.168.2.88:3307" [ref=e3594]
+          - cell "-" [ref=e3595]
+          - cell "2.4%" [ref=e3596]
+          - cell "0.4" [ref=e3597]
+          - cell "0" [ref=e3598]
+          - cell [ref=e3599]:
+            - generic [ref=e3600]:
+              - button "编辑" [ref=e3601] [cursor=pointer]:
+                - img [ref=e3602]
+              - button "诊断" [ref=e3605] [cursor=pointer]:
+                - img [ref=e3606]
+              - button "更多" [ref=e3609] [cursor=pointer]:
+                - img [ref=e3610]
+        - row "mysql_5.5(71:3306) mysql - ✓ 正常 192.168.2.71:3306 - 0.0% 13.2 1" [ref=e3614]:
+          - cell "mysql_5.5(71:3306)" [ref=e3615]:
+            - strong [ref=e3616]: mysql_5.5(71:3306)
+          - cell "mysql" [ref=e3617]:
+            - generic [ref=e3618]: mysql
+          - cell "-" [ref=e3619]
+          - cell "✓ 正常" [ref=e3620]:
+            - generic "连接正常" [ref=e3621]: ✓ 正常
+          - cell "192.168.2.71:3306" [ref=e3622]
+          - cell "-" [ref=e3623]
+          - cell "0.0%" [ref=e3624]
+          - cell "13.2" [ref=e3625]
+          - cell "1" [ref=e3626]
+          - cell [ref=e3627]:
+            - generic [ref=e3628]:
+              - button "编辑" [ref=e3629] [cursor=pointer]:
+                - img [ref=e3630]
+              - button "诊断" [ref=e3633] [cursor=pointer]:
+                - img [ref=e3634]
+              - button "更多" [ref=e3637] [cursor=pointer]:
+                - img [ref=e3638]
+        - row "mysql_5.6(72:3306) mysql - ✓ 正常 192.168.2.72:3306 - 0.0% 13.0 1" [ref=e3642]:
+          - cell "mysql_5.6(72:3306)" [ref=e3643]:
+            - strong [ref=e3644]: mysql_5.6(72:3306)
+          - cell "mysql" [ref=e3645]:
+            - generic [ref=e3646]: mysql
+          - cell "-" [ref=e3647]
+          - cell "✓ 正常" [ref=e3648]:
+            - generic "连接正常" [ref=e3649]: ✓ 正常
+          - cell "192.168.2.72:3306" [ref=e3650]
+          - cell "-" [ref=e3651]
+          - cell "0.0%" [ref=e3652]
+          - cell "13.0" [ref=e3653]
+          - cell "1" [ref=e3654]
+          - cell [ref=e3655]:
+            - generic [ref=e3656]:
+              - button "编辑" [ref=e3657] [cursor=pointer]:
+                - img [ref=e3658]
+              - button "诊断" [ref=e3661] [cursor=pointer]:
+                - img [ref=e3662]
+              - button "更多" [ref=e3665] [cursor=pointer]:
+                - img [ref=e3666]
+        - row "mysql_5.6(77:3306) mysql - ✓ 正常 192.168.2.77:3306 - 1.1% 0.1 1" [ref=e3670]:
+          - cell "mysql_5.6(77:3306)" [ref=e3671]:
+            - strong [ref=e3672]: mysql_5.6(77:3306)
+          - cell "mysql" [ref=e3673]:
+            - generic [ref=e3674]: mysql
+          - cell "-" [ref=e3675]
+          - cell "✓ 正常" [ref=e3676]:
+            - generic "连接正常" [ref=e3677]: ✓ 正常
+          - cell "192.168.2.77:3306" [ref=e3678]
+          - cell "-" [ref=e3679]
+          - cell "1.1%" [ref=e3680]
+          - cell "0.1" [ref=e3681]
+          - cell "1" [ref=e3682]
+          - cell [ref=e3683]:
+            - generic [ref=e3684]:
+              - button "编辑" [ref=e3685] [cursor=pointer]:
+                - img [ref=e3686]
+              - button "诊断" [ref=e3689] [cursor=pointer]:
+                - img [ref=e3690]
+              - button "更多" [ref=e3693] [cursor=pointer]:
+                - img [ref=e3694]
+        - row "mysql_5.6(polardb-x)(66:8527) mysql - ✓ 正常 192.168.2.66:8527 - 2.3% 36.2 0" [ref=e3698]:
+          - cell "mysql_5.6(polardb-x)(66:8527)" [ref=e3699]:
+            - strong [ref=e3700]: mysql_5.6(polardb-x)(66:8527)
+          - cell "mysql" [ref=e3701]:
+            - generic [ref=e3702]: mysql
+          - cell "-" [ref=e3703]
+          - cell "✓ 正常" [ref=e3704]:
+            - generic "连接正常" [ref=e3705]: ✓ 正常
+          - cell "192.168.2.66:8527" [ref=e3706]
+          - cell "-" [ref=e3707]
+          - cell "2.3%" [ref=e3708]
+          - cell "36.2" [ref=e3709]
+          - cell "0" [ref=e3710]
+          - cell [ref=e3711]:
+            - generic [ref=e3712]:
+              - button "编辑" [ref=e3713] [cursor=pointer]:
+                - img [ref=e3714]
+              - button "诊断" [ref=e3717] [cursor=pointer]:
+                - img [ref=e3718]
+              - button "更多" [ref=e3721] [cursor=pointer]:
+                - img [ref=e3722]
+        - row "mysql_5.7(73:3306) mysql - ✓ 正常 192.168.2.73:3306 - 0.0% 13.0 3" [ref=e3726]:
+          - cell "mysql_5.7(73:3306)" [ref=e3727]:
+            - strong [ref=e3728]: mysql_5.7(73:3306)
+          - cell "mysql" [ref=e3729]:
+            - generic [ref=e3730]: mysql
+          - cell "-" [ref=e3731]
+          - cell "✓ 正常" [ref=e3732]:
+            - generic "连接正常" [ref=e3733]: ✓ 正常
+          - cell "192.168.2.73:3306" [ref=e3734]
+          - cell "-" [ref=e3735]
+          - cell "0.0%" [ref=e3736]
+          - cell "13.0" [ref=e3737]
+          - cell "3" [ref=e3738]
+          - cell [ref=e3739]:
+            - generic [ref=e3740]:
+              - button "编辑" [ref=e3741] [cursor=pointer]:
+                - img [ref=e3742]
+              - button "诊断" [ref=e3745] [cursor=pointer]:
+                - img [ref=e3746]
+              - button "更多" [ref=e3749] [cursor=pointer]:
+                - img [ref=e3750]
+        - row "mysql_5.7(77:3307) mysql - ✓ 正常 192.168.2.77:3307 - 1.0% 0.1 1" [ref=e3754]:
+          - cell "mysql_5.7(77:3307)" [ref=e3755]:
+            - strong [ref=e3756]: mysql_5.7(77:3307)
+          - cell "mysql" [ref=e3757]:
+            - generic [ref=e3758]: mysql
+          - cell "-" [ref=e3759]
+          - cell "✓ 正常" [ref=e3760]:
+            - generic "连接正常" [ref=e3761]: ✓ 正常
+          - cell "192.168.2.77:3307" [ref=e3762]
+          - cell "-" [ref=e3763]
+          - cell "1.0%" [ref=e3764]
+          - cell "0.1" [ref=e3765]
+          - cell "1" [ref=e3766]
+          - cell [ref=e3767]:
+            - generic [ref=e3768]:
+              - button "编辑" [ref=e3769] [cursor=pointer]:
+                - img [ref=e3770]
+              - button "诊断" [ref=e3773] [cursor=pointer]:
+                - img [ref=e3774]
+              - button "更多" [ref=e3777] [cursor=pointer]:
+                - img [ref=e3778]
+        - row "mysql_5.7(88:3306) mysql - ✓ 正常 192.168.2.88:3306 - 2.3% 0.1 1" [ref=e3782]:
+          - cell "mysql_5.7(88:3306)" [ref=e3783]:
+            - strong [ref=e3784]: mysql_5.7(88:3306)
+          - cell "mysql" [ref=e3785]:
+            - generic [ref=e3786]: mysql
+          - cell "-" [ref=e3787]
+          - cell "✓ 正常" [ref=e3788]:
+            - generic "连接正常" [ref=e3789]: ✓ 正常
+          - cell "192.168.2.88:3306" [ref=e3790]
+          - cell "-" [ref=e3791]
+          - cell "2.3%" [ref=e3792]
+          - cell "0.1" [ref=e3793]
+          - cell "1" [ref=e3794]
+          - cell [ref=e3795]:
+            - generic [ref=e3796]:
+              - button "编辑" [ref=e3797] [cursor=pointer]:
+                - img [ref=e3798]
+              - button "诊断" [ref=e3801] [cursor=pointer]:
+                - img [ref=e3802]
+              - button "更多" [ref=e3805] [cursor=pointer]:
+                - img [ref=e3806]
+        - row "mysql_5.7(percona)(88:3308) mysql - ✓ 正常 192.168.2.88:3308 - 2.4% 0.1 1" [ref=e3810]:
+          - cell "mysql_5.7(percona)(88:3308)" [ref=e3811]:
+            - strong [ref=e3812]: mysql_5.7(percona)(88:3308)
+          - cell "mysql" [ref=e3813]:
+            - generic [ref=e3814]: mysql
+          - cell "-" [ref=e3815]
+          - cell "✓ 正常" [ref=e3816]:
+            - generic "连接正常" [ref=e3817]: ✓ 正常
+          - cell "192.168.2.88:3308" [ref=e3818]
+          - cell "-" [ref=e3819]
+          - cell "2.4%" [ref=e3820]
+          - cell "0.1" [ref=e3821]
+          - cell "1" [ref=e3822]
+          - cell [ref=e3823]:
+            - generic [ref=e3824]:
+              - button "编辑" [ref=e3825] [cursor=pointer]:
+                - img [ref=e3826]
+              - button "诊断" [ref=e3829] [cursor=pointer]:
+                - img [ref=e3830]
+              - button "更多" [ref=e3833] [cursor=pointer]:
+                - img [ref=e3834]
+        - row "mysql_8.0(40:3306) mysql - ✓ 正常 192.168.2.40:3306 - 1.6% 0.1 1" [ref=e3838]:
+          - cell "mysql_8.0(40:3306)" [ref=e3839]:
+            - strong [ref=e3840]: mysql_8.0(40:3306)
+          - cell "mysql" [ref=e3841]:
+            - generic [ref=e3842]: mysql
+          - cell "-" [ref=e3843]
+          - cell "✓ 正常" [ref=e3844]:
+            - generic "连接正常" [ref=e3845]: ✓ 正常
+          - cell "192.168.2.40:3306" [ref=e3846]
+          - cell "-" [ref=e3847]
+          - cell "1.6%" [ref=e3848]
+          - cell "0.1" [ref=e3849]
+          - cell "1" [ref=e3850]
+          - cell [ref=e3851]:
+            - generic [ref=e3852]:
+              - button "编辑" [ref=e3853] [cursor=pointer]:
+                - img [ref=e3854]
+              - button "诊断" [ref=e3857] [cursor=pointer]:
+                - img [ref=e3858]
+              - button "更多" [ref=e3861] [cursor=pointer]:
+                - img [ref=e3862]
+        - row "mysql_8.0(74:3306) mysql - ✓ 正常 192.168.2.74:3306 - 3.4% 42.9 1" [ref=e3866]:
+          - cell "mysql_8.0(74:3306)" [ref=e3867]:
+            - strong [ref=e3868]: mysql_8.0(74:3306)
+          - cell "mysql" [ref=e3869]:
+            - generic [ref=e3870]: mysql
+          - cell "-" [ref=e3871]
+          - cell "✓ 正常" [ref=e3872]:
+            - generic "连接正常" [ref=e3873]: ✓ 正常
+          - cell "192.168.2.74:3306" [ref=e3874]
+          - cell "-" [ref=e3875]
+          - cell "3.4%" [ref=e3876]
+          - cell "42.9" [ref=e3877]
+          - cell "1" [ref=e3878]
+          - cell [ref=e3879]:
+            - generic [ref=e3880]:
+              - button "编辑" [ref=e3881] [cursor=pointer]:
+                - img [ref=e3882]
+              - button "诊断" [ref=e3885] [cursor=pointer]:
+                - img [ref=e3886]
+              - button "更多" [ref=e3889] [cursor=pointer]:
+                - img [ref=e3890]
+        - row "mysql_8.0(yzs-rds:3306) mysql 测试 RDS ✓ 正常 rm-bp16knn4mo4fvh99ieo.mysql.rds.aliyuncs.com:3306 yzs 0.9% 5.3 0" [ref=e3894]:
+          - cell "mysql_8.0(yzs-rds:3306)" [ref=e3895]:
+            - strong [ref=e3896]: mysql_8.0(yzs-rds:3306)
+          - cell "mysql" [ref=e3897]:
+            - generic [ref=e3898]: mysql
+          - cell "测试 RDS" [ref=e3899]:
+            - generic [ref=e3900]:
+              - generic [ref=e3901]: 测试
+              - generic [ref=e3902]: RDS
+          - cell "✓ 正常" [ref=e3903]:
+            - generic "连接正常" [ref=e3904]: ✓ 正常
+          - cell "rm-bp16knn4mo4fvh99ieo.mysql.rds.aliyuncs.com:3306" [ref=e3905]
+          - cell "yzs" [ref=e3906]
+          - cell "0.9%" [ref=e3907]
+          - cell "5.3" [ref=e3908]
+          - cell "0" [ref=e3909]
+          - cell [ref=e3910]:
+            - generic [ref=e3911]:
+              - button "编辑" [ref=e3912] [cursor=pointer]:
+                - img [ref=e3913]
+              - button "诊断" [ref=e3916] [cursor=pointer]:
+                - img [ref=e3917]
+              - button "更多" [ref=e3920] [cursor=pointer]:
+                - img [ref=e3921]
+        - row "mysql_8.3(29:3306) mysql - ✓ 正常 192.168.2.29:3306 - 4.4% 0.1 1" [ref=e3925]:
+          - cell "mysql_8.3(29:3306)" [ref=e3926]:
+            - strong [ref=e3927]: mysql_8.3(29:3306)
+          - cell "mysql" [ref=e3928]:
+            - generic [ref=e3929]: mysql
+          - cell "-" [ref=e3930]
+          - cell "✓ 正常" [ref=e3931]:
+            - generic "连接正常" [ref=e3932]: ✓ 正常
+          - cell "192.168.2.29:3306" [ref=e3933]
+          - cell "-" [ref=e3934]
+          - cell "4.4%" [ref=e3935]
+          - cell "0.1" [ref=e3936]
+          - cell "1" [ref=e3937]
+          - cell [ref=e3938]:
+            - generic [ref=e3939]:
+              - button "编辑" [ref=e3940] [cursor=pointer]:
+                - img [ref=e3941]
+              - button "诊断" [ref=e3944] [cursor=pointer]:
+                - img [ref=e3945]
+              - button "更多" [ref=e3948] [cursor=pointer]:
+                - img [ref=e3949]
+        - row "mysql_unknown(24:10082) mysql - ✗ 失败 192.168.2.24:10082 - 3.7% - -" [ref=e3953]:
+          - cell "mysql_unknown(24:10082)" [ref=e3954]:
+            - strong [ref=e3955]: mysql_unknown(24:10082)
+          - cell "mysql" [ref=e3956]:
+            - generic [ref=e3957]: mysql
+          - cell "-" [ref=e3958]
+          - cell "✗ 失败" [ref=e3959]:
+            - generic "数据库连接失败：用户名或密码错误，或认证方式不匹配" [ref=e3960]: ✗ 失败
+          - cell "192.168.2.24:10082" [ref=e3961]
+          - cell "-" [ref=e3962]
+          - cell "3.7%" [ref=e3963]
+          - cell "-" [ref=e3964]
+          - cell "-" [ref=e3965]
+          - cell [ref=e3966]:
+            - generic [ref=e3967]:
+              - button "编辑" [ref=e3968] [cursor=pointer]:
+                - img [ref=e3969]
+              - button "诊断" [ref=e3972] [cursor=pointer]:
+                - img [ref=e3973]
+              - button "更多" [ref=e3976] [cursor=pointer]:
+                - img [ref=e3977]
+        - row "oceanbase_4.2(14:2881) oceanbase_mysql - ✓ 正常 192.168.2.14:2881 - 43.5% 0.0 0" [ref=e3981]:
+          - cell "oceanbase_4.2(14:2881)" [ref=e3982]:
+            - strong [ref=e3983]: oceanbase_4.2(14:2881)
+          - cell "oceanbase_mysql" [ref=e3984]:
+            - generic [ref=e3985]: oceanbase_mysql
+          - cell "-" [ref=e3986]
+          - cell "✓ 正常" [ref=e3987]:
+            - generic "连接正常" [ref=e3988]: ✓ 正常
+          - cell "192.168.2.14:2881" [ref=e3989]
+          - cell "-" [ref=e3990]
+          - cell "43.5%" [ref=e3991]
+          - cell "0.0" [ref=e3992]
+          - cell "0" [ref=e3993]
+          - cell [ref=e3994]:
+            - generic [ref=e3995]:
+              - button "编辑" [ref=e3996] [cursor=pointer]:
+                - img [ref=e3997]
+              - button "诊断" [ref=e4000] [cursor=pointer]:
+                - img [ref=e4001]
+              - button "更多" [ref=e4004] [cursor=pointer]:
+                - img [ref=e4005]
+        - row "oracle_18c(85:1518) oracle - ✓ 正常 192.168.2.85:1518 - 1.6% 1.1 -" [ref=e4009]:
+          - cell "oracle_18c(85:1518)" [ref=e4010]:
+            - strong [ref=e4011]: oracle_18c(85:1518)
+          - cell "oracle" [ref=e4012]:
+            - generic [ref=e4013]: oracle
+          - cell "-" [ref=e4014]
+          - cell "✓ 正常" [ref=e4015]:
+            - generic "连接正常" [ref=e4016]: ✓ 正常
+          - cell "192.168.2.85:1518" [ref=e4017]
+          - cell "-" [ref=e4018]
+          - cell "1.6%" [ref=e4019]
+          - cell "1.1" [ref=e4020]
+          - cell "-" [ref=e4021]
+          - cell [ref=e4022]:
+            - generic [ref=e4023]:
+              - button "编辑" [ref=e4024] [cursor=pointer]:
+                - img [ref=e4025]
+              - button "诊断" [ref=e4028] [cursor=pointer]:
+                - img [ref=e4029]
+              - button "更多" [ref=e4032] [cursor=pointer]:
+                - img [ref=e4033]
+        - row "oracle_19c(86:1519) oracle - ✓ 正常 192.168.2.86:1519 orcl 29.8% 250.2 2" [ref=e4037]:
+          - cell "oracle_19c(86:1519)" [ref=e4038]:
+            - strong [ref=e4039]: oracle_19c(86:1519)
+          - cell "oracle" [ref=e4040]:
+            - generic [ref=e4041]: oracle
+          - cell "-" [ref=e4042]
+          - cell "✓ 正常" [ref=e4043]:
+            - generic "连接正常" [ref=e4044]: ✓ 正常
+          - cell "192.168.2.86:1519" [ref=e4045]
+          - cell "orcl" [ref=e4046]
+          - cell "29.8%" [ref=e4047]
+          - cell "250.2" [ref=e4048]
+          - cell "2" [ref=e4049]
+          - cell [ref=e4050]:
+            - generic [ref=e4051]:
+              - button "编辑" [ref=e4052] [cursor=pointer]:
+                - img [ref=e4053]
+              - button "诊断" [ref=e4056] [cursor=pointer]:
+                - img [ref=e4057]
+              - button "更多" [ref=e4060] [cursor=pointer]:
+                - img [ref=e4061]
+        - row "polardb-oracle_14(132:1523) postgresql - ✓ 正常 192.168.2.132:1523 - 6.5% 128.0 1" [ref=e4065]:
+          - cell "polardb-oracle_14(132:1523)" [ref=e4066]:
+            - strong [ref=e4067]: polardb-oracle_14(132:1523)
+          - cell "postgresql" [ref=e4068]:
+            - generic [ref=e4069]: postgresql
+          - cell "-" [ref=e4070]
+          - cell "✓ 正常" [ref=e4071]:
+            - generic "连接正常" [ref=e4072]: ✓ 正常
+          - cell "192.168.2.132:1523" [ref=e4073]
+          - cell "-" [ref=e4074]
+          - cell "6.5%" [ref=e4075]
+          - cell "128.0" [ref=e4076]
+          - cell "1" [ref=e4077]
+          - cell [ref=e4078]:
+            - generic [ref=e4079]:
+              - button "编辑" [ref=e4080] [cursor=pointer]:
+                - img [ref=e4081]
+              - button "诊断" [ref=e4084] [cursor=pointer]:
+                - img [ref=e4085]
+              - button "更多" [ref=e4088] [cursor=pointer]:
+                - img [ref=e4089]
+        - row "postgresql_10(90:5410) postgresql - ✓ 正常 192.168.2.90:5410 - 27.4% 10.7 1" [ref=e4093]:
+          - cell "postgresql_10(90:5410)" [ref=e4094]:
+            - strong [ref=e4095]: postgresql_10(90:5410)
+          - cell "postgresql" [ref=e4096]:
+            - generic [ref=e4097]: postgresql
+          - cell "-" [ref=e4098]
+          - cell "✓ 正常" [ref=e4099]:
+            - generic "连接正常" [ref=e4100]: ✓ 正常
+          - cell "192.168.2.90:5410" [ref=e4101]
+          - cell "-" [ref=e4102]
+          - cell "27.4%" [ref=e4103]
+          - cell "10.7" [ref=e4104]
+          - cell "1" [ref=e4105]
+          - cell [ref=e4106]:
+            - generic [ref=e4107]:
+              - button "编辑" [ref=e4108] [cursor=pointer]:
+                - img [ref=e4109]
+              - button "诊断" [ref=e4112] [cursor=pointer]:
+                - img [ref=e4113]
+              - button "更多" [ref=e4116] [cursor=pointer]:
+                - img [ref=e4117]
+        - row "postgresql_10(91:5410) postgresql - ✓ 正常 192.168.2.91:5410 - 78.1% 5.8 1" [ref=e4121]:
+          - cell "postgresql_10(91:5410)" [ref=e4122]:
+            - strong [ref=e4123]: postgresql_10(91:5410)
+          - cell "postgresql" [ref=e4124]:
+            - generic [ref=e4125]: postgresql
+          - cell "-" [ref=e4126]
+          - cell "✓ 正常" [ref=e4127]:
+            - generic "连接正常" [ref=e4128]: ✓ 正常
+          - cell "192.168.2.91:5410" [ref=e4129]
+          - cell "-" [ref=e4130]
+          - cell "78.1%" [ref=e4131]
+          - cell "5.8" [ref=e4132]
+          - cell "1" [ref=e4133]
+          - cell [ref=e4134]:
+            - generic [ref=e4135]:
+              - button "编辑" [ref=e4136] [cursor=pointer]:
+                - img [ref=e4137]
+              - button "诊断" [ref=e4140] [cursor=pointer]:
+                - img [ref=e4141]
+              - button "更多" [ref=e4144] [cursor=pointer]:
+                - img [ref=e4145]
+        - row "postgresql_11(90:5411) postgresql - ✓ 正常 192.168.2.90:5411 - 23.9% 6.0 1" [ref=e4149]:
+          - cell "postgresql_11(90:5411)" [ref=e4150]:
+            - strong [ref=e4151]: postgresql_11(90:5411)
+          - cell "postgresql" [ref=e4152]:
+            - generic [ref=e4153]: postgresql
+          - cell "-" [ref=e4154]
+          - cell "✓ 正常" [ref=e4155]:
+            - generic "连接正常" [ref=e4156]: ✓ 正常
+          - cell "192.168.2.90:5411" [ref=e4157]
+          - cell "-" [ref=e4158]
+          - cell "23.9%" [ref=e4159]
+          - cell "6.0" [ref=e4160]
+          - cell "1" [ref=e4161]
+          - cell [ref=e4162]:
+            - generic [ref=e4163]:
+              - button "编辑" [ref=e4164] [cursor=pointer]:
+                - img [ref=e4165]
+              - button "诊断" [ref=e4168] [cursor=pointer]:
+                - img [ref=e4169]
+              - button "更多" [ref=e4172] [cursor=pointer]:
+                - img [ref=e4173]
+        - row "postgresql_12(40:5432) postgresql - ✓ 正常 192.168.2.40:5432 - 6.3% 6.8 1" [ref=e4177]:
+          - cell "postgresql_12(40:5432)" [ref=e4178]:
+            - strong [ref=e4179]: postgresql_12(40:5432)
+          - cell "postgresql" [ref=e4180]:
+            - generic [ref=e4181]: postgresql
+          - cell "-" [ref=e4182]
+          - cell "✓ 正常" [ref=e4183]:
+            - generic "连接正常" [ref=e4184]: ✓ 正常
+          - cell "192.168.2.40:5432" [ref=e4185]
+          - cell "-" [ref=e4186]
+          - cell "6.3%" [ref=e4187]
+          - cell "6.8" [ref=e4188]
+          - cell "1" [ref=e4189]
+          - cell [ref=e4190]:
+            - generic [ref=e4191]:
+              - button "编辑" [ref=e4192] [cursor=pointer]:
+                - img [ref=e4193]
+              - button "诊断" [ref=e4196] [cursor=pointer]:
+                - img [ref=e4197]
+              - button "更多" [ref=e4200] [cursor=pointer]:
+                - img [ref=e4201]
+        - row "postgresql_12(91:5412) postgresql - ✓ 正常 192.168.2.91:5412 - 79.2% 10.6 1" [ref=e4205]:
+          - cell "postgresql_12(91:5412)" [ref=e4206]:
+            - strong [ref=e4207]: postgresql_12(91:5412)
+          - cell "postgresql" [ref=e4208]:
+            - generic [ref=e4209]: postgresql
+          - cell "-" [ref=e4210]
+          - cell "✓ 正常" [ref=e4211]:
+            - generic "连接正常" [ref=e4212]: ✓ 正常
+          - cell "192.168.2.91:5412" [ref=e4213]
+          - cell "-" [ref=e4214]
+          - cell "79.2%" [ref=e4215]
+          - cell "10.6" [ref=e4216]
+          - cell "1" [ref=e4217]
+          - cell [ref=e4218]:
+            - generic [ref=e4219]:
+              - button "编辑" [ref=e4220] [cursor=pointer]:
+                - img [ref=e4221]
+              - button "诊断" [ref=e4224] [cursor=pointer]:
+                - img [ref=e4225]
+              - button "更多" [ref=e4228] [cursor=pointer]:
+                - img [ref=e4229]
+        - row "postgresql_14(90:5414) postgresql - ✓ 正常 192.168.2.90:5414 - 20.6% 19.1 1" [ref=e4233]:
+          - cell "postgresql_14(90:5414)" [ref=e4234]:
+            - strong [ref=e4235]: postgresql_14(90:5414)
+          - cell "postgresql" [ref=e4236]:
+            - generic [ref=e4237]: postgresql
+          - cell "-" [ref=e4238]
+          - cell "✓ 正常" [ref=e4239]:
+            - generic "连接正常" [ref=e4240]: ✓ 正常
+          - cell "192.168.2.90:5414" [ref=e4241]
+          - cell "-" [ref=e4242]
+          - cell "20.6%" [ref=e4243]
+          - cell "19.1" [ref=e4244]
+          - cell "1" [ref=e4245]
+          - cell [ref=e4246]:
+            - generic [ref=e4247]:
+              - button "编辑" [ref=e4248] [cursor=pointer]:
+                - img [ref=e4249]
+              - button "诊断" [ref=e4252] [cursor=pointer]:
+                - img [ref=e4253]
+              - button "更多" [ref=e4256] [cursor=pointer]:
+                - img [ref=e4257]
+        - row "postgresql_14(91:5414) postgresql - ✓ 正常 192.168.2.91:5414 - 45.3% 19.1 1" [ref=e4261]:
+          - cell "postgresql_14(91:5414)" [ref=e4262]:
+            - strong [ref=e4263]: postgresql_14(91:5414)
+          - cell "postgresql" [ref=e4264]:
+            - generic [ref=e4265]: postgresql
+          - cell "-" [ref=e4266]
+          - cell "✓ 正常" [ref=e4267]:
+            - generic "连接正常" [ref=e4268]: ✓ 正常
+          - cell "192.168.2.91:5414" [ref=e4269]
+          - cell "-" [ref=e4270]
+          - cell "45.3%" [ref=e4271]
+          - cell "19.1" [ref=e4272]
+          - cell "1" [ref=e4273]
+          - cell [ref=e4274]:
+            - generic [ref=e4275]:
+              - button "编辑" [ref=e4276] [cursor=pointer]:
+                - img [ref=e4277]
+              - button "诊断" [ref=e4280] [cursor=pointer]:
+                - img [ref=e4281]
+              - button "更多" [ref=e4284] [cursor=pointer]:
+                - img [ref=e4285]
+        - row "postgresql_14(hashdata)(95:5432) postgresql 测试 ✗ 失败 192.168.2.95:5432 - 1.6% - -" [ref=e4289]:
+          - cell "postgresql_14(hashdata)(95:5432)" [ref=e4290]:
+            - strong [ref=e4291]: postgresql_14(hashdata)(95:5432)
+          - cell "postgresql" [ref=e4292]:
+            - generic [ref=e4293]: postgresql
+          - cell "测试" [ref=e4294]:
+            - generic [ref=e4296]: 测试
+          - cell "✗ 失败" [ref=e4297]:
+            - generic "数据库连接失败：目标端口未监听或被防火墙拦截" [ref=e4298]: ✗ 失败
+          - cell "192.168.2.95:5432" [ref=e4299]
+          - cell "-" [ref=e4300]
+          - cell "1.6%" [ref=e4301]
+          - cell "-" [ref=e4302]
+          - cell "-" [ref=e4303]
+          - cell [ref=e4304]:
+            - generic [ref=e4305]:
+              - button "编辑" [ref=e4306] [cursor=pointer]:
+                - img [ref=e4307]
+              - button "诊断" [ref=e4310] [cursor=pointer]:
+                - img [ref=e4311]
+              - button "更多" [ref=e4314] [cursor=pointer]:
+                - img [ref=e4315]
+        - row "postgresql_14(polardb)(179:1523) postgresql - ✓ 正常 192.168.2.179:1523 admin_db 0.0% 13.4 1" [ref=e4319]:
+          - cell "postgresql_14(polardb)(179:1523)" [ref=e4320]:
+            - strong [ref=e4321]: postgresql_14(polardb)(179:1523)
+          - cell "postgresql" [ref=e4322]:
+            - generic [ref=e4323]: postgresql
+          - cell "-" [ref=e4324]
+          - cell "✓ 正常" [ref=e4325]:
+            - generic "连接正常" [ref=e4326]: ✓ 正常
+          - cell "192.168.2.179:1523" [ref=e4327]
+          - cell "admin_db" [ref=e4328]
+          - cell "0.0%" [ref=e4329]
+          - cell "13.4" [ref=e4330]
+          - cell "1" [ref=e4331]
+          - cell [ref=e4332]:
+            - generic [ref=e4333]:
+              - button "编辑" [ref=e4334] [cursor=pointer]:
+                - img [ref=e4335]
+              - button "诊断" [ref=e4338] [cursor=pointer]:
+                - img [ref=e4339]
+              - button "更多" [ref=e4342] [cursor=pointer]:
+                - img [ref=e4343]
+        - row "postgresql_15(90:5432) postgresql - ✓ 正常 192.168.2.90:5432 - 21.3% 56.0 1" [ref=e4347]:
+          - cell "postgresql_15(90:5432)" [ref=e4348]:
+            - strong [ref=e4349]: postgresql_15(90:5432)
+          - cell "postgresql" [ref=e4350]:
+            - generic [ref=e4351]: postgresql
+          - cell "-" [ref=e4352]
+          - cell "✓ 正常" [ref=e4353]:
+            - generic "连接正常" [ref=e4354]: ✓ 正常
+          - cell "192.168.2.90:5432" [ref=e4355]
+          - cell "-" [ref=e4356]
+          - cell "21.3%" [ref=e4357]
+          - cell "56.0" [ref=e4358]
+          - cell "1" [ref=e4359]
+          - cell [ref=e4360]:
+            - generic [ref=e4361]:
+              - button "编辑" [ref=e4362] [cursor=pointer]:
+                - img [ref=e4363]
+              - button "诊断" [ref=e4366] [cursor=pointer]:
+                - img [ref=e4367]
+              - button "更多" [ref=e4370] [cursor=pointer]:
+                - img [ref=e4371]
+        - row "postgresql_15(91:5432) postgresql - ✓ 正常 192.168.2.91:5432 - 26.4% 5517.9 1" [ref=e4375]:
+          - cell "postgresql_15(91:5432)" [ref=e4376]:
+            - strong [ref=e4377]: postgresql_15(91:5432)
+          - cell "postgresql" [ref=e4378]:
+            - generic [ref=e4379]: postgresql
+          - cell "-" [ref=e4380]
+          - cell "✓ 正常" [ref=e4381]:
+            - generic "连接正常" [ref=e4382]: ✓ 正常
+          - cell "192.168.2.91:5432" [ref=e4383]
+          - cell "-" [ref=e4384]
+          - cell "26.4%" [ref=e4385]
+          - cell "5517.9" [ref=e4386]
+          - cell "1" [ref=e4387]
+          - cell [ref=e4388]:
+            - generic [ref=e4389]:
+              - button "编辑" [ref=e4390] [cursor=pointer]:
+                - img [ref=e4391]
+              - button "诊断" [ref=e4394] [cursor=pointer]:
+                - img [ref=e4395]
+              - button "更多" [ref=e4398] [cursor=pointer]:
+                - img [ref=e4399]
+        - row "postgresql_15(polardb)(91:5415) postgresql - ✓ 正常 192.168.2.91:5415 - 84.5% 1234.4 2" [ref=e4403]:
+          - cell "postgresql_15(polardb)(91:5415)" [ref=e4404]:
+            - strong [ref=e4405]: postgresql_15(polardb)(91:5415)
+          - cell "postgresql" [ref=e4406]:
+            - generic [ref=e4407]: postgresql
+          - cell "-" [ref=e4408]
+          - cell "✓ 正常" [ref=e4409]:
+            - generic "连接正常" [ref=e4410]: ✓ 正常
+          - cell "192.168.2.91:5415" [ref=e4411]
+          - cell "-" [ref=e4412]
+          - cell "84.5%" [ref=e4413]
+          - cell "1234.4" [ref=e4414]
+          - cell "2" [ref=e4415]
+          - cell [ref=e4416]:
+            - generic [ref=e4417]:
+              - button "编辑" [ref=e4418] [cursor=pointer]:
+                - img [ref=e4419]
+              - button "诊断" [ref=e4422] [cursor=pointer]:
+                - img [ref=e4423]
+              - button "更多" [ref=e4426] [cursor=pointer]:
+                - img [ref=e4427]
+        - row "postgresql_16(91:5416) postgresql - ✓ 正常 192.168.2.91:5416 - 41.7% 60.9 2" [ref=e4431]:
+          - cell "postgresql_16(91:5416)" [ref=e4432]:
+            - strong [ref=e4433]: postgresql_16(91:5416)
+          - cell "postgresql" [ref=e4434]:
+            - generic [ref=e4435]: postgresql
+          - cell "-" [ref=e4436]
+          - cell "✓ 正常" [ref=e4437]:
+            - generic "连接正常" [ref=e4438]: ✓ 正常
+          - cell "192.168.2.91:5416" [ref=e4439]
+          - cell "-" [ref=e4440]
+          - cell "41.7%" [ref=e4441]
+          - cell "60.9" [ref=e4442]
+          - cell "2" [ref=e4443]
+          - cell [ref=e4444]:
+            - generic [ref=e4445]:
+              - button "编辑" [ref=e4446] [cursor=pointer]:
+                - img [ref=e4447]
+              - button "诊断" [ref=e4450] [cursor=pointer]:
+                - img [ref=e4451]
+              - button "更多" [ref=e4454] [cursor=pointer]:
+                - img [ref=e4455]
+        - row "postgresql_18(208:15432) postgresql - ✓ 正常 118.178.108.208:15432 tpcc 6.2% 9.5 1" [ref=e4459]:
+          - cell "postgresql_18(208:15432)" [ref=e4460]:
+            - strong [ref=e4461]: postgresql_18(208:15432)
+          - cell "postgresql" [ref=e4462]:
+            - generic [ref=e4463]: postgresql
+          - cell "-" [ref=e4464]
+          - cell "✓ 正常" [ref=e4465]:
+            - generic "连接正常" [ref=e4466]: ✓ 正常
+          - cell "118.178.108.208:15432" [ref=e4467]
+          - cell "tpcc" [ref=e4468]
+          - cell "6.2%" [ref=e4469]
+          - cell "9.5" [ref=e4470]
+          - cell "1" [ref=e4471]
+          - cell [ref=e4472]:
+            - generic [ref=e4473]:
+              - button "编辑" [ref=e4474] [cursor=pointer]:
+                - img [ref=e4475]
+              - button "诊断" [ref=e4478] [cursor=pointer]:
+                - img [ref=e4479]
+              - button "更多" [ref=e4482] [cursor=pointer]:
+                - img [ref=e4483]
+        - row "postgresql_8(kingbase)(75:54321) postgresql - ✓ 正常 192.168.2.75:54321 - 1.6% 403.1 1" [ref=e4487]:
+          - cell "postgresql_8(kingbase)(75:54321)" [ref=e4488]:
+            - strong [ref=e4489]: postgresql_8(kingbase)(75:54321)
+          - cell "postgresql" [ref=e4490]:
+            - generic [ref=e4491]: postgresql
+          - cell "-" [ref=e4492]
+          - cell "✓ 正常" [ref=e4493]:
+            - generic "连接正常" [ref=e4494]: ✓ 正常
+          - cell "192.168.2.75:54321" [ref=e4495]
+          - cell "-" [ref=e4496]
+          - cell "1.6%" [ref=e4497]
+          - cell "403.1" [ref=e4498]
+          - cell "1" [ref=e4499]
+          - cell [ref=e4500]:
+            - generic [ref=e4501]:
+              - button "编辑" [ref=e4502] [cursor=pointer]:
+                - img [ref=e4503]
+              - button "诊断" [ref=e4506] [cursor=pointer]:
+                - img [ref=e4507]
+              - button "更多" [ref=e4510] [cursor=pointer]:
+                - img [ref=e4511]
+        - row "postgresql_9.4(greenplum)(93:5432) opengauss - ✓ 正常 192.168.2.93:5432 - 3.1% - 1" [ref=e4515]:
+          - cell "postgresql_9.4(greenplum)(93:5432)" [ref=e4516]:
+            - strong [ref=e4517]: postgresql_9.4(greenplum)(93:5432)
+          - cell "opengauss" [ref=e4518]:
+            - generic [ref=e4519]: opengauss
+          - cell "-" [ref=e4520]
+          - cell "✓ 正常" [ref=e4521]:
+            - generic "连接正常" [ref=e4522]: ✓ 正常
+          - cell "192.168.2.93:5432" [ref=e4523]
+          - cell "-" [ref=e4524]
+          - cell "3.1%" [ref=e4525]
+          - cell "-" [ref=e4526]
+          - cell "1" [ref=e4527]
+          - cell [ref=e4528]:
+            - generic [ref=e4529]:
+              - button "编辑" [ref=e4530] [cursor=pointer]:
+                - img [ref=e4531]
+              - button "诊断" [ref=e4534] [cursor=pointer]:
+                - img [ref=e4535]
+              - button "更多" [ref=e4538] [cursor=pointer]:
+                - img [ref=e4539]
+        - row "sqlserver_2017(61:1417) sqlserver - ✓ 正常 192.168.2.61:1417 - - 0.1 1" [ref=e4543]:
+          - cell "sqlserver_2017(61:1417)" [ref=e4544]:
+            - strong [ref=e4545]: sqlserver_2017(61:1417)
+          - cell "sqlserver" [ref=e4546]:
+            - generic [ref=e4547]: sqlserver
+          - cell "-" [ref=e4548]
+          - cell "✓ 正常" [ref=e4549]:
+            - generic "连接正常" [ref=e4550]: ✓ 正常
+          - cell "192.168.2.61:1417" [ref=e4551]
+          - cell "-" [ref=e4552]
+          - cell "-" [ref=e4553]
+          - cell "0.1" [ref=e4554]
+          - cell "1" [ref=e4555]
+          - cell [ref=e4556]:
+            - generic [ref=e4557]:
+              - button "编辑" [ref=e4558] [cursor=pointer]:
+                - img [ref=e4559]
+              - button "诊断" [ref=e4562] [cursor=pointer]:
+                - img [ref=e4563]
+              - button "更多" [ref=e4566] [cursor=pointer]:
+                - img [ref=e4567]
+        - row "sqlserver_2017(62:1417) sqlserver - ✓ 正常 192.168.2.62:1417 - - 1.2 1" [ref=e4571]:
+          - cell "sqlserver_2017(62:1417)" [ref=e4572]:
+            - strong [ref=e4573]: sqlserver_2017(62:1417)
+          - cell "sqlserver" [ref=e4574]:
+            - generic [ref=e4575]: sqlserver
+          - cell "-" [ref=e4576]
+          - cell "✓ 正常" [ref=e4577]:
+            - generic "连接正常" [ref=e4578]: ✓ 正常
+          - cell "192.168.2.62:1417" [ref=e4579]
+          - cell "-" [ref=e4580]
+          - cell "-" [ref=e4581]
+          - cell "1.2" [ref=e4582]
+          - cell "1" [ref=e4583]
+          - cell [ref=e4584]:
+            - generic [ref=e4585]:
+              - button "编辑" [ref=e4586] [cursor=pointer]:
+                - img [ref=e4587]
+              - button "诊断" [ref=e4590] [cursor=pointer]:
+                - img [ref=e4591]
+              - button "更多" [ref=e4594] [cursor=pointer]:
+                - img [ref=e4595]
+        - row "sqlserver_2019(244:1433) sqlserver - ✓ 正常 192.168.2.244:1433 - - 0.1 1" [ref=e4599]:
+          - cell "sqlserver_2019(244:1433)" [ref=e4600]:
+            - strong [ref=e4601]: sqlserver_2019(244:1433)
+          - cell "sqlserver" [ref=e4602]:
+            - generic [ref=e4603]: sqlserver
+          - cell "-" [ref=e4604]
+          - cell "✓ 正常" [ref=e4605]:
+            - generic "连接正常" [ref=e4606]: ✓ 正常
+          - cell "192.168.2.244:1433" [ref=e4607]
+          - cell "-" [ref=e4608]
+          - cell "-" [ref=e4609]
+          - cell "0.1" [ref=e4610]
+          - cell "1" [ref=e4611]
+          - cell [ref=e4612]:
+            - generic [ref=e4613]:
+              - button "编辑" [ref=e4614] [cursor=pointer]:
+                - img [ref=e4615]
+              - button "诊断" [ref=e4618] [cursor=pointer]:
+                - img [ref=e4619]
+              - button "更多" [ref=e4622] [cursor=pointer]:
+                - img [ref=e4623]
+        - row "sqlserver_2019(61:1433) sqlserver - ✓ 正常 192.168.2.61:1433 - - 0.1 1" [ref=e4627]:
+          - cell "sqlserver_2019(61:1433)" [ref=e4628]:
+            - strong [ref=e4629]: sqlserver_2019(61:1433)
+          - cell "sqlserver" [ref=e4630]:
+            - generic [ref=e4631]: sqlserver
+          - cell "-" [ref=e4632]
+          - cell "✓ 正常" [ref=e4633]:
+            - generic "连接正常" [ref=e4634]: ✓ 正常
+          - cell "192.168.2.61:1433" [ref=e4635]
+          - cell "-" [ref=e4636]
+          - cell "-" [ref=e4637]
+          - cell "0.1" [ref=e4638]
+          - cell "1" [ref=e4639]
+          - cell [ref=e4640]:
+            - generic [ref=e4641]:
+              - button "编辑" [ref=e4642] [cursor=pointer]:
+                - img [ref=e4643]
+              - button "诊断" [ref=e4646] [cursor=pointer]:
+                - img [ref=e4647]
+              - button "更多" [ref=e4650] [cursor=pointer]:
+                - img [ref=e4651]
+        - row "sqlserver_2019(62:1419) sqlserver - ✓ 正常 192.168.2.62:1419 - - 19.8 1" [ref=e4655]:
+          - cell "sqlserver_2019(62:1419)" [ref=e4656]:
+            - strong [ref=e4657]: sqlserver_2019(62:1419)
+          - cell "sqlserver" [ref=e4658]:
+            - generic [ref=e4659]: sqlserver
+          - cell "-" [ref=e4660]
+          - cell "✓ 正常" [ref=e4661]:
+            - generic "连接正常" [ref=e4662]: ✓ 正常
+          - cell "192.168.2.62:1419" [ref=e4663]
+          - cell "-" [ref=e4664]
+          - cell "-" [ref=e4665]
+          - cell "19.8" [ref=e4666]
+          - cell "1" [ref=e4667]
+          - cell [ref=e4668]:
+            - generic [ref=e4669]:
+              - button "编辑" [ref=e4670] [cursor=pointer]:
+                - img [ref=e4671]
+              - button "诊断" [ref=e4674] [cursor=pointer]:
+                - img [ref=e4675]
+              - button "更多" [ref=e4678] [cursor=pointer]:
+                - img [ref=e4679]
+        - row "sqlserver_2022(62:1422) sqlserver - ✓ 正常 192.168.2.62:1422 - - 2.0 1" [ref=e4683]:
+          - cell "sqlserver_2022(62:1422)" [ref=e4684]:
+            - strong [ref=e4685]: sqlserver_2022(62:1422)
+          - cell "sqlserver" [ref=e4686]:
+            - generic [ref=e4687]: sqlserver
+          - cell "-" [ref=e4688]
+          - cell "✓ 正常" [ref=e4689]:
+            - generic "连接正常" [ref=e4690]: ✓ 正常
+          - cell "192.168.2.62:1422" [ref=e4691]
+          - cell "-" [ref=e4692]
+          - cell "-" [ref=e4693]
+          - cell "2.0" [ref=e4694]
+          - cell "1" [ref=e4695]
+          - cell [ref=e4696]:
+            - generic [ref=e4697]:
+              - button "编辑" [ref=e4698] [cursor=pointer]:
+                - img [ref=e4699]
+              - button "诊断" [ref=e4702] [cursor=pointer]:
+                - img [ref=e4703]
+              - button "更多" [ref=e4706] [cursor=pointer]:
+                - img [ref=e4707]
+        - row "vastbase(132) opengauss - ✓ 正常 192.168.2.132:5432 - 8.3% - 2" [ref=e4711]:
+          - cell "vastbase(132)" [ref=e4712]:
+            - strong [ref=e4713]: vastbase(132)
+          - cell "opengauss" [ref=e4714]:
+            - generic [ref=e4715]: opengauss
+          - cell "-" [ref=e4716]
+          - cell "✓ 正常" [ref=e4717]:
+            - generic "连接正常" [ref=e4718]: ✓ 正常
+          - cell "192.168.2.132:5432" [ref=e4719]
+          - cell "-" [ref=e4720]
+          - cell "8.3%" [ref=e4721]
+          - cell "-" [ref=e4722]
+          - cell "2" [ref=e4723]
+          - cell [ref=e4724]:
+            - generic [ref=e4725]:
+              - button "编辑" [ref=e4726] [cursor=pointer]:
+                - img [ref=e4727]
+              - button "诊断" [ref=e4730] [cursor=pointer]:
+                - img [ref=e4731]
+              - button "更多" [ref=e4734] [cursor=pointer]:
+                - img [ref=e4735]

@@ -19,7 +19,6 @@ GLOBAL_SKILL_IDS: Set[str] = {
     "execute_diagnostic_query",
     "diagnose_datasource_connection",
     "execute_any_sql",
-    "search_knowledge_base",
     "fetch_webpage",
     "web_search_bocha",
     # Confirmed: keep datasource listing available even when scoped.

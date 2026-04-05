@@ -1,20 +1,27 @@
 """
 Updated conversation module to use dynamic skill system
 """
+import asyncio
 import json
 import logging
 import re
+import uuid
 from typing import AsyncGenerator, List, Dict, Any, Optional
 
 from backend.agent.prompts import DIAGNOSTIC_PROMPT, INFORMATIONAL_PROMPT, ADMINISTRATIVE_PROMPT
 from backend.agent.intent_detector import detect_query_intent
 from backend.agent.skill_selector import get_available_skills_as_tools
-from backend.services.ai_agent import get_ai_client, stream_assistant_turn
+from backend.agent.tools import get_filtered_tools
+from backend.agent.context_builder import execute_tool
+from backend.services.ai_agent import get_ai_client, stream_assistant_turn, request_text_response
 from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
 
 MAX_TOOL_ROUNDS = 1000
+# 单轮 AI API 调用超时（秒），防止 LLM 提供商 API 挂起导致会话卡死
+STREAM_ROUND_TIMEOUT = 600
+KB_TOOL_NAMES = {"list_documents", "read_document"}
 
 READ_ONLY_SQL_KEYWORDS = {'SELECT', 'SHOW', 'EXPLAIN', 'EXEC', 'EXECUTE', 'DESCRIBE', 'DESC', 'WITH'}
 DANGEROUS_SQL_KEYWORDS = {'INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'TRUNCATE', 'CREATE', 'GRANT', 'REVOKE', 'CALL'}
@@ -51,6 +58,61 @@ def _get_command_arg(arguments: Dict[str, Any]) -> str:
     return str(arguments.get('command') or arguments.get('cmd') or arguments.get('shell_command') or '').strip()
 
 
+_RISK_ASSESS_SYSTEM_PROMPT = """你是一个数据库运维安全审计专家。你的任务是判断给定的 SQL 语句或 OS 命令的风险等级。
+
+风险等级定义：
+- safe: 只读操作，不会修改任何数据或系统状态。例如 SELECT 查询、SHOW 命令、df/ps/top 等诊断命令。
+- high: 可能修改数据或系统状态，但不会造成不可逆的破坏。例如 INSERT/UPDATE/DELETE、systemctl restart、chmod 等。
+- destructive: 可能造成不可逆的数据丢失或系统破坏。例如 DROP TABLE、TRUNCATE、rm -rf、mkfs、shutdown 等。
+
+判断规则：
+1. 关注语句的实际语义，而非简单的关键词匹配。例如 `SELECT * FROM delete_log` 是安全的只读查询，虽然包含 "delete" 一词。
+2. 存储过程/函数调用（CALL/EXEC）如果无法确定其内部行为，应判定为 high。
+3. 带 WHERE 条件的 UPDATE/DELETE 比不带条件的风险更低，但仍为 high。
+4. 不带 WHERE 的 DELETE/UPDATE 应判定为 destructive。
+
+请严格以 JSON 格式返回，不要包含任何其他文字：
+{"level": "safe|high|destructive", "reason": "简短的中文原因说明"}"""
+
+
+async def _llm_assess_risk(client, sql: str = "", command: str = "") -> Optional[Dict[str, Any]]:
+    """调用 LLM 判定 SQL/OS 命令的风险等级，返回 None 表示判定失败需 fallback。"""
+    if not client:
+        return None
+
+    content_parts = []
+    if sql:
+        content_parts.append(f"SQL 语句：{sql[:500]}")
+    if command:
+        content_parts.append(f"OS 命令：{command[:500]}")
+    if not content_parts:
+        return None
+
+    messages = [
+        {"role": "system", "content": _RISK_ASSESS_SYSTEM_PROMPT},
+        {"role": "user", "content": "\n".join(content_parts)},
+    ]
+
+    try:
+        response = await request_text_response(client, messages, temperature=0, max_tokens=128)
+        # 提取 JSON（兼容 LLM 可能在 JSON 前后添加多余文字的情况）
+        text = response.strip()
+        start = text.find('{')
+        end = text.rfind('}')
+        if start == -1 or end == -1:
+            logger.warning(f"LLM risk assess response not valid JSON: {text[:200]}")
+            return None
+        parsed = json.loads(text[start:end + 1])
+        level = parsed.get("level", "").lower()
+        if level not in ("safe", "high", "destructive"):
+            logger.warning(f"LLM risk assess returned unknown level: {level}")
+            return None
+        return {"level": level, "reason": parsed.get("reason", "")}
+    except Exception as e:
+        logger.warning(f"LLM risk assess failed, will fallback to keyword matching: {e}")
+        return None
+
+
 def build_confirmation_reason(tool_name: str, arguments: Dict[str, Any], risk_level: str) -> str:
     command = _get_command_arg(arguments)
     sql = str(arguments.get('sql') or '').strip()
@@ -66,7 +128,8 @@ def build_confirmation_reason(tool_name: str, arguments: Dict[str, Any], risk_le
     return f"技能 `{tool_name}` 具备潜在变更能力，需要确认后再执行。"
 
 
-def assess_tool_risk(tool_name: str, arguments: Dict[str, Any], permissions: Optional[List[str]] = None) -> Dict[str, Any]:
+def _keyword_assess_risk(tool_name: str, arguments: Dict[str, Any], permissions: Optional[List[str]] = None) -> Dict[str, Any]:
+    """基于关键词匹配的风险判定（fallback 方案）。"""
     permissions = permissions or []
     command = _get_command_arg(arguments)
     sql = str(arguments.get('sql') or '').strip()
@@ -160,6 +223,55 @@ def assess_tool_risk(tool_name: str, arguments: Dict[str, Any], permissions: Opt
     }
 
 
+def _build_risk_dict_from_llm(llm_result: Dict[str, Any], tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """将 LLM 返回的风险判定结果转换为标准 risk dict。"""
+    level = llm_result["level"]
+    command = _get_command_arg(arguments)
+    sql = str(arguments.get('sql') or '').strip()
+
+    if command:
+        if level == 'destructive':
+            key = 'os_destructive'
+        elif level == 'high':
+            key = 'os_write'
+        else:
+            key = 'os_readonly'
+    elif sql:
+        if level == 'destructive':
+            key = 'sql_destructive'
+        elif level == 'high':
+            key = 'sql_write'
+        else:
+            key = 'sql_readonly'
+    else:
+        key = 'generic_readonly'
+
+    reason = llm_result.get("reason") or build_confirmation_reason(tool_name, arguments, level)
+
+    return {
+        'level': level,
+        'requires_confirmation': False,
+        'risk_reason': reason,
+        'suppressible': level not in ('safe', 'destructive'),
+        'confirmation_key': key,
+    }
+
+
+async def assess_tool_risk(tool_name: str, arguments: Dict[str, Any], permissions: Optional[List[str]] = None, client=None) -> Dict[str, Any]:
+    """评估工具调用的风险等级。优先使用 LLM 判定，失败时 fallback 到关键词匹配。"""
+    command = _get_command_arg(arguments)
+    sql = str(arguments.get('sql') or '').strip()
+
+    # 有 client 且存在 sql/command 时，优先走 LLM 判定
+    if client and (sql or command):
+        llm_result = await _llm_assess_risk(client, sql=sql, command=command)
+        if llm_result:
+            return _build_risk_dict_from_llm(llm_result, tool_name, arguments)
+        logger.info("LLM risk assessment unavailable, falling back to keyword matching")
+
+    return _keyword_assess_risk(tool_name, arguments, permissions)
+
+
 async def execute_skill_call(
     skill_id: str, arguments: Dict[str, Any], db, user_id: int, session_id: Optional[int] = None
 ) -> tuple[str, int, Optional[int]]:
@@ -242,6 +354,7 @@ async def run_conversation_with_skills(
     session_id: Optional[int] = None,
     disabled_tools: Optional[List[str]] = None,
     system_prompt_override: Optional[str] = None,
+    skip_approval: bool = False,
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """Run the AI conversation loop with dynamic skill calling and streaming."""
     from backend.models.ai_model import AIModel
@@ -281,7 +394,17 @@ async def run_conversation_with_skills(
         intent_text = " ".join(p.get("text", "") for p in first_user_message if isinstance(p, dict) and p.get("type") == "text")
     else:
         intent_text = first_user_message
+
+    # 阶段1: 意图检测
+    yield {"type": "thinking_phase", "phase": "intent_detection", "message": "正在分析您的问题..."}
     intent = detect_query_intent(intent_text)
+
+    intent_message_map = {
+        "diagnostic": "检测到诊断意图，正在分析数据库问题...",
+        "informational": "检测到查询意图，正在准备信息检索...",
+        "administrative": "检测到操作意图，正在准备执行任务...",
+    }
+    yield {"type": "thinking_phase", "phase": "intent_detection", "message": intent_message_map.get(intent, "正在分析..."), "intent": intent}
 
     if system_prompt_override:
         system_msg = system_prompt_override
@@ -321,6 +444,25 @@ async def run_conversation_with_skills(
             }
             skill_prefix = skill_prefix_map.get(datasource.db_type, datasource.db_type)
 
+            # 获取数据库版本信息
+            db_version_info = ""
+            if datasource.db_version:
+                db_version_info = f"\n- db_version: {datasource.db_version}"
+
+            # 获取主机详情
+            host_os_info = ""
+            host_ssh_port = ""
+            host_name_for_display = ""
+            if host_id:
+                host_result = await db.execute(select(Host).filter(Host.id == host_id))
+                host = host_result.scalar_one_or_none()
+                if host:
+                    host_name_for_display = host.name or host.host
+                    if host.os_version:
+                        host_os_info = f"\n- host_os_version: {host.os_version}"
+                    if host.port:
+                        host_ssh_port = f"\n- host_ssh_port: {host.port}"
+
             system_msg += (
                 "\n\nCurrent conversation datasource context (stable unless the user explicitly asks to switch):"
                 f"\n- datasource_id: {datasource_id}"
@@ -328,6 +470,11 @@ async def run_conversation_with_skills(
                 f"\n- datasource_name: {datasource.name}"
                 f"\n- host_id: {host_id if host_id is not None else 'None'}"
                 f"\n- host_configured: {str(host_configured).lower()}"
+                f"\n- datasource_host: {datasource.host}"
+                f"\n- datasource_port: {datasource.port}"
+                f"{db_version_info}"
+                f"{host_os_info}"
+                f"{host_ssh_port}"
             )
             system_msg += f"\n\nThe user is currently working with datasource ID: {datasource_id} (Type: {datasource.db_type.upper()}, Name: {datasource.name}). Use this ID when calling tools unless they specify otherwise."
             system_msg += f"\n\nIMPORTANT: This is a {datasource.db_type.upper()} database. You MUST use {skill_prefix}_* skills (e.g., {skill_prefix}_get_db_status, {skill_prefix}_get_slow_queries, {skill_prefix}_get_table_stats, etc.). Do NOT use skills for other database types like mysql_*, pg_*, mssql_*, or oracle_* unless they match this database type. Unless the user explicitly asks to switch datasources, keep all diagnosis and tool calls scoped to this datasource."
@@ -338,11 +485,16 @@ async def run_conversation_with_skills(
                     "\n此备注包含该数据源的业务背景、特殊配置或已知问题等重要上下文信息，诊断时请结合此备注进行分析。"
                 )
 
-            if host_id:
-                host_result = await db.execute(select(Host).filter(Host.id == host_id))
-                host = host_result.scalar_one_or_none()
-                host_info = f" (Host: {host.name or host.host})" if host else ""
-                system_msg += f"\n\n**主机连接已配置**：该数据源已关联主机{host_info}，host_id={host_id}。你可以使用 OS 层面的诊断技能（get_os_metrics、diagnose_high_cpu、diagnose_high_memory、diagnose_disk_space、diagnose_disk_io、diagnose_network）进行操作系统级别的深度分析。遇到性能问题时，应同时从数据库和操作系统两个层面进行诊断。"
+            if host_id and host_name_for_display:
+                host_info_parts = [f"主机名: {host_name_for_display}"]
+                if host and host.os_version:
+                    host_info_parts.append(f"OS版本: {host.os_version}")
+                if host and host.port:
+                    host_info_parts.append(f"SSH端口: {host.port}")
+                host_detail = "，".join(host_info_parts)
+                system_msg += f"\n\n**主机连接已配置**：该数据源已关联主机（{host_detail}），host_id={host_id}。你可以使用 OS 层面的诊断技能（get_os_metrics、diagnose_high_cpu、diagnose_high_memory、diagnose_disk_space、diagnose_disk_io、diagnose_network）进行操作系统级别的深度分析。遇到性能问题时，应同时从数据库和操作系统两个层面进行诊断。"
+            elif host_id:
+                system_msg += f"\n\n**主机连接已配置**：该数据源已关联主机，host_id={host_id}。你可以使用 OS 层面的诊断技能（get_os_metrics、diagnose_high_cpu、diagnose_high_memory、diagnose_disk_space、diagnose_disk_io、diagnose_network）进行操作系统级别的深度分析。遇到性能问题时，应同时从数据库和操作系统两个层面进行诊断。"
             else:
                 system_msg += "\n\n**注意**：该数据源未配置主机连接，host_id=None，无法进行操作系统层面的诊断（如 CPU、内存、磁盘、网络分析）。如需 OS 级别诊断，请建议用户在数据源配置中关联主机。"
         else:
@@ -367,14 +519,55 @@ async def run_conversation_with_skills(
     if kb_ids:
         system_msg += f"\n\nKnowledge bases are enabled for this session (IDs: {kb_ids}). Use list_documents tool to browse available documentation, then read_document to fetch full content."
 
+    # 阶段2: 数据源上下文构建完成
+    datasource_info = ""
+    datasource_ctx = None
+    if datasource_id and db:
+        from backend.models.datasource import Datasource
+        from backend.models.soft_delete import alive_filter
+        from sqlalchemy import select
+        result = await db.execute(select(Datasource).filter(Datasource.id == datasource_id, alive_filter(Datasource)))
+        datasource_ctx = result.scalar_one_or_none()
+        if datasource_ctx:
+            datasource_info = f"数据源: {datasource_ctx.name} ({datasource_ctx.db_type})"
+            if datasource_ctx.host_id:
+                datasource_info += " · 已关联主机"
+            else:
+                datasource_info += " · 未关联主机"
+    yield {
+        "type": "thinking_phase",
+        "phase": "context_building",
+        "message": f"正在构建诊断上下文... {datasource_info}" if datasource_info else "正在构建诊断上下文...",
+        "datasource_name": datasource_ctx.name if datasource_ctx else None,
+        "datasource_type": datasource_ctx.db_type if datasource_ctx else None,
+        "host_configured": bool(datasource_ctx.host_id) if datasource_ctx else False,
+    }
+
     active_tools = await get_available_skills_as_tools(
         db,
         disabled_tools,
         datasource_db_type=datasource_db_type,
         host_configured=host_configured_for_tools,
     )
+    static_kb_tools = [tool for tool in get_filtered_tools(disabled_tools) if tool.get("function", {}).get("name") in KB_TOOL_NAMES]
+    active_tools = active_tools + static_kb_tools
     disabled_set = set(disabled_tools) if disabled_tools else set()
+
+    # 阶段3: 技能选择完成
+    skill_count = len(active_tools)
+    yield {
+        "type": "thinking_phase",
+        "phase": "skill_selection",
+        "message": f"已选中 {skill_count} 个诊断技能",
+        "skill_count": skill_count,
+    }
+
+    # 阶段4: 准备开始输出
+    yield {"type": "thinking_complete", "message": "开始诊断..."}
+
     full_messages = [{"role": "system", "content": system_msg}] + messages
+    emitted_plan = False
+    emitted_kb_hint = False
 
     for round_num in range(MAX_TOOL_ROUNDS):
         try:
@@ -382,23 +575,45 @@ async def run_conversation_with_skills(
             collected_tool_calls = []
             round_usage = None
 
-            async for event in stream_assistant_turn(
-                client,
-                full_messages,
-                tools=active_tools,
-                tool_choice="auto",
-            ):
-                if event["type"] == "content":
-                    collected_content += event["content"]
-                    yield {"type": "content", "content": event["content"]}
-                elif event["type"] == "message_complete":
-                    collected_tool_calls = event.get("tool_calls", [])
-                    round_usage = event.get("usage")
-                    if round_usage:
-                        yield {"type": "usage", "usage": round_usage}
-                    if event.get("stop_reason") == "end_turn" and not collected_tool_calls:
-                        yield {"type": "done", "content": collected_content}
-                        return
+            try:
+                async with asyncio.timeout(STREAM_ROUND_TIMEOUT):
+                    async for event in stream_assistant_turn(
+                        client,
+                        full_messages,
+                        tools=active_tools,
+                        tool_choice="auto",
+                    ):
+                        if not emitted_plan and round_num == 0:
+                            emitted_plan = True
+                            yield {
+                                "type": "plan_created",
+                                "summary": "诊断计划已启动：理解问题、必要时阅读知识库、调用诊断技能收集证据、输出结论。",
+                            }
+                        if kb_ids and not emitted_kb_hint and round_num == 0:
+                            emitted_kb_hint = True
+                            yield {
+                                "type": "kb_document_selected",
+                                "title": f"当前会话启用了 {len(kb_ids)} 个知识库，将优先结合文档诊断。",
+                            }
+                        if event["type"] == "content":
+                            collected_content += event["content"]
+                            yield {"type": "content", "content": event["content"]}
+                        elif event["type"] == "message_complete":
+                            collected_tool_calls = event.get("tool_calls", [])
+                            round_usage = event.get("usage")
+                            if round_usage:
+                                yield {"type": "usage", "usage": round_usage}
+                            if event.get("stop_reason") == "end_turn" and not collected_tool_calls:
+                                yield {"type": "done", "content": collected_content}
+                                return
+            except TimeoutError:
+                logger.error(f"AI API stream timed out at round {round_num} after {STREAM_ROUND_TIMEOUT}s")
+                if collected_content:
+                    yield {"type": "content", "content": "\n\n[AI 响应超时，以上为部分结果]"}
+                    yield {"type": "done", "content": collected_content + "\n\n[AI 响应超时，以上为部分结果]"}
+                else:
+                    yield {"type": "error", "message": f"AI 响应超时（{STREAM_ROUND_TIMEOUT}秒），请稍后重试或简化问题。"}
+                return
 
             if not collected_tool_calls:
                 yield {"type": "done", "content": collected_content}
@@ -415,6 +630,15 @@ async def run_conversation_with_skills(
                     tool_args = {}
 
                 if tool_name in disabled_set:
+                    yield {
+                        "type": "plan_step_status",
+                        "step_id": tc["id"],
+                        "tool_name": tool_name,
+                        "status": "failed",
+                        "title": f"尝试调用技能 {tool_name}",
+                        "summary": f"技能 {tool_name} 已被用户在当前会话中禁用。",
+                        "error": f"Tool '{tool_name}' is disabled for this session by the user.",
+                    }
                     tool_result = json.dumps({"error": f"Tool '{tool_name}' is disabled for this session by the user."})
                     yield {
                         "type": "tool_call",
@@ -436,9 +660,100 @@ async def run_conversation_with_skills(
                     })
                     continue
 
+                if tool_name in KB_TOOL_NAMES:
+                    yield {
+                        "type": "plan_step_status",
+                        "step_id": tc["id"],
+                        "tool_name": tool_name,
+                        "status": "running",
+                        "title": f"读取知识库 {tool_name}",
+                        "summary": f"正在调用 {tool_name}...",
+                    }
+                    yield {
+                        "type": "tool_call",
+                        "tool_name": tool_name,
+                        "tool_args": tool_args,
+                        "tool_call_id": tc["id"],
+                    }
+                    tool_result = await execute_tool(tool_name, tool_args)
+                    if tool_name == "list_documents":
+                        try:
+                            docs = json.loads(tool_result)
+                            first_doc = docs[0] if isinstance(docs, list) and docs else None
+                            if first_doc:
+                                yield {
+                                    "type": "kb_document_selected",
+                                    "title": first_doc.get("title") or f"已找到 {len(docs)} 篇候选文档",
+                                    "document_id": first_doc.get("id"),
+                                }
+                        except Exception:
+                            pass
+                    elif tool_name == "read_document":
+                        yield {
+                            "type": "kb_document_read",
+                            "document_id": tool_args.get("doc_id"),
+                            "title": f"已读取文档 #{tool_args.get('doc_id')}",
+                        }
+                    yield {
+                        "type": "tool_result",
+                        "tool_name": tool_name,
+                        "tool_call_id": tc["id"],
+                        "result": tool_result[:10000],
+                        "execution_time_ms": 0,
+                    }
+                    yield {
+                        "type": "plan_step_status",
+                        "step_id": tc["id"],
+                        "tool_name": tool_name,
+                        "status": "completed",
+                        "title": f"知识库工具 {tool_name} 执行完成",
+                        "summary": f"知识库 {tool_name} 执行完成。",
+                        "execution_time_ms": 0,
+                    }
+                    full_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "content": tool_result,
+                    })
+                    continue
+
                 from backend.skills.registry import SkillRegistry
                 skill = await SkillRegistry(db).get_skill(tool_name) if db else None
-                risk = assess_tool_risk(tool_name, tool_args, getattr(skill, 'permissions', None))
+                risk = await assess_tool_risk(tool_name, tool_args, getattr(skill, 'permissions', None), client=client)
+
+                yield {
+                    "type": "plan_step_status",
+                    "step_id": tc["id"],
+                    "tool_name": tool_name,
+                    "status": "running",
+                    "title": f"执行技能 {tool_name}",
+                    "summary": f"正在执行 {tool_name}...",
+                }
+
+                if risk.get("level") in {"high", "destructive"} and not skip_approval:
+                    approval_id = f"approval_{uuid.uuid4().hex}"
+                    yield {
+                        "type": "approval_request",
+                        "approval_id": approval_id,
+                        "tool_name": tool_name,
+                        "tool_args": tool_args,
+                        "tool_call_id": tc["id"],
+                        "summary": f"技能 {tool_name} 可能带来数据库或主机状态变更，需要确认后再执行。",
+                        "plan_markdown": f"1. 执行技能 `{tool_name}`\n2. 观察执行结果\n3. 继续完成本轮诊断",
+                        "risk_level": risk.get("level", "high"),
+                        "risk_reason": risk.get("risk_reason"),
+                        "suppressible": risk.get("suppressible", False),
+                        "confirmation_key": risk.get("confirmation_key"),
+                    }
+                    yield {
+                        "type": "plan_step_status",
+                        "step_id": tc["id"],
+                        "tool_name": tool_name,
+                        "status": "waiting_approval",
+                        "title": f"等待确认 {tool_name}",
+                        "summary": f"技能 {tool_name} 已提交，等待用户批准后执行。",
+                    }
+                    return
 
                 yield {
                     "type": "tool_call",
@@ -451,6 +766,21 @@ async def run_conversation_with_skills(
                     tool_name, tool_args, db, user_id, session_id
                 )
 
+                try:
+                    result_data = json.loads(tool_result)
+                    if isinstance(result_data, dict) and result_data.get("success") is False:
+                        step_status = "failed"
+                        step_summary = f"技能 {tool_name} 执行失败：{result_data.get('error', 'unknown')}"
+                        step_error = result_data.get("error")
+                    else:
+                        step_status = "completed"
+                        step_summary = f"技能 {tool_name} 执行完成"
+                        step_error = None
+                except Exception:
+                    step_status = "completed"
+                    step_summary = f"技能 {tool_name} 执行完成"
+                    step_error = None
+
                 yield {
                     "type": "tool_result",
                     "tool_name": tool_name,
@@ -459,11 +789,25 @@ async def run_conversation_with_skills(
                     "execution_time_ms": execution_time_ms,
                     "skill_execution_id": skill_execution_id,
                 }
+                yield {
+                    "type": "plan_step_status",
+                    "step_id": tc["id"],
+                    "tool_name": tool_name,
+                    "status": step_status,
+                    "title": f"执行技能 {tool_name}",
+                    "summary": step_summary,
+                    "execution_time_ms": execution_time_ms,
+                    "error": step_error,
+                }
 
+                # Truncate result for AI model to avoid token limit issues
+                ai_result = tool_result
+                if len(tool_result) > 30000:
+                    ai_result = tool_result[:30000] + "\n\n... [数据过长，已截断。请基于以上数据进行分析]"
                 full_messages.append({
                     "role": "tool",
                     "tool_call_id": tc["id"],
-                    "content": tool_result,
+                    "content": ai_result,
                 })
 
         except Exception as e:

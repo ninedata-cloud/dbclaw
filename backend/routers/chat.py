@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from datetime import datetime
@@ -30,6 +31,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
 ACTIVE_CHAT_SOCKETS: dict[int, list[WebSocket]] = {}
 PENDING_APPROVALS: dict[int, dict[str, dict]] = {}
+# session_id -> running asyncio.Task for AI stream
+ACTIVE_STREAM_TASKS: dict[int, asyncio.Task] = {}
 
 
 def _register_socket(session_id: int, websocket: WebSocket) -> None:
@@ -282,9 +285,31 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
     _register_socket(session_id, websocket)
     logger.info(f"Chat WebSocket connected for session {session_id}, user {user.id}")
 
+    # If there's an active stream task for this session, notify the client
+    active_task = ACTIVE_STREAM_TASKS.get(session_id)
+    if active_task and not active_task.done():
+        try:
+            await websocket.send_json({"type": "stream_resuming", "message": "AI 正在生成中..."})
+        except Exception:
+            pass
+
     try:
         while True:
             data = await websocket.receive_json()
+
+            # Handle cancel command
+            msg_type = data.get("type")
+            if msg_type == "cancel":
+                task = ACTIVE_STREAM_TASKS.get(session_id)
+                if task and not task.done():
+                    task.cancel()
+                    logger.info(f"Stream task cancel requested for session {session_id}")
+                    try:
+                        await websocket.send_json({"type": "cancel_ack"})
+                    except Exception:
+                        pass
+                continue
+
             refreshed_user, refreshed_session = await _authenticate_websocket_session(websocket, session_id)
             if not refreshed_user or not refreshed_session:
                 await websocket.close(code=1008, reason="Session expired")
@@ -298,40 +323,80 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
             if not user_message and not attachments:
                 continue
 
-            async with async_session() as db:
-                messages, effective_datasource_id, model_id, kb_ids, disabled_tools = await prepare_user_turn(
-                    db,
-                    session_id=session_id,
-                    user_id=user.id,
-                    user_message=user_message,
-                    attachments=attachments,
-                    payload_datasource_id=payload_datasource_id,
-                    model_id=model_id,
-                )
+            # If there's already a running task for this session, reject new messages
+            existing_task = ACTIVE_STREAM_TASKS.get(session_id)
+            if existing_task and not existing_task.done():
+                try:
+                    await websocket.send_json({
+                        "type": "error",
+                        "content": "AI 正在生成中，请等待完成或点击停止按钮。",
+                    })
+                except Exception:
+                    pass
+                continue
 
-                await process_stream_events(
-                    db,
-                    session_id=session_id,
-                    user_id=user.id,
-                    messages=messages,
-                    datasource_id=effective_datasource_id,
-                    model_id=model_id,
-                    kb_ids=kb_ids,
-                    disabled_tools=disabled_tools,
-                    pending_approvals=PENDING_APPROVALS,
-                    on_event=websocket.send_json,
-                )
+            async def _run_stream(
+                sid=session_id,
+                uid=user.id,
+                msg=user_message,
+                atts=attachments,
+                ds_id=payload_datasource_id,
+                m_id=model_id,
+            ):
+                try:
+                    async with async_session() as db:
+                        messages, effective_datasource_id, m_id_resolved, kb_ids, disabled_tools = await prepare_user_turn(
+                            db,
+                            session_id=sid,
+                            user_id=uid,
+                            user_message=msg,
+                            attachments=atts,
+                            payload_datasource_id=ds_id,
+                            model_id=m_id,
+                        )
+
+                        await process_stream_events(
+                            db,
+                            session_id=sid,
+                            user_id=uid,
+                            messages=messages,
+                            datasource_id=effective_datasource_id,
+                            model_id=m_id_resolved,
+                            kb_ids=kb_ids,
+                            disabled_tools=disabled_tools,
+                            pending_approvals=PENDING_APPROVALS,
+                            on_event=lambda payload: _broadcast_to_session(sid, payload),
+                        )
+                except asyncio.CancelledError:
+                    logger.info(f"Stream task cancelled for session {sid}")
+                    try:
+                        await _broadcast_to_session(sid, {
+                            "type": "content",
+                            "content": "\n\n[用户已停止生成]",
+                        })
+                        await _broadcast_to_session(sid, {"type": "done"})
+                    except Exception:
+                        pass
+                except Exception as e:
+                    logger.error(f"Stream task error for session {sid}: {e}", exc_info=True)
+                    await _broadcast_to_session(sid, {
+                        "type": "error",
+                        "content": f"AI 会话出错: {str(e)}",
+                    })
+                finally:
+                    ACTIVE_STREAM_TASKS.pop(sid, None)
+
+            task = asyncio.create_task(_run_stream())
+            ACTIVE_STREAM_TASKS[session_id] = task
 
     except WebSocketDisconnect:
         _unregister_socket(session_id, websocket)
-        logger.info(f"Chat WebSocket disconnected for session {session_id}")
+        logger.info(f"Chat WebSocket disconnected for session {session_id} (task continues in background)")
     except Exception as e:
         _unregister_socket(session_id, websocket)
         logger.error(f"Chat WebSocket error: {e}", exc_info=True)
         try:
-            # Try to send error message first
             await websocket.send_json({"type": "error", "content": str(e)})
-            # Then close with error code and reason
             await websocket.close(code=1011, reason=f"Server error: {str(e)[:100]}")
         except Exception as e:
             logger.debug("Failed to send error message to WebSocket: %s", e)

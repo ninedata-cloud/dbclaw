@@ -30,6 +30,7 @@ class HostResponse(BaseModel):
     port: int
     username: str
     auth_type: str
+    os_version: Optional[str] = None
     cpu_usage: Optional[float] = None
     memory_usage: Optional[float] = None
     disk_usage: Optional[float] = None

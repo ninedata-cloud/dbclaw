@@ -3,6 +3,8 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from datetime import datetime
+import html
+escape_html = html.escape
 import hashlib
 import logging
 
@@ -415,7 +417,7 @@ async def public_alert_page(
     ds_type = escape_html(datasource.db_type.upper() if datasource and datasource.db_type else '-')
     ds_host = escape_html(datasource.host if datasource else '-')
     ds_port = datasource.port if datasource else '-'
-    ds_db = escape_html(datasource.database if datasource else '-')
+    ds_db = escape_html(datasource.database if datasource and datasource.database else '-')
     ds_level = datasource.importance_level if datasource else 'production'
     ds_level_label = {'core': '核心', 'production': '生产', 'development': '开发', 'temporary': '临时'}.get(ds_level, ds_level)
     ds_level_color = {'core': '#dc2626', 'production': '#2563eb', 'development': '#7c3aed', 'temporary': '#6b7280'}.get(ds_level, '#6b7280')
@@ -429,6 +431,8 @@ async def public_alert_page(
     has_diagnosis = ai_root_cause or ai_actions
     ai_diagnosis_html = ''
     if has_diagnosis:
+        root_cause_block = f'<div class="diag-block root-cause"><div class="diag-label">🔍 根本原因</div><div class="diag-content">{escape_html(ai_root_cause)}</div></div>' if ai_root_cause else ''
+        actions_block = f'<div class="diag-block actions"><div class="diag-label">🛠 建议措施</div><div class="diag-content">{escape_html(ai_actions)}</div></div>' if ai_actions else ''
         ai_diagnosis_html = f'''
         <div class="section ai-section">
             <div class="section-header">
@@ -436,8 +440,8 @@ async def public_alert_page(
                 <span class="section-title">AI 诊断分析</span>
             </div>
             <div class="section-body">
-                {"<div class=\"diag-block root-cause\"><div class=\"diag-label\">🔍 根本原因</div><div class=\"diag-content\">" + escape_html(ai_root_cause) + "</div></div>" if ai_root_cause else ""}
-                {"<div class=\"diag-block actions\"><div class=\"diag-label\">🛠 建议措施</div><div class=\"diag-content\">" + escape_html(ai_actions) + "</div></div>" if ai_actions else ""}
+                {root_cause_block}
+                {actions_block}
             </div>
         </div>'''
 

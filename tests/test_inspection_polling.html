@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Inspection Polling</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .generating { background: #fff3cd; }
+        .completed { background: #d4edda; }
+        .failed { background: #f8d7da; }
+    </style>
+</head>
+<body>
+    <h1>Inspection Polling Test</h1>
+    <div id="status"></div>
+    <button onclick="simulateGeneration()">Simulate Report Generation</button>
+    <button onclick="stopPolling()">Stop Polling</button>
+    <div id="log"></div>
+
+    <script>
+        let pollInterval = null;
+        let reportStatus = 'generating';
+        let pollCount = 0;
+
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logDiv.appendChild(entry);
+        }
+
+        function updateStatus() {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = `status ${reportStatus}`;
+            statusDiv.textContent = `Report Status: ${reportStatus} (Poll count: ${pollCount})`;
+        }
+
+        function startPolling() {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+            }
+            log('Starting polling (every 3 seconds)');
+            pollInterval = setInterval(() => {
+                pollCount++;
+                log(`Polling... (count: ${pollCount})`);
+                updateStatus();
+                
+                // Check if should stop polling
+                if (reportStatus === 'completed' || reportStatus === 'failed') {
+                    log('Report finished, stopping polling');
+                    clearInterval(pollInterval);
+                    pollInterval = null;
+                }
+            }, 3000);
+        }
+
+        function simulateGeneration() {
+            reportStatus = 'generating';
+            pollCount = 0;
+            updateStatus();
+            log('Report generation started');
+            startPolling();
+
+            // Simulate completion after 10 seconds
+            setTimeout(() => {
+                reportStatus = 'completed';
+                updateStatus();
+                log('Report generation completed');
+            }, 10000);
+        }
+
+        function stopPolling() {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+                log('Polling stopped manually');
+            }
+        }
+
+        // Initialize
+        updateStatus();
+    </script>
+</body>
+</html>

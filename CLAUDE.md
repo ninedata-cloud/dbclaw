@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 DbGuard 是一个 AI 驱动的数据库运维平台，为多种数据库类型（MySQL、PostgreSQL、Oracle、SQL Server、DM、MongoDB、Redis、TiDB、OceanBase、openGauss）提供智能诊断、主动监控、自动巡检和告警通知。
 
-**架构**：FastAPI 后端 + 原生 JavaScript 前端（无构建步骤） + PostgreSQL 元数据存储 + ChromaDB 向量库
+**架构**：FastAPI 后端 + 原生 JavaScript 前端（无构建步骤） + PostgreSQL 元数据存储
 
 ## 开发命令
 
@@ -24,10 +24,10 @@ python run.py
 # 前端从 /frontend 目录静态提供，无需构建
 
 # 运行测试（各功能独立测试文件，无统一测试框架）
-python test_skills.py
-python test_threshold_checker.py
-python test_auto_resolve_alerts.py
-python test_deduplication.py
+python tests/test_skills.py
+python tests/test_threshold_checker.py
+python tests/test_auto_resolve_alerts.py
+python tests/test_deduplication.py
 
 # 数据库迁移（启动时通过 SQLAlchemy create_all 自动执行）
 # 手动迁移脚本：python backend/migrations/<migration_name>.py
@@ -144,8 +144,8 @@ from backend.utils.encryption import encrypt_password, decrypt_password
 - **全异步**：所有数据库操作使用 async/await
 - **Session 管理**：使用 `get_db()` 依赖注入获取 AsyncSession
 - **错误处理**：Service 抛出带适当状态码的 HTTPException
-- **安全性**：数据库密码用 Fernet 加密，JWT 用于认证
-- **元数据库**：PostgreSQL（非 SQLite），通过 `DATABASE_URL` 配置
+- **安全性**：数据库密码用 Fernet 加密
+- **元数据库**：PostgreSQL，通过 `DATABASE_URL` 配置
 - **WebSocket**：`/ws/monitor` 端点提供实时指标
 
 ## 配置

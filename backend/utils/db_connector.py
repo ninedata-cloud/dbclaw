@@ -39,7 +39,9 @@ def _normalize_sql_for_readonly_check(query: str) -> str:
     normalized = re.sub(r"--.*?$", " ", normalized, flags=re.MULTILINE)
     normalized = re.sub(r"'(?:''|[^'])*'", "''", normalized)
     normalized = re.sub(r'"(?:""|[^"])*"', '""', normalized)
-    return normalized.strip().upper()
+    # Remove trailing semicolon (statement terminator) for read-only checks
+    normalized = normalized.strip().rstrip(';').strip()
+    return normalized.upper()
 
 
 def _is_explain_write_query(query_upper: str) -> bool:
@@ -59,19 +61,23 @@ def _is_explain_write_query(query_upper: str) -> bool:
 
 def _is_read_only_query(query: str) -> bool:
     query_upper = _normalize_sql_for_readonly_check(query)
-    simple_allowed_keywords = ['SELECT', 'SHOW', 'EXPLAIN', 'DESCRIBE', 'DESC']
-
-    if ';' in query_upper:
-        return False
+    simple_allowed_keywords = ['SELECT', 'SHOW', 'EXPLAIN', 'DESCRIBE', 'DESC', 'EXEC', 'EXECUTE']
 
     if query_upper.startswith('EXPLAIN'):
         return not _is_explain_write_query(query_upper)
 
-    if any(query_upper.startswith(keyword) for keyword in simple_allowed_keywords):
-        return True
-
     if query_upper.startswith('WITH'):
         return not re.search(r'\b(INSERT|UPDATE|DELETE|MERGE)\b', query_upper)
+
+    if any(query_upper.startswith(keyword) for keyword in simple_allowed_keywords):
+        # 单条语句末尾的分号是合法的，只读查询仍然允许
+        # 多条语句（分号分隔）则拒绝
+        if ';' in query_upper:
+            return False
+        return True
+
+    if ';' in query_upper:
+        return False
 
     return False
 
