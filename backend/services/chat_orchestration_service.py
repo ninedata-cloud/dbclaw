@@ -5,19 +5,34 @@ import re
 from datetime import datetime
 from typing import Any, AsyncGenerator, Awaitable, Callable, Optional
 
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agent.conversation_skills import execute_skill_call, run_conversation_with_skills
+from backend.agent.intent_detector import analyze_query_intent
 from backend.models.diagnosis_conclusion import DiagnosisConclusion
 from backend.models.diagnosis_event import DiagnosisEvent
 from backend.models.diagnostic_session import ChatMessage, DiagnosticSession
 from backend.models.soft_delete import alive_filter, alive_select
+from backend.services.knowledge_router import build_knowledge_context
 
 logger = logging.getLogger(__name__)
 
 PendingApprovalsStore = dict[int, dict[str, dict[str, Any]]]
 EventCallback = Optional[Callable[[dict[str, Any]], Awaitable[None]]]
+TRACKED_DIAGNOSIS_EVENTS = {
+    "thinking_phase",
+    "thinking_complete",
+    "diagnosis_state",
+    "plan_created",
+    "plan_step_status",
+    "tool_call",
+    "tool_result",
+    "kb_document_selected",
+    "kb_document_read",
+    "approval_request",
+    "diagnosis_conclusion",
+}
 
 
 async def rebuild_llm_messages(all_msgs):
@@ -96,6 +111,94 @@ async def _emit(event: dict[str, Any], on_event: EventCallback = None):
             pass  # WebSocket may be disconnected; task continues in background
 
 
+def _summarize_value(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped[:240]
+    if isinstance(value, list):
+        return f"返回 {len(value)} 条记录"
+    if isinstance(value, dict):
+        if value.get("error"):
+            return str(value["error"])[:240]
+        if value.get("message"):
+            return str(value["message"])[:240]
+        parts = []
+        for key, item in list(value.items())[:3]:
+            rendered = item if isinstance(item, (str, int, float, bool)) else json.dumps(item, ensure_ascii=False)[:60]
+            parts.append(f"{key}={rendered}")
+        return "，".join(parts)[:240]
+    return str(value)[:240]
+
+
+def _build_diagnosis_event_payload(event_type: str, event: dict[str, Any]) -> dict[str, Any]:
+    if event_type == "tool_call":
+        return {
+            "tool_name": event.get("tool_name"),
+            "tool_call_id": event.get("tool_call_id"),
+            "summary": f"调用 {event.get('tool_name')}",
+        }
+    if event_type == "tool_result":
+        raw_result = event.get("result")
+        parsed = raw_result
+        if isinstance(raw_result, str):
+            try:
+                parsed = json.loads(raw_result)
+            except Exception:
+                parsed = raw_result
+        return {
+            "tool_name": event.get("tool_name"),
+            "tool_call_id": event.get("tool_call_id"),
+            "execution_time_ms": event.get("execution_time_ms"),
+            "skill_execution_id": event.get("skill_execution_id"),
+            "summary": _summarize_value(parsed),
+            "success": not (isinstance(parsed, dict) and parsed.get("error")),
+        }
+    if event_type == "plan_step_status":
+        return {
+            "tool_name": event.get("tool_name"),
+            "status": event.get("status"),
+            "title": event.get("title"),
+            "summary": event.get("summary"),
+            "error": event.get("error"),
+        }
+    if event_type == "diagnosis_conclusion":
+        return {
+            "summary": event.get("summary"),
+            "confidence": event.get("confidence"),
+            "findings": event.get("findings", [])[:5],
+            "action_items": event.get("action_items", [])[:5],
+        }
+    return {
+        key: value
+        for key, value in event.items()
+        if key not in {"type", "content", "result"}
+    }
+
+
+async def _store_diagnosis_event(
+    db: AsyncSession,
+    *,
+    session_id: int,
+    run_id: str,
+    sequence_no: int,
+    event_type: str,
+    payload: dict[str, Any],
+    step_id: str | None = None,
+) -> None:
+    event_row = DiagnosisEvent(
+        session_id=session_id,
+        run_id=run_id,
+        event_type=event_type,
+        sequence_no=sequence_no,
+        step_id=step_id,
+        payload=payload,
+    )
+    db.add(event_row)
+    await db.commit()
+
+
 async def _store_tool_call(db: AsyncSession, session_id: int, event: dict[str, Any]) -> None:
     tool_msg = ChatMessage(
         session_id=session_id,
@@ -140,6 +243,7 @@ async def _store_approval_request(
     datasource_id: int | None,
     model_id: int | None,
     kb_ids,
+    knowledge_context,
     disabled_tools,
     user_id: int | None,
 ) -> None:
@@ -152,6 +256,7 @@ async def _store_approval_request(
         "datasource_id": datasource_id,
         "model_id": model_id,
         "kb_ids": kb_ids,
+        "knowledge_context": knowledge_context,
         "disabled_tools": disabled_tools,
         "user_id": user_id,
         "risk_level": event.get("risk_level", "high"),
@@ -230,6 +335,7 @@ async def _load_pending_approval_from_db(
         "datasource_id": session.datasource_id if session else None,
         "model_id": session.ai_model_id if session else None,
         "kb_ids": session.kb_ids if session else None,
+        "knowledge_context": session.knowledge_snapshot if session else None,
         "disabled_tools": session.disabled_tools if session else None,
         "user_id": user_id,
         "risk_level": data.get("risk_level", "high"),
@@ -342,6 +448,9 @@ async def _upsert_diagnosis_conclusion(
             knowledge_refs.append({
                 "document_id": payload.get("document_id"),
                 "title": payload.get("title") or payload.get("document_title") or "未命名文档",
+                "reason": payload.get("reason"),
+                "scope": payload.get("scope"),
+                "document_kind": payload.get("document_kind"),
             })
 
     result = await db.execute(
@@ -384,6 +493,119 @@ async def _upsert_diagnosis_conclusion(
     }
 
 
+def _serialize_diagnosis_event(event: DiagnosisEvent) -> dict[str, Any]:
+    return {
+        "id": event.id,
+        "run_id": event.run_id,
+        "event_type": event.event_type,
+        "sequence_no": event.sequence_no,
+        "step_id": event.step_id,
+        "payload": event.payload or {},
+        "created_at": event.created_at.isoformat() if event.created_at else None,
+    }
+
+
+async def get_session_insights(
+    db: AsyncSession,
+    *,
+    session_id: int,
+    user_id: int | None,
+) -> dict[str, Any]:
+    session_query = alive_select(DiagnosticSession).where(DiagnosticSession.id == session_id)
+    if user_id is not None:
+        session_query = session_query.where(DiagnosticSession.user_id == user_id)
+    session_result = await db.execute(session_query)
+    session = session_result.scalar_one_or_none()
+    if not session:
+        raise ValueError("会话不存在")
+
+    conclusion_query = (
+        select(DiagnosisConclusion)
+        .where(DiagnosisConclusion.session_id == session_id)
+        .order_by(desc(DiagnosisConclusion.updated_at), desc(DiagnosisConclusion.id))
+    )
+    conclusion_result = await db.execute(conclusion_query)
+    latest_conclusion = conclusion_result.scalars().first()
+
+    latest_event_query = (
+        alive_select(DiagnosisEvent)
+        .where(DiagnosisEvent.session_id == session_id)
+        .order_by(DiagnosisEvent.created_at.desc(), DiagnosisEvent.id.desc())
+    )
+    latest_event_result = await db.execute(latest_event_query)
+    latest_event = latest_event_result.scalars().first()
+
+    run_id = None
+    if latest_conclusion and latest_conclusion.run_id:
+        run_id = latest_conclusion.run_id
+    elif latest_event:
+        run_id = latest_event.run_id
+
+    events: list[DiagnosisEvent] = []
+    if run_id:
+        events_result = await db.execute(
+            alive_select(DiagnosisEvent)
+            .where(DiagnosisEvent.session_id == session_id, DiagnosisEvent.run_id == run_id)
+            .order_by(DiagnosisEvent.sequence_no.asc(), DiagnosisEvent.id.asc())
+        )
+        events = events_result.scalars().all()
+
+    latest_state = next((event.payload for event in reversed(events) if event.event_type == "diagnosis_state"), None)
+    latest_plan = next((event.payload for event in reversed(events) if event.event_type == "plan_created"), None)
+    knowledge_refs = []
+    if latest_conclusion and latest_conclusion.knowledge_refs:
+        knowledge_refs.extend(latest_conclusion.knowledge_refs)
+    for event in events:
+        if event.event_type in {"kb_document_selected", "kb_document_read"}:
+            payload = event.payload or {}
+            knowledge_refs.append({
+                "document_id": payload.get("document_id"),
+                "title": payload.get("title") or payload.get("document_title"),
+                "reason": payload.get("reason"),
+                "scope": payload.get("scope"),
+                "document_kind": payload.get("document_kind"),
+            })
+
+    seen_refs: set[tuple[Any, Any]] = set()
+    deduped_knowledge_refs = []
+    for ref in knowledge_refs:
+        key = (ref.get("document_id"), ref.get("title"))
+        if key in seen_refs:
+            continue
+        seen_refs.add(key)
+        deduped_knowledge_refs.append(ref)
+
+    evidence = []
+    if latest_conclusion and latest_conclusion.evidence_refs:
+        evidence.extend(latest_conclusion.evidence_refs)
+    elif latest_state and latest_state.get("abnormal_signals"):
+        evidence.extend({
+            "type": "signal",
+            "detail": f"{signal.get('label')}: {signal.get('value')} ({signal.get('reason')})",
+        } for signal in latest_state.get("abnormal_signals", [])[:8])
+
+    return {
+        "session_id": session_id,
+        "run_id": run_id,
+        "latest_state": latest_state,
+        "latest_plan": latest_plan,
+        "latest_conclusion": {
+            "id": latest_conclusion.id,
+            "summary": latest_conclusion.summary,
+            "confidence": latest_conclusion.confidence,
+            "final_markdown": latest_conclusion.final_markdown,
+            "findings": latest_conclusion.findings or [],
+            "action_items": latest_conclusion.action_items or [],
+            "evidence_refs": latest_conclusion.evidence_refs or [],
+            "knowledge_refs": latest_conclusion.knowledge_refs or [],
+            "updated_at": latest_conclusion.updated_at.isoformat() if latest_conclusion and latest_conclusion.updated_at else None,
+        } if latest_conclusion else None,
+        "knowledge_refs": deduped_knowledge_refs[:10],
+        "evidence": evidence[:10],
+        "recent_events": [_serialize_diagnosis_event(event) for event in events[-30:]],
+    }
+
+
 async def process_stream_events(
     db: AsyncSession,
     *,
@@ -393,6 +615,7 @@ async def process_stream_events(
     datasource_id: int | None,
     model_id: int | None,
     kb_ids,
+    knowledge_context,
     disabled_tools,
     pending_approvals: PendingApprovalsStore,
     on_event: EventCallback = None,
@@ -403,6 +626,8 @@ async def process_stream_events(
     full_response = ""
     usage_totals = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
     paused_for_approval = False
+    run_id = run_id or f"chat_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{session_id}"
+    sequence_no = 0
 
     try:
         async with asyncio.timeout(600):
@@ -411,6 +636,7 @@ async def process_stream_events(
                 datasource_id,
                 model_id,
                 kb_ids,
+                knowledge_context,
                 db,
                 user_id=user_id,
                 session_id=session_id,
@@ -419,6 +645,17 @@ async def process_stream_events(
                 skip_approval=skip_approval,
             ):
                 event_type = event.get("type")
+                if event_type in TRACKED_DIAGNOSIS_EVENTS:
+                    sequence_no += 1
+                    await _store_diagnosis_event(
+                        db,
+                        session_id=session_id,
+                        run_id=run_id,
+                        sequence_no=sequence_no,
+                        event_type=event_type,
+                        payload=_build_diagnosis_event_payload(event_type, event),
+                        step_id=event.get("step_id") or event.get("tool_call_id"),
+                    )
 
                 if event_type == "content":
                     full_response += event["content"]
@@ -440,6 +677,9 @@ async def process_stream_events(
                         "execution_time_ms": event.get("execution_time_ms"),
                         "tool_call_id": event.get("tool_call_id"),
                         "skill_execution_id": event.get("skill_execution_id"),
+                        "action_run_id": event.get("action_run_id"),
+                        "action_title": event.get("action_title"),
+                        "phase": event.get("phase"),
                     }, on_event)
                 elif event_type == "approval_request":
                     paused_for_approval = True
@@ -451,6 +691,7 @@ async def process_stream_events(
                         datasource_id,
                         model_id,
                         kb_ids,
+                        knowledge_context,
                         disabled_tools,
                         user_id,
                     )
@@ -464,6 +705,8 @@ async def process_stream_events(
                     await _emit({"type": "usage", "usage": usage}, on_event)
                 elif event_type in ("thinking_start", "thinking_phase", "thinking_complete"):
                     logger.info(f"[THINKING] Emitting thinking event: {event}")
+                    await _emit(event, on_event)
+                elif event_type in ("diagnosis_state", "plan_created", "kb_document_selected", "kb_document_read"):
                     await _emit(event, on_event)
                 elif event_type == "plan_step_status":
                     await _emit(event, on_event)
@@ -521,6 +764,15 @@ async def process_stream_events(
             content=full_response,
         )
         if conclusion_payload:
+            sequence_no += 1
+            await _store_diagnosis_event(
+                db,
+                session_id=session_id,
+                run_id=run_id,
+                sequence_no=sequence_no,
+                event_type="diagnosis_conclusion",
+                payload=_build_diagnosis_event_payload("diagnosis_conclusion", conclusion_payload),
+            )
             await _emit({"type": "diagnosis_conclusion", **conclusion_payload}, on_event)
 
     return full_response, usage_totals, paused_for_approval
@@ -535,10 +787,11 @@ async def prepare_user_turn(
     attachments: Optional[list[dict[str, Any]]] = None,
     payload_datasource_id: int | None = None,
     model_id: int | None = None,
-) -> tuple[list[dict[str, Any]], int | None, int | None, Any, Any]:
+) -> tuple[list[dict[str, Any]], int | None, int | None, Any, Any, Any]:
     attachments = attachments or []
     effective_datasource_id = payload_datasource_id
     kb_ids = None
+    knowledge_context = None
     disabled_tools = None
 
     msg = ChatMessage(
@@ -574,6 +827,14 @@ async def prepare_user_turn(
             session.ai_model_id = model_id
         session.updated_at = datetime.utcnow()
         kb_ids = session.kb_ids
+        intent_analysis = analyze_query_intent(user_message or "")
+        knowledge_context = await build_knowledge_context(
+            db,
+            datasource_id=effective_datasource_id,
+            user_message=user_message or "",
+            issue_category=intent_analysis.issue_category,
+        )
+        session.knowledge_snapshot = knowledge_context
         disabled_tools = session.disabled_tools
 
     await db.commit()
@@ -585,7 +846,7 @@ async def prepare_user_turn(
     )
     all_msgs = msgs_result.scalars().all()
     messages = await rebuild_llm_messages(all_msgs)
-    return messages, effective_datasource_id, model_id, kb_ids, disabled_tools
+    return messages, effective_datasource_id, model_id, kb_ids, knowledge_context, disabled_tools
 
 
 async def continue_conversation_after_tool(
@@ -596,6 +857,7 @@ async def continue_conversation_after_tool(
     datasource_id: int | None,
     model_id: int | None,
     kb_ids,
+    knowledge_context,
     disabled_tools,
     pending_approvals: PendingApprovalsStore,
     on_event: EventCallback = None,
@@ -615,6 +877,7 @@ async def continue_conversation_after_tool(
         datasource_id=datasource_id,
         model_id=model_id,
         kb_ids=kb_ids,
+        knowledge_context=knowledge_context,
         disabled_tools=disabled_tools,
         pending_approvals=pending_approvals,
         on_event=on_event,
@@ -725,6 +988,7 @@ async def resolve_pending_approval(
         datasource_id=pending.get("datasource_id"),
         model_id=pending.get("model_id"),
         kb_ids=pending.get("kb_ids"),
+        knowledge_context=pending.get("knowledge_context"),
         disabled_tools=pending.get("disabled_tools"),
         pending_approvals=pending_approvals,
         on_event=on_event,

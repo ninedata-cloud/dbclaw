@@ -1,6 +1,10 @@
+import logging
+
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import DeclarativeBase
 from backend.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 engine = create_async_engine(
     get_settings().database_url,
@@ -65,8 +69,14 @@ async def init_db():
         try:
             from backend.migrations.add_user_session_security import migrate as migrate_user_session_security
             await migrate_user_session_security()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("User session security migration failed during init_db: %s", exc)
+
+        try:
+            from backend.migrations.add_knowledge_routing_fields import migrate as migrate_knowledge_routing_fields
+            await migrate_knowledge_routing_fields()
+        except Exception as exc:
+            logger.warning("Knowledge routing migration failed during init_db: %s", exc)
 
     # Seed default admin user if no users exist
     from backend.models.user import User

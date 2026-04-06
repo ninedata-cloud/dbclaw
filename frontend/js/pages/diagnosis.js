@@ -5,16 +5,13 @@ const DiagnosisPage = {
     datasourceClickOutsideHandler: null,
     currentSessionId: null,
     selectedModelId: null,
-    selectedKBIds: [],
     disabledTools: [],
     highRiskTools: [],
     availableModels: [],
     sessionTokenUsage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+    _pendingResumeState: null,
     _toolCheckboxes: null,
     _modelSelectEl: null,
-    _kbButtonEl: null,
-    _kbDropdownEl: null,
-    _availableKBs: [],
 
     _getSelectedDatasource() {
         return this.datasourceSelector?.getValue() || Store.get('currentDatasource') || null;
@@ -28,7 +25,7 @@ const DiagnosisPage = {
             this.highRiskTools = await API.getHighRiskTools();
         } catch (e) { /* ignore */ }
 
-        // Header with connection, model, KB selectors, and tool safety toggle
+        // Header with connection, model and tool safety toggle
         const headerActions = DOM.el('div', { className: 'flex gap-8', style: { flex: '1', minWidth: '0' } });
         const datasourceContainer = DOM.el('div', {
             id: 'diagnosis-datasource-selector',
@@ -84,81 +81,11 @@ const DiagnosisPage = {
             this._updateTokenUsageDisplay();
         });
 
-        // Knowledge Base multi-select (custom dropdown)
-        const kbContainer = DOM.el('div', {
-            className: 'kb-selector-container',
-            style: { position: 'relative', minWidth: '150px', maxWidth: '200px', flex: '0 1 auto' }
-        });
-
-        const kbButton = DOM.el('button', {
-            className: 'kb-selector-button',
-            type: 'button',
-            innerHTML: '<span class="kb-selector-text">选择 0项</span><i data-lucide="chevron-down" style="width:16px;height:16px;"></i>'
-        });
-        this._kbButtonEl = kbButton;
-
-        const kbDropdown = DOM.el('div', {
-            className: 'kb-selector-dropdown',
-            style: { display: 'none' }
-        });
-        this._kbDropdownEl = kbDropdown;
-
-        let availableKBs = [];
-        try {
-            const kbs = await API.getKnowledgeBases();
-            availableKBs = kbs.filter(k => k.is_active);
-            this._availableKBs = availableKBs;
-
-            if (availableKBs.length === 0) {
-                kbDropdown.innerHTML = '<div class="kb-selector-empty">暂无可用知识库</div>';
-            } else {
-                for (const kb of availableKBs) {
-                    const item = DOM.el('label', {
-                        className: 'kb-selector-item'
-                    });
-                    const checkbox = DOM.el('input', {
-                        type: 'checkbox',
-                        value: kb.id,
-                        className: 'kb-selector-checkbox'
-                    });
-                    const text = DOM.el('span', {
-                        textContent: kb.name,
-                        className: 'kb-selector-label'
-                    });
-                    item.appendChild(checkbox);
-                    item.appendChild(text);
-                    kbDropdown.appendChild(item);
-
-                    checkbox.addEventListener('change', () => {
-                        this.selectedKBIds = Array.from(kbDropdown.querySelectorAll('.kb-selector-checkbox:checked'))
-                            .map(cb => parseInt(cb.value));
-                        this._updateKBButtonText(kbButton, availableKBs);
-                    });
-                }
-            }
-        } catch (e) {
-            kbDropdown.innerHTML = '<div class="kb-selector-empty">加载失败</div>';
-        }
-
-        kbButton.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const isVisible = kbDropdown.style.display === 'block';
-            kbDropdown.style.display = isVisible ? 'none' : 'block';
-        });
-
-        // Close dropdown when clicking outside
         if (this.datasourceClickOutsideHandler) {
             document.removeEventListener('click', this.datasourceClickOutsideHandler);
         }
-        this.datasourceClickOutsideHandler = (e) => {
-            if (!kbContainer.contains(e.target)) {
-                kbDropdown.style.display = 'none';
-            }
-        };
+        this.datasourceClickOutsideHandler = () => {};
         document.addEventListener('click', this.datasourceClickOutsideHandler);
-
-        kbContainer.appendChild(kbButton);
-        kbContainer.appendChild(kbDropdown);
 
         // Tool safety settings button
         const toolSafetyBtn = DOM.el('button', {
@@ -170,7 +97,6 @@ const DiagnosisPage = {
 
         headerActions.appendChild(datasourceContainer);
         headerActions.appendChild(modelSelect);
-        headerActions.appendChild(kbContainer);
         headerActions.appendChild(toolSafetyBtn);
         Header.render('AI 诊断', headerActions);
 
@@ -499,7 +425,6 @@ const DiagnosisPage = {
                 datasource_id: conn?.id || null,
                 title: '新建会话',
                 ai_model_id: this.selectedModelId,
-                kb_ids: this.selectedKBIds.length > 0 ? this.selectedKBIds : null,
                 disabled_tools: this.disabledTools.length > 0 ? this.disabledTools : null
             });
             this.currentSessionId = session.id;
@@ -545,23 +470,13 @@ const DiagnosisPage = {
             this._modelSelectEl.value = this.selectedModelId != null ? String(this.selectedModelId) : '';
         }
 
-        // 恢复知识库选择
-        this.selectedKBIds = session.kb_ids || [];
-        if (this._kbDropdownEl) {
-            this._kbDropdownEl.querySelectorAll('.kb-selector-checkbox').forEach(cb => {
-                cb.checked = this.selectedKBIds.includes(parseInt(cb.value));
-            });
-        }
-        if (this._kbButtonEl) {
-            this._updateKBButtonText(this._kbButtonEl, this._availableKBs);
-        }
-
         // 恢复禁用工具
         this.disabledTools = session.disabled_tools || [];
     },
 
     async _switchSession(sessionId) {
         this.currentSessionId = sessionId;
+        this._pendingResumeState = null;
         this._restoreSessionContext(sessionId);
         this._connectWebSocket(sessionId);
         ChatWidget.loadMessages([]);
@@ -583,9 +498,15 @@ const DiagnosisPage = {
             });
         }
 
-        // Load messages
+        // Load messages and structured diagnosis insights
         try {
-            const messages = await API.getSessionMessages(sessionId);
+            const [messages, insights] = await Promise.all([
+                API.getSessionMessages(sessionId),
+                API.getSessionInsights(sessionId).catch(() => null)
+            ]);
+            const hasToolHistory = Array.isArray(messages) && messages.some((msg) =>
+                ['tool_call', 'tool_result', 'approval_request', 'approval_response'].includes(msg.role)
+            );
             this.sessionTokenUsage = this._getSessionTokenUsage(sessionId);
             this._updateTokenUsageDisplay();
             console.log(`Loaded ${messages.length} messages for session ${sessionId}`, messages);
@@ -605,8 +526,16 @@ const DiagnosisPage = {
                     `;
                     DOM.createIcons();
                 }
+            }
+
+            if (!hasToolHistory) {
                 ChatWidget.resetToolPanel();
             }
+
+            if (insights) {
+                ChatWidget.loadDiagnosticInsights(insights);
+            }
+            this._applyPendingStreamResume();
         } catch (e) {
             console.error('加载失败 messages:', e);
             Toast.error('加载失败 session messages: ' + e.message);
@@ -692,6 +621,11 @@ const DiagnosisPage = {
         ChatWidget.addUserMessage(text, attachments);
         ChatWidget.startAssistantMessage();
         ChatWidget.isStreaming = true;
+        this._pendingResumeState = {
+            content: '',
+            thinking_phase: null,
+            thinking_message: '',
+        };
 
         this.ws.send({
             message: text,
@@ -742,15 +676,54 @@ const DiagnosisPage = {
         ChatWidget.updateTokenUsage(this._buildTokenStatus());
     },
 
+    _rememberResumeState(patch = {}) {
+        const current = this._pendingResumeState || {
+            content: '',
+            thinking_phase: null,
+            thinking_message: '',
+        };
+        this._pendingResumeState = { ...current, ...patch };
+    },
+
+    _clearResumeState() {
+        this._pendingResumeState = null;
+    },
+
+    _applyPendingStreamResume() {
+        if (!this._pendingResumeState) return;
+
+        const state = this._pendingResumeState;
+        ChatWidget.resumeAssistantMessage(state.content || '');
+
+        if (state.thinking_phase || state.thinking_message) {
+            ChatWidget.showThinkingIndicator(
+                state.thinking_phase || 'llm_thinking',
+                state.thinking_message || 'AI 正在生成中...'
+            );
+        } else if (!(state.content || '').trim()) {
+            ChatWidget.showThinkingIndicator('llm_thinking', 'AI 正在生成中...');
+        } else {
+            ChatWidget.hideThinkingIndicator();
+        }
+    },
+
     _handleWSMessage(data) {
         console.log('[WS]', data.type, data);
         switch (data.type) {
             case 'thinking_start':
                 console.log('[WS] calling showThinkingIndicator', data.phase, data.message);
+                this._rememberResumeState({
+                    thinking_phase: data.phase || 'llm_thinking',
+                    thinking_message: data.message || '正在思考分析...',
+                });
                 ChatWidget.showThinkingIndicator(data.phase, data.message);
                 break;
             case 'thinking_phase':
                 console.log('[WS] calling updateThinkingIndicator', data.phase, data.message);
+                this._rememberResumeState({
+                    thinking_phase: data.phase || 'llm_thinking',
+                    thinking_message: data.message || '正在思考分析...',
+                });
                 // If indicator doesn't exist yet (no thinking_start was sent), create it first
                 if (!document.getElementById('thinking-indicator')) {
                     ChatWidget.showThinkingIndicator(data.phase, data.message);
@@ -759,6 +732,10 @@ const DiagnosisPage = {
                 }
                 break;
             case 'thinking_complete':
+                this._rememberResumeState({
+                    thinking_phase: 'llm_thinking',
+                    thinking_message: '正在思考分析...',
+                });
                 // Model is about to be called — show "thinking" status instead of hiding
                 if (!document.getElementById('thinking-indicator')) {
                     ChatWidget.showThinkingIndicator('llm_thinking', '正在思考分析...');
@@ -770,17 +747,30 @@ const DiagnosisPage = {
                 if (data.status === 'running') {
                     // Reuse thinking indicator to show current tool execution status
                     const msg = `正在执行 ${data.tool_name}...`;
+                    this._rememberResumeState({
+                        thinking_phase: 'tool_execution',
+                        thinking_message: msg,
+                    });
                     if (!document.getElementById('thinking-indicator')) {
                         ChatWidget.showThinkingIndicator('tool_execution', msg);
                     } else {
                         ChatWidget.updateThinkingIndicator('tool_execution', msg);
                     }
                 } else {
+                    this._rememberResumeState({
+                        thinking_phase: null,
+                        thinking_message: '',
+                    });
                     // Tool finished — hide indicator, next running/content event will take over
                     ChatWidget.hideThinkingIndicator();
                 }
                 break;
             case 'content':
+                this._rememberResumeState({
+                    content: `${this._pendingResumeState?.content || ''}${data.content || ''}`,
+                    thinking_phase: null,
+                    thinking_message: '',
+                });
                 ChatWidget.hideThinkingIndicator();
                 ChatWidget.appendContent(data.content);
                 break;
@@ -788,9 +778,31 @@ const DiagnosisPage = {
                 ChatWidget.addToolCall(data.tool_name, data.tool_args, data.tool_call_id);
                 break;
             case 'tool_result':
-                ChatWidget.addToolResult(data.tool_name, data.result, data.execution_time_ms, data.tool_call_id);
+                ChatWidget.addToolResult(data.tool_name, data.result, data.execution_time_ms, data.tool_call_id, {
+                    skill_execution_id: data.skill_execution_id,
+                    action_run_id: data.action_run_id,
+                    action_title: data.action_title,
+                    phase: data.phase,
+                });
+                break;
+            case 'diagnosis_state':
+                ChatWidget.updateDiagnosisState(data);
+                break;
+            case 'plan_created':
+                ChatWidget.updateDiagnosisPlan(data);
+                break;
+            case 'kb_document_selected':
+            case 'kb_document_read':
+                ChatWidget.addKnowledgeReference(data);
+                break;
+            case 'diagnosis_conclusion':
+                ChatWidget.updateDiagnosisConclusion(data);
                 break;
             case 'approval_request':
+                this._rememberResumeState({
+                    thinking_phase: null,
+                    thinking_message: '',
+                });
                 ChatWidget.hideThinkingIndicator();
                 this._showApprovalRequest(data);
                 break;
@@ -806,20 +818,24 @@ const DiagnosisPage = {
                 break;
             case 'done':
                 ChatWidget.finishAssistantMessage();
+                this._clearResumeState();
                 // Refresh session list to update title after first message
                 this._loadSessions();
                 break;
             case 'stream_resuming':
-                // Reconnected while AI is still generating — restore streaming UI
-                ChatWidget.startAssistantMessage();
-                ChatWidget.isStreaming = true;
-                ChatWidget.showThinkingIndicator('llm_thinking', data.message || 'AI 正在生成中...');
+                this._pendingResumeState = {
+                    content: data.content || '',
+                    thinking_phase: data.thinking_phase || null,
+                    thinking_message: data.thinking_message || data.message || 'AI 正在生成中...',
+                };
+                this._applyPendingStreamResume();
                 break;
             case 'cancel_ack':
                 // Server acknowledged cancel, UI already handled in _stopGeneration
                 break;
             case 'error':
                 ChatWidget.showError(data.content);
+                this._clearResumeState();
                 break;
         }
     },
@@ -1008,19 +1024,6 @@ const DiagnosisPage = {
         });
     },
 
-    _updateKBButtonText(button, availableKBs) {
-        const count = this.selectedKBIds.length;
-        const textSpan = button.querySelector('.kb-selector-text');
-        if (count === 0) {
-            textSpan.textContent = '选择 0项';
-        } else if (count === 1) {
-            const kb = availableKBs.find(k => k.id === this.selectedKBIds[0]);
-            textSpan.textContent = kb ? kb.name : `选择 ${count}项`;
-        } else {
-            textSpan.textContent = `选择 ${count}项`;
-        }
-    },
-
     _toggleSidebar() {
         const sidebar = DOM.$('#session-sidebar');
         const btn = DOM.$('#sidebar-toggle-btn');
@@ -1073,8 +1076,5 @@ const DiagnosisPage = {
         }
         this.currentSessionId = null;
         this._modelSelectEl = null;
-        this._kbButtonEl = null;
-        this._kbDropdownEl = null;
-        this._availableKBs = [];
     }
 };

@@ -1,5 +1,6 @@
 import time
 import logging
+from collections import defaultdict, deque
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,24 +15,15 @@ from backend.schemas.query import (
 )
 from backend.services.db_connector import get_connector
 from backend.utils.encryption import decrypt_value
+from backend.utils.db_connector import _is_read_only_query
 
 from backend.dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/query", tags=["query"], dependencies=[Depends(get_current_user)])
 
-# In-memory query history (simple approach)
-_query_history = []
-
-
-def _is_safe_query(sql: str) -> bool:
-    """Check if query is read-only (basic safety check)."""
-    dangerous = ["DROP ", "DELETE ", "TRUNCATE ", "ALTER ", "CREATE ", "INSERT ", "UPDATE ", "GRANT ", "REVOKE "]
-    upper = sql.strip().upper()
-    for kw in dangerous:
-        if upper.startswith(kw):
-            return False
-    return True
+# Keep a small per-user in-memory history to avoid cross-user data leakage.
+_query_history_by_user: dict[int, deque] = defaultdict(lambda: deque(maxlen=100))
 
 
 async def _get_connector_for(datasource_id: int, db: AsyncSession):
@@ -48,15 +40,20 @@ async def _get_connector_for(datasource_id: int, db: AsyncSession):
 
 
 @router.post("/execute", response_model=QueryResult)
-async def execute_query(req: QueryExecuteRequest, db: AsyncSession = Depends(get_db)):
-    if not _is_safe_query(req.sql):
+async def execute_query(
+    req: QueryExecuteRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if not _is_read_only_query(req.sql):
         raise HTTPException(status_code=400, detail="Only read-only queries are allowed. DML/DDL statements are blocked.")
 
+    history = _query_history_by_user[current_user.id]
     connector, datasource = await _get_connector_for(req.datasource_id, db)
     try:
         result = await connector.execute_query(req.sql, max_rows=req.max_rows)
-        _query_history.append({
-            "id": len(_query_history) + 1,
+        history.append({
+            "id": len(history) + 1,
             "datasource_id": req.datasource_id,
             "sql": req.sql,
             "execution_time_ms": result.get("execution_time_ms", 0),
@@ -84,6 +81,9 @@ async def execute_query(req: QueryExecuteRequest, db: AsyncSession = Depends(get
 
 @router.post("/explain")
 async def explain_query(req: QueryExplainRequest, db: AsyncSession = Depends(get_db)):
+    if not _is_read_only_query(req.sql):
+        raise HTTPException(status_code=400, detail="Only read-only queries can be explained.")
+
     connector, datasource = await _get_connector_for(req.datasource_id, db)
     try:
         result = await connector.explain_query(req.sql)
@@ -96,8 +96,9 @@ async def explain_query(req: QueryExplainRequest, db: AsyncSession = Depends(get
 
 
 @router.get("/history")
-async def get_query_history():
-    return list(reversed(_query_history[-100:]))
+async def get_query_history(current_user=Depends(get_current_user)):
+    history = _query_history_by_user[current_user.id]
+    return list(reversed(history))
 
 
 @router.get("/schema/databases", response_model=List[SchemaInfo])
@@ -140,4 +141,3 @@ async def get_columns(datasource_id: int, table: str, schema: Optional[str] = No
         raise HTTPException(status_code=400, detail=str(e))
     finally:
         await connector.close()
-

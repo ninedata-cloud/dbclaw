@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, JSON
 from sqlalchemy.sql import func
 from backend.database import Base
 from backend.models.soft_delete import SoftDeleteMixin
@@ -26,6 +26,16 @@ class DocDocument(SoftDeleteMixin, Base):
     summary = Column(Text, nullable=True)    # 100 字内摘要，供 AI 目录使用
     is_builtin = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
+    scope = Column(String(20), default="builtin")
+    doc_kind = Column(String(30), default="reference")
+    db_types = Column(JSON, nullable=True)
+    issue_categories = Column(JSON, nullable=True)
+    datasource_ids = Column(JSON, nullable=True)
+    host_ids = Column(JSON, nullable=True)
+    tags = Column(JSON, nullable=True)
+    priority = Column(Integer, default=0)
+    freshness_level = Column(String(20), default="stable")
+    enabled_in_diagnosis = Column(Boolean, default=True)
     sort_order = Column(Integer, default=0)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

@@ -5,13 +5,14 @@ from typing import Any, Dict, Optional
 from sqlalchemy import select, desc
 from backend.database import async_session
 from backend.models.datasource import Datasource
+from backend.models.host import Host
 from backend.models.soft_delete import alive_filter
 from backend.models.metric_snapshot import MetricSnapshot
-from backend.models.host import Host
-from backend.models.host import Host
 from backend.services.db_connector import get_connector
 from backend.services.ssh_service import SSHService
 from backend.services.os_metrics_service import OSMetricsService
+from backend.utils.command_safety import STRICTLY_BLOCKED_COMMAND_PATTERNS, first_matching_command_pattern
+from backend.utils.db_connector import _is_read_only_query
 from backend.utils.encryption import decrypt_value
 
 logger = logging.getLogger(__name__)
@@ -143,8 +144,7 @@ async def _tool_get_db_size(args):
 
 async def _tool_execute_query(args):
     sql = args.get("sql", "").strip()
-    upper = sql.upper()
-    if not upper.startswith("SELECT") and not upper.startswith("SHOW") and not upper.startswith("EXPLAIN"):
+    if not _is_read_only_query(sql):
         return {"error": "Only SELECT/SHOW/EXPLAIN queries are allowed for diagnostics"}
     connector, _ = await _get_connector_for(args["datasource_id"])
     try:
@@ -154,9 +154,12 @@ async def _tool_execute_query(args):
 
 
 async def _tool_explain_query(args):
+    sql = args.get("sql", "").strip()
+    if not _is_read_only_query(sql):
+        return {"error": "Only read-only queries can be explained during diagnostics"}
     connector, _ = await _get_connector_for(args["datasource_id"])
     try:
-        return await connector.explain_query(args["sql"])
+        return await connector.explain_query(sql)
     finally:
         await connector.close()
 
@@ -193,15 +196,9 @@ async def _tool_execute_os_command(args):
         return {"error": "No command provided"}
 
     # Block destructive commands
-    blocked = ["rm ", "rmdir", "mkfs", "dd ", "shutdown", "reboot", "poweroff",
-               "init ", "halt", "kill -9", "killall", "pkill", "mv ", "cp ",
-               "chmod", "chown", "useradd", "userdel", "passwd", "iptables",
-               "systemctl stop", "systemctl disable", "service stop",
-               "> /dev/", "fdisk", "parted", "wipefs"]
-    cmd_lower = command.lower()
-    for b in blocked:
-        if b in cmd_lower:
-            return {"error": f"Command blocked for safety: contains '{b.strip()}'. Only read-only diagnostic commands are allowed."}
+    blocked_pattern = first_matching_command_pattern(command, STRICTLY_BLOCKED_COMMAND_PATTERNS)
+    if blocked_pattern:
+        return {"error": f"Command blocked for safety: contains '{blocked_pattern}'. Only read-only diagnostic commands are allowed."}
 
     async with async_session() as db:
         result = await db.execute(select(Host).where(Host.id == datasource.host_id))

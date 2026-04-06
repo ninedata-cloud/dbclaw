@@ -8,12 +8,19 @@ import re
 import uuid
 from typing import AsyncGenerator, List, Dict, Any, Optional
 
+from backend.agent.diagnosis_context import build_diagnostic_brief, render_diagnostic_brief_for_prompt
 from backend.agent.prompts import DIAGNOSTIC_PROMPT, INFORMATIONAL_PROMPT, ADMINISTRATIVE_PROMPT
-from backend.agent.intent_detector import detect_query_intent
+from backend.agent.intent_detector import analyze_query_intent
 from backend.agent.skill_selector import get_available_skills_as_tools
 from backend.agent.tools import get_filtered_tools
 from backend.agent.context_builder import execute_tool
 from backend.services.ai_agent import get_ai_client, stream_assistant_turn, request_text_response
+from backend.utils.command_safety import (
+    DANGEROUS_COMMAND_PATTERNS,
+    DESTRUCTIVE_COMMAND_PATTERNS,
+    first_matching_command_pattern,
+    looks_clearly_read_only_command,
+)
 from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
@@ -25,27 +32,37 @@ KB_TOOL_NAMES = {"list_documents", "read_document"}
 
 READ_ONLY_SQL_KEYWORDS = {'SELECT', 'SHOW', 'EXPLAIN', 'EXEC', 'EXECUTE', 'DESCRIBE', 'DESC', 'WITH'}
 DANGEROUS_SQL_KEYWORDS = {'INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'TRUNCATE', 'CREATE', 'GRANT', 'REVOKE', 'CALL'}
-DANGEROUS_COMMAND_PATTERNS = [
-    'rm ', 'rmdir', 'del ', 'delete',
-    'mv ', 'move',
-    'chmod', 'chown', 'chgrp',
-    'kill', 'pkill', 'killall',
-    'shutdown', 'reboot', 'halt', 'poweroff',
-    'mkfs', 'fdisk', 'parted',
-    'dd ',
-    'iptables', 'firewall',
-    'useradd', 'userdel', 'usermod',
-    'groupadd', 'groupdel',
-    '>>', 'tee',
-    'wget', 'curl -o', 'curl -O',
-    'apt install', 'yum install', 'dnf install',
-    'systemctl stop', 'systemctl start', 'systemctl restart',
-    'service stop', 'service start', 'service restart',
-]
-READ_ONLY_COMMAND_HINTS = [
-    'df', 'du', 'free', 'ps', 'top', 'htop', 'iostat', 'vmstat', 'sar', 'ss', 'netstat',
-    'journalctl', 'tail', 'cat', 'uptime', 'hostname', 'lsblk', 'mount', 'dmesg', 'sysctl',
-]
+
+ISSUE_CATEGORY_LABELS = {
+    "performance": "性能问题",
+    "connectivity": "连接问题",
+    "locking": "锁等待/阻塞",
+    "replication": "复制问题",
+    "capacity": "容量问题",
+    "sql": "SQL 优化",
+    "resource": "主机资源",
+    "configuration": "配置问题",
+    "error": "错误诊断",
+    "general": "综合诊断",
+}
+
+
+def _build_plan_summary(intent: str, issue_category: str | None, focus_areas: list[str]) -> str:
+    if intent != "diagnostic":
+        if intent == "administrative":
+            return "执行计划已启动：确认操作对象和风险、必要时收集信息、输出可执行步骤。"
+        return "查询计划已启动：理解需求、检索必要信息、整理结果并回答问题。"
+
+    label = ISSUE_CATEGORY_LABELS.get(issue_category or "general", "综合诊断")
+    plan_steps = [
+        f"识别为{label}",
+        "先核对整体状态和上下文",
+        "按异常信号选择数据库/主机工具收集证据",
+        "交叉验证根因后输出建议动作",
+    ]
+    if focus_areas:
+        plan_steps.append(f"本轮重点：{focus_areas[0]}")
+    return "诊断计划已启动：" + "、".join(plan_steps) + "。"
 
 
 def _normalize_sql_keyword(sql: str) -> str:
@@ -136,22 +153,20 @@ def _keyword_assess_risk(tool_name: str, arguments: Dict[str, Any], permissions:
     keyword = _normalize_sql_keyword(sql)
 
     if command:
-        command_lower = command.lower()
-        for pattern in DANGEROUS_COMMAND_PATTERNS:
-            if pattern in command_lower:
-                destructive_patterns = {'rm ', 'rmdir', 'del ', 'delete', 'shutdown', 'reboot', 'halt', 'poweroff', 'mkfs', 'fdisk', 'parted', 'dd '}
-                level = 'destructive' if pattern in destructive_patterns else 'high'
-                return {
-                    'level': level,
-                    'requires_confirmation': False,
-                    'risk_reason': build_confirmation_reason(tool_name, arguments, level),
-                    'suppressible': level != 'destructive',
-                    'confirmation_key': 'os_destructive' if level == 'destructive' else 'os_write',
-                }
+        pattern = first_matching_command_pattern(command, DANGEROUS_COMMAND_PATTERNS)
+        if pattern:
+            level = 'destructive' if pattern in DESTRUCTIVE_COMMAND_PATTERNS else 'high'
+            return {
+                'level': level,
+                'requires_confirmation': False,
+                'risk_reason': build_confirmation_reason(tool_name, arguments, level),
+                'suppressible': level != 'destructive',
+                'confirmation_key': 'os_destructive' if level == 'destructive' else 'os_write',
+            }
 
         is_read_only_permission = 'execute_any_os_command' not in permissions
-        looks_read_only = any(command_lower.startswith(f'{hint} ') or command_lower == hint or f'| {hint}' in command_lower for hint in READ_ONLY_COMMAND_HINTS)
-        if is_read_only_permission or looks_read_only:
+        looks_read_only = looks_clearly_read_only_command(command)
+        if looks_read_only or is_read_only_permission:
             return {
                 'level': 'safe',
                 'requires_confirmation': False,
@@ -261,6 +276,11 @@ async def assess_tool_risk(tool_name: str, arguments: Dict[str, Any], permission
     """评估工具调用的风险等级。优先使用 LLM 判定，失败时 fallback 到关键词匹配。"""
     command = _get_command_arg(arguments)
     sql = str(arguments.get('sql') or '').strip()
+    keyword_risk = _keyword_assess_risk(tool_name, arguments, permissions)
+
+    # 对明显只读的命令优先采用本地规则，避免 LLM 将 cat/grep/head/wc 等诊断命令误判为高危。
+    if command and keyword_risk.get('level') == 'safe' and looks_clearly_read_only_command(command):
+        return keyword_risk
 
     # 有 client 且存在 sql/command 时，优先走 LLM 判定
     if client and (sql or command):
@@ -269,7 +289,7 @@ async def assess_tool_risk(tool_name: str, arguments: Dict[str, Any], permission
             return _build_risk_dict_from_llm(llm_result, tool_name, arguments)
         logger.info("LLM risk assessment unavailable, falling back to keyword matching")
 
-    return _keyword_assess_risk(tool_name, arguments, permissions)
+    return keyword_risk
 
 
 async def execute_skill_call(
@@ -317,6 +337,10 @@ async def execute_skill_call(
             execution_time = int((time.time() - start_time) * 1000)
             return json.dumps({"error": f"Skill '{skill_id}' is disabled"}), execution_time, None
 
+        if not skill.is_builtin:
+            execution_time = int((time.time() - start_time) * 1000)
+            return json.dumps({"error": "Custom skill execution is disabled until a safer sandbox is implemented"}), execution_time, None
+
         from backend.skills.executor import SkillExecutor
         if timeout is None:
             timeout = skill.timeout if skill.timeout else SkillExecutor.DEFAULT_TIMEOUT
@@ -349,6 +373,7 @@ async def run_conversation_with_skills(
     datasource_id: Optional[int] = None,
     model_id: Optional[int] = None,
     kb_ids: Optional[List[int]] = None,
+    knowledge_context: Optional[Dict[str, Any]] = None,
     db: Optional[Any] = None,
     user_id: Optional[int] = None,
     session_id: Optional[int] = None,
@@ -397,14 +422,28 @@ async def run_conversation_with_skills(
 
     # 阶段1: 意图检测
     yield {"type": "thinking_phase", "phase": "intent_detection", "message": "正在分析您的问题..."}
-    intent = detect_query_intent(intent_text)
+    intent_analysis = analyze_query_intent(intent_text)
+    intent = intent_analysis.intent
+    issue_category = intent_analysis.issue_category
 
     intent_message_map = {
         "diagnostic": "检测到诊断意图，正在分析数据库问题...",
         "informational": "检测到查询意图，正在准备信息检索...",
         "administrative": "检测到操作意图，正在准备执行任务...",
     }
-    yield {"type": "thinking_phase", "phase": "intent_detection", "message": intent_message_map.get(intent, "正在分析..."), "intent": intent}
+    if intent == "diagnostic" and issue_category:
+        category_label = ISSUE_CATEGORY_LABELS.get(issue_category, issue_category)
+        detail_message = f"{intent_message_map.get(intent, '正在分析...')} 当前更像 {category_label}。"
+    else:
+        detail_message = intent_message_map.get(intent, "正在分析...")
+    yield {
+        "type": "thinking_phase",
+        "phase": "intent_detection",
+        "message": detail_message,
+        "intent": intent,
+        "issue_category": issue_category,
+        "confidence": intent_analysis.confidence,
+    }
 
     if system_prompt_override:
         system_msg = system_prompt_override
@@ -417,6 +456,8 @@ async def run_conversation_with_skills(
 
     datasource_db_type = None
     host_configured_for_tools = None
+    datasource_name = None
+    diagnostic_brief = None
 
     if datasource_id and db:
         from backend.models.datasource import Datasource
@@ -426,6 +467,7 @@ async def run_conversation_with_skills(
         result = await db.execute(select(Datasource).filter(Datasource.id == datasource_id, alive_filter(Datasource)))
         datasource = result.scalar_one_or_none()
         if datasource:
+            datasource_name = datasource.name
             datasource_db_type = datasource.db_type
             host_id = datasource.host_id
             host_configured = host_id is not None
@@ -516,8 +558,44 @@ async def run_conversation_with_skills(
         )
         system_msg += f"\n\nThe user is currently working with datasource ID: {datasource_id}. Use this ID when calling tools unless they specify otherwise."
 
-    if kb_ids:
-        system_msg += f"\n\nKnowledge bases are enabled for this session (IDs: {kb_ids}). Use list_documents tool to browse available documentation, then read_document to fetch full content."
+    if knowledge_context and knowledge_context.get("knowledge_brief"):
+        system_msg += "\n\nAuto-selected knowledge brief for this diagnosis:"
+        for idx, item in enumerate(knowledge_context.get("knowledge_brief", [])[:5], start=1):
+            system_msg += (
+                f"\n{idx}. [{item.get('scope')}/{item.get('doc_kind')}] {item.get('title')}"
+                f"\n   summary: {item.get('summary') or '无摘要'}"
+                f"\n   reason: {item.get('reason') or '匹配当前上下文'}"
+                f"\n   document_id: {item.get('document_id')}"
+            )
+        system_msg += "\nUse read_document to open one of the recommended documents when you need detailed steps or commands. Prefer these recommended documents over browsing the full directory."
+    elif kb_ids:
+        system_msg += f"\n\nLegacy knowledge base IDs are present ({kb_ids}), but diagnosis should rely on auto-selected documents. Use list_documents only if you truly need to browse beyond the recommended set."
+
+    if intent == "diagnostic" and datasource_id and db:
+        diagnostic_brief = await build_diagnostic_brief(
+            db,
+            datasource_id=datasource_id,
+            user_message=intent_text,
+            issue_category=issue_category,
+        )
+        if diagnostic_brief:
+            system_msg += "\n\n" + render_diagnostic_brief_for_prompt(diagnostic_brief)
+            yield {
+                "type": "diagnosis_state",
+                "intent": intent,
+                "issue_category": issue_category,
+                "issue_category_label": ISSUE_CATEGORY_LABELS.get(issue_category or "general", "综合诊断"),
+                "confidence": intent_analysis.confidence,
+                "datasource_id": datasource_id,
+                "datasource_name": datasource_name,
+                "overview": diagnostic_brief.get("triage_summary"),
+                "focus_areas": diagnostic_brief.get("focus_areas", []),
+                "abnormal_signals": diagnostic_brief.get("abnormal_signals", []),
+                "active_alerts": diagnostic_brief.get("active_alerts", []),
+                "user_symptoms": diagnostic_brief.get("user_symptoms", []),
+                "recent_report": diagnostic_brief.get("recent_report"),
+                "recent_conclusion": diagnostic_brief.get("recent_conclusion"),
+            }
 
     # 阶段2: 数据源上下文构建完成
     datasource_info = ""
@@ -568,6 +646,7 @@ async def run_conversation_with_skills(
     full_messages = [{"role": "system", "content": system_msg}] + messages
     emitted_plan = False
     emitted_kb_hint = False
+    emitted_kb_recommendations = False
 
     for round_num in range(MAX_TOOL_ROUNDS):
         try:
@@ -585,11 +664,31 @@ async def run_conversation_with_skills(
                     ):
                         if not emitted_plan and round_num == 0:
                             emitted_plan = True
+                            plan_summary = _build_plan_summary(
+                                intent,
+                                issue_category,
+                                (diagnostic_brief or {}).get("focus_areas", []),
+                            )
                             yield {
                                 "type": "plan_created",
-                                "summary": "诊断计划已启动：理解问题、必要时阅读知识库、调用诊断技能收集证据、输出结论。",
+                                "summary": plan_summary,
+                                "intent": intent,
+                                "issue_category": issue_category,
+                                "issue_category_label": ISSUE_CATEGORY_LABELS.get(issue_category or "general", "综合诊断"),
+                                "focus_areas": (diagnostic_brief or {}).get("focus_areas", []),
                             }
-                        if kb_ids and not emitted_kb_hint and round_num == 0:
+                        if knowledge_context and knowledge_context.get("knowledge_brief") and not emitted_kb_recommendations and round_num == 0:
+                            emitted_kb_recommendations = True
+                            for item in knowledge_context.get("knowledge_brief", [])[:5]:
+                                yield {
+                                    "type": "kb_document_selected",
+                                    "title": item.get("title"),
+                                    "document_id": item.get("document_id"),
+                                    "reason": item.get("reason"),
+                                    "document_kind": item.get("doc_kind"),
+                                    "scope": item.get("scope"),
+                                }
+                        elif kb_ids and not emitted_kb_hint and round_num == 0:
                             emitted_kb_hint = True
                             yield {
                                 "type": "kb_document_selected",

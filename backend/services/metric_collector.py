@@ -80,6 +80,7 @@ async def _push_to_subscribers(datasource_id: int, data: Dict[str, Any]):
 
 async def collect_metrics_for_connection(datasource_id: int):
     """Collect and store metrics for a single datasource."""
+    connector = None
     try:
         async with async_session() as db:
                 result = await db.execute(
@@ -173,11 +174,14 @@ async def collect_metrics_for_connection(datasource_id: int):
                     "data": normalized_status,
                     "collected_at": now().isoformat(),
                 })
-
-                await connector.close()
-
     except Exception as e:
         logger.error(f"Error collecting metrics for datasource {datasource_id}: {e}")
+    finally:
+        if connector is not None:
+            try:
+                await connector.close()
+            except Exception:
+                logger.debug("Failed to close connector for datasource %s", datasource_id, exc_info=True)
 
 
 async def _auto_resolve_connection_alerts(db, datasource_id: int):
@@ -436,6 +440,9 @@ async def _handle_connection_failure(db, datasource_id: int, datasource, error_m
             )
             return
 
+        error_detail = (error_message or "").strip(" ：:")
+        trigger_reason = f"数据库连接失败：{error_detail}" if error_detail else "数据库连接失败"
+
         # Create critical alert for connection failure
         alert = await AlertService.create_alert(
             db=db,
@@ -445,7 +452,7 @@ async def _handle_connection_failure(db, datasource_id: int, datasource, error_m
             metric_name="connection_status",
             metric_value=0.0,  # 0 = failed
             threshold_value=1.0,  # 1 = expected success
-            trigger_reason=f"Connection failed: {error_message}"
+            trigger_reason=trigger_reason
         )
 
         logger.error(f"Connection failure alert created for datasource {datasource_id}: {alert.id}")
@@ -612,4 +619,3 @@ async def _collect_os_metrics(db, host_id: int) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error in _collect_os_metrics: {e}")
         return {}
-

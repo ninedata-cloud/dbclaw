@@ -9,6 +9,7 @@ const ChatWidget = {
     attachments: [],
     _streamTimeoutTimer: null,
     _streamTimeoutMs: 600 * 1000,
+    diagnosticInsights: null,
 
     createMessagesContainer() {
         return DOM.el('div', { className: 'chat-messages', id: 'chat-messages' });
@@ -18,8 +19,8 @@ const ChatWidget = {
         const panel = DOM.el('div', {
             id: 'tool-execution-panel',
             style: {
-                width: '40px',
-                minWidth: '40px',
+                width: '360px',
+                minWidth: '360px',
                 flexShrink: '0',
                 height: '100%',
                 borderLeft: '1px solid var(--border-color)',
@@ -40,27 +41,27 @@ const ChatWidget = {
                 display: 'flex',
                 gap: '8px',
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'space-between'
             }
         });
 
         const title = DOM.el('div', {
             id: 'tool-panel-title',
-            style: { fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)', display: 'none' },
+            style: { fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)', display: '' },
             textContent: 'Skill 调用记录'
         });
 
         const toggleBtn = DOM.el('button', {
             className: 'btn-icon-only',
             id: 'toggle-tool-panel-btn',
-            innerHTML: '<i data-lucide="panel-right-open"></i>',
-            title: '显示 skill 调用记录',
+            innerHTML: '<i data-lucide="panel-right-close"></i>',
+            title: '隐藏 skill 调用记录',
             onClick: () => this.toggleToolPanel()
         });
 
         const content = DOM.el('div', {
             id: 'tool-panel-content',
-            style: { flex: '1', overflowY: 'auto', padding: '8px', display: 'none' }
+            style: { flex: '1', overflowY: 'auto', padding: '8px', display: 'block' }
         });
 
         header.appendChild(title);
@@ -311,9 +312,58 @@ const ChatWidget = {
             <div class="chat-avatar">AI</div>
             <div class="chat-bubble"><div class="spinner"></div></div>
         `;
+        msg.setAttribute('data-raw-content', '');
         messages.appendChild(msg);
         this._updateSendButton(true);
         this._resetStreamTimeout();
+        this._scrollToBottom();
+    },
+
+    resumeAssistantMessage(content = '') {
+        const messages = DOM.$('#chat-messages');
+        if (!messages) return;
+
+        let streamingMsg = DOM.$('#streaming-message');
+        if (!streamingMsg) {
+            const reusable = Array.from(messages.querySelectorAll('.chat-message.assistant'))
+                .reverse()
+                .find((el) => {
+                    if (el.classList.contains('thinking-indicator') || el.classList.contains('chat-system-message')) return false;
+                    if (el.hasAttribute('data-approval-id')) return false;
+                    const avatarText = (el.querySelector('.chat-avatar')?.textContent || '').trim();
+                    return avatarText === 'AI';
+                });
+            const reusableRawContent = reusable?.getAttribute('data-raw-content') || '';
+
+            if (reusable && reusableRawContent === (content || '')) {
+                streamingMsg = reusable;
+                streamingMsg.id = 'streaming-message';
+                const copyBtn = streamingMsg.querySelector('.message-copy-btn');
+                if (copyBtn) copyBtn.remove();
+            } else {
+                this.startAssistantMessage();
+                streamingMsg = DOM.$('#streaming-message');
+            }
+        }
+
+        if (!streamingMsg) return;
+
+        this.currentContent = content || '';
+        this.isStreaming = true;
+        this.isThinking = false;
+        this._updateSendButton(true);
+        this._resetStreamTimeout();
+
+        const bubble = streamingMsg.querySelector('.chat-bubble');
+        if (bubble) {
+            if (this.currentContent) {
+                this._renderAssistantBubble(bubble, this.currentContent);
+            } else {
+                bubble.innerHTML = '<div class="spinner"></div>';
+            }
+        }
+
+        streamingMsg.setAttribute('data-raw-content', this.currentContent);
         this._scrollToBottom();
     },
 
@@ -324,16 +374,8 @@ const ChatWidget = {
         this.thinkingPhase = phase;
         this.thinkingMessage = message;
         const bubble = streamingMsg.querySelector('.chat-bubble');
-        bubble.innerHTML = `
-            <div class="thinking-status">
-                <div class="thinking-dots">
-                    <span class="thinking-dot"></span>
-                    <span class="thinking-dot"></span>
-                    <span class="thinking-dot"></span>
-                </div>
-                <div class="thinking-text">${this._escapeHtml(message)}</div>
-            </div>
-        `;
+        bubble.innerHTML = this._buildThinkingMarkup(phase, message, true);
+        DOM.createIcons();
         this._scrollToBottom();
     },
 
@@ -349,16 +391,12 @@ const ChatWidget = {
 
         const indicator = DOM.el('div', {
             className: 'chat-message assistant thinking-indicator',
-            id: 'thinking-indicator',
-            style: { padding: '8px 12px', borderLeft: '3px solid var(--accent-purple)', margin: '4px 0 4px 48px' }
+            id: 'thinking-indicator'
         });
 
-        indicator.innerHTML = `
-            <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary);">
-                <span style="font-weight:500;color:var(--text-primary);">${this._escapeHtml(message)}</span>
-            </div>
-        `;
+        indicator.innerHTML = this._buildThinkingMarkup(phase, message);
         messages.appendChild(indicator);
+        DOM.createIcons();
         this._scrollToBottom();
     },
 
@@ -367,10 +405,8 @@ const ChatWidget = {
         this.thinkingMessage = message;
         const indicator = DOM.$('#thinking-indicator');
         if (indicator) {
-            const text = indicator.querySelector('span:last-child');
-            if (text) {
-                text.textContent = message;
-            }
+            indicator.innerHTML = this._buildThinkingMarkup(phase, message);
+            DOM.createIcons();
         }
     },
 
@@ -383,23 +419,81 @@ const ChatWidget = {
         this.thinkingMessage = '';
     },
 
+    _renderMarkdown(content) {
+        if (typeof MarkdownRenderer !== 'undefined') {
+            try {
+                return MarkdownRenderer.render(content || '');
+            } catch (error) {
+                console.error('Markdown rendering error:', error);
+                return (content || '').replace(/\n/g, '<br>');
+            }
+        }
+
+        return (content || '').replace(/\n/g, '<br>');
+    },
+
+    _parseAssistantSegments(content) {
+        const source = content || '';
+        const segments = [];
+        const openTagPattern = /<think\b[^>]*>/ig;
+        let cursor = 0;
+        let match;
+
+        while ((match = openTagPattern.exec(source)) !== null) {
+            if (match.index > cursor) {
+                segments.push({ type: 'markdown', content: source.slice(cursor, match.index) });
+            }
+
+            const thinkStart = match.index + match[0].length;
+            const closeTagPattern = /<\/think>/ig;
+            closeTagPattern.lastIndex = thinkStart;
+            const closeMatch = closeTagPattern.exec(source);
+            const thinkEnd = closeMatch ? closeMatch.index : source.length;
+
+            segments.push({ type: 'think', content: source.slice(thinkStart, thinkEnd) });
+            cursor = closeMatch ? closeMatch.index + closeMatch[0].length : source.length;
+            openTagPattern.lastIndex = cursor;
+        }
+
+        if (cursor < source.length) {
+            segments.push({ type: 'markdown', content: source.slice(cursor) });
+        }
+
+        return segments.length > 0 ? segments : [{ type: 'markdown', content: source }];
+    },
+
+    _buildThinkBlockHtml(content) {
+        const thinkHtml = this._renderMarkdown(content || '');
+        return `
+            <details class="assistant-think-block">
+                <summary class="assistant-think-summary">推理过程</summary>
+                <div class="assistant-think-content">${thinkHtml}</div>
+            </details>
+        `;
+    },
+
+    _renderAssistantBubble(bubble, content) {
+        if (!bubble) return;
+
+        const segments = this._parseAssistantSegments(content);
+        bubble.innerHTML = segments.map((segment) => {
+            if (segment.type === 'think') {
+                return this._buildThinkBlockHtml(segment.content);
+            }
+            return this._renderMarkdown(segment.content);
+        }).join('');
+
+        this._highlightCode(bubble);
+    },
+
     appendContent(text) {
         this.currentContent += text;
         this._resetStreamTimeout();
         const streamingMsg = DOM.$('#streaming-message');
         if (streamingMsg) {
             const bubble = streamingMsg.querySelector('.chat-bubble');
-            if (typeof MarkdownRenderer !== 'undefined') {
-                try {
-                    bubble.innerHTML = MarkdownRenderer.render(this.currentContent);
-                } catch (error) {
-                    console.error('Markdown rendering error:', error);
-                    bubble.innerHTML = this.currentContent.replace(/\n/g, '<br>');
-                }
-            } else {
-                bubble.innerHTML = this.currentContent.replace(/\n/g, '<br>');
-            }
-            this._highlightCode(bubble);
+            this._renderAssistantBubble(bubble, this.currentContent);
+            streamingMsg.setAttribute('data-raw-content', this.currentContent);
             this._scrollToBottom();
         }
     },
@@ -412,6 +506,7 @@ const ChatWidget = {
         const streamingMsg = DOM.$('#streaming-message');
         if (streamingMsg) {
             streamingMsg.removeAttribute('id');
+            streamingMsg.setAttribute('data-raw-content', this.currentContent || '');
             // Add copy button to finished message
             const copyBtn = DOM.el('button', {
                 className: 'message-copy-btn',
@@ -472,13 +567,101 @@ const ChatWidget = {
     },
 
     _appendSystemCard(cardElement) {
-        const content = DOM.$('#tool-panel-content');
+        const content = DOM.$('#tool-log-section');
         if (!content) return;
         const placeholder = content.querySelector('.tool-panel-empty');
         if (placeholder) placeholder.remove();
         content.appendChild(cardElement);
         DOM.createIcons();
         this._scrollToolPanelToBottom();
+    },
+
+    _ensureInsightState() {
+        if (!this.diagnosticInsights) {
+            this.diagnosticInsights = {
+                state: null,
+                plan: null,
+                conclusion: null,
+                evidence: [],
+                knowledgeRefs: [],
+            };
+        }
+    },
+
+    _setToolPanelScaffold() {
+        const content = DOM.$('#tool-panel-content');
+        if (!content) return;
+        content.innerHTML = `
+            <div id="tool-log-section">
+                <div class="tool-panel-empty" style="color: var(--text-muted); font-size: 13px;">当前会话的 skill 调用记录会显示在这里</div>
+            </div>
+        `;
+    },
+
+    _renderInfoCard(title, bodyHtml) {
+        return `
+            <div style="border:1px solid var(--border-color);border-radius:8px;padding:10px;background:var(--bg-primary);">
+                <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;">${title}</div>
+                ${bodyHtml}
+            </div>
+        `;
+    },
+
+    _renderSimpleList(items, formatter) {
+        if (!items || items.length === 0) {
+            return '<div style="font-size:12px;color:var(--text-muted);">暂无</div>';
+        }
+        return `<div style="display:flex;flex-direction:column;gap:6px;">${items.map(formatter).join('')}</div>`;
+    },
+
+    _renderDiagnosticInsights() {
+        return;
+    },
+
+    updateDiagnosisState(state) {
+        this._ensureInsightState();
+        this.diagnosticInsights.state = { ...(this.diagnosticInsights.state || {}), ...(state || {}) };
+        this._renderDiagnosticInsights();
+    },
+
+    updateDiagnosisPlan(plan) {
+        this._ensureInsightState();
+        this.diagnosticInsights.plan = plan || null;
+        this._renderDiagnosticInsights();
+    },
+
+    updateDiagnosisConclusion(conclusion) {
+        this._ensureInsightState();
+        this.diagnosticInsights.conclusion = conclusion || null;
+        this.diagnosticInsights.evidence = conclusion?.evidence_refs || this.diagnosticInsights.evidence;
+        if (Array.isArray(conclusion?.knowledge_refs)) {
+            this.diagnosticInsights.knowledgeRefs = conclusion.knowledge_refs;
+        }
+        this._renderDiagnosticInsights();
+    },
+
+    addKnowledgeReference(ref) {
+        this._ensureInsightState();
+        const title = ref?.title || ref?.document_title;
+        if (!title) return;
+        const exists = this.diagnosticInsights.knowledgeRefs.some(item => item.title === title && item.document_id === ref.document_id);
+        if (!exists) {
+            this.diagnosticInsights.knowledgeRefs.push({
+                document_id: ref.document_id || null,
+                title,
+            });
+        }
+        this._renderDiagnosticInsights();
+    },
+
+    loadDiagnosticInsights(insights) {
+        this._ensureInsightState();
+        this.diagnosticInsights.state = insights?.latest_state || null;
+        this.diagnosticInsights.plan = insights?.latest_plan || null;
+        this.diagnosticInsights.conclusion = insights?.latest_conclusion || null;
+        this.diagnosticInsights.evidence = insights?.evidence || insights?.latest_conclusion?.evidence_refs || [];
+        this.diagnosticInsights.knowledgeRefs = insights?.knowledge_refs || insights?.latest_conclusion?.knowledge_refs || [];
+        this._renderDiagnosticInsights();
     },
 
     _stringifyData(data) {
@@ -725,25 +908,16 @@ const ChatWidget = {
                 this.addUserMessage(msg.content, msg.attachments || []);
             } else if (msg.role === 'assistant') {
                 const msgEl = DOM.el('div', { className: 'chat-message assistant' });
-                let renderedContent;
-                if (typeof MarkdownRenderer !== 'undefined') {
-                    try {
-                        renderedContent = MarkdownRenderer.render(msg.content);
-                    } catch (error) {
-                        renderedContent = msg.content.replace(/\n/g, '<br>');
-                    }
-                } else {
-                    renderedContent = msg.content.replace(/\n/g, '<br>');
-                }
+                msgEl.setAttribute('data-raw-content', msg.content || '');
                 msgEl.innerHTML = `
                     <div class="chat-avatar">AI</div>
-                    <div class="chat-bubble">${renderedContent}</div>
+                    <div class="chat-bubble"></div>
                 `;
+                this._renderAssistantBubble(msgEl.querySelector('.chat-bubble'), msg.content);
                 const copyBtn = DOM.el('button', { className: 'message-copy-btn', title: '复制', innerHTML: '<i data-lucide="copy"></i>' });
                 msgEl.appendChild(copyBtn);
                 copyBtn.addEventListener('click', () => this._copyMessageContent(msgEl));
                 container.appendChild(msgEl);
-                this._highlightCode(msgEl.querySelector('.chat-bubble'));
             } else if (msg.role === 'tool_call') {
                 try {
                     const data = JSON.parse(msg.content);
@@ -790,22 +964,29 @@ const ChatWidget = {
     },
 
     showToolPanelLoading() {
-        const content = DOM.$('#tool-panel-content');
-        if (content) {
-            content.innerHTML = `
+        this._setToolPanelScaffold();
+        const toolLog = DOM.$('#tool-log-section');
+        if (toolLog) {
+            toolLog.innerHTML = `
                 <div class="tool-panel-empty" style="color: var(--text-muted); font-size: 13px; display:flex; align-items:center; gap:8px;">
                     <div class="spinner" style="width:14px;height:14px;"></div>
                     <span>正在加载当前会话的 skill 调用记录...</span>
                 </div>
             `;
         }
+        this._renderDiagnosticInsights();
     },
 
     resetToolPanel() {
-        const content = DOM.$('#tool-panel-content');
-        if (content) {
-            content.innerHTML = '<div class="tool-panel-empty" style="color: var(--text-muted); font-size: 13px;">当前会话的 skill 调用记录会显示在这里</div>';
-        }
+        this.diagnosticInsights = {
+            state: null,
+            plan: null,
+            conclusion: null,
+            evidence: [],
+            knowledgeRefs: [],
+        };
+        this._setToolPanelScaffold();
+        this._renderDiagnosticInsights();
     },
 
     toggleToolPanel() {
@@ -888,6 +1069,88 @@ const ChatWidget = {
         const div = document.createElement('div');
         div.textContent = text == null ? '' : String(text);
         return div.innerHTML;
+    },
+
+    _getThinkingMeta(phase, message) {
+        const phaseMap = {
+            intent_detection: {
+                title: '问题分析中',
+                subtitle: '识别意图和故障类型',
+                icon: 'search',
+                tone: 'violet',
+                badge: '分析',
+            },
+            context_building: {
+                title: '上下文装配中',
+                subtitle: '汇总数据源、历史结论和环境信息',
+                icon: 'database',
+                tone: 'blue',
+                badge: '上下文',
+            },
+            skill_selection: {
+                title: '诊断路径规划中',
+                subtitle: '选择合适的诊断技能和排查顺序',
+                icon: 'git-branch',
+                tone: 'cyan',
+                badge: '规划',
+            },
+            tool_execution: {
+                title: '证据收集中',
+                subtitle: '正在调用数据库或主机诊断工具',
+                icon: 'wrench',
+                tone: 'amber',
+                badge: '执行',
+            },
+            llm_thinking: {
+                title: '结论生成中',
+                subtitle: '交叉整理证据并形成诊断结论',
+                icon: 'sparkles',
+                tone: 'green',
+                badge: '总结',
+            },
+        };
+
+        const meta = phaseMap[phase] || {
+            title: 'AI 思考中',
+            subtitle: '正在处理当前诊断步骤',
+            icon: 'bot',
+            tone: 'violet',
+            badge: '处理中',
+        };
+        return {
+            ...meta,
+            message: message || meta.subtitle,
+        };
+    },
+
+    _buildThinkingMarkup(phase, message, compact = false) {
+        const meta = this._getThinkingMeta(phase, message);
+        const compactClass = compact ? ' thinking-card-compact' : '';
+        return `
+            <div class="thinking-card thinking-tone-${meta.tone}${compactClass}">
+                <div class="thinking-card-accent"></div>
+                <div class="thinking-card-main">
+                    <div class="thinking-card-topline">
+                        <div class="thinking-card-icon">
+                            <i data-lucide="${meta.icon}"></i>
+                        </div>
+                        <div class="thinking-card-copy">
+                            <div class="thinking-card-title-row">
+                                <div class="thinking-card-title">${this._escapeHtml(meta.title)}</div>
+                                <span class="thinking-card-badge">${this._escapeHtml(meta.badge)}</span>
+                            </div>
+                            <div class="thinking-card-subtitle">${this._escapeHtml(meta.subtitle)}</div>
+                        </div>
+                    </div>
+                    <div class="thinking-card-message">${this._escapeHtml(meta.message)}</div>
+                    <div class="thinking-card-progress">
+                        <span class="thinking-card-progress-dot"></span>
+                        <span class="thinking-card-progress-dot"></span>
+                        <span class="thinking-card-progress-dot"></span>
+                    </div>
+                </div>
+            </div>
+        `;
     },
 
     _highlightCode(element) {

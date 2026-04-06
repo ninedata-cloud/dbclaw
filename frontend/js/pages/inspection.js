@@ -14,6 +14,14 @@ const InspectionPage = {
     },
     currentReportDetail: null,
 
+    _escapeHtml(value) {
+        return Utils.escapeHtml(String(value ?? ''));
+    },
+
+    _escapeAttr(value) {
+        return this._escapeHtml(value).replace(/"/g, '&quot;');
+    },
+
     async render() {
         const content = DOM.$('#page-content');
         content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
@@ -22,11 +30,18 @@ const InspectionPage = {
         Header.render('数据库智能巡检', this._buildHeaderActions());
 
         content.innerHTML = `
-            <div class="page-container">
-                <div id="reportList">
+            <div class="inspection-page">
+                <section class="inspection-list-shell" id="reportList">
+                    <div class="inspection-list-header">
+                        <div>
+                            <div class="inspection-list-eyebrow">Inspection Center</div>
+                            <h2>巡检报告</h2>
+                        </div>
+                        <div id="inspection-list-meta" class="inspection-list-meta">正在加载最新报告...</div>
+                    </div>
                     <div id="reports"></div>
-                    <div id="pagination" style="margin-top: 15px; display: flex; justify-content: center; gap: 10px;"></div>
-                </div>
+                    <div id="pagination" class="inspection-pagination"></div>
+                </section>
             </div>
         `;
 
@@ -39,9 +54,9 @@ const InspectionPage = {
 
     _buildHeaderActions() {
         // Build filters container
-        const filtersContainer = DOM.el('div', { className: 'dashboard-filters' });
+        const filtersContainer = DOM.el('div', { className: 'dashboard-filters inspection-header-filters' });
         filtersContainer.innerHTML = `
-            <div id="filterDatasource" style="min-width: 400px;"></div>
+            <div id="filterDatasource" class="inspection-filter-datasource"></div>
             <select id="filterStatus" class="filter-select">
                 <option value="">所有状态</option>
                 <option value="completed">已完成</option>
@@ -82,8 +97,8 @@ const InspectionPage = {
             container: DOM.$('#filterDatasource'),
             allowEmpty: true,
             emptyText: '所有数据源',
-            minWidth: '400px',
-            maxWidth: '400px',
+            minWidth: '280px',
+            maxWidth: '320px',
             showStatus: true,
             showDetails: true,
             onChange: (datasource) => {
@@ -144,65 +159,125 @@ const InspectionPage = {
 
         // Show loading indicator only on initial load or filter change
         if (!this.pollInterval || container.innerHTML === '') {
-            container.innerHTML = '<div style="text-align:center;padding:40px;color:#666;"><div class="spinner"></div><p style="margin-top:10px;">加载中...</p></div>';
+            container.innerHTML = `
+                <div class="inspection-state">
+                    <div class="spinner"></div>
+                    <p>正在加载巡检报告...</p>
+                </div>
+            `;
         }
 
         try {
             const response = await API.get(`/api/inspections/reports?${params.toString()}`);
             const reports = Array.isArray(response) ? response : response.reports || [];
             this.totalReports = response.total || reports.length;
+            const meta = DOM.$('#inspection-list-meta');
+            if (meta) {
+                meta.textContent = `共 ${this.totalReports.toLocaleString()} 条报告，当前第 ${this.currentPage} 页`;
+            }
 
             if (reports.length === 0) {
-                container.innerHTML = '<p style="text-align:center;color:#666;padding:20px;">未找到报告</p>';
+                container.innerHTML = `
+                    <div class="inspection-state inspection-state-empty">
+                        <i data-lucide="file-search"></i>
+                        <h3>未找到报告</h3>
+                        <p>当前筛选条件下没有巡检记录，调整后再试一次。</p>
+                    </div>
+                `;
                 DOM.$('#pagination').innerHTML = '';
+                DOM.createIcons();
                 return;
             }
 
+            const renderTriggerBadge = (triggerType) => {
+                const map = {
+                    anomaly: { label: '异常触发', className: 'danger' },
+                    scheduled: { label: '定时触发', className: 'success' },
+                    manual: { label: '手动触发', className: 'info' },
+                    threshold: { label: '阈值触发', className: 'warning' }
+                };
+                const meta = map[triggerType] || { label: this.formatTriggerType(triggerType), className: 'muted' };
+                return `<span class="inspection-pill ${meta.className}">${this._escapeHtml(meta.label)}</span>`;
+            };
+
             container.innerHTML = `
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>数据源</th>
-                            <th>触发类型</th>
-                            <th>报告状态</th>
-                            <th>标题</th>
-                            <th>创建时间</th>
-                            <th>原因</th>
-                            <th style="width:150px;">操作</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${reports.map(r => `
+                <div class="data-table-container inspection-table-container">
+                    <table class="data-table inspection-table">
+                        <thead>
                             <tr>
-                                <td>${r.datasource_name || 'N/A'}</td>
-                                <td>
-                                    <span class="badge badge-${r.trigger_type === 'anomaly' ? 'danger' : r.trigger_type === 'scheduled' ? 'success' : 'info'}">
-                                        ${r.trigger_type === 'anomaly' ? '🔴 异常' : r.trigger_type === 'scheduled' ? '📅 定时' : '👤 手动'}
-                                    </span>
-                                </td>
-                                <td>
-                                    ${(() => { const s = InspectionPage.formatReportStatus(r.status); return `<span class="badge badge-${s.badge}">${s.text}</span>`; })()}
-                                    ${r.status !== 'completed' && r.error_message ? `
-                                        <span class="error-icon" data-error="${r.error_message.replace(/"/g, '&quot;')}" style="margin-left:6px;color:#dc3545;cursor:help;font-size:16px;">⚠️</span>
-                                    ` : ''}
-                                </td>
-                                <td><strong>${r.title}</strong></td>
-                                <td>${Format.datetime(r.created_at)}</td>
-                                <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.trigger_reason || '-'}</td>
-                                <td>
-                                    <button onclick="InspectionPage.viewReport(${r.report_id})" class="btn btn-sm btn-primary" style="padding:4px 8px;margin-right:5px;">查看报告</button>
-                                    <button onclick="InspectionPage.confirmDelete(${r.report_id})" class="btn btn-sm btn-danger" style="padding:4px 8px;">删除</button>
-                                </td>
+                                <th class="inspection-col-source">数据源</th>
+                                <th class="inspection-col-trigger">触发类型</th>
+                                <th class="inspection-col-status">报告状态</th>
+                                <th class="inspection-col-title">标题</th>
+                                <th class="inspection-col-time">创建时间</th>
+                                <th class="inspection-col-reason">触发原因</th>
+                                <th class="inspection-actions-col">操作</th>
                             </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            ${reports.map(r => {
+                                const statusMeta = InspectionPage.formatReportStatus(r.status);
+                                return `
+                                    <tr>
+                                        <td class="inspection-col-source">
+                                            <div class="inspection-cell-stack">
+                                                <div class="inspection-primary-text inspection-nowrap-text" title="${InspectionPage._escapeAttr(r.datasource_name || 'N/A')}">${InspectionPage._escapeHtml(r.datasource_name || 'N/A')}</div>
+                                            </div>
+                                        </td>
+                                        <td class="inspection-col-trigger">${renderTriggerBadge(r.trigger_type)}</td>
+                                        <td class="inspection-col-status">
+                                            <div class="inspection-status-cell">
+                                                <span class="inspection-pill ${statusMeta.badge}">${InspectionPage._escapeHtml(statusMeta.text)}</span>
+                                                ${r.status !== 'completed' && r.error_message ? `
+                                                    <span class="error-icon" data-error="${InspectionPage._escapeAttr(r.error_message)}">⚠</span>
+                                                ` : ''}
+                                            </div>
+                                        </td>
+                                        <td class="inspection-col-title">
+                                            <div class="inspection-cell-stack">
+                                                <div class="inspection-primary-text inspection-nowrap-text" title="${InspectionPage._escapeAttr(r.title)}">${InspectionPage._escapeHtml(r.title)}</div>
+                                                <div class="inspection-secondary-text inspection-nowrap-text">#${InspectionPage._escapeHtml(r.report_id)}</div>
+                                            </div>
+                                        </td>
+                                        <td class="inspection-col-time">
+                                            <div class="inspection-secondary-text inspection-time-text">${InspectionPage._escapeHtml(Format.datetime(r.created_at))}</div>
+                                        </td>
+                                        <td class="inspection-col-reason">
+                                            <div class="inspection-reason-text" title="${InspectionPage._escapeAttr(r.trigger_reason || '-')}">${InspectionPage._escapeHtml(r.trigger_reason || '-')}</div>
+                                        </td>
+                                        <td class="inspection-actions-col">
+                                            <div class="inspection-actions-cell">
+                                                <button
+                                                    onclick="InspectionPage.viewReport(${r.report_id})"
+                                                    class="inspection-action-btn inspection-action-btn-primary"
+                                                    title="查看报告"
+                                                    aria-label="查看报告"
+                                                >
+                                                    <i data-lucide="file-text"></i>
+                                                </button>
+                                                <button
+                                                    onclick="InspectionPage.confirmDelete(${r.report_id})"
+                                                    class="inspection-action-btn inspection-action-btn-danger"
+                                                    title="删除报告"
+                                                    aria-label="删除报告"
+                                                >
+                                                    <i data-lucide="trash-2"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
             `;
 
             // Setup error icon tooltips
             this.setupErrorTooltips();
 
             this.renderPagination();
+            DOM.createIcons();
 
             // Stop polling if no reports are generating
             const hasGeneratingReports = reports.some(r =>
@@ -218,7 +293,12 @@ const InspectionPage = {
             }
         } catch (error) {
             console.error('Failed to load reports:', error);
-            container.innerHTML = '<p style="text-align:center;color:#dc3545;padding:20px;">加载失败，请刷新重试</p>';
+            container.innerHTML = `
+                <div class="inspection-state inspection-state-error">
+                    <h3>加载失败</h3>
+                    <p>巡检报告获取失败，请刷新后重试。</p>
+                </div>
+            `;
             Toast.show('加载报告失败', 'error');
         }
     },
@@ -236,19 +316,19 @@ const InspectionPage = {
         const buttons = [];
 
         // Previous button
-        buttons.push(`<button class="btn btn-sm btn-secondary" style="flex: 0 0 auto;" ${this.currentPage === 1 ? 'disabled' : ''} onclick="InspectionPage.goToPage(${this.currentPage - 1})">上一页</button>`);
+        buttons.push(`<button class="btn btn-sm btn-secondary inspection-pagination-btn" ${this.currentPage === 1 ? 'disabled' : ''} onclick="InspectionPage.goToPage(${this.currentPage - 1})">上一页</button>`);
 
         // Page numbers
         for (let i = 1; i <= totalPages; i++) {
             if (i === 1 || i === totalPages || (i >= this.currentPage - 2 && i <= this.currentPage + 2)) {
-                buttons.push(`<button class="btn btn-sm ${i === this.currentPage ? 'btn-primary' : 'btn-secondary'}" style="flex: 0 0 auto;" onclick="InspectionPage.goToPage(${i})">${i}</button>`);
+                buttons.push(`<button class="btn btn-sm ${i === this.currentPage ? 'btn-primary' : 'btn-secondary'} inspection-pagination-btn" onclick="InspectionPage.goToPage(${i})">${i}</button>`);
             } else if (i === this.currentPage - 3 || i === this.currentPage + 3) {
-                buttons.push(`<span style="padding:0 5px; flex: 0 0 auto;">...</span>`);
+                buttons.push('<span class="inspection-pagination-ellipsis">...</span>');
             }
         }
 
         // Next button
-        buttons.push(`<button class="btn btn-sm btn-secondary" style="flex: 0 0 auto;" ${this.currentPage === totalPages ? 'disabled' : ''} onclick="InspectionPage.goToPage(${this.currentPage + 1})">下一页</button>`);
+        buttons.push(`<button class="btn btn-sm btn-secondary inspection-pagination-btn" ${this.currentPage === totalPages ? 'disabled' : ''} onclick="InspectionPage.goToPage(${this.currentPage + 1})">下一页</button>`);
 
         pagination.innerHTML = buttons.join('');
     },
@@ -260,12 +340,12 @@ const InspectionPage = {
 
     formatReportStatus(status) {
         const map = {
-            completed: { text: '✓ 已完成', badge: 'success' },
-            partial: { text: '◐ 部分结果', badge: 'warning' },
-            timed_out: { text: '⏱ 已超时', badge: 'warning' },
-            awaiting_confirm: { text: '🛑 待确认', badge: 'warning' },
-            failed: { text: '✗ 失败', badge: 'danger' },
-            generating: { text: '⏳ 生成中', badge: 'warning' }
+            completed: { text: '已完成', badge: 'success' },
+            partial: { text: '部分结果', badge: 'warning' },
+            timed_out: { text: '已超时', badge: 'warning' },
+            awaiting_confirm: { text: '待确认', badge: 'warning' },
+            failed: { text: '失败', badge: 'danger' },
+            generating: { text: '生成中', badge: 'info' }
         };
         return map[status] || { text: status || '未知', badge: 'warning' };
     },
@@ -275,7 +355,8 @@ const InspectionPage = {
             anomaly: '异常触发',
             scheduled: '定时触发',
             threshold: '阈值触发',
-            manual: '手动触发'
+            manual: '手动触发',
+            connection_failure: '连接失败'
         };
         return map[triggerType] || triggerType || '未知类型';
     },
@@ -285,6 +366,8 @@ const InspectionPage = {
             const report = await API.get(`/api/inspections/reports/detail/${reportId}`);
             this.currentReportDetail = report;
             const content = DOM.$('#page-content');
+            const safe = (value) => this._escapeHtml(value);
+            const safeAttr = (value) => this._escapeAttr(value);
 
             const statusMeta = this.formatReportStatus(report.status);
             const triggerTypeLabel = this.formatTriggerType(report.trigger_type || 'manual');
@@ -295,14 +378,14 @@ const InspectionPage = {
             const summaryHtml = report.summary ? `
                 <section class="inspection-report-section inspection-report-summary">
                     <div class="inspection-report-section-title">诊断摘要</div>
-                    <div class="inspection-report-summary-text">${report.summary}</div>
+                    <div class="inspection-report-summary-text">${safe(report.summary)}</div>
                 </section>
             ` : '';
 
             const triggerDetailsHtml = report.trigger_reason ? `
                 <section class="inspection-report-section inspection-report-trigger">
                     <div class="inspection-report-section-title">触发原因</div>
-                    <div class="inspection-report-trigger-text">${report.trigger_reason}</div>
+                    <div class="inspection-report-trigger-text">${safe(report.trigger_reason)}</div>
                 </section>
             ` : '';
 
@@ -315,14 +398,14 @@ const InspectionPage = {
                             <div class="inspection-report-action-card">
                                 <div class="inspection-report-action-header">
                                     <div>
-                                        <div class="inspection-report-action-title">${action.title || '未命名动作'}</div>
-                                        <div class="inspection-report-action-summary">${action.summary || ''}</div>
-                                        ${action.precheck ? `<div class="inspection-report-action-meta">前置检查：${action.precheck}</div>` : ''}
-                                        ${action.verification?.success_criteria ? `<div class="inspection-report-action-meta">验证：${action.verification.success_criteria}</div>` : ''}
+                                        <div class="inspection-report-action-title">${safe(action.title || '未命名动作')}</div>
+                                        <div class="inspection-report-action-summary">${safe(action.summary || '')}</div>
+                                        ${action.precheck ? `<div class="inspection-report-action-meta">前置检查：${safe(action.precheck)}</div>` : ''}
+                                        ${action.verification?.success_criteria ? `<div class="inspection-report-action-meta">验证：${safe(action.verification.success_criteria)}</div>` : ''}
                                     </div>
                                     <div class="inspection-report-action-badges">
-                                        <span class="badge badge-${action.risk_level === 'destructive' ? 'danger' : action.risk_level === 'high' ? 'warning' : 'success'}">${action.risk_level || 'safe'}</span>
-                                        ${action.latest_run ? `<span class="badge badge-info">${InspectionPage.formatActionRunStatus(action.latest_run.status)}</span>` : ''}
+                                        <span class="badge badge-${action.risk_level === 'destructive' ? 'danger' : action.risk_level === 'high' ? 'warning' : 'success'}">${safe(action.risk_level || 'safe')}</span>
+                                        ${action.latest_run ? `<span class="badge badge-info">${safe(InspectionPage.formatActionRunStatus(action.latest_run.status))}</span>` : ''}
                                     </div>
                                 </div>
                                 <div class="inspection-report-action-buttons">
@@ -354,25 +437,25 @@ const InspectionPage = {
                     <div class="inspection-report-header">
                         <div>
                             <div class="inspection-report-kicker">巡检报告</div>
-                            <h1 class="inspection-report-title">${report.title}</h1>
+                            <h1 class="inspection-report-title">${safe(report.title)}</h1>
                             <div class="inspection-report-badges">
-                                <span class="badge badge-${statusMeta.badge}">${statusMeta.text}</span>
-                                <span class="badge badge-info">${triggerTypeLabel}</span>
-                                <span class="badge badge-secondary">${datasourceLabel}</span>
+                                <span class="badge badge-${statusMeta.badge}">${safe(statusMeta.text)}</span>
+                                <span class="badge badge-info">${safe(triggerTypeLabel)}</span>
+                                <span class="badge badge-secondary" title="${safeAttr(datasourceLabel)}">${safe(datasourceLabel)}</span>
                             </div>
                         </div>
                         <div class="inspection-report-meta">
                             <div class="inspection-report-meta-item">
                                 <span class="inspection-report-meta-label">创建时间</span>
-                                <span class="inspection-report-meta-value">${createdAtLabel}</span>
+                                <span class="inspection-report-meta-value">${safe(createdAtLabel)}</span>
                             </div>
                             <div class="inspection-report-meta-item">
                                 <span class="inspection-report-meta-label">完成时间</span>
-                                <span class="inspection-report-meta-value">${completedAtLabel || '—'}</span>
+                                <span class="inspection-report-meta-value">${safe(completedAtLabel || '—')}</span>
                             </div>
                             <div class="inspection-report-meta-item">
                                 <span class="inspection-report-meta-label">报告 ID</span>
-                                <span class="inspection-report-meta-value">#${report.id}</span>
+                                <span class="inspection-report-meta-value">#${safe(report.id)}</span>
                             </div>
                         </div>
                     </div>
@@ -459,7 +542,7 @@ const InspectionPage = {
 
             Toast.show('Markdown 导出成功', 'success');
         } catch (error) {
-            Toast.show(`Export failed: ${error.message}`, 'error');
+            Toast.show(`导出失败: ${error.message}`, 'error');
         }
     },
 
@@ -484,7 +567,7 @@ const InspectionPage = {
 
             Toast.show('PDF 导出成功', 'success');
         } catch (error) {
-            Toast.show(`Export failed: ${error.message}`, 'error');
+            Toast.show(`导出失败: ${error.message}`, 'error');
         }
     },
 
@@ -603,14 +686,14 @@ const InspectionPage = {
             Modal.show({
                 title: '执行记录',
                 content: `
-                            <div style="display:flex;flex-direction:column;gap:10px;">
-                            <div><strong>动作：</strong>${safe(run.title)}</div>
-                            <div><strong>状态：</strong>${safe(this.formatActionRunStatus(run.status))}</div>
-                            <div><strong>执行：</strong>${safe(this.formatExecutionStatus(run.execution_status))} ${run.skill_execution_id ? `(skill_execution_id=${safe(run.skill_execution_id)})` : ''}</div>
-                            ${run.execution_result_summary ? `<pre style="margin:0;background:var(--bg-input);padding:10px;border-radius:8px;white-space:pre-wrap;">${safe(run.execution_result_summary)}</pre>` : ''}
-                            <div><strong>验证：</strong>${safe(this.formatVerificationStatus(run.verification_status))} ${run.verification_skill_execution_id ? `(skill_execution_id=${safe(run.verification_skill_execution_id)})` : ''}</div>
-                            ${run.verification_summary ? `<pre style="margin:0;background:var(--bg-input);padding:10px;border-radius:8px;white-space:pre-wrap;">${safe(run.verification_summary)}</pre>` : ''}
-                        </div>
+                    <div class="inspection-run-detail">
+                        <div><strong>动作：</strong>${safe(run.title)}</div>
+                        <div><strong>状态：</strong>${safe(this.formatActionRunStatus(run.status))}</div>
+                        <div><strong>执行：</strong>${safe(this.formatExecutionStatus(run.execution_status))} ${run.skill_execution_id ? `(skill_execution_id=${safe(run.skill_execution_id)})` : ''}</div>
+                        ${run.execution_result_summary ? `<pre class="inspection-inline-code">${safe(run.execution_result_summary)}</pre>` : ''}
+                        <div><strong>验证：</strong>${safe(this.formatVerificationStatus(run.verification_status))} ${run.verification_skill_execution_id ? `(skill_execution_id=${safe(run.verification_skill_execution_id)})` : ''}</div>
+                        ${run.verification_summary ? `<pre class="inspection-inline-code">${safe(run.verification_summary)}</pre>` : ''}
+                    </div>
                 `,
                 buttons: [
                     { text: '关闭', variant: 'secondary', onClick: () => Modal.hide() }

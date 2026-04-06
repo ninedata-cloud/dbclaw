@@ -11,6 +11,8 @@ from openai import AsyncOpenAI
 from backend.config import get_settings
 
 logger = logging.getLogger(__name__)
+THINK_START_TAG = "<think>"
+THINK_END_TAG = "</think>"
 
 
 def _normalize_usage(input_tokens: Optional[int] = None, output_tokens: Optional[int] = None) -> Dict[str, int]:
@@ -21,6 +23,45 @@ def _normalize_usage(input_tokens: Optional[int] = None, output_tokens: Optional
         "output_tokens": output_value,
         "total_tokens": input_value + output_value,
     }
+
+
+def _coerce_stream_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return "".join(_coerce_stream_text(item) for item in value)
+    if isinstance(value, dict):
+        for key in ("text", "content", "reasoning", "thinking", "reasoning_content"):
+            if key in value:
+                return _coerce_stream_text(value.get(key))
+        return ""
+
+    for attr in ("text", "content", "reasoning", "thinking", "reasoning_content"):
+        attr_value = getattr(value, attr, None)
+        if attr_value is not None:
+            return _coerce_stream_text(attr_value)
+    return ""
+
+
+def _extract_openai_reasoning_text(delta: Any) -> str:
+    for attr in ("reasoning_content", "reasoning"):
+        text = _coerce_stream_text(getattr(delta, attr, None))
+        if text:
+            return text
+    return ""
+
+
+def _extract_anthropic_reasoning_text(delta: Any) -> str:
+    delta_type = getattr(delta, "type", None)
+    if delta_type not in {"thinking_delta", "reasoning_delta"}:
+        return ""
+    for attr in ("thinking", "text", "reasoning", "content"):
+        text = _coerce_stream_text(getattr(delta, attr, None))
+        if text:
+            return text
+    return ""
 
 
 OPENAI_PROTOCOL = "openai"

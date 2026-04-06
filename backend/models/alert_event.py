@@ -42,6 +42,9 @@ class AlertEvent(Base):
     root_cause = Column(Text, nullable=True)            # Root cause analysis
     recommended_actions = Column(Text, nullable=True)  # Recommended fix actions
     diagnosis_status = Column(String(20), nullable=True)  # pending / in_progress / completed / failed
+    diagnosis_started_at = Column(DateTime, nullable=True, index=True)
+    diagnosis_completed_at = Column(DateTime, nullable=True, index=True)
+    diagnosis_source_event_id = Column(Integer, nullable=True, index=True)
 
     def __repr__(self):
         return (

@@ -1,7 +1,7 @@
 import asyncio
-import time
 from typing import Any, Dict, List, Optional
 from backend.services.db_connector import DBConnector
+from backend.services.asyncpg_query_executor import execute_asyncpg_query
 
 
 class OpenGaussConnector(DBConnector):
@@ -173,27 +173,7 @@ class OpenGaussConnector(DBConnector):
     async def execute_query(self, sql: str, max_rows: int = 1000) -> Dict[str, Any]:
         conn = await self._connect()
         try:
-            start = time.time()
-            cleaned = sql.strip().rstrip(';')
-            normalized = cleaned.upper()
-            is_select = normalized.startswith('SELECT') or normalized.startswith('WITH')
-            has_limit = 'LIMIT' in normalized.split(')')[-1]
-            if is_select and not has_limit:
-                fetch_sql = f"{cleaned} LIMIT {max_rows + 1}"
-            else:
-                fetch_sql = cleaned
-            rows = await conn.fetch(fetch_sql)
-            elapsed = round((time.time() - start) * 1000, 2)
-            columns = list(rows[0].keys()) if rows else []
-            truncated = is_select and not has_limit and len(rows) > max_rows
-            limited = rows[:max_rows] if truncated else rows
-            return {
-                "columns": columns,
-                "rows": [list(r.values()) for r in limited],
-                "row_count": len(limited),
-                "execution_time_ms": elapsed,
-                "truncated": truncated,
-            }
+            return await execute_asyncpg_query(conn, sql, max_rows=max_rows, explain_uses_fetch=True)
         finally:
             await conn.close()
 

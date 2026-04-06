@@ -27,6 +27,7 @@ class ReportResponse(BaseModel):
     ai_analysis: Optional[str] = None
     ai_model_id: Optional[int] = None
     kb_ids: Optional[List[int]] = None
+    knowledge_sources: Optional[Any] = None
     generation_method: Optional[str] = None
     error_message: Optional[str] = None
     is_scheduled: Optional[bool] = None
@@ -34,4 +35,3 @@ class ReportResponse(BaseModel):
 
     class Config:
         from_attributes = True
-

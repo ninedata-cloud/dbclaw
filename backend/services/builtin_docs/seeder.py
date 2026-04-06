@@ -84,6 +84,20 @@ async def seed_builtin_docs(db: AsyncSession):
                 summary=auto_summary(content),
                 is_builtin=True,
                 is_active=True,
+                scope="builtin",
+                doc_kind="reference" if doc_def["category"] == "技术参考" else ("sop" if doc_def["category"] == "综合诊断" else "runbook"),
+                db_types=[db_type],
+                issue_categories={
+                    "综合诊断": ["general", "performance"],
+                    "性能诊断": ["performance", "sql", "resource"],
+                    "故障排查": ["error", "connectivity", "locking", "replication"],
+                    "配置与会话": ["configuration", "connectivity"],
+                    "安全与权限": ["error", "configuration"],
+                    "技术参考": ["general"],
+                }.get(doc_def["category"], ["general"]),
+                tags=[db_type, doc_def["category"]],
+                freshness_level="stable",
+                enabled_in_diagnosis=True,
                 sort_order=sort_k,
             )
             db.add(doc)

@@ -282,13 +282,7 @@ const AlertsPage = {
         });
         filtersContainer.appendChild(searchInput);
 
-        const addSubBtn = DOM.el('button', {
-            className: 'btn btn-primary',
-            innerHTML: '<i data-lucide="plus"></i>新建订阅',
-            onClick: () => this.showSubscriptionModal()
-        });
-
-        return [filtersContainer, addSubBtn];
+        return [filtersContainer];
     },
 
     renderAlertsPane() {

@@ -61,7 +61,7 @@ def _is_explain_write_query(query_upper: str) -> bool:
 
 def _is_read_only_query(query: str) -> bool:
     query_upper = _normalize_sql_for_readonly_check(query)
-    simple_allowed_keywords = ['SELECT', 'SHOW', 'EXPLAIN', 'DESCRIBE', 'DESC', 'EXEC', 'EXECUTE']
+    simple_allowed_keywords = ['SELECT', 'SHOW', 'EXPLAIN', 'DESCRIBE', 'DESC']
 
     if query_upper.startswith('EXPLAIN'):
         return not _is_explain_write_query(query_upper)
@@ -208,4 +208,3 @@ async def execute_query(datasource: Datasource, query: str, allow_write: bool = 
             "error": error_message,
             "error_type": e.__class__.__name__,
         }
-

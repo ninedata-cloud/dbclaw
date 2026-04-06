@@ -6,6 +6,7 @@ from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.skills.registry import SkillRegistry
 from backend.skills.loader import SkillLoader
+from backend.skills.builtin_metadata import normalize_builtin_skill_definition
 from backend.skills.models import Skill
 
 
@@ -18,10 +19,11 @@ async def load_builtin_skills(db: AsyncSession) -> List[Skill]:
     if not builtin_dir.exists():
         return loaded_skills
 
-    for yaml_file in builtin_dir.glob("*.yaml"):
+    for yaml_file in sorted(builtin_dir.glob("*.yaml")):
         try:
             yaml_content = yaml_file.read_text()
             skill_def = SkillLoader.load_from_yaml(yaml_content)
+            skill_def = normalize_builtin_skill_definition(skill_def)
             skill = await registry.register_skill(skill_def, is_builtin=True)
             loaded_skills.append(skill)
             print(f"Loaded built-in skill: {skill.id}")
