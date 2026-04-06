@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from backend.models.host import Host
 from backend.services.ssh_connection_pool import get_ssh_pool
+from backend.utils.command_safety import DANGEROUS_COMMAND_PATTERNS, first_matching_command_pattern
 
 
 async def execute_host_command(db: AsyncSession, host_id: int, command: str, allow_write: bool = False, timeout: int = None) -> Dict[str, Any]:
@@ -23,32 +24,12 @@ async def execute_host_command(db: AsyncSession, host_id: int, command: str, all
     try:
         # Validate command if write operations are not allowed
         if not allow_write:
-            # List of dangerous command patterns
-            dangerous_patterns = [
-                'rm ', 'rmdir', 'del ', 'delete',
-                'mv ', 'move',
-                'chmod', 'chown', 'chgrp',
-                'kill', 'pkill', 'killall',
-                'shutdown', 'reboot', 'halt', 'poweroff',
-                'mkfs', 'fdisk', 'parted',
-                'dd ',
-                'iptables', 'firewall',
-                'useradd', 'userdel', 'usermod',
-                'groupadd', 'groupdel',
-                '>>', 'tee',
-                'wget', 'curl -o', 'curl -O',
-                'apt install', 'yum install', 'dnf install',
-                'systemctl stop', 'systemctl start', 'systemctl restart',
-                'service stop', 'service start', 'service restart',
-            ]
-
-            command_lower = command.lower()
-            for pattern in dangerous_patterns:
-                if pattern in command_lower:
-                    return {
-                        "success": False,
-                        "error": f"Command contains potentially dangerous operation '{pattern}'. Enable 'Execute Any OS Command' permission for write operations."
-                    }
+            pattern = first_matching_command_pattern(command, DANGEROUS_COMMAND_PATTERNS)
+            if pattern:
+                return {
+                    "success": False,
+                    "error": f"Command contains potentially dangerous operation '{pattern}'. Enable 'Execute Any OS Command' permission for write operations."
+                }
 
         # Get host
         result = await db.execute(

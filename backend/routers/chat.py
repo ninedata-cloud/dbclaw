@@ -34,6 +34,7 @@ ACTIVE_CHAT_SOCKETS: dict[int, list[WebSocket]] = {}
 PENDING_APPROVALS: dict[int, dict[str, dict]] = {}
 # session_id -> running asyncio.Task for AI stream
 ACTIVE_STREAM_TASKS: dict[int, asyncio.Task] = {}
+ACTIVE_STREAM_STATES: dict[int, dict[str, str | None]] = {}
 
 
 def _register_socket(session_id: int, websocket: WebSocket) -> None:
@@ -61,6 +62,57 @@ async def _broadcast_to_session(session_id: int, payload: dict) -> None:
         _unregister_socket(session_id, ws)
 
 
+def _start_stream_state(session_id: int) -> None:
+    ACTIVE_STREAM_STATES[session_id] = {
+        "content": "",
+        "thinking_phase": None,
+        "thinking_message": "",
+    }
+
+
+def _clear_stream_state(session_id: int) -> None:
+    ACTIVE_STREAM_STATES.pop(session_id, None)
+
+
+def _update_stream_state(session_id: int, payload: dict) -> None:
+    state = ACTIVE_STREAM_STATES.get(session_id)
+    if state is None:
+        return
+
+    payload_type = payload.get("type")
+    if payload_type in {"thinking_start", "thinking_phase", "thinking_complete"}:
+        state["thinking_phase"] = payload.get("phase")
+        state["thinking_message"] = payload.get("message") or ""
+        return
+
+    if payload_type == "plan_step_status":
+        if payload.get("status") == "running":
+            tool_name = payload.get("tool_name") or "工具"
+            state["thinking_phase"] = "tool_execution"
+            state["thinking_message"] = f"正在执行 {tool_name}..."
+        else:
+            state["thinking_phase"] = None
+            state["thinking_message"] = ""
+        return
+
+    if payload_type == "content":
+        chunk = payload.get("content") or ""
+        if chunk:
+            state["content"] = f"{state.get('content', '')}{chunk}"
+        state["thinking_phase"] = None
+        state["thinking_message"] = ""
+        return
+
+    if payload_type in {"approval_request", "done", "error"}:
+        state["thinking_phase"] = None
+        state["thinking_message"] = ""
+
+
+async def _emit_session_event(session_id: int, payload: dict) -> None:
+    _update_stream_state(session_id, payload)
+    await _broadcast_to_session(session_id, payload)
+
+
 async def _rebuild_llm_messages(all_msgs):
     return await rebuild_llm_messages(all_msgs)
 
@@ -71,6 +123,7 @@ async def _continue_conversation_after_tool(
     datasource_id: int | None,
     model_id: int | None,
     kb_ids,
+    knowledge_context,
     disabled_tools,
 ):
     async with async_session() as db:
@@ -81,9 +134,10 @@ async def _continue_conversation_after_tool(
             datasource_id=datasource_id,
             model_id=model_id,
             kb_ids=kb_ids,
+            knowledge_context=knowledge_context,
             disabled_tools=disabled_tools,
             pending_approvals=PENDING_APPROVALS,
-            on_event=lambda payload: _broadcast_to_session(session_id, payload),
+            on_event=lambda payload: _emit_session_event(session_id, payload),
         )
 
 
@@ -162,7 +216,6 @@ async def create_session(data: ChatSessionCreate, db: AsyncSession = Depends(get
         datasource_id=data.datasource_id,
         title=data.title or "New Session",
         ai_model_id=data.ai_model_id,
-        kb_ids=data.kb_ids,
         disabled_tools=data.disabled_tools,
     )
     db.add(session)
@@ -269,7 +322,7 @@ async def resolve_chat_approval(
             comment=payload.comment,
             user_id=user.id,
             pending_approvals=PENDING_APPROVALS,
-            on_event=lambda event: _broadcast_to_session(session_id, event),
+            on_event=lambda event: _emit_session_event(session_id, event),
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
@@ -295,8 +348,15 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
     # If there's an active stream task for this session, notify the client
     active_task = ACTIVE_STREAM_TASKS.get(session_id)
     if active_task and not active_task.done():
+        stream_state = ACTIVE_STREAM_STATES.get(session_id, {})
         try:
-            await websocket.send_json({"type": "stream_resuming", "message": "AI 正在生成中..."})
+            await websocket.send_json({
+                "type": "stream_resuming",
+                "message": stream_state.get("thinking_message") or "AI 正在生成中...",
+                "content": stream_state.get("content") or "",
+                "thinking_phase": stream_state.get("thinking_phase"),
+                "thinking_message": stream_state.get("thinking_message") or "",
+            })
         except Exception:
             pass
 
@@ -350,9 +410,10 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
                 ds_id=payload_datasource_id,
                 m_id=model_id,
             ):
+                _start_stream_state(sid)
                 try:
                     async with async_session() as db:
-                        messages, effective_datasource_id, m_id_resolved, kb_ids, disabled_tools = await prepare_user_turn(
+                        messages, effective_datasource_id, m_id_resolved, kb_ids, knowledge_context, disabled_tools = await prepare_user_turn(
                             db,
                             session_id=sid,
                             user_id=uid,
@@ -370,28 +431,30 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
                             datasource_id=effective_datasource_id,
                             model_id=m_id_resolved,
                             kb_ids=kb_ids,
+                            knowledge_context=knowledge_context,
                             disabled_tools=disabled_tools,
                             pending_approvals=PENDING_APPROVALS,
-                            on_event=lambda payload: _broadcast_to_session(sid, payload),
+                            on_event=lambda payload: _emit_session_event(sid, payload),
                         )
                 except asyncio.CancelledError:
                     logger.info(f"Stream task cancelled for session {sid}")
                     try:
-                        await _broadcast_to_session(sid, {
+                        await _emit_session_event(sid, {
                             "type": "content",
                             "content": "\n\n[用户已停止生成]",
                         })
-                        await _broadcast_to_session(sid, {"type": "done"})
+                        await _emit_session_event(sid, {"type": "done"})
                     except Exception:
                         pass
                 except Exception as e:
                     logger.error(f"Stream task error for session {sid}: {e}", exc_info=True)
-                    await _broadcast_to_session(sid, {
+                    await _emit_session_event(sid, {
                         "type": "error",
                         "content": f"AI 会话出错: {str(e)}",
                     })
                 finally:
                     ACTIVE_STREAM_TASKS.pop(sid, None)
+                    _clear_stream_state(sid)
 
             task = asyncio.create_task(_run_stream())
             ACTIVE_STREAM_TASKS[session_id] = task

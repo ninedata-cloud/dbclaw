@@ -110,6 +110,58 @@
 .chat-bubble pre { background: var(--bg-input); padding: 12px; border-radius: var(--radius-sm); overflow-x: auto; margin: 8px 0; max-width: 100%; }
 .chat-bubble pre code { padding: 0; background: none; white-space: pre; word-break: normal; }
 
+.assistant-think-block {
+    margin: 10px 0;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: var(--radius-sm);
+    background: rgba(148, 163, 184, 0.06);
+    overflow: hidden;
+}
+
+.assistant-think-summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 10px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    user-select: none;
+}
+
+.assistant-think-summary::-webkit-details-marker {
+    display: none;
+}
+
+.assistant-think-summary::before {
+    content: '>';
+    display: inline-block;
+    margin-right: 8px;
+    color: var(--text-muted);
+    transform: rotate(0deg);
+    transition: transform 0.2s ease;
+}
+
+.assistant-think-block[open] .assistant-think-summary::before {
+    transform: rotate(90deg);
+}
+
+.assistant-think-content {
+    padding: 0 12px 12px;
+    color: var(--text-secondary);
+}
+
+.assistant-think-content h1,
+.assistant-think-content h2,
+.assistant-think-content h3,
+.assistant-think-content h4,
+.assistant-think-content h5,
+.assistant-think-content h6,
+.assistant-think-content p,
+.assistant-think-content li,
+.assistant-think-content blockquote {
+    color: inherit;
+}
+
 .chat-tool-call {
     background: var(--bg-card);
     border: 1px solid var(--border-color);

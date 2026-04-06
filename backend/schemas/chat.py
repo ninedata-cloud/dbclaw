@@ -17,6 +17,7 @@ class ChatSessionResponse(BaseModel):
     ai_model_id: Optional[int] = None
     title: str
     kb_ids: Optional[List[int]] = None
+    knowledge_snapshot: Optional[Any] = None
     disabled_tools: Optional[List[str]] = None
     input_tokens: int = 0
     output_tokens: int = 0

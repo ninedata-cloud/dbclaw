@@ -15,6 +15,12 @@ from backend.agent.skill_selector import get_available_skills_as_tools
 from backend.agent.tools import get_filtered_tools
 from backend.agent.context_builder import execute_tool
 from backend.services.ai_agent import get_ai_client, stream_assistant_turn, request_text_response
+from backend.utils.command_safety import (
+    DANGEROUS_COMMAND_PATTERNS,
+    DESTRUCTIVE_COMMAND_PATTERNS,
+    first_matching_command_pattern,
+    looks_clearly_read_only_command,
+)
 from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
@@ -26,27 +32,6 @@ KB_TOOL_NAMES = {"list_documents", "read_document"}
 
 READ_ONLY_SQL_KEYWORDS = {'SELECT', 'SHOW', 'EXPLAIN', 'EXEC', 'EXECUTE', 'DESCRIBE', 'DESC', 'WITH'}
 DANGEROUS_SQL_KEYWORDS = {'INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'TRUNCATE', 'CREATE', 'GRANT', 'REVOKE', 'CALL'}
-DANGEROUS_COMMAND_PATTERNS = [
-    'rm ', 'rmdir', 'del ', 'delete',
-    'mv ', 'move',
-    'chmod', 'chown', 'chgrp',
-    'kill', 'pkill', 'killall',
-    'shutdown', 'reboot', 'halt', 'poweroff',
-    'mkfs', 'fdisk', 'parted',
-    'dd ',
-    'iptables', 'firewall',
-    'useradd', 'userdel', 'usermod',
-    'groupadd', 'groupdel',
-    '>>', 'tee',
-    'wget', 'curl -o', 'curl -O',
-    'apt install', 'yum install', 'dnf install',
-    'systemctl stop', 'systemctl start', 'systemctl restart',
-    'service stop', 'service start', 'service restart',
-]
-READ_ONLY_COMMAND_HINTS = [
-    'df', 'du', 'free', 'ps', 'top', 'htop', 'iostat', 'vmstat', 'sar', 'ss', 'netstat',
-    'journalctl', 'tail', 'cat', 'uptime', 'hostname', 'lsblk', 'mount', 'dmesg', 'sysctl',
-]
 
 ISSUE_CATEGORY_LABELS = {
     "performance": "性能问题",
@@ -168,22 +153,20 @@ def _keyword_assess_risk(tool_name: str, arguments: Dict[str, Any], permissions:
     keyword = _normalize_sql_keyword(sql)
 
     if command:
-        command_lower = command.lower()
-        for pattern in DANGEROUS_COMMAND_PATTERNS:
-            if pattern in command_lower:
-                destructive_patterns = {'rm ', 'rmdir', 'del ', 'delete', 'shutdown', 'reboot', 'halt', 'poweroff', 'mkfs', 'fdisk', 'parted', 'dd '}
-                level = 'destructive' if pattern in destructive_patterns else 'high'
-                return {
-                    'level': level,
-                    'requires_confirmation': False,
-                    'risk_reason': build_confirmation_reason(tool_name, arguments, level),
-                    'suppressible': level != 'destructive',
-                    'confirmation_key': 'os_destructive' if level == 'destructive' else 'os_write',
-                }
+        pattern = first_matching_command_pattern(command, DANGEROUS_COMMAND_PATTERNS)
+        if pattern:
+            level = 'destructive' if pattern in DESTRUCTIVE_COMMAND_PATTERNS else 'high'
+            return {
+                'level': level,
+                'requires_confirmation': False,
+                'risk_reason': build_confirmation_reason(tool_name, arguments, level),
+                'suppressible': level != 'destructive',
+                'confirmation_key': 'os_destructive' if level == 'destructive' else 'os_write',
+            }
 
         is_read_only_permission = 'execute_any_os_command' not in permissions
-        looks_read_only = any(command_lower.startswith(f'{hint} ') or command_lower == hint or f'| {hint}' in command_lower for hint in READ_ONLY_COMMAND_HINTS)
-        if is_read_only_permission or looks_read_only:
+        looks_read_only = looks_clearly_read_only_command(command)
+        if looks_read_only or is_read_only_permission:
             return {
                 'level': 'safe',
                 'requires_confirmation': False,
@@ -293,6 +276,11 @@ async def assess_tool_risk(tool_name: str, arguments: Dict[str, Any], permission
     """评估工具调用的风险等级。优先使用 LLM 判定，失败时 fallback 到关键词匹配。"""
     command = _get_command_arg(arguments)
     sql = str(arguments.get('sql') or '').strip()
+    keyword_risk = _keyword_assess_risk(tool_name, arguments, permissions)
+
+    # 对明显只读的命令优先采用本地规则，避免 LLM 将 cat/grep/head/wc 等诊断命令误判为高危。
+    if command and keyword_risk.get('level') == 'safe' and looks_clearly_read_only_command(command):
+        return keyword_risk
 
     # 有 client 且存在 sql/command 时，优先走 LLM 判定
     if client and (sql or command):
@@ -301,7 +289,7 @@ async def assess_tool_risk(tool_name: str, arguments: Dict[str, Any], permission
             return _build_risk_dict_from_llm(llm_result, tool_name, arguments)
         logger.info("LLM risk assessment unavailable, falling back to keyword matching")
 
-    return _keyword_assess_risk(tool_name, arguments, permissions)
+    return keyword_risk
 
 
 async def execute_skill_call(
@@ -385,6 +373,7 @@ async def run_conversation_with_skills(
     datasource_id: Optional[int] = None,
     model_id: Optional[int] = None,
     kb_ids: Optional[List[int]] = None,
+    knowledge_context: Optional[Dict[str, Any]] = None,
     db: Optional[Any] = None,
     user_id: Optional[int] = None,
     session_id: Optional[int] = None,
@@ -569,8 +558,18 @@ async def run_conversation_with_skills(
         )
         system_msg += f"\n\nThe user is currently working with datasource ID: {datasource_id}. Use this ID when calling tools unless they specify otherwise."
 
-    if kb_ids:
-        system_msg += f"\n\nKnowledge bases are enabled for this session (IDs: {kb_ids}). Use list_documents tool to browse available documentation, then read_document to fetch full content."
+    if knowledge_context and knowledge_context.get("knowledge_brief"):
+        system_msg += "\n\nAuto-selected knowledge brief for this diagnosis:"
+        for idx, item in enumerate(knowledge_context.get("knowledge_brief", [])[:5], start=1):
+            system_msg += (
+                f"\n{idx}. [{item.get('scope')}/{item.get('doc_kind')}] {item.get('title')}"
+                f"\n   summary: {item.get('summary') or '无摘要'}"
+                f"\n   reason: {item.get('reason') or '匹配当前上下文'}"
+                f"\n   document_id: {item.get('document_id')}"
+            )
+        system_msg += "\nUse read_document to open one of the recommended documents when you need detailed steps or commands. Prefer these recommended documents over browsing the full directory."
+    elif kb_ids:
+        system_msg += f"\n\nLegacy knowledge base IDs are present ({kb_ids}), but diagnosis should rely on auto-selected documents. Use list_documents only if you truly need to browse beyond the recommended set."
 
     if intent == "diagnostic" and datasource_id and db:
         diagnostic_brief = await build_diagnostic_brief(
@@ -647,6 +646,7 @@ async def run_conversation_with_skills(
     full_messages = [{"role": "system", "content": system_msg}] + messages
     emitted_plan = False
     emitted_kb_hint = False
+    emitted_kb_recommendations = False
 
     for round_num in range(MAX_TOOL_ROUNDS):
         try:
@@ -677,7 +677,18 @@ async def run_conversation_with_skills(
                                 "issue_category_label": ISSUE_CATEGORY_LABELS.get(issue_category or "general", "综合诊断"),
                                 "focus_areas": (diagnostic_brief or {}).get("focus_areas", []),
                             }
-                        if kb_ids and not emitted_kb_hint and round_num == 0:
+                        if knowledge_context and knowledge_context.get("knowledge_brief") and not emitted_kb_recommendations and round_num == 0:
+                            emitted_kb_recommendations = True
+                            for item in knowledge_context.get("knowledge_brief", [])[:5]:
+                                yield {
+                                    "type": "kb_document_selected",
+                                    "title": item.get("title"),
+                                    "document_id": item.get("document_id"),
+                                    "reason": item.get("reason"),
+                                    "document_kind": item.get("doc_kind"),
+                                    "scope": item.get("scope"),
+                                }
+                        elif kb_ids and not emitted_kb_hint and round_num == 0:
                             emitted_kb_hint = True
                             yield {
                                 "type": "kb_document_selected",

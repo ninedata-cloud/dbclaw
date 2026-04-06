@@ -159,30 +159,34 @@ code: |
           if existing:
               return {"success": False, "error": f"Skill '{skill_id}' already exists"}
           
-          # Build skill dict for validation
-          skill_dict = {
-              "id": skill_id,
-              "name": params['name'],
-              "version": params.get('version', '1.0.0'),
-              "category": params.get('category', 'custom'),
-              "description": params.get('description', ''),
-              "tags": params.get('tags', []),
-              "parameters": params.get('parameters', []),
-              "permissions": params.get('permissions', []),
-              "code": params['code']
-          }
-          
-          if params.get('timeout'):
-              skill_dict['timeout'] = params['timeout']
-          
           # Validate skill definition
-          validator = SkillValidator()
-          validation_result = validator.validate(skill_dict)
-          
-          if not validation_result.is_valid:
+          from backend.skills.schema import SkillDefinition, SkillParameter
+          try:
+              skill_def = SkillDefinition(
+                  id=skill_id,
+                  name=params['name'],
+                  version=params.get('version', '1.0.0'),
+                  author='custom',
+                  category=params.get('category', 'custom'),
+                  description=params.get('description', ''),
+                  tags=params.get('tags', []),
+                  parameters=[SkillParameter(**p) for p in params.get('parameters', [])],
+                  dependencies=[],
+                  permissions=params.get('permissions', []),
+                  timeout=params.get('timeout'),
+                  code=params['code'],
+              )
+          except Exception as e:
               return {
                   "success": False,
-                  "error": f"Validation failed: {', '.join(validation_result.errors)}"
+                  "error": f"Validation failed: {str(e)}"
+              }
+
+          is_valid, validation_errors = SkillValidator.validate_code(skill_def.code)
+          if not is_valid:
+              return {
+                  "success": False,
+                  "error": f"Validation failed: {', '.join(validation_errors)}"
               }
           
           # Create skill (is_builtin=False for custom skills)

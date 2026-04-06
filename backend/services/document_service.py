@@ -63,6 +63,10 @@ async def list_documents_for_ai(db: AsyncSession, db_type: Optional[str] = None)
             "summary": row.DocDocument.summary or "",
             "category_name": row.cat_name,
             "db_type": row.cat_db_type,
+            "scope": row.DocDocument.scope or "builtin",
+            "doc_kind": row.DocDocument.doc_kind or "reference",
+            "issue_categories": row.DocDocument.issue_categories or [],
+            "priority": row.DocDocument.priority or 0,
         }
         for row in result.all()
     ]
@@ -82,6 +86,16 @@ async def create_document(db: AsyncSession, data: DocDocumentCreate, user_id: in
         title=data.title,
         content=data.content,
         summary=summary,
+        scope=data.scope or "tenant",
+        doc_kind=data.doc_kind or "reference",
+        db_types=data.db_types,
+        issue_categories=data.issue_categories,
+        datasource_ids=data.datasource_ids,
+        host_ids=data.host_ids,
+        tags=data.tags,
+        priority=data.priority,
+        freshness_level=data.freshness_level or "stable",
+        enabled_in_diagnosis=data.enabled_in_diagnosis,
         sort_order=data.sort_order,
         created_by=user_id,
     )

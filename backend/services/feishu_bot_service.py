@@ -379,7 +379,7 @@ class FeishuBotService:
                 app_secret=app_secret,
             )
 
-        messages, effective_datasource_id, model_id, kb_ids, disabled_tools = await prepare_user_turn(
+        messages, effective_datasource_id, model_id, kb_ids, knowledge_context, disabled_tools = await prepare_user_turn(
             db,
             session_id=binding.session_id,
             user_id=None,
@@ -407,6 +407,7 @@ class FeishuBotService:
             datasource_id=effective_datasource_id,
             model_id=model_id,
             kb_ids=kb_ids,
+            knowledge_context=knowledge_context,
             disabled_tools=disabled_tools,
             pending_approvals=PENDING_APPROVALS,
             on_event=on_event,

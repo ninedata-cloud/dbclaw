@@ -22,25 +22,31 @@ permissions:
 code: |
   async def execute(context, params):
       datasource_id = params['datasource_id']
-      limit = params.get('limit', 20)
+      try:
+          limit = int(params.get('limit', 20))
+      except (TypeError, ValueError):
+          limit = 20
+      limit = max(1, min(limit, 200))
 
       query = f"""
-      SELECT
-          sql_id,
-          SUBSTR(sql_text, 1, 200) as sql_text,
-          executions,
-          ROUND(elapsed_time / 1000000, 2) as elapsed_seconds,
-          ROUND(cpu_time / 1000000, 2) as cpu_seconds,
-          ROUND(elapsed_time / executions / 1000000, 4) as avg_elapsed_seconds,
-          disk_reads,
-          buffer_gets,
-          rows_processed,
-          last_active_time,
-          parsing_schema_name
-      FROM v$sql
-      WHERE executions > 0
-      ORDER BY elapsed_time DESC
-      FETCH FIRST {limit} ROWS ONLY
+      SELECT * FROM (
+          SELECT
+              sql_id,
+              SUBSTR(sql_text, 1, 200) as sql_text,
+              executions,
+              ROUND(elapsed_time / 1000000, 2) as elapsed_seconds,
+              ROUND(cpu_time / 1000000, 2) as cpu_seconds,
+              ROUND(elapsed_time / executions / 1000000, 4) as avg_elapsed_seconds,
+              disk_reads,
+              buffer_gets,
+              rows_processed,
+              last_active_time,
+              parsing_schema_name
+          FROM v$sql
+          WHERE executions > 0
+          ORDER BY elapsed_time DESC
+      )
+      WHERE ROWNUM <= {limit}
       """
 
       result = await context.execute_query(query, datasource_id)

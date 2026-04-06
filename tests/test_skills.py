@@ -46,9 +46,18 @@ async def test_skill_loading():
     print("=" * 60)
 
     results = TestResults()
-    builtin_dir = Path(__file__).parent / "backend/skills/builtin"
+    builtin_dir = Path(__file__).parent.parent / "backend/skills/builtin"
 
-    for yaml_file in builtin_dir.glob("*.yaml"):
+    if not builtin_dir.exists():
+        results.record_fail("Builtin skill directory", f"Directory not found: {builtin_dir}")
+        return results.summary()
+
+    yaml_files = sorted(builtin_dir.glob("*.yaml"))
+    if not yaml_files:
+        results.record_fail("Builtin skill loading", "No builtin skill YAML files found")
+        return results.summary()
+
+    for yaml_file in yaml_files:
         try:
             yaml_content = yaml_file.read_text()
             skill_def = SkillLoader.load_from_yaml(yaml_content)

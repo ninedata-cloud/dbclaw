@@ -8,6 +8,7 @@ from backend.database import get_db
 from backend.models.user import User
 from backend.dependencies import get_current_user
 from backend.skills.registry import SkillRegistry
+from backend.skills.builtin_metadata import sort_skill_categories
 from backend.skills.executor import SkillExecutor
 from backend.skills.context import SkillContext
 from backend.skills.loader import SkillLoader
@@ -56,7 +57,7 @@ async def list_categories(
     result = await db.execute(
         select(Skill.category).distinct().where(Skill.category.isnot(None))
     )
-    categories = [row[0] for row in result.all()]
+    categories = sort_skill_categories(row[0] for row in result.all())
     return {"categories": categories}
 
 

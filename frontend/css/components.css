@@ -383,8 +383,9 @@
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
     min-width: 480px;
-    max-width: 640px;
-    max-height: 85vh;
+    width: min(640px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+    max-height: 90vh;
     display: flex;
     flex-direction: column;
 }
@@ -406,6 +407,7 @@
     padding: 24px;
     overflow-y: auto;
     flex: 1;
+    min-height: 0;
 }
 
 .modal-footer {
@@ -414,6 +416,22 @@
     gap: 8px;
     padding: 16px 24px;
     border-top: 1px solid var(--border-color);
+}
+
+@media (max-width: 720px) {
+    .modal-container {
+        min-width: 0;
+        width: calc(100vw - 16px);
+        max-width: calc(100vw - 16px);
+        max-height: 92vh;
+    }
+
+    .modal-header,
+    .modal-body,
+    .modal-footer {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
 }
 
 /* === Metric Card === */
@@ -512,4 +530,3 @@
 .status-dot.online { background: var(--accent-green); box-shadow: 0 0 6px rgba(63,185,80,0.5); }
 .status-dot.offline { background: var(--text-muted); }
 .status-dot.error { background: var(--accent-red); box-shadow: 0 0 6px rgba(248,81,73,0.5); }
-

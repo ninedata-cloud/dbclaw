@@ -16,6 +16,7 @@ from backend.models.report import Report
 from backend.models.soft_delete import alive_filter, get_alive_by_id
 from backend.agent.conversation_skills import run_conversation_with_skills
 from backend.agent.prompts import DIAGNOSTIC_PROMPT, REPORT_GENERATION_PROMPT
+from backend.services.knowledge_router import build_knowledge_context
 from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
@@ -109,12 +110,19 @@ async def generate_ai_report(
         ai_analysis_parts = []
         collected_data = {}
 
+        knowledge_context = await build_knowledge_context(
+            db,
+            datasource_id=datasource_id,
+            user_message=initial_message,
+        )
+
         # Stream AI conversation
         async for event in run_conversation_with_skills(
             messages=messages,
             datasource_id=datasource_id,
             model_id=model_id,
             kb_ids=kb_ids,
+            knowledge_context=knowledge_context,
             db=db,
             user_id=user_id,
             session_id=None
@@ -312,6 +320,7 @@ async def generate_ai_report(
             ai_analysis=full_report_markdown,
             ai_model_id=model_id,
             kb_ids=kb_ids,
+            knowledge_sources=(knowledge_context or {}).get("recommended_documents", [])[:10],
             generation_method="ai",
             error_message=final_error,
         )
@@ -508,4 +517,3 @@ def _markdown_to_html(
 """
 
     return html
-

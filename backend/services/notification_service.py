@@ -29,6 +29,13 @@ class NotificationService:
     """Notification dispatch service"""
 
     @staticmethod
+    def _get_recovery_metric_value(alert: AlertMessage) -> Optional[float]:
+        """Return the metric value captured at recovery time."""
+        if alert.resolved_value is not None:
+            return alert.resolved_value
+        return alert.metric_value
+
+    @staticmethod
     async def check_subscription_match(
         alert: AlertMessage,
         subscription: AlertSubscription
@@ -412,6 +419,10 @@ class NotificationService:
 """
 
             resolved_at = alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else '未知'
+            recovery_metric_text = ""
+            recovery_value = NotificationService._get_recovery_metric_value(alert)
+            if alert.metric_name and recovery_value is not None:
+                recovery_metric_text = f"恢复后值：{alert.metric_name} = {recovery_value:.2f}\n"
             body = f"""
 告警已恢复：
 --------------
@@ -421,7 +432,7 @@ class NotificationService:
 {alert.content}
 
 告警时间：{alert.created_at.strftime('%Y-%m-%d %H:%M:%S')}
-恢复时间：{resolved_at}
+{recovery_metric_text}恢复时间：{resolved_at}
 """
             msg.attach(MIMEText(body, 'plain'))
             if smtp_use_tls:
@@ -558,9 +569,9 @@ class NotificationService:
         content_lines = [f"**告警标题：** {alert.title}"]
         content_lines.append(f"**严重程度：** {severity_label}")
         content_lines.append(f"**告警类型：** {alert_type_label}")
-        if alert.metric_name and alert.metric_value is not None:
-            recovery_val = alert.resolved_value if alert.resolved_value is not None else alert.metric_value
-            content_lines.append(f"**恢复时指标：** {alert.metric_name} = {recovery_val:.2f}")
+        recovery_val = NotificationService._get_recovery_metric_value(alert)
+        if alert.metric_name and recovery_val is not None:
+            content_lines.append(f"**恢复后值：** {alert.metric_name} = {recovery_val:.2f}")
         if alert.threshold_value is not None:
             content_lines.append(f"**阈值：** {alert.threshold_value:.2f}")
         content_lines.append(f"**告警时间：** {alert.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -625,6 +636,8 @@ class NotificationService:
                         "content": alert.content,
                         "metric_name": alert.metric_name,
                         "metric_value": alert.metric_value,
+                        "resolved_value": alert.resolved_value,
+                        "recovery_value": NotificationService._get_recovery_metric_value(alert),
                         "threshold_value": alert.threshold_value,
                         "status": "resolved",
                         "resolved_at": alert.resolved_at.isoformat() if alert.resolved_at else None,
@@ -827,9 +840,9 @@ class NotificationService:
             lines.append(f'**数据库：** {datasource.name} ({datasource.db_type.upper()}) {datasource.host}:{datasource.port}')
         lines.append(f'**严重程度：** {severity_label}')
         lines.append(f'**告警类型：** {alert_type_label}')
-        if alert.metric_name and alert.metric_value is not None:
-            recovery_val = alert.resolved_value if alert.resolved_value is not None else alert.metric_value
-            lines.append(f'**恢复时指标：** {alert.metric_name} = {recovery_val:.2f}')
+        recovery_val = NotificationService._get_recovery_metric_value(alert)
+        if alert.metric_name and recovery_val is not None:
+            lines.append(f'**恢复后值：** {alert.metric_name} = {recovery_val:.2f}')
         if alert.threshold_value is not None:
             lines.append(f'**阈值：** {alert.threshold_value:.2f}')
         lines.append(f'**告警时间：** {alert.created_at.strftime("%Y-%m-%d %H:%M:%S")}')

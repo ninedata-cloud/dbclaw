@@ -34,6 +34,16 @@ class DocDocumentCreate(BaseModel):
     content: str
     summary: Optional[str] = None
     category_id: int
+    scope: Optional[str] = None
+    doc_kind: Optional[str] = None
+    db_types: Optional[List[str]] = None
+    issue_categories: Optional[List[str]] = None
+    datasource_ids: Optional[List[int]] = None
+    host_ids: Optional[List[int]] = None
+    tags: Optional[List[str]] = None
+    priority: int = 0
+    freshness_level: Optional[str] = None
+    enabled_in_diagnosis: bool = True
     sort_order: int = 0
 
 
@@ -42,6 +52,16 @@ class DocDocumentUpdate(BaseModel):
     content: Optional[str] = None
     summary: Optional[str] = None
     category_id: Optional[int] = None
+    scope: Optional[str] = None
+    doc_kind: Optional[str] = None
+    db_types: Optional[List[str]] = None
+    issue_categories: Optional[List[str]] = None
+    datasource_ids: Optional[List[int]] = None
+    host_ids: Optional[List[int]] = None
+    tags: Optional[List[str]] = None
+    priority: Optional[int] = None
+    freshness_level: Optional[str] = None
+    enabled_in_diagnosis: Optional[bool] = None
     sort_order: Optional[int] = None
     is_active: Optional[bool] = None
 
@@ -54,6 +74,16 @@ class DocDocumentListItem(BaseModel):
     category_id: int
     is_builtin: bool
     is_active: bool
+    scope: Optional[str] = None
+    doc_kind: Optional[str] = None
+    db_types: Optional[List[str]] = None
+    issue_categories: Optional[List[str]] = None
+    datasource_ids: Optional[List[int]] = None
+    host_ids: Optional[List[int]] = None
+    tags: Optional[List[str]] = None
+    priority: int = 0
+    freshness_level: Optional[str] = None
+    enabled_in_diagnosis: bool = True
     sort_order: int
     created_at: datetime
     updated_at: datetime

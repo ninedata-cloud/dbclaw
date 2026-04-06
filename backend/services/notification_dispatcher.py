@@ -8,7 +8,11 @@ import logging
 from typing import List
 
 from backend.database import async_session
-from backend.services.alert_service import AlertService
+from backend.services.alert_service import (
+    AlertService,
+    extract_connection_failure_detail,
+    is_connection_status_alert,
+)
 from backend.services.notification_service import NotificationService
 from backend.services.aggregation_engine import AggregationEngine
 from backend.models.soft_delete import alive_filter, get_alive_by_id
@@ -22,6 +26,134 @@ def _get_required_integration_params(integration) -> list[str]:
     schema = integration.config_schema or {}
     required = schema.get("required") or []
     return [key for key in required if isinstance(key, str) and key.strip()]
+
+
+def _alert_type_display(alert_type: str | None) -> str:
+    return {
+        "threshold_violation": "超过阈值",
+        "custom_expression": "自定义表达式",
+        "system_error": "系统错误",
+    }.get(alert_type or "", alert_type or "未知")
+
+
+def _severity_display(severity: str | None) -> str:
+    return {
+        "critical": "严重",
+        "high": "高",
+        "medium": "中",
+        "low": "低",
+    }.get(severity or "", severity or "未知")
+
+
+def _is_connection_failure_alert(alert) -> bool:
+    return is_connection_status_alert(getattr(alert, "alert_type", None), getattr(alert, "metric_name", None))
+
+
+def _build_active_alert_payload(alert, datasource, diagnosis_payload: dict[str, str | None], alert_url: str | None, report_url: str | None) -> dict:
+    datasource_name = datasource.name if datasource else "未知数据源"
+    timestamp = alert.created_at.strftime('%Y-%m-%d %H:%M:%S') if alert.created_at else now().strftime('%Y-%m-%d %H:%M:%S')
+
+    payload = {
+        "title": f"【{alert.severity.upper()}】{datasource_name} 告警",
+        "content": alert.content,
+        "severity": alert.severity,
+        "datasource_name": datasource_name,
+        "alert_id": alert.id,
+        "alert_url": alert_url,
+        "report_url": report_url,
+        "timestamp": timestamp,
+        "created_at": timestamp if alert.created_at else None,
+        "resolved_at": None,
+        "ai_diagnosis_summary": diagnosis_payload.get("summary"),
+        "root_cause": diagnosis_payload.get("root_cause"),
+        "recommended_actions": diagnosis_payload.get("recommended_actions"),
+        "diagnosis_status": diagnosis_payload.get("status"),
+        "status": "active",
+        "alert_type": alert.alert_type,
+        "metric_name": alert.metric_name,
+        "metric_value": alert.metric_value,
+        "resolved_value": None,
+        "threshold_value": alert.threshold_value,
+        "trigger_reason": alert.trigger_reason,
+    }
+
+    if _is_connection_failure_alert(alert):
+        detail = extract_connection_failure_detail(alert.trigger_reason)
+        content_lines = ["状态：数据库连接失败"]
+        if detail:
+            content_lines.append(f"错误详情：{detail}")
+        payload.update({
+            "title": f"【{alert.severity.upper()}】{datasource_name} 数据库连接失败",
+            "content": "\n".join(content_lines),
+            "alert_type": "连接失败",
+            "metric_name": None,
+            "metric_value": None,
+            "threshold_value": None,
+            "trigger_reason": detail or "数据库连接失败",
+        })
+
+    return payload
+
+
+def _build_recovery_alert_payload(alert, datasource) -> dict:
+    datasource_name = datasource.name if datasource else "未知数据源"
+    created_at_str = alert.created_at.strftime('%Y-%m-%d %H:%M:%S') if alert.created_at else None
+    resolved_at_str = alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else now().strftime('%Y-%m-%d %H:%M:%S')
+
+    recovery_metric_line = ""
+    recovery_value = None
+    if alert.metric_name and alert.resolved_value is not None:
+        recovery_value = alert.resolved_value
+        recovery_metric_line = f"\n恢复后值：{alert.metric_name} = {alert.resolved_value:.2f}"
+    elif alert.metric_name and alert.metric_value is not None:
+        recovery_value = alert.metric_value
+        recovery_metric_line = f"\n恢复后值：{alert.metric_name} = {alert.metric_value:.2f}"
+
+    payload = {
+        "title": f"【已恢复】{datasource_name} 告警已恢复",
+        "content": (
+            f"告警类型：{_alert_type_display(alert.alert_type)}\n"
+            f"严重程度：{_severity_display(alert.severity)}\n\n"
+            f"{alert.content}{recovery_metric_line}\n\n"
+            f"告警时间：{created_at_str or '未知'}\n"
+            f"恢复时间：{resolved_at_str}"
+        ),
+        "severity": alert.severity,
+        "alert_type": alert.alert_type,
+        "datasource_name": datasource_name,
+        "alert_id": alert.id,
+        "timestamp": resolved_at_str,
+        "created_at": created_at_str,
+        "resolved_at": resolved_at_str,
+        "status": "resolved",
+        "metric_name": alert.metric_name,
+        "metric_value": alert.metric_value,
+        "resolved_value": alert.resolved_value,
+        "recovery_value": recovery_value,
+        "threshold_value": alert.threshold_value,
+        "trigger_reason": alert.trigger_reason,
+    }
+
+    if _is_connection_failure_alert(alert):
+        detail = extract_connection_failure_detail(alert.trigger_reason)
+        content_lines = ["状态：数据库连接已恢复"]
+        if detail:
+            content_lines.append(f"上一条错误：{detail}")
+        content_lines.append(f"告警时间：{created_at_str or '未知'}")
+        content_lines.append(f"恢复时间：{resolved_at_str}")
+        payload.update({
+            "title": f"【已恢复】{datasource_name} 数据库连接已恢复",
+            "content": "\n".join(content_lines),
+            "alert_type": "连接恢复",
+            "metric_name": None,
+            "metric_value": None,
+            "resolved_value": None,
+            "recovery_value": None,
+            "threshold_value": None,
+            "trigger_reason": detail or "数据库连接已恢复",
+        })
+
+    return payload
 
 
 async def start_notification_dispatcher():
@@ -186,6 +318,7 @@ async def _send_via_integrations(db, alert, subscription, diagnosis_result=None)
     from backend.models.datasource import Datasource
     from backend.services.integration_executor import IntegrationExecutor
     from backend.services.public_share_service import PublicShareService
+    from backend.services.alert_service import normalize_alert_diagnosis_fields
     from sqlalchemy import select
     from datetime import datetime
 
@@ -251,25 +384,27 @@ async def _send_via_integrations(db, alert, subscription, diagnosis_result=None)
                     recommended_actions = event_obj.recommended_actions
                     diagnosis_status = event_obj.diagnosis_status
 
-        payload = {
-            "title": f"【{alert.severity.upper()}】{datasource.name if datasource else '未知数据源'} 告警",
-            "content": alert.content,
-            "severity": alert.severity,
-            "datasource_name": datasource.name if datasource else "未知数据源",
-            "alert_id": alert.id,
-            "alert_url": alert_url,
-            "report_url": report_url,
-            "timestamp": alert.created_at.strftime('%Y-%m-%d %H:%M:%S') if alert.created_at else now().strftime('%Y-%m-%d %H:%M:%S'),
-            "ai_diagnosis_summary": ai_diagnosis_summary,
-            "root_cause": root_cause,
-            "recommended_actions": recommended_actions,
-            "diagnosis_status": diagnosis_status,
-            "alert_type": alert.alert_type,
-            "metric_name": alert.metric_name,
-            "metric_value": alert.metric_value,
-            "threshold_value": alert.threshold_value,
-            "trigger_reason": alert.trigger_reason,
-        }
+        normalized_diagnosis = normalize_alert_diagnosis_fields(
+            root_cause=root_cause,
+            recommended_actions=recommended_actions,
+            summary=ai_diagnosis_summary,
+        )
+        ai_diagnosis_summary = normalized_diagnosis["summary"]
+        root_cause = normalized_diagnosis["root_cause"]
+        recommended_actions = normalized_diagnosis["recommended_actions"]
+
+        payload = _build_active_alert_payload(
+            alert,
+            datasource,
+            {
+                "summary": ai_diagnosis_summary,
+                "root_cause": root_cause,
+                "recommended_actions": recommended_actions,
+                "status": diagnosis_status,
+            },
+            alert_url,
+            report_url,
+        )
 
         params = target.get("params") or {}
         target_id = target.get("target_id")
@@ -433,37 +568,7 @@ async def _send_recovery_via_integrations(db, alert, subscription):
             logger.warning(f"Integration {integration_id} 不存在或已禁用")
             continue
 
-        resolved_at_str = alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else now().strftime('%Y-%m-%d %H:%M:%S')
-        recovery_metric_line = ""
-        if alert.metric_name and alert.resolved_value is not None:
-            recovery_metric_line = f"\n恢复时指标：{alert.metric_name} = {alert.resolved_value:.2f}"
-        elif alert.metric_name and alert.metric_value is not None:
-            recovery_metric_line = f"\n恢复时指标：{alert.metric_name} = {alert.metric_value:.2f}"
-
-        # Map alert_type and severity to Chinese labels for display
-        alert_type_labels = {
-            'threshold_violation': '超过阈值',
-            'custom_expression': '自定义表达式',
-            'system_error': '系统错误'
-        }
-        severity_labels = {'critical': '严重', 'high': '高', 'medium': '中', 'low': '低'}
-        alert_type_display = alert_type_labels.get(alert.alert_type, alert.alert_type)
-        severity_display = severity_labels.get(alert.severity, alert.severity)
-
-        payload = {
-            "title": f"【已恢复】{datasource.name if datasource else '未知数据源'} 告警已恢复",
-            "content": f"告警类型：{alert_type_display}\n严重程度：{severity_display}\n\n{alert.content}{recovery_metric_line}\n\n告警时间：{alert.created_at.strftime('%Y-%m-%d %H:%M:%S') if alert.created_at else '未知'}\n恢复时间：{resolved_at_str}",
-            "severity": alert.severity,
-            "alert_type": alert.alert_type,
-            "datasource_name": datasource.name if datasource else "未知数据源",
-            "alert_id": alert.id,
-            "timestamp": resolved_at_str,
-            "status": "resolved",
-            "metric_name": alert.metric_name,
-            "metric_value": alert.metric_value,
-            "threshold_value": alert.threshold_value,
-            "trigger_reason": alert.trigger_reason,
-        }
+        payload = _build_recovery_alert_payload(alert, datasource)
 
         params = target.get("params") or {}
         target_id = target.get("target_id")

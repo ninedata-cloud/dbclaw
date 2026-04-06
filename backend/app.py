@@ -153,6 +153,24 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Alert AI diagnosis summary migration: {e}")
 
+    try:
+        from backend.migrations.add_alert_event_diagnosis_fields import migrate as migrate_alert_event_diagnosis_fields
+        await migrate_alert_event_diagnosis_fields()
+    except Exception as e:
+        logger.warning(f"Alert event diagnosis fields migration: {e}")
+
+    try:
+        from backend.migrations.add_knowledge_routing_fields import migrate as migrate_knowledge_routing_fields
+        await migrate_knowledge_routing_fields()
+    except Exception as e:
+        logger.warning(f"Knowledge routing migration: {e}")
+
+    try:
+        from backend.migrations.add_alert_event_diagnosis_timestamps import migrate as migrate_alert_event_diagnosis_timestamps
+        await migrate_alert_event_diagnosis_timestamps()
+    except Exception as e:
+        logger.warning(f"Alert event diagnosis timestamps migration: {e}")
+
 
     try:
         from backend.migrations.migrate_alert_channels_to_subscription_targets import migrate as migrate_alert_channels_to_subscription_targets

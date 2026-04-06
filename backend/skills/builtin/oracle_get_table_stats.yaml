@@ -20,22 +20,24 @@ code: |
       datasource_id = params['datasource_id']
 
       query = """
-      SELECT
-          owner,
-          table_name,
-          num_rows,
-          blocks,
-          empty_blocks,
-          avg_row_len,
-          ROUND(blocks * 8192 / 1024 / 1024, 2) as size_mb,
-          last_analyzed,
-          partitioned,
-          compression,
-          degree as parallel_degree
-      FROM dba_tables
-      WHERE owner NOT IN ('SYS', 'SYSTEM', 'OUTLN', 'DBSNMP', 'XDB', 'WMSYS', 'CTXSYS', 'MDSYS', 'OLAPSYS')
-      ORDER BY num_rows DESC NULLS LAST
-      FETCH FIRST 100 ROWS ONLY
+      SELECT * FROM (
+          SELECT
+              owner,
+              table_name,
+              num_rows,
+              blocks,
+              empty_blocks,
+              avg_row_len,
+              ROUND(blocks * 8192 / 1024 / 1024, 2) as size_mb,
+              last_analyzed,
+              partitioned,
+              compression,
+              degree as parallel_degree
+          FROM dba_tables
+          WHERE owner NOT IN ('SYS', 'SYSTEM', 'OUTLN', 'DBSNMP', 'XDB', 'WMSYS', 'CTXSYS', 'MDSYS', 'OLAPSYS')
+          ORDER BY num_rows DESC NULLS LAST
+      )
+      WHERE ROWNUM <= 100
       """
 
       result = await context.execute_query(query, datasource_id)

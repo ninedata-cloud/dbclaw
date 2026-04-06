@@ -1,11 +1,19 @@
 /* Modal component */
 const Modal = {
-    show({ title, content, buttons, footer, size = 'medium', width }) {
+    show({ title, content, buttons, footer, size = 'medium', width, maxHeight, containerClassName = '', bodyClassName = '' }) {
         const overlay = DOM.$('#modal-overlay');
         const container = DOM.$('#modal-container');
 
-        const sizes = { small: '400px', medium: '600px', large: '800px' };
-        container.style.maxWidth = width || sizes[size] || sizes.medium;
+        const sizes = { small: '420px', medium: '640px', large: '880px', xlarge: '1180px' };
+        const resolvedWidth = width || sizes[size] || sizes.medium;
+
+        container.className = 'modal-container';
+        if (containerClassName) {
+            containerClassName.split(/\s+/).filter(Boolean).forEach(cls => container.classList.add(cls));
+        }
+        container.style.width = resolvedWidth;
+        container.style.maxWidth = 'calc(100vw - 24px)';
+        container.style.maxHeight = maxHeight || '90vh';
 
         container.innerHTML = '';
         const header = DOM.el('div', { className: 'modal-header' },
@@ -18,7 +26,11 @@ const Modal = {
         );
         container.appendChild(header);
 
-        const body = DOM.el('div', { className: 'modal-body' });
+        const bodyClasses = ['modal-body'];
+        if (bodyClassName) {
+            bodyClassName.split(/\s+/).filter(Boolean).forEach(cls => bodyClasses.push(cls));
+        }
+        const body = DOM.el('div', { className: bodyClasses.join(' ') });
         if (typeof content === 'string') body.innerHTML = content;
         else if (content instanceof Node) body.appendChild(content);
         container.appendChild(body);

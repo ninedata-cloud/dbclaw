@@ -23,6 +23,7 @@ class Report(SoftDeleteMixin, Base):
     ai_analysis = Column(Text, nullable=True)  # Full AI conversation text
     ai_model_id = Column(Integer, nullable=True)  # Which AI model was used
     kb_ids = Column(JSON, nullable=True)  # Knowledge bases used during analysis
+    knowledge_sources = Column(JSON, nullable=True)
     generation_method = Column(String(20), default="rule-based")  # "ai" or "rule-based"
     error_message = Column(Text, nullable=True)  # Error details if generation failed
 

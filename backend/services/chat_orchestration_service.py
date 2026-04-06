@@ -9,10 +9,12 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agent.conversation_skills import execute_skill_call, run_conversation_with_skills
+from backend.agent.intent_detector import analyze_query_intent
 from backend.models.diagnosis_conclusion import DiagnosisConclusion
 from backend.models.diagnosis_event import DiagnosisEvent
 from backend.models.diagnostic_session import ChatMessage, DiagnosticSession
 from backend.models.soft_delete import alive_filter, alive_select
+from backend.services.knowledge_router import build_knowledge_context
 
 logger = logging.getLogger(__name__)
 
@@ -241,6 +243,7 @@ async def _store_approval_request(
     datasource_id: int | None,
     model_id: int | None,
     kb_ids,
+    knowledge_context,
     disabled_tools,
     user_id: int | None,
 ) -> None:
@@ -253,6 +256,7 @@ async def _store_approval_request(
         "datasource_id": datasource_id,
         "model_id": model_id,
         "kb_ids": kb_ids,
+        "knowledge_context": knowledge_context,
         "disabled_tools": disabled_tools,
         "user_id": user_id,
         "risk_level": event.get("risk_level", "high"),
@@ -331,6 +335,7 @@ async def _load_pending_approval_from_db(
         "datasource_id": session.datasource_id if session else None,
         "model_id": session.ai_model_id if session else None,
         "kb_ids": session.kb_ids if session else None,
+        "knowledge_context": session.knowledge_snapshot if session else None,
         "disabled_tools": session.disabled_tools if session else None,
         "user_id": user_id,
         "risk_level": data.get("risk_level", "high"),
@@ -443,6 +448,9 @@ async def _upsert_diagnosis_conclusion(
             knowledge_refs.append({
                 "document_id": payload.get("document_id"),
                 "title": payload.get("title") or payload.get("document_title") or "未命名文档",
+                "reason": payload.get("reason"),
+                "scope": payload.get("scope"),
+                "document_kind": payload.get("document_kind"),
             })
 
     result = await db.execute(
@@ -553,6 +561,9 @@ async def get_session_insights(
             knowledge_refs.append({
                 "document_id": payload.get("document_id"),
                 "title": payload.get("title") or payload.get("document_title"),
+                "reason": payload.get("reason"),
+                "scope": payload.get("scope"),
+                "document_kind": payload.get("document_kind"),
             })
 
     seen_refs: set[tuple[Any, Any]] = set()
@@ -604,6 +615,7 @@ async def process_stream_events(
     datasource_id: int | None,
     model_id: int | None,
     kb_ids,
+    knowledge_context,
     disabled_tools,
     pending_approvals: PendingApprovalsStore,
     on_event: EventCallback = None,
@@ -624,6 +636,7 @@ async def process_stream_events(
                 datasource_id,
                 model_id,
                 kb_ids,
+                knowledge_context,
                 db,
                 user_id=user_id,
                 session_id=session_id,
@@ -678,6 +691,7 @@ async def process_stream_events(
                         datasource_id,
                         model_id,
                         kb_ids,
+                        knowledge_context,
                         disabled_tools,
                         user_id,
                     )
@@ -773,10 +787,11 @@ async def prepare_user_turn(
     attachments: Optional[list[dict[str, Any]]] = None,
     payload_datasource_id: int | None = None,
     model_id: int | None = None,
-) -> tuple[list[dict[str, Any]], int | None, int | None, Any, Any]:
+) -> tuple[list[dict[str, Any]], int | None, int | None, Any, Any, Any]:
     attachments = attachments or []
     effective_datasource_id = payload_datasource_id
     kb_ids = None
+    knowledge_context = None
     disabled_tools = None
 
     msg = ChatMessage(
@@ -812,6 +827,14 @@ async def prepare_user_turn(
             session.ai_model_id = model_id
         session.updated_at = datetime.utcnow()
         kb_ids = session.kb_ids
+        intent_analysis = analyze_query_intent(user_message or "")
+        knowledge_context = await build_knowledge_context(
+            db,
+            datasource_id=effective_datasource_id,
+            user_message=user_message or "",
+            issue_category=intent_analysis.issue_category,
+        )
+        session.knowledge_snapshot = knowledge_context
         disabled_tools = session.disabled_tools
 
     await db.commit()
@@ -823,7 +846,7 @@ async def prepare_user_turn(
     )
     all_msgs = msgs_result.scalars().all()
     messages = await rebuild_llm_messages(all_msgs)
-    return messages, effective_datasource_id, model_id, kb_ids, disabled_tools
+    return messages, effective_datasource_id, model_id, kb_ids, knowledge_context, disabled_tools
 
 
 async def continue_conversation_after_tool(
@@ -834,6 +857,7 @@ async def continue_conversation_after_tool(
     datasource_id: int | None,
     model_id: int | None,
     kb_ids,
+    knowledge_context,
     disabled_tools,
     pending_approvals: PendingApprovalsStore,
     on_event: EventCallback = None,
@@ -853,6 +877,7 @@ async def continue_conversation_after_tool(
         datasource_id=datasource_id,
         model_id=model_id,
         kb_ids=kb_ids,
+        knowledge_context=knowledge_context,
         disabled_tools=disabled_tools,
         pending_approvals=pending_approvals,
         on_event=on_event,
@@ -963,6 +988,7 @@ async def resolve_pending_approval(
         datasource_id=pending.get("datasource_id"),
         model_id=pending.get("model_id"),
         kb_ids=pending.get("kb_ids"),
+        knowledge_context=pending.get("knowledge_context"),
         disabled_tools=pending.get("disabled_tools"),
         pending_approvals=pending_approvals,
         on_event=on_event,

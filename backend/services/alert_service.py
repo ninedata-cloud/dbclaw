@@ -24,6 +24,282 @@ from backend.schemas.alert import (
 
 logger = logging.getLogger(__name__)
 
+SUMMARY_SECTION_KEYS = ["告警摘要", "诊断摘要", "摘要", "核心结论", "结论概述", "summary"]
+ROOT_CAUSE_SECTION_KEYS = ["根本原因", "root cause", "原因分析", "问题原因", "可能原因", "causes", "cause"]
+ACTION_SECTION_KEYS = ["处置建议", "修复建议", "建议动作", "建议", "操作建议", "修复步骤", "下一步", "actions", "action"]
+PROCESS_MARKERS = [
+    "我来分析",
+    "让我",
+    "现在开始",
+    "接下来",
+    "制定诊断计划",
+    "开始收集证据",
+    "获取更多",
+    "修正查询",
+    "继续分析",
+    "现在我已经",
+    "让我分析",
+    "让我获取",
+    "让我们",
+    "plan",
+    "planning",
+]
+CONNECTION_FAILURE_PREFIXES = [
+    "connection failed:",
+    "connection failed",
+    "数据库连接失败：",
+    "数据库连接失败:",
+    "数据库连接失败",
+]
+
+
+def _strip_markdown_text(text: str) -> str:
+    if not text:
+        return ""
+    cleaned = text
+    cleaned = re.sub(r"```[\s\S]*?```", " ", cleaned)
+    cleaned = re.sub(r"`([^`]*)`", r"\1", cleaned)
+    cleaned = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", cleaned)
+    cleaned = re.sub(r"[*_~>#]", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned.strip()
+
+
+def _normalize_line(line: str) -> str:
+    plain = _strip_markdown_text(line)
+    plain = re.sub(r"^[\-\*\u2022]+\s*", "", plain)
+    plain = re.sub(r"^\d+[\.\)、]\s*", "", plain)
+    plain = re.sub(r"^[（(]?\d+[）)]\s*", "", plain)
+    return plain.strip(" ：:;；")
+
+
+def _looks_like_process_line(line: str) -> bool:
+    plain = _normalize_line(line).lower()
+    if not plain:
+        return True
+    if plain.startswith(("步骤", "计划", "分析", "诊断")) and ("如下" in plain or "如下：" in plain):
+        return True
+    return any(marker in plain for marker in PROCESS_MARKERS)
+
+
+def _extract_sections(full_text: str) -> dict[str, str]:
+    sections: dict[str, str] = {}
+    if not full_text:
+        return sections
+
+    header_pattern = re.compile(r"^#{1,4}\s*(.+?)\s*$", re.MULTILINE)
+    parts = header_pattern.split(full_text)
+    if len(parts) <= 1:
+        return sections
+
+    for index in range(1, len(parts), 2):
+        header = parts[index].strip().lower()
+        content = parts[index + 1].strip() if index + 1 < len(parts) else ""
+        sections[header] = content
+    return sections
+
+
+def _find_section_content(sections: dict[str, str], keys: list[str]) -> Optional[str]:
+    for header, content in sections.items():
+        if any(key.lower() in header for key in keys):
+            return content
+    return None
+
+
+def _extract_keyword_block(full_text: str, keys: list[str]) -> Optional[str]:
+    for key in keys:
+        pattern = re.compile(
+            rf"{re.escape(key)}\s*[：:]\s*(.+?)(?=\n\s*\n|\n#{1,4}\s|\Z)",
+            re.DOTALL | re.IGNORECASE,
+        )
+        match = pattern.search(full_text)
+        if match:
+            return match.group(1).strip()
+    return None
+
+
+def _clean_section_text(text: Optional[str], *, max_lines: int, max_chars: int) -> Optional[str]:
+    if not text:
+        return None
+
+    lines: list[str] = []
+    seen: set[str] = set()
+    for raw_line in text.splitlines():
+        line = _normalize_line(raw_line)
+        if not line:
+            continue
+        if _looks_like_process_line(line):
+            continue
+        lowered = line.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        lines.append(line)
+        if len(lines) >= max_lines:
+            break
+
+    if not lines:
+        plain = _normalize_line(text)
+        if plain and not _looks_like_process_line(plain):
+            lines = [plain]
+
+    if not lines:
+        return None
+
+    joined = "；".join(lines)
+    joined = re.sub(r"[；;]{2,}", "；", joined).strip("；; ")
+    if len(joined) > max_chars:
+        joined = joined[:max_chars].rstrip("，,；;。.!？? ") + "..."
+    return joined or None
+
+
+def _extract_candidate_sentences(text: str) -> list[str]:
+    plain = _strip_markdown_text(text)
+    if not plain:
+        return []
+    parts = re.split(r"[。！？!?；;\n]+", plain)
+    return [part.strip(" ，,") for part in parts if part and part.strip(" ，,")]
+
+
+def _extract_root_cause_sentence(full_text: str) -> Optional[str]:
+    if not full_text:
+        return None
+
+    direct_patterns = [
+        r"根本原因(?:是|为|：|:)\s*(.+?)(?:。|；|!|！|\?|？|$)",
+        r"主要原因(?:是|为|：|:)\s*(.+?)(?:。|；|!|！|\?|？|$)",
+        r"核心原因(?:是|为|：|:)\s*(.+?)(?:。|；|!|！|\?|？|$)",
+        r"原因是\s*(.+?)(?:。|；|!|！|\?|？|$)",
+    ]
+    for pattern in direct_patterns:
+        match = re.search(pattern, full_text, re.IGNORECASE | re.DOTALL)
+        if match:
+            candidate = _clean_section_text(match.group(1), max_lines=1, max_chars=220)
+            if candidate:
+                return candidate
+
+    priority_keywords = ["根本原因", "原因是", "主要原因", "核心原因", "导致", "瓶颈", "竞争", "过载", "阻塞", "饱和", "异常"]
+    for sentence in _extract_candidate_sentences(full_text):
+        if _looks_like_process_line(sentence):
+            continue
+        if any(keyword in sentence for keyword in priority_keywords):
+            candidate = _clean_section_text(sentence, max_lines=1, max_chars=220)
+            if candidate:
+                return candidate
+
+    for sentence in _extract_candidate_sentences(full_text):
+        if _looks_like_process_line(sentence):
+            continue
+        candidate = _clean_section_text(sentence, max_lines=1, max_chars=220)
+        if candidate:
+            return candidate
+    return None
+
+
+def _extract_action_text(full_text: str) -> Optional[str]:
+    if not full_text:
+        return None
+
+    action_keywords = ["建议", "应", "需要", "可先", "优先", "排查", "执行", "优化", "调整", "检查"]
+    candidates: list[str] = []
+    for sentence in _extract_candidate_sentences(full_text):
+        if _looks_like_process_line(sentence):
+            continue
+        if any(keyword in sentence for keyword in action_keywords):
+            candidates.append(sentence)
+        if len(candidates) >= 3:
+            break
+
+    if not candidates:
+        return None
+    return _clean_section_text("\n".join(candidates), max_lines=3, max_chars=320)
+
+
+def _compact_summary_text(text: Optional[str], *, max_chars: int = 120) -> Optional[str]:
+    if not text:
+        return None
+    cleaned = _clean_section_text(text, max_lines=2, max_chars=max_chars)
+    if not cleaned:
+        return None
+    if len(cleaned) > max_chars:
+        cleaned = cleaned[:max_chars].rstrip("，,；;。.!？? ") + "..."
+    return cleaned
+
+
+def is_connection_status_alert(alert_type: Optional[str], metric_name: Optional[str]) -> bool:
+    return (alert_type or "") == "system_error" and (metric_name or "") == "connection_status"
+
+
+def extract_connection_failure_detail(trigger_reason: Optional[str]) -> Optional[str]:
+    reason = (trigger_reason or "").strip()
+    if not reason:
+        return None
+
+    lowered = reason.lower()
+    for prefix in CONNECTION_FAILURE_PREFIXES:
+        if lowered.startswith(prefix.lower()):
+            trimmed = reason[len(prefix):].strip(" ：:")
+            return trimmed or None
+    return reason.strip(" ：:") or None
+
+
+def build_alert_title_and_content(
+    *,
+    alert_type: str,
+    metric_name: Optional[str],
+    metric_value: Optional[float],
+    threshold_value: Optional[float],
+    trigger_reason: Optional[str],
+) -> tuple[str, str]:
+    if is_connection_status_alert(alert_type, metric_name):
+        detail = extract_connection_failure_detail(trigger_reason)
+        title = "数据库连接失败"
+        content_parts = ["状态：数据库连接失败"]
+        if detail:
+            content_parts.append(f"错误详情：{detail}")
+        return title, "\n".join(content_parts)
+
+    if alert_type == "threshold_violation" and metric_name:
+        title = f"{metric_name} 阈值告警"
+    else:
+        title = f"{alert_type.replace('_', ' ').title()}"
+
+    content_parts = []
+    if metric_name and metric_value is not None:
+        content_parts.append(f"指标：{metric_name} = {metric_value:.2f}")
+    if threshold_value is not None:
+        content_parts.append(f"阈值：{threshold_value:.2f}")
+    if trigger_reason:
+        content_parts.append(f"原因：{trigger_reason}")
+
+    content = "\n".join(content_parts) if content_parts else "告警已触发"
+    return title, content
+
+
+def normalize_alert_diagnosis_fields(
+    *,
+    root_cause: Optional[str],
+    recommended_actions: Optional[str],
+    summary: Optional[str],
+) -> dict[str, Optional[str]]:
+    source_text = summary or ""
+    extracted_root = _extract_root_cause_sentence(source_text) if source_text else None
+    extracted_actions = _extract_action_text(source_text) if source_text else None
+
+    final_root = _clean_section_text(root_cause or extracted_root, max_lines=3, max_chars=500)
+    final_actions = _clean_section_text(recommended_actions or extracted_actions, max_lines=5, max_chars=500)
+    final_summary = (
+        _compact_summary_text(final_root)
+        or _compact_summary_text(summary)
+        or _compact_summary_text(extracted_root)
+    )
+
+    return {
+        "root_cause": final_root,
+        "recommended_actions": final_actions,
+        "summary": final_summary,
+    }
+
 
 class AlertService:
     """Core alert management service"""
@@ -75,22 +351,13 @@ class AlertService:
         Returns:
             Created AlertMessage instance
         """
-        # Generate title based on alert type and metric
-        if alert_type == "threshold_violation" and metric_name:
-            title = f"{metric_name} 阈值告警"
-        else:
-            title = f"{alert_type.replace('_', ' ').title()}"
-
-        # Generate content
-        content_parts = []
-        if metric_name and metric_value is not None:
-            content_parts.append(f"指标：{metric_name} = {metric_value:.2f}")
-        if threshold_value is not None:
-            content_parts.append(f"阈值：{threshold_value:.2f}")
-        if trigger_reason:
-            content_parts.append(f"原因：{trigger_reason}")
-
-        content = "\n".join(content_parts) if content_parts else "告警已触发"
+        title, content = build_alert_title_and_content(
+            alert_type=alert_type,
+            metric_name=metric_name,
+            metric_value=metric_value,
+            threshold_value=threshold_value,
+            trigger_reason=trigger_reason,
+        )
 
         alert = AlertMessage(
             datasource_id=datasource_id,
@@ -473,7 +740,6 @@ class AlertService:
         from backend.models.diagnostic_session import DiagnosticSession
         from backend.models.datasource import Datasource
         from backend.models.soft_delete import alive_filter
-        from backend.database import async_session as db_session_factory
 
         # Get alert event
         result = await db.execute(select(AlertEvent).where(AlertEvent.id == alert_event_id))
@@ -485,21 +751,34 @@ class AlertService:
         # Skip if diagnosis already completed
         if event.diagnosis_status == "completed" and event.ai_diagnosis_summary:
             logger.info(f"Auto-diagnosis skipped for event {alert_event_id}: already completed")
-            return event.ai_diagnosis_summary
+            normalized = normalize_alert_diagnosis_fields(
+                root_cause=event.root_cause,
+                recommended_actions=event.recommended_actions,
+                summary=event.ai_diagnosis_summary,
+            )
+            return normalized["summary"]
 
-        # Dedup: check if another event for the same datasource+metric was diagnosed recently
+        # Dedup: reuse a recent same-type completed diagnosis if available.
         recent_diagnosis = await _find_recent_diagnosis(db, event)
         if recent_diagnosis:
             logger.info(
                 f"Auto-diagnosis: reusing recent diagnosis from event {recent_diagnosis.id} "
                 f"for alert event {alert_event_id}"
             )
-            event.ai_diagnosis_summary = recent_diagnosis.ai_diagnosis_summary
-            event.root_cause = recent_diagnosis.root_cause
-            event.recommended_actions = recent_diagnosis.recommended_actions
-            event.diagnosis_status = "completed"
-            await db.commit()
+            await _reuse_diagnosis_from_event(db, event, recent_diagnosis)
             return event.ai_diagnosis_summary
+
+        in_progress_diagnosis = await _find_in_progress_diagnosis(db, event)
+        if in_progress_diagnosis:
+            logger.info(
+                f"Auto-diagnosis skipped for event {alert_event_id}: "
+                f"event {in_progress_diagnosis.id} is already diagnosing "
+                f"(datasource={event.datasource_id}, type={event.alert_type})"
+            )
+            event.diagnosis_status = "pending"
+            event.diagnosis_source_event_id = in_progress_diagnosis.id
+            await db.commit()
+            return f"同类告警正在诊断中（事件 {in_progress_diagnosis.id}）..."
 
         # Get datasource
         result = await db.execute(select(Datasource).where(Datasource.id == event.datasource_id, alive_filter(Datasource)))
@@ -507,6 +786,12 @@ class AlertService:
         if not ds:
             logger.warning(f"Datasource {event.datasource_id} not found for auto-diagnosis")
             return None
+
+        event.diagnosis_status = "in_progress"
+        event.diagnosis_started_at = now()
+        event.diagnosis_completed_at = None
+        event.diagnosis_source_event_id = None
+        await db.commit()
 
         # Build diagnosis context
         severity_emoji = "🔴" if event.severity == "critical" else "🟠" if event.severity == "high" else "🟡"
@@ -518,13 +803,17 @@ class AlertService:
 首次时间：{event.event_start_time.isoformat() if event.event_start_time else '未知'}
 持续时间：{(now() - event.event_start_time).total_seconds() / 60:.0f} 分钟（截至目前）
 
-请分析此告警的根本原因并给出处置建议。请按以下格式输出（使用 Markdown）：
+这是告警通知场景，请只输出最终结论，不要输出“我来分析/让我/开始收集证据/制定计划”等过程描述。
+请分析此告警的根本原因并给出处置建议。请严格按以下格式输出（使用 Markdown）：
+
+## 告警摘要
+<用 1 句话直接说明核心根因，不超过 60 字>
 
 ## 根本原因
-<分析为什么会出现这个问题，可能的原因有哪些>
+- <直接描述告警核心根因，优先写已经证实的原因>
 
 ## 处置建议
-<具体的修复步骤，列出 1-5 条可操作的建议>
+- <列出 1-3 条可操作建议>
 
 """
 
@@ -571,6 +860,8 @@ async def _run_auto_diagnosis(session_id: int, alert_event_id: int, datasource_i
                         root_cause=root_cause,
                         recommended_actions=recommended_actions,
                         diagnosis_status="completed",
+                        diagnosis_completed_at=now(),
+                        diagnosis_source_event_id=None,
                     )
                 )
                 await db.commit()
@@ -579,6 +870,14 @@ async def _run_auto_diagnosis(session_id: int, alert_event_id: int, datasource_i
             logger.warning(f"Auto-diagnosis returned empty result for alert event {alert_event_id}")
     except Exception as e:
         logger.error(f"Auto-diagnosis failed for alert event {alert_event_id}: {e}", exc_info=True)
+        async with db_session_factory() as db:
+            from sqlalchemy import update
+            await db.execute(
+                update(AlertEvent)
+                .where(AlertEvent.id == alert_event_id)
+                .values(diagnosis_status="failed")
+            )
+            await db.commit()
 
 
 def _extract_diagnosis_parts(full_text: str) -> tuple[Optional[str], Optional[str], Optional[str]]:
@@ -591,105 +890,116 @@ def _extract_diagnosis_parts(full_text: str) -> tuple[Optional[str], Optional[st
     if not full_text:
         return None, None, None
 
-    root_cause = None
-    recommended_actions = None
+    sections = _extract_sections(full_text)
 
-    # Try markdown section headers first
-    sections = {}
+    summary_section = _find_section_content(sections, SUMMARY_SECTION_KEYS) or _extract_keyword_block(full_text, SUMMARY_SECTION_KEYS)
+    root_cause_section = _find_section_content(sections, ROOT_CAUSE_SECTION_KEYS) or _extract_keyword_block(full_text, ROOT_CAUSE_SECTION_KEYS)
+    action_section = _find_section_content(sections, ACTION_SECTION_KEYS) or _extract_keyword_block(full_text, ACTION_SECTION_KEYS)
 
-    # Split by markdown headers (## or ###)
-    header_pattern = re.compile(r'^#{1,3}\s*(.+?)\s*$', re.MULTILINE)
-    parts = header_pattern.split(full_text)
-    if len(parts) > 1:
-        # parts[0] is before first header, parts[1] is first header name, parts[2] is content, etc.
-        for i in range(1, len(parts), 2):
-            header = parts[i].strip().lower()
-            content = parts[i + 1].strip() if i + 1 < len(parts) else ""
-            sections[header] = content
-
-    # Normalize header keys for matching
-    root_cause_keys = ['根本原因', 'root cause', '原因分析', '问题原因', 'causes', 'cause']
-    action_keys = ['处置建议', 'recommendations', '建议', '修复建议', '操作建议', 'actions', 'action', '修复步骤', '下一步']
-
-    for header, content in sections.items():
-        if root_cause is None:
-            for key in root_cause_keys:
-                if key in header:
-                    root_cause = content.strip()
-                    break
-        if recommended_actions is None:
-            for key in action_keys:
-                if key in header:
-                    recommended_actions = content.strip()
-                    break
-
-    # Fallback: if no structured sections found, try keyword detection
-    if root_cause is None:
-        text_lower = full_text.lower()
-        # Try to find content after root cause keywords anywhere in text
-        for keyword in ['根本原因', '原因分析', '可能原因', '问题原因']:
-            pattern = re.compile(rf'{re.escape(keyword)}[：:]\s*(.+?)(?=\n\n|\n##|\n#|\Z)', re.DOTALL | re.IGNORECASE)
-            match = pattern.search(full_text)
-            if match:
-                root_cause = match.group(1).strip()[:500]
-                break
-
-    if recommended_actions is None:
-        for keyword in ['处置建议', '修复建议', '建议', '修复步骤', '下一步', '操作建议']:
-            pattern = re.compile(rf'{re.escape(keyword)}[：:]\s*(.+?)(?=\n\n|\n##|\n#|\Z)', re.DOTALL | re.IGNORECASE)
-            match = pattern.search(full_text)
-            if match:
-                recommended_actions = match.group(1).strip()[:500]
-                break
-
-    # Summary: strip markdown and truncate
-    summary = full_text.strip()[:2000]
+    root_cause = _clean_section_text(root_cause_section, max_lines=3, max_chars=500) or _extract_root_cause_sentence(full_text)
+    recommended_actions = _clean_section_text(action_section, max_lines=5, max_chars=500) or _extract_action_text(full_text)
+    summary = (
+        _compact_summary_text(summary_section)
+        or _compact_summary_text(root_cause)
+        or _compact_summary_text(_extract_root_cause_sentence(full_text))
+    )
 
     return root_cause, recommended_actions, summary
 
 
+async def _get_diagnosis_dedup_window_minutes(db: AsyncSession) -> int:
+    """Load diagnosis dedup window from system config."""
+    from backend.services.config_service import get_config
+    from backend.config import get_settings
+
+    dedup_minutes = await get_config(
+        db, "inspection_dedup_window_minutes",
+        default=get_settings().inspection_dedup_window_minutes
+    )
+    if not dedup_minutes:
+        return 0
+    return int(dedup_minutes)
+
+
+async def _reuse_diagnosis_from_event(db: AsyncSession, current_event, source_event) -> None:
+    """Copy diagnosis result from a recent same-type event."""
+    normalized = normalize_alert_diagnosis_fields(
+        root_cause=source_event.root_cause,
+        recommended_actions=source_event.recommended_actions,
+        summary=source_event.ai_diagnosis_summary,
+    )
+    current_event.ai_diagnosis_summary = normalized["summary"]
+    current_event.root_cause = normalized["root_cause"]
+    current_event.recommended_actions = normalized["recommended_actions"]
+    current_event.diagnosis_status = "completed"
+    current_event.diagnosis_completed_at = source_event.diagnosis_completed_at or now()
+    current_event.diagnosis_source_event_id = source_event.id
+    await db.commit()
+
+
 async def _find_recent_diagnosis(db: AsyncSession, current_event) -> Optional["AlertEvent"]:
     """
-    Check if there's a recently completed diagnosis for the same datasource + metric
+    Check if there's a recently completed diagnosis for the same datasource + alert_type
     within the inspection_dedup_window_minutes window.
 
     Returns the recent AlertEvent with completed diagnosis, or None.
     """
     from backend.models.alert_event import AlertEvent
-    from backend.services.config_service import get_config
-    from backend.config import get_settings
 
-    # Read dedup window from system config (fallback to settings default)
-    dedup_minutes = await get_config(
-        db, "inspection_dedup_window_minutes",
-        default=get_settings().inspection_dedup_window_minutes
-    )
+    dedup_minutes = await _get_diagnosis_dedup_window_minutes(db)
     if not dedup_minutes or dedup_minutes <= 0:
         return None
 
     time_threshold = now() - timedelta(minutes=int(dedup_minutes))
 
-    # Build query: same datasource, same metric, completed diagnosis, within window
+    if not current_event.alert_type:
+        return None
+
+    # Build query: same datasource, same alert_type, completed diagnosis, within window
     filters = [
         AlertEvent.id != current_event.id,
         AlertEvent.datasource_id == current_event.datasource_id,
+        AlertEvent.alert_type == current_event.alert_type,
         AlertEvent.diagnosis_status == "completed",
         AlertEvent.ai_diagnosis_summary.isnot(None),
-        AlertEvent.last_updated >= time_threshold,
+        AlertEvent.diagnosis_completed_at.isnot(None),
+        AlertEvent.diagnosis_completed_at >= time_threshold,
     ]
-
-    # Match by metric_name if available, otherwise by alert_type
-    if current_event.metric_name:
-        filters.append(AlertEvent.metric_name == current_event.metric_name)
-    elif current_event.alert_type:
-        filters.append(AlertEvent.alert_type == current_event.alert_type)
-    else:
-        return None
 
     result = await db.execute(
         select(AlertEvent)
         .where(and_(*filters))
-        .order_by(AlertEvent.last_updated.desc())
+        .order_by(AlertEvent.diagnosis_completed_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def _find_in_progress_diagnosis(db: AsyncSession, current_event) -> Optional["AlertEvent"]:
+    """
+    Check if a same-type diagnosis is already running or pending in the dedup window.
+    """
+    from backend.models.alert_event import AlertEvent
+
+    dedup_minutes = await _get_diagnosis_dedup_window_minutes(db)
+    if not dedup_minutes or dedup_minutes <= 0 or not current_event.alert_type:
+        return None
+
+    time_threshold = now() - timedelta(minutes=int(dedup_minutes))
+
+    result = await db.execute(
+        select(AlertEvent)
+        .where(
+            and_(
+                AlertEvent.id != current_event.id,
+                AlertEvent.datasource_id == current_event.datasource_id,
+                AlertEvent.alert_type == current_event.alert_type,
+                AlertEvent.diagnosis_status.in_(["in_progress", "pending"]),
+                AlertEvent.diagnosis_started_at.isnot(None),
+                AlertEvent.diagnosis_started_at >= time_threshold,
+            )
+        )
+        .order_by(AlertEvent.diagnosis_started_at.desc())
         .limit(1)
     )
     return result.scalar_one_or_none()
@@ -727,31 +1037,53 @@ async def run_sync_diagnosis(
     # If diagnosis already completed, return cached result
     if event.diagnosis_status == "completed" and event.ai_diagnosis_summary:
         logger.info(f"Using cached diagnosis for alert event {alert_event_id}")
+        normalized = normalize_alert_diagnosis_fields(
+            root_cause=event.root_cause,
+            recommended_actions=event.recommended_actions,
+            summary=event.ai_diagnosis_summary,
+        )
         return {
-            "root_cause": event.root_cause,
-            "recommended_actions": event.recommended_actions,
-            "summary": event.ai_diagnosis_summary,
+            "root_cause": normalized["root_cause"],
+            "recommended_actions": normalized["recommended_actions"],
+            "summary": normalized["summary"],
             "status": "completed",
         }
 
-    # Dedup: check if another event for the same datasource+metric was diagnosed recently
+    # Dedup: reuse a recent same-type completed diagnosis if available.
     recent_diagnosis = await _find_recent_diagnosis(db, event)
     if recent_diagnosis:
         logger.info(
             f"Reusing recent diagnosis from event {recent_diagnosis.id} for alert event {alert_event_id} "
-            f"(datasource={event.datasource_id}, metric={event.metric_name})"
+            f"(datasource={event.datasource_id}, type={event.alert_type})"
         )
-        # Copy diagnosis results to current event
-        event.ai_diagnosis_summary = recent_diagnosis.ai_diagnosis_summary
-        event.root_cause = recent_diagnosis.root_cause
-        event.recommended_actions = recent_diagnosis.recommended_actions
-        event.diagnosis_status = "completed"
+        await _reuse_diagnosis_from_event(db, event, recent_diagnosis)
+        normalized = normalize_alert_diagnosis_fields(
+            root_cause=recent_diagnosis.root_cause,
+            recommended_actions=recent_diagnosis.recommended_actions,
+            summary=recent_diagnosis.ai_diagnosis_summary,
+        )
+        return {
+            "root_cause": normalized["root_cause"],
+            "recommended_actions": normalized["recommended_actions"],
+            "summary": normalized["summary"],
+            "status": "completed",
+        }
+
+    in_progress_diagnosis = await _find_in_progress_diagnosis(db, event)
+    if in_progress_diagnosis:
+        logger.info(
+            f"Skipping sync diagnosis for event {alert_event_id}: "
+            f"event {in_progress_diagnosis.id} is already diagnosing "
+            f"(datasource={event.datasource_id}, type={event.alert_type})"
+        )
+        event.diagnosis_status = "pending"
+        event.diagnosis_source_event_id = in_progress_diagnosis.id
         await db.commit()
         return {
-            "root_cause": recent_diagnosis.root_cause,
-            "recommended_actions": recent_diagnosis.recommended_actions,
-            "summary": recent_diagnosis.ai_diagnosis_summary,
-            "status": "completed",
+            "root_cause": None,
+            "recommended_actions": None,
+            "summary": f"同类告警正在诊断中，复用事件 {in_progress_diagnosis.id} 的诊断结果...",
+            "status": "pending",
         }
 
     # Get datasource
@@ -779,6 +1111,9 @@ async def run_sync_diagnosis(
 
     # Update status to in_progress
     event.diagnosis_status = "in_progress"
+    event.diagnosis_started_at = now()
+    event.diagnosis_completed_at = None
+    event.diagnosis_source_event_id = None
     await db.commit()
 
     # Build structured diagnosis prompt
@@ -795,13 +1130,17 @@ async def run_sync_diagnosis(
 首次时间：{event.event_start_time.isoformat() if event.event_start_time else '未知'}
 持续时间：{(now() - event.event_start_time).total_seconds() / 60:.0f} 分钟
 
-请分析此告警的根本原因并给出处置建议。请按以下格式输出（使用 Markdown）：
+这是告警通知场景，请只输出最终结论，不要输出“我来分析/让我/开始收集证据/制定计划”等过程描述。
+请分析此告警的根本原因并给出处置建议。请严格按以下格式输出（使用 Markdown）：
+
+## 告警摘要
+<用 1 句话直接说明核心根因，不超过 60 字>
 
 ## 根本原因
-<分析为什么会出现这个问题，可能的原因有哪些>
+- <直接描述告警核心根因，优先写已经证实的原因>
 
 ## 处置建议
-<具体的修复步骤，列出 1-5 条可操作的建议>
+- <列出 1-3 条可操作建议>
 
 """
 
@@ -833,6 +1172,7 @@ async def run_sync_diagnosis(
         event.root_cause = root_cause
         event.recommended_actions = recommended_actions
         event.diagnosis_status = "completed"
+        event.diagnosis_completed_at = now()
         await db.commit()
 
         logger.info(f"Sync diagnosis complete for alert event {alert_event_id}")
@@ -878,6 +1218,7 @@ async def _run_diagnosis_coro(
     """
     from backend.database import async_session as db_session_factory
     from backend.agent.conversation_skills import run_conversation_with_skills
+    from backend.services.knowledge_router import build_knowledge_context
     from backend.models.alert_event import AlertEvent
     from backend.services.chat_orchestration_service import prepare_user_turn
     from sqlalchemy import select
@@ -919,12 +1260,18 @@ async def _run_diagnosis_coro(
 
         # Run conversation (non-streaming, collect final response)
         full_diagnosis = ""
-        async for event in run_conversation_with_skills(
-            messages,
-            datasource_id,
-            None,
-            None,
+        knowledge_context = await build_knowledge_context(
             db,
+            datasource_id=datasource_id,
+            user_message=draft,
+        )
+        async for event in run_conversation_with_skills(
+            messages=messages,
+            datasource_id=datasource_id,
+            model_id=None,
+            kb_ids=None,
+            knowledge_context=knowledge_context,
+            db=db,
             user_id=None,
             session_id=session_id,
             disabled_tools=[],
