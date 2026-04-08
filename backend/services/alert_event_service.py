@@ -6,7 +6,7 @@ Handles aggregation of alerts into events and event management.
 
 from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import select, func, and_, or_, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.alert_event import AlertEvent
@@ -17,6 +17,14 @@ from backend.utils.datetime_helper import now
 
 class AlertEventService:
     """Service for managing alert events"""
+
+    @staticmethod
+    def _status_priority_expr():
+        return case(
+            (AlertEvent.status == "active", 0),
+            (AlertEvent.status == "acknowledged", 1),
+            else_=2,
+        )
 
     @staticmethod
     async def process_new_alert(
@@ -196,7 +204,11 @@ class AlertEventService:
         total = count_result.scalar()
 
         # Apply ordering and pagination
-        query = query.order_by(AlertEvent.event_start_time.desc())
+        query = query.order_by(
+            AlertEventService._status_priority_expr().asc(),
+            AlertEvent.event_start_time.desc(),
+            AlertEvent.id.desc(),
+        )
         query = query.limit(limit).offset(offset)
 
         # Execute query

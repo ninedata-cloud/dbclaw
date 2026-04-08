@@ -63,6 +63,7 @@ async def generate_ai_report(
         # Determine database type and skill prefix
         skill_prefix_map = {
             'mysql': 'mysql',
+            'tdsql-c-mysql': 'mysql',
             'postgresql': 'pg',
             'sqlserver': 'mssql',
             'oracle': 'oracle'

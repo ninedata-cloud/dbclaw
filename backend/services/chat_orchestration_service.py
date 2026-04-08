@@ -228,6 +228,7 @@ async def _store_tool_result(db: AsyncSession, session_id: int, event: dict[str,
             "execution_time_ms": event.get("execution_time_ms"),
             "tool_call_id": event.get("tool_call_id"),
             "skill_execution_id": event.get("skill_execution_id"),
+            "visualization": event.get("visualization"),
         }),
         tool_call_id=event.get("tool_call_id"),
     )
@@ -680,6 +681,7 @@ async def process_stream_events(
                         "action_run_id": event.get("action_run_id"),
                         "action_title": event.get("action_title"),
                         "phase": event.get("phase"),
+                        "visualization": event.get("visualization"),
                     }, on_event)
                 elif event_type == "approval_request":
                     paused_for_approval = True
@@ -790,6 +792,7 @@ async def prepare_user_turn(
 ) -> tuple[list[dict[str, Any]], int | None, int | None, Any, Any, Any]:
     attachments = attachments or []
     effective_datasource_id = payload_datasource_id
+    effective_model_id = model_id
     kb_ids = None
     knowledge_context = None
     disabled_tools = None
@@ -823,8 +826,9 @@ async def prepare_user_turn(
 
         if session.title in ("New Session", "新建会话"):
             session.title = user_message[:80] if user_message else "[Attachment]"
-        if model_id and not session.ai_model_id:
+        if model_id is not None and model_id != session.ai_model_id:
             session.ai_model_id = model_id
+        effective_model_id = session.ai_model_id
         session.updated_at = datetime.utcnow()
         kb_ids = session.kb_ids
         intent_analysis = analyze_query_intent(user_message or "")
@@ -846,7 +850,7 @@ async def prepare_user_turn(
     )
     all_msgs = msgs_result.scalars().all()
     messages = await rebuild_llm_messages(all_msgs)
-    return messages, effective_datasource_id, model_id, kb_ids, knowledge_context, disabled_tools
+    return messages, effective_datasource_id, effective_model_id, kb_ids, knowledge_context, disabled_tools
 
 
 async def continue_conversation_after_tool(
@@ -959,7 +963,7 @@ async def resolve_pending_approval(
     await _store_tool_call(db, session_id, tool_call_event)
     await _emit(tool_call_event, on_event)
 
-    tool_result, execution_time_ms, skill_execution_id = await execute_skill_call(
+    tool_result, execution_time_ms, skill_execution_id, visualization = await execute_skill_call(
         pending["tool_name"],
         dict(pending["tool_args"]),
         db,
@@ -977,6 +981,7 @@ async def resolve_pending_approval(
         "recommendation_id": pending.get("recommendation_id"),
         "action_title": pending.get("action_title"),
         "phase": pending.get("phase"),
+        "visualization": visualization,
     }
     await _store_tool_result(db, session_id, tool_result_event)
     await _emit(tool_result_event, on_event)

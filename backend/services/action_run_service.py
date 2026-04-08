@@ -27,6 +27,7 @@ STATUS_VERIFIED_FAILED = "verified_failed"
 
 DB_PREFIX_MAP = {
     "mysql": "mysql",
+    "tdsql-c-mysql": "mysql",
     "postgresql": "pg",
     "sqlserver": "mssql",
     "oracle": "oracle",
@@ -40,6 +41,7 @@ DB_PREFIX_MAP = {
 READ_ONLY_VERIFY_SKILLS = {
     "postgresql": "pg_get_db_status",
     "mysql": "mysql_get_process_list",
+    "tdsql-c-mysql": "mysql_get_process_list",
     "sqlserver": "mssql_list_connections",
     "oracle": "oracle_list_sessions",
     "opengauss": "opengauss_list_connections",
@@ -290,7 +292,7 @@ async def execute_action_run(db: AsyncSession, run_id: int, user_id: Optional[in
     run.execution_status = "running"
     await db.commit()
 
-    result_text, _, skill_execution_id = await execute_skill_call(skill_id, params, db, user_id, session_id)
+    result_text, _, skill_execution_id, _ = await execute_skill_call(skill_id, params, db, user_id, session_id)
     run.skill_execution_id = skill_execution_id
 
     try:
@@ -328,7 +330,7 @@ async def verify_action_run(db: AsyncSession, run_id: int, user_id: Optional[int
     run.verification_skill_id = verification_skill_id
     await db.commit()
 
-    result_text, _, skill_execution_id = await execute_skill_call(
+    result_text, _, skill_execution_id, _ = await execute_skill_call(
         verification_skill_id,
         verification_params,
         db,

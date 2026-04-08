@@ -10,12 +10,41 @@ from io import StringIO
 from backend.models.alert_message import AlertMessage
 from backend.models.alert_subscription import AlertSubscription
 from backend.models.alert_delivery_log import AlertDeliveryLog
+from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
 
 
 class AggregationEngine:
     """Alert aggregation logic to prevent notification storms"""
+
+    @staticmethod
+    async def _get_notification_cooldown_minutes(db: AsyncSession) -> int:
+        from backend.config import get_settings
+        from backend.services.config_service import get_config
+
+        cooldown_minutes = await get_config(
+            db,
+            "inspection_dedup_window_minutes",
+            default=get_settings().inspection_dedup_window_minutes,
+        )
+        if not cooldown_minutes:
+            return 0
+        return int(cooldown_minutes)
+
+    @staticmethod
+    def _build_similarity_filters(alert: AlertMessage) -> List[Any]:
+        filters = [
+            AlertMessage.datasource_id == alert.datasource_id,
+            AlertMessage.alert_type == alert.alert_type,
+        ]
+
+        if alert.metric_name:
+            filters.append(AlertMessage.metric_name == alert.metric_name)
+        else:
+            filters.append(AlertMessage.metric_name.is_(None))
+
+        return filters
 
     @staticmethod
     async def should_send_alert(
@@ -40,7 +69,7 @@ class AggregationEngine:
                 db, alert, subscription
             )
 
-        # Default rule: 10-minute cooldown per datasource + alert_type
+        # Default rule: configurable cooldown per datasource + alert identity
         return await AggregationEngine._default_aggregation_rule(
             db, alert, subscription
         )
@@ -53,11 +82,9 @@ class AggregationEngine:
     ) -> bool:
         """
         Default aggregation rule:
-        - If alert belongs to an event, only send notification for the first alert in the event,
-          or if the last notification for this event was sent more than 60 minutes ago (re-notify),
-          OR if the previous alert in the event was already resolved (recurrence → re-notify).
-        - Otherwise, use 60-minute cooldown per datasource + alert_type, but allow re-notification
-          if the previous alert was resolved (recurrence detection).
+        - Respect the configured cooldown window for the same alert event.
+        - For non-event comparisons, deduplicate by datasource + alert_type + metric_name
+          within the same cooldown window, even if the previous alert recovered.
 
         Args:
             db: Database session
@@ -67,6 +94,9 @@ class AggregationEngine:
         Returns:
             True if notification should be sent, False if suppressed
         """
+        cooldown_minutes = await AggregationEngine._get_notification_cooldown_minutes(db)
+        current_time = now()
+
         # 如果告警属于某个事件，检查该事件是否已经发送过通知
         if alert.event_id:
             # 查询该事件的所有告警的投递记录
@@ -84,35 +114,16 @@ class AggregationEngine:
             event_deliveries = result.scalars().all()
 
             if event_deliveries:
-                # 查询该事件中是否有已恢复（resolved）的告警
-                # 如果之前的告警已恢复，新告警是再次触发，应重新通知
-                resolved_result = await db.execute(
-                    select(AlertMessage).where(
-                        and_(
-                            AlertMessage.event_id == alert.event_id,
-                            AlertMessage.status == "resolved"
-                        )
-                    )
-                )
-                resolved_alerts = resolved_result.scalars().all()
-
-                if resolved_alerts:
-                    # 之前有告警已恢复，重新触发时应通知
-                    logger.info(
-                        f"Re-notifying for event {alert.event_id} - previous alert(s) were resolved, "
-                        f"this is a recurrence (found {len(resolved_alerts)} resolved alerts)"
-                    )
-                    return True
-
                 # 检查最近一次投递是否超过60分钟，超过则允许重新通知
                 latest_delivery = max(event_deliveries, key=lambda d: d.sent_at or d.created_at)
                 latest_sent_at = latest_delivery.sent_at or latest_delivery.created_at
-                minutes_since_last = (datetime.now() - latest_sent_at).total_seconds() / 60
+                minutes_since_last = (current_time - latest_sent_at).total_seconds() / 60
 
-                if minutes_since_last < 60:
+                if cooldown_minutes > 0 and minutes_since_last < cooldown_minutes:
                     logger.info(
                         f"Suppressing alert {alert.id} - event {alert.event_id} already has "
-                        f"{len(event_deliveries)} notifications sent, last {minutes_since_last:.0f}m ago"
+                        f"{len(event_deliveries)} notifications sent, last {minutes_since_last:.0f}m ago "
+                        f"(cooldown={cooldown_minutes}m)"
                     )
                     return False
                 else:
@@ -122,9 +133,9 @@ class AggregationEngine:
                     )
                     return True
 
-        # 如果没有事件ID，使用传统的时间窗口聚合
-        # 使用60分钟聚合窗口，避免频繁发送相同告警
-        cutoff_time = datetime.now() - timedelta(minutes=60)
+        # 如果没有事件ID，按告警身份在冷却窗口内去重
+        cutoff_time = current_time - timedelta(minutes=max(cooldown_minutes, 0))
+        similarity_filters = AggregationEngine._build_similarity_filters(alert)
 
         # Check for recent deliveries with same datasource and alert_type
         result = await db.execute(
@@ -135,40 +146,18 @@ class AggregationEngine:
                     AlertDeliveryLog.subscription_id == subscription.id,
                     AlertDeliveryLog.sent_at >= cutoff_time,
                     AlertDeliveryLog.status == "sent",
-                    AlertMessage.datasource_id == alert.datasource_id,
-                    AlertMessage.alert_type == alert.alert_type
+                    *similarity_filters,
                 )
             )
         )
         recent_deliveries = result.scalars().all()
 
         if recent_deliveries:
-            # 查询最近60分钟内是否有同类型、同数据源的已恢复告警
-            # 如果之前告警已恢复，新告警再次触发时应重新通知
-            resolved_check = await db.execute(
-                select(AlertMessage).where(
-                    and_(
-                        AlertMessage.datasource_id == alert.datasource_id,
-                        AlertMessage.alert_type == alert.alert_type,
-                        AlertMessage.status == "resolved",
-                        AlertMessage.resolved_at >= cutoff_time
-                    )
-                )
-            )
-            resolved_recent = resolved_check.scalars().all()
-
-            if resolved_recent:
-                logger.info(
-                    f"Re-notifying for alert {alert.id} - previous alert(s) for "
-                    f"datasource={alert.datasource_id} type={alert.alert_type} were resolved, "
-                    f"this is a recurrence"
-                )
-                return True
-
             logger.info(
                 f"Suppressing alert {alert.id} due to recent delivery "
                 f"(datasource={alert.datasource_id}, type={alert.alert_type}, "
-                f"found {len(recent_deliveries)} deliveries in last 60 minutes)"
+                f"metric={alert.metric_name or '-'}, found {len(recent_deliveries)} deliveries "
+                f"in last {cooldown_minutes} minutes)"
             )
             return False
 

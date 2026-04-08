@@ -294,12 +294,13 @@ async def assess_tool_risk(tool_name: str, arguments: Dict[str, Any], permission
 
 async def execute_skill_call(
     skill_id: str, arguments: Dict[str, Any], db, user_id: int, session_id: Optional[int] = None
-) -> tuple[str, int, Optional[int]]:
-    """Execute a skill and return JSON result, execution time, and skill_execution_id."""
+) -> tuple[str, int, Optional[int], Optional[Dict[str, Any]]]:
+    """Execute a skill and return JSON result, execution time, skill_execution_id, and visualization."""
     from backend.skills.registry import SkillRegistry
     from backend.skills.executor import SkillExecutor
     from backend.skills.context import SkillContext
     from backend.skills.models import SkillExecution
+    from backend.services.tool_visualization_service import build_tool_result_visualization
     from sqlalchemy import select
     import time
 
@@ -331,15 +332,15 @@ async def execute_skill_call(
 
         if not skill:
             execution_time = int((time.time() - start_time) * 1000)
-            return json.dumps({"error": f"Skill '{skill_id}' not found"}), execution_time, None
+            return json.dumps({"error": f"Skill '{skill_id}' not found"}), execution_time, None, None
 
         if not skill.is_enabled:
             execution_time = int((time.time() - start_time) * 1000)
-            return json.dumps({"error": f"Skill '{skill_id}' is disabled"}), execution_time, None
+            return json.dumps({"error": f"Skill '{skill_id}' is disabled"}), execution_time, None, None
 
         if not skill.is_builtin:
             execution_time = int((time.time() - start_time) * 1000)
-            return json.dumps({"error": "Custom skill execution is disabled until a safer sandbox is implemented"}), execution_time, None
+            return json.dumps({"error": "Custom skill execution is disabled until a safer sandbox is implemented"}), execution_time, None, None
 
         from backend.skills.executor import SkillExecutor
         if timeout is None:
@@ -356,16 +357,17 @@ async def execute_skill_call(
 
         executor = SkillExecutor()
         result = await executor.execute(skill, arguments, context, timeout=timeout)
+        visualization = build_tool_result_visualization(skill_id, result)
 
         execution_time = int((time.time() - start_time) * 1000)
         execution_id = await _get_latest_execution_id()
-        return json.dumps(result, default=str), execution_time, execution_id
+        return json.dumps(result, default=str), execution_time, execution_id, visualization
 
     except Exception as e:
         execution_time = int((time.time() - start_time) * 1000)
         logger.error(f"Error executing skill {skill_id}: {e}")
         execution_id = await _get_latest_execution_id()
-        return json.dumps({"error": str(e)}), execution_time, execution_id
+        return json.dumps({"error": str(e)}), execution_time, execution_id, None
 
 
 async def run_conversation_with_skills(
@@ -475,6 +477,7 @@ async def run_conversation_with_skills(
 
             skill_prefix_map = {
                 'mysql': 'mysql',
+                'tdsql-c-mysql': 'mysql',
                 'postgresql': 'pg',
                 'sqlserver': 'mssql',
                 'oracle': 'oracle',
@@ -861,7 +864,7 @@ async def run_conversation_with_skills(
                     "tool_call_id": tc["id"],
                 }
 
-                tool_result, execution_time_ms, skill_execution_id = await execute_skill_call(
+                tool_result, execution_time_ms, skill_execution_id, visualization = await execute_skill_call(
                     tool_name, tool_args, db, user_id, session_id
                 )
 
@@ -887,6 +890,7 @@ async def run_conversation_with_skills(
                     "result": tool_result[:10000],
                     "execution_time_ms": execution_time_ms,
                     "skill_execution_id": skill_execution_id,
+                    "visualization": visualization,
                 }
                 yield {
                     "type": "plan_step_status",

@@ -4,13 +4,12 @@ const MonitorPage = {
     datasourceSelector: null,
     chartIds: ['connections', 'qps', 'cache_hit', 'tps', 'network', 'latency'],
     osChartIds: ['cpu_usage', 'memory_usage', 'disk_usage', 'load_avg', 'disk_io', 'network_io'],
-    // Track previous network bytes for rate calculation
-    prevNetworkRx: null,
-    prevNetworkTx: null,
-    prevNetworkTime: null,
+    dbNetworkState: { rx: null, tx: null, time: null },
+    hostNetworkState: { rx: null, tx: null, time: null },
     // Time range state
     currentTimeRange: 60, // default 1 hour in minutes
     isRealtime: true,
+    chartMaxPoints: 240,
 
     _getSelectedDatasource() {
         return this.datasourceSelector?.getValue() || Store.get('currentConnection') || null;
@@ -18,6 +17,228 @@ const MonitorPage = {
 
     _getSelectedDatasourceId() {
         return this._getSelectedDatasource()?.id || null;
+    },
+
+    _resetNetworkStates() {
+        this.dbNetworkState = { rx: null, tx: null, time: null };
+        this.hostNetworkState = { rx: null, tx: null, time: null };
+    },
+
+    _resetChartMaxPoints() {
+        this.chartMaxPoints = 240;
+    },
+
+    _setChartMaxPoints(pointCount) {
+        const numericCount = typeof pointCount === 'number' ? pointCount : parseInt(pointCount, 10);
+        if (!Number.isFinite(numericCount) || numericCount <= 0) {
+            this._resetChartMaxPoints();
+            return;
+        }
+
+        this.chartMaxPoints = Math.min(Math.max(numericCount + 120, 240), 10000);
+    },
+
+    _getChartMaxPoints() {
+        return this.chartMaxPoints || 240;
+    },
+
+    _toNumeric(value) {
+        if (value === null || value === undefined || value === '') return null;
+        const parsed = typeof value === 'number' ? value : parseFloat(value);
+        return Number.isFinite(parsed) ? parsed : null;
+    },
+
+    _formatNetworkChartValue(value) {
+        if (Array.isArray(value)) {
+            return value.map(item => Format.networkRate(item)).join(' / ');
+        }
+        return Format.networkRate(value);
+    },
+
+    _buildNetworkChartOptions() {
+        return {
+            valueFormatter: (value) => this._formatNetworkChartValue(value),
+            options: {
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: { color: '#e6edf3', font: { size: 11 } }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => {
+                                const datasetLabel = context.dataset?.label || '';
+                                return `${datasetLabel}: ${Format.networkRate(context.parsed?.y)}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        ticks: {
+                            callback: (value) => Format.networkRate(value)
+                        }
+                    }
+                }
+            }
+        };
+    },
+
+    _buildMultiLineDataset(label, borderColor, backgroundColor) {
+        return {
+            label,
+            borderColor,
+            backgroundColor,
+            borderWidth: 1,
+            data: [],
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            pointHitRadius: 10,
+        };
+    },
+
+    _formatChartLabel(dateInput) {
+        const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+        if (Number.isNaN(date.getTime())) return '';
+
+        const now = new Date();
+        const isToday =
+            date.getFullYear() === now.getFullYear() &&
+            date.getMonth() === now.getMonth() &&
+            date.getDate() === now.getDate();
+
+        if (isToday) {
+            return date.toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+
+        const dateLabel = [
+            date.getFullYear(),
+            String(date.getMonth() + 1).padStart(2, '0'),
+            String(date.getDate()).padStart(2, '0')
+        ].join('-');
+        const timeLabel = [
+            String(date.getHours()).padStart(2, '0'),
+            String(date.getMinutes()).padStart(2, '0')
+        ].join(':');
+        return [dateLabel, timeLabel];
+    },
+
+    _calculateRateFromCounters(currentRx, currentTx, timestamp, state) {
+        if (currentRx === null || currentTx === null || timestamp === null || timestamp === undefined) {
+            return null;
+        }
+
+        let rxRate = null;
+        let txRate = null;
+        if (state.rx !== null && state.tx !== null && state.time !== null) {
+            const timeDelta = (timestamp - state.time) / 1000;
+            if (timeDelta > 0) {
+                rxRate = Math.max(0, (currentRx - state.rx) / timeDelta);
+                txRate = Math.max(0, (currentTx - state.tx) / timeDelta);
+            }
+        }
+
+        state.rx = currentRx;
+        state.tx = currentTx;
+        state.time = timestamp;
+
+        if (rxRate === null || txRate === null) {
+            return null;
+        }
+
+        return {
+            rx: Math.round(rxRate * 100) / 100,
+            tx: Math.round(txRate * 100) / 100
+        };
+    },
+
+    _extractDatabaseNetworkRates(data, timestamp) {
+        const directRx = this._toNumeric(data.network_rx_rate);
+        const directTx = this._toNumeric(data.network_tx_rate);
+        if (directRx !== null && directTx !== null) {
+            this.dbNetworkState = { rx: null, tx: null, time: null };
+            return { rx: directRx, tx: directTx };
+        }
+
+        const cloudRx = this._toNumeric(data.network_in);
+        const cloudTx = this._toNumeric(data.network_out);
+        if (cloudRx !== null && cloudTx !== null) {
+            this.dbNetworkState = { rx: null, tx: null, time: null };
+            return {
+                rx: Math.round(cloudRx * 1024 * 100) / 100,
+                tx: Math.round(cloudTx * 1024 * 100) / 100
+            };
+        }
+
+        const inputRx = this._toNumeric(data.input_kbps);
+        const inputTx = this._toNumeric(data.output_kbps);
+        if (inputRx !== null && inputTx !== null) {
+            this.dbNetworkState = { rx: null, tx: null, time: null };
+            return {
+                rx: Math.round(inputRx * 1024 * 100) / 100,
+                tx: Math.round(inputTx * 1024 * 100) / 100
+            };
+        }
+
+        const cumulativeRx = this._toNumeric(data.bytes_received) ?? this._toNumeric(data.network_bytes_in);
+        const cumulativeTx = this._toNumeric(data.bytes_sent) ?? this._toNumeric(data.network_bytes_out);
+        if (cumulativeRx !== null && cumulativeTx !== null) {
+            return this._calculateRateFromCounters(cumulativeRx, cumulativeTx, timestamp, this.dbNetworkState);
+        }
+
+        const aliasRx = this._toNumeric(data.network_rx_bytes);
+        const aliasTx = this._toNumeric(data.network_tx_bytes);
+        if (aliasRx !== null && aliasTx !== null) {
+            const looksCumulative = aliasRx > 10 * 1024 * 1024 || aliasTx > 10 * 1024 * 1024;
+            if (looksCumulative) {
+                return this._calculateRateFromCounters(aliasRx, aliasTx, timestamp, this.dbNetworkState);
+            }
+            this.dbNetworkState = { rx: null, tx: null, time: null };
+            return {
+                rx: Math.round(aliasRx * 1024 * 100) / 100,
+                tx: Math.round(aliasTx * 1024 * 100) / 100
+            };
+        }
+
+        this.dbNetworkState = { rx: null, tx: null, time: null };
+        return null;
+    },
+
+    _extractHostNetworkRates(data, timestamp) {
+        const hostRx = this._toNumeric(data.host_network_rx_bytes);
+        const hostTx = this._toNumeric(data.host_network_tx_bytes);
+        if (hostRx !== null && hostTx !== null) {
+            return this._calculateRateFromCounters(hostRx, hostTx, timestamp, this.hostNetworkState);
+        }
+
+        const normalizedRx = this._toNumeric(data.network_rx_rate);
+        const normalizedTx = this._toNumeric(data.network_tx_rate);
+        if (normalizedRx !== null && normalizedTx !== null) {
+            this.hostNetworkState = { rx: null, tx: null, time: null };
+            return { rx: normalizedRx, tx: normalizedTx };
+        }
+
+        const aliasRx = this._toNumeric(data.network_rx_bytes);
+        const aliasTx = this._toNumeric(data.network_tx_bytes);
+        if (aliasRx !== null && aliasTx !== null) {
+            const looksCumulative = aliasRx > 10 * 1024 * 1024 || aliasTx > 10 * 1024 * 1024;
+            if (looksCumulative) {
+                return this._calculateRateFromCounters(aliasRx, aliasTx, timestamp, this.hostNetworkState);
+            }
+            this.hostNetworkState = { rx: null, tx: null, time: null };
+            return {
+                rx: Math.round(aliasRx * 1024 * 100) / 100,
+                tx: Math.round(aliasTx * 1024 * 100) / 100
+            };
+        }
+
+        this.hostNetworkState = { rx: null, tx: null, time: null };
+        return null;
     },
 
     async render() {
@@ -265,8 +486,8 @@ const MonitorPage = {
                 } else if (id === 'connections') {
                     config.data = {
                         datasets: [
-                            { label: '总连接数', borderColor: '#2f81f7', backgroundColor: 'rgba(47,129,247,0.1)', borderWidth: 1, data: [] },
-                            { label: '活跃连接数', borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', borderWidth: 1, data: [] }
+                            this._buildMultiLineDataset('总连接数', '#2f81f7', 'rgba(47,129,247,0.1)'),
+                            this._buildMultiLineDataset('活跃连接数', '#10b981', 'rgba(16,185,129,0.1)')
                         ]
                     };
                     config.options = {
@@ -275,17 +496,15 @@ const MonitorPage = {
                         }
                     };
                 } else if (id === 'network') {
+                    const networkConfig = this._buildNetworkChartOptions();
                     config.data = {
                         datasets: [
-                            { label: '接收', borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', borderWidth: 1, data: [] },
-                            { label: '发送', borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.1)', borderWidth: 1, data: [] }
+                            this._buildMultiLineDataset('接收', '#10b981', 'rgba(16,185,129,0.1)'),
+                            this._buildMultiLineDataset('发送', '#8b5cf6', 'rgba(139,92,246,0.1)')
                         ]
                     };
-                    config.options = {
-                        plugins: {
-                            legend: { display: true, position: 'top', labels: { color: '#e6edf3', font: { size: 11 } } }
-                        }
-                    };
+                    config.options = networkConfig.options;
+                    config.valueFormatter = networkConfig.valueFormatter;
                 }
                 const chart = ChartPanel.init(id, 'line', config);
                 if (chart) {
@@ -307,8 +526,8 @@ const MonitorPage = {
                 if (id === 'disk_io') {
                     config.data = {
                         datasets: [
-                            { label: '读', borderColor: '#2f81f7', backgroundColor: 'rgba(47,129,247,0.1)', borderWidth: 1, data: [] },
-                            { label: '写', borderColor: '#f97316', backgroundColor: 'rgba(249,115,22,0.1)', borderWidth: 1, data: [] }
+                            this._buildMultiLineDataset('读', '#2f81f7', 'rgba(47,129,247,0.1)'),
+                            this._buildMultiLineDataset('写', '#f97316', 'rgba(249,115,22,0.1)')
                         ]
                     };
                     config.options = {
@@ -317,17 +536,15 @@ const MonitorPage = {
                         }
                     };
                 } else if (id === 'network_io') {
+                    const networkConfig = this._buildNetworkChartOptions();
                     config.data = {
                         datasets: [
-                            { label: '接收', borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', borderWidth: 1, data: [] },
-                            { label: '发送', borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.1)', borderWidth: 1, data: [] }
+                            this._buildMultiLineDataset('接收', '#10b981', 'rgba(16,185,129,0.1)'),
+                            this._buildMultiLineDataset('发送', '#8b5cf6', 'rgba(139,92,246,0.1)')
                         ]
                     };
-                    config.options = {
-                        plugins: {
-                            legend: { display: true, position: 'top', labels: { color: '#e6edf3', font: { size: 11 } } }
-                        }
-                    };
+                    config.options = networkConfig.options;
+                    config.valueFormatter = networkConfig.valueFormatter;
                 }
                 const chart = ChartPanel.init(id, 'line', config);
                 if (chart) {
@@ -367,10 +584,7 @@ const MonitorPage = {
             ChartPanel.clear(id);
         }
 
-        // Reset network tracking
-        this.prevNetworkRx = null;
-        this.prevNetworkTx = null;
-        this.prevNetworkTime = null;
+        this._resetNetworkStates();
 
         // Load health status
         this._loadHealthStatus(connId);
@@ -552,15 +766,14 @@ const MonitorPage = {
                 return;
             }
 
+            this._setChartMaxPoints(metrics.length);
+
             // Clear charts
             for (const id of [...this.chartIds, ...this.osChartIds]) {
                 ChartPanel.clear(id);
             }
 
-            // Reset network tracking
-            this.prevNetworkRx = null;
-            this.prevNetworkTx = null;
-            this.prevNetworkTime = null;
+            this._resetNetworkStates();
 
             const reversed = [...metrics].reverse();
 
@@ -601,11 +814,9 @@ const MonitorPage = {
             }
 
             const reversed = [...metrics].reverse();
+            this._setChartMaxPoints(metrics.length);
 
-            // Reset network tracking for history load
-            this.prevNetworkRx = null;
-            this.prevNetworkTx = null;
-            this.prevNetworkTime = null;
+            this._resetNetworkStates();
 
             // Batch populate charts with historical data for better performance
             this._batchUpdateCharts(reversed);
@@ -638,7 +849,7 @@ const MonitorPage = {
             if (data.type === 'db_status' && data.data) {
                 console.log('[Monitor] Received metric data:', data.data);
                 const now = Date.now();
-                const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const time = this._formatChartLabel(now);
                 this._updateMetricCards(data.data);
                 this._updateCharts(data.data, time, now);
             }
@@ -657,8 +868,8 @@ const MonitorPage = {
         const cards = DOM.$$('#monitor-metrics .metric-card');
         if (cards.length < 4) return;
 
-        const active = data.connections_active ?? data.connected_clients ?? data.user_sessions ?? data.connections_current ?? data.active_sessions ?? 0;
-        const total = data.connections_total;
+        const active = data.connections_active ?? data.threads_running ?? data.active_connections ?? data.connected_clients ?? data.user_sessions ?? data.connections_current ?? data.active_sessions ?? 0;
+        const total = data.connections_total ?? data.threads_connected ?? data.total_connections;
         const maxConnections = data.max_connections;
         const qps = data.qps ?? data.ops_per_sec ?? data.batch_requests_sec ?? 0;
         const hitRate = data.buffer_pool_hit_rate ?? data.cache_hit_rate ?? data.hit_rate;
@@ -698,106 +909,53 @@ const MonitorPage = {
     },
 
     _updateCharts(data, time, timestamp) {
-        const active = data.connections_active ?? data.connected_clients ?? data.user_sessions ?? data.connections_current ?? data.active_sessions ?? 0;
-        const total = data.connections_total;
+        const active = data.connections_active ?? data.threads_running ?? data.active_connections ?? data.connected_clients ?? data.user_sessions ?? data.connections_current ?? data.active_sessions ?? 0;
+        const total = data.connections_total ?? data.threads_connected ?? data.total_connections;
         const qps = data.qps ?? data.ops_per_sec ?? data.batch_requests_sec ?? 0;
         const hitRate = data.buffer_pool_hit_rate ?? data.cache_hit_rate ?? data.hit_rate;
         const tps = data.tps || 0;
-        const netIn = data.network_rx_rate ?? (data.bytes_received || data.network_bytes_in || data.input_kbps || 0);
-        const netOut = data.network_tx_rate ?? (data.bytes_sent || data.network_bytes_out || data.output_kbps || 0);
         const slow = data.slow_queries || data.deadlocks || 0;
+        const dbNetworkRates = this._extractDatabaseNetworkRates(data, timestamp);
+        const hostNetworkRates = this._extractHostNetworkRates(data, timestamp);
+        const maxPoints = this._getChartMaxPoints();
 
-        ChartPanel.update('connections', time, [parseFloat(total) || 0, parseFloat(active) || 0]);
-        ChartPanel.update('qps', time, parseFloat(qps) || 0);
-        ChartPanel.update('cache_hit', time, hitRate !== undefined && hitRate !== null ? (parseFloat(hitRate) || 0) : null);
-        ChartPanel.update('tps', time, parseFloat(tps) || 0);
-        ChartPanel.update('network', time, [netIn, netOut]);
-        ChartPanel.update('latency', time, slow);
+        ChartPanel.update('connections', time, [parseFloat(total) || 0, parseFloat(active) || 0], maxPoints);
+        ChartPanel.update('qps', time, parseFloat(qps) || 0, maxPoints);
+        ChartPanel.update('cache_hit', time, hitRate !== undefined && hitRate !== null ? (parseFloat(hitRate) || 0) : null, maxPoints);
+        ChartPanel.update('tps', time, parseFloat(tps) || 0, maxPoints);
+        if (dbNetworkRates) {
+            ChartPanel.update('network', time, [dbNetworkRates.rx, dbNetworkRates.tx], maxPoints);
+        }
+        ChartPanel.update('latency', time, slow, maxPoints);
 
         // Update OS charts
         if (data.cpu_usage !== undefined) {
-            ChartPanel.update('cpu_usage', time, parseFloat(data.cpu_usage) || 0);
+            ChartPanel.update('cpu_usage', time, parseFloat(data.cpu_usage) || 0, maxPoints);
         }
         if (data.memory_usage !== undefined) {
-            ChartPanel.update('memory_usage', time, parseFloat(data.memory_usage) || 0);
+            ChartPanel.update('memory_usage', time, parseFloat(data.memory_usage) || 0, maxPoints);
         }
         if (data.disk_usage !== undefined) {
-            ChartPanel.update('disk_usage', time, parseFloat(data.disk_usage) || 0);
+            ChartPanel.update('disk_usage', time, parseFloat(data.disk_usage) || 0, maxPoints);
         }
         if (data.load_avg_1min !== undefined) {
-            ChartPanel.update('load_avg', time, parseFloat(data.load_avg_1min) || 0);
+            ChartPanel.update('load_avg', time, parseFloat(data.load_avg_1min) || 0, maxPoints);
         }
 
         // Disk IO: Show separate read and write curves
         if (data.disk_reads_per_sec !== undefined || data.disk_writes_per_sec !== undefined) {
             const reads = parseFloat(data.disk_reads_per_sec) || 0;
             const writes = parseFloat(data.disk_writes_per_sec) || 0;
-            ChartPanel.update('disk_io', time, [reads, writes]);
+            ChartPanel.update('disk_io', time, [reads, writes], maxPoints);
         }
 
-        // Network IO:
-        // - MetricNormalizer 输出：network_rx_rate/network_tx_rate（已经是速率 bytes/秒），直接转 KB/s 使用
-        // - system 直连采集（OS Collector）：network_rx_bytes/network_tx_bytes 累积字节数，需要差分后展示 KB/s
-        // - 云集成采集（如阿里云 RDS）：同名字段可能直接就是速率（KB/s），不能再做差分
-        if (data.network_rx_rate !== undefined && data.network_tx_rate !== undefined) {
-            // MetricNormalizer 已计算好速率（bytes/秒），直接转为 KB/s
-            const rxRate = parseFloat(data.network_rx_rate) / 1024;
-            const txRate = parseFloat(data.network_tx_rate) / 1024;
-            ChartPanel.update('network_io', time, [
-                Math.round(rxRate * 100) / 100,
-                Math.round(txRate * 100) / 100
-            ]);
-            this.prevNetworkRx = null;
-            this.prevNetworkTx = null;
-            this.prevNetworkTime = null;
-            return;
-        }
-
-        if (data.network_rx_bytes !== undefined && data.network_tx_bytes !== undefined) {
-            const currentRx = parseFloat(data.network_rx_bytes) || 0;
-            const currentTx = parseFloat(data.network_tx_bytes) || 0;
-
-            const looksCumulative = currentRx > 10 * 1024 * 1024 || currentTx > 10 * 1024 * 1024;
-            if (!looksCumulative) {
-                // Integration metrics may already be rate values from cloud APIs.
-                // Aliyun RDS MySQL_NetworkTraffic 返回 KB 级速率值，这里按十进制单位换算，
-                // 避免监控页把数值放大约 1000 倍。
-                const rxRate = currentRx / 1000;
-                const txRate = currentTx / 1000;
-                ChartPanel.update('network_io', time, [
-                    Math.round(rxRate * 100) / 100,
-                    Math.round(txRate * 100) / 100
-                ]);
-                this.prevNetworkRx = null;
-                this.prevNetworkTx = null;
-                this.prevNetworkTime = null;
-                return;
-            }
-
-            if (this.prevNetworkRx !== null && this.prevNetworkTx !== null && this.prevNetworkTime !== null) {
-                // Calculate time delta in seconds
-                const timeDelta = (timestamp - this.prevNetworkTime) / 1000;
-
-                if (timeDelta > 0) {
-                    // Calculate rate in KB/s
-                    const rxRate = Math.max(0, (currentRx - this.prevNetworkRx) / timeDelta / 1024);
-                    const txRate = Math.max(0, (currentTx - this.prevNetworkTx) / timeDelta / 1024);
-
-                    ChartPanel.update('network_io', time, [
-                        Math.round(rxRate * 100) / 100,
-                        Math.round(txRate * 100) / 100
-                    ]);
-                }
-            }
-
-            // Update previous values (cumulative)
-            this.prevNetworkRx = currentRx;
-            this.prevNetworkTx = currentTx;
-            this.prevNetworkTime = timestamp;
+        if (hostNetworkRates) {
+            ChartPanel.update('network_io', time, [hostNetworkRates.rx, hostNetworkRates.tx], maxPoints);
         }
     },
 
     _batchUpdateCharts(metrics) {
+        const maxPoints = this._getChartMaxPoints();
         // Prepare batch data for all charts
         const batchData = {
             labels: [],
@@ -821,15 +979,15 @@ const MonitorPage = {
 
         // Process all metrics
         for (const m of metrics) {
-            const time = new Date(m.collected_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const time = this._formatChartLabel(m.collected_at);
             const data = m.data;
             const timestamp = new Date(m.collected_at).getTime();
 
             batchData.labels.push(time);
 
             // Database metrics
-            const active = data.connections_active ?? data.connected_clients ?? data.user_sessions ?? data.connections_current ?? data.active_sessions ?? 0;
-            const total = data.connections_total;
+            const active = data.connections_active ?? data.threads_running ?? data.active_connections ?? data.connected_clients ?? data.user_sessions ?? data.connections_current ?? data.active_sessions ?? 0;
+            const total = data.connections_total ?? data.threads_connected ?? data.total_connections;
             batchData.connections_active.push(parseFloat(active) || 0);
             batchData.connections_total.push(parseFloat(total) || 0);
             batchData.qps.push(parseFloat(data.qps ?? data.ops_per_sec ?? data.batch_requests_sec ?? 0));
@@ -837,9 +995,11 @@ const MonitorPage = {
             const hitRate = data.buffer_pool_hit_rate ?? data.cache_hit_rate ?? data.hit_rate;
             batchData.cache_hit.push(hitRate !== undefined && hitRate !== null ? (parseFloat(hitRate) || 0) : null);
             batchData.tps.push(parseFloat(data.tps || 0));
-            batchData.network_rx.push(data.network_rx_rate ?? (data.bytes_received || data.network_bytes_in || data.input_kbps || 0));
-            batchData.network_tx.push(data.network_tx_rate ?? (data.bytes_sent || data.network_bytes_out || data.output_kbps || 0));
             batchData.latency.push(data.slow_queries || data.deadlocks || 0);
+
+            const dbNetworkRates = this._extractDatabaseNetworkRates(data, timestamp);
+            batchData.network_rx.push(dbNetworkRates ? dbNetworkRates.rx : null);
+            batchData.network_tx.push(dbNetworkRates ? dbNetworkRates.tx : null);
 
             // OS metrics
             batchData.cpu_usage.push(data.cpu_usage !== undefined ? parseFloat(data.cpu_usage) || 0 : null);
@@ -851,95 +1011,48 @@ const MonitorPage = {
             batchData.disk_io_reads.push(data.disk_reads_per_sec !== undefined ? parseFloat(data.disk_reads_per_sec) || 0 : null);
             batchData.disk_io_writes.push(data.disk_writes_per_sec !== undefined ? parseFloat(data.disk_writes_per_sec) || 0 : null);
 
-            // Network IO
-            // 优先使用 MetricNormalizer 已计算的速率（bytes/秒），直接转为 KB/s
-            if (data.network_rx_rate !== undefined && data.network_tx_rate !== undefined) {
-                const rxRate = parseFloat(data.network_rx_rate) / 1024;
-                const txRate = parseFloat(data.network_tx_rate) / 1024;
-                batchData.network_io_rx.push(Math.round(rxRate * 100) / 100);
-                batchData.network_io_tx.push(Math.round(txRate * 100) / 100);
-                this.prevNetworkRx = null;
-                this.prevNetworkTx = null;
-                this.prevNetworkTime = null;
-            } else {
-                const currentRx = data.network_rx_bytes !== undefined ? parseFloat(data.network_rx_bytes) || 0 : null;
-                const currentTx = data.network_tx_bytes !== undefined ? parseFloat(data.network_tx_bytes) || 0 : null;
-
-                if (currentRx === null || currentTx === null) {
-                    batchData.network_io_rx.push(null);
-                    batchData.network_io_tx.push(null);
-                } else {
-                    const looksCumulative = currentRx > 10 * 1024 * 1024 || currentTx > 10 * 1024 * 1024;
-                    if (!looksCumulative) {
-                        const rxRate = currentRx / 1000;
-                        const txRate = currentTx / 1000;
-                        batchData.network_io_rx.push(Math.round(rxRate * 100) / 100);
-                        batchData.network_io_tx.push(Math.round(txRate * 100) / 100);
-                        this.prevNetworkRx = null;
-                        this.prevNetworkTx = null;
-                        this.prevNetworkTime = null;
-                    } else if (this.prevNetworkRx !== null && this.prevNetworkTx !== null && this.prevNetworkTime !== null) {
-                        const timeDelta = (timestamp - this.prevNetworkTime) / 1000;
-                        if (timeDelta > 0) {
-                            const rxRate = Math.max(0, (currentRx - this.prevNetworkRx) / timeDelta / 1024);
-                            const txRate = Math.max(0, (currentTx - this.prevNetworkTx) / timeDelta / 1024);
-                            batchData.network_io_rx.push(Math.round(rxRate * 100) / 100);
-                            batchData.network_io_tx.push(Math.round(txRate * 100) / 100);
-                        } else {
-                            batchData.network_io_rx.push(null);
-                            batchData.network_io_tx.push(null);
-                        }
-                        this.prevNetworkRx = currentRx;
-                        this.prevNetworkTx = currentTx;
-                        this.prevNetworkTime = timestamp;
-                    } else {
-                        batchData.network_io_rx.push(null);
-                        batchData.network_io_tx.push(null);
-                        this.prevNetworkRx = currentRx;
-                        this.prevNetworkTx = currentTx;
-                        this.prevNetworkTime = timestamp;
-                    }
-                }
-            }
+            const hostNetworkRates = this._extractHostNetworkRates(data, timestamp);
+            batchData.network_io_rx.push(hostNetworkRates ? hostNetworkRates.rx : null);
+            batchData.network_io_tx.push(hostNetworkRates ? hostNetworkRates.tx : null);
         }
 
         // Batch update all charts
-        ChartPanel.batchUpdateMulti('connections', batchData.labels, [batchData.connections_total, batchData.connections_active]);
-        ChartPanel.batchUpdate('qps', batchData.labels, batchData.qps);
-        ChartPanel.batchUpdate('cache_hit', batchData.labels, batchData.cache_hit);
-        ChartPanel.batchUpdate('tps', batchData.labels, batchData.tps);
+        ChartPanel.batchUpdateMulti('connections', batchData.labels, [batchData.connections_total, batchData.connections_active], maxPoints);
+        ChartPanel.batchUpdate('qps', batchData.labels, batchData.qps, maxPoints);
+        ChartPanel.batchUpdate('cache_hit', batchData.labels, batchData.cache_hit, maxPoints);
+        ChartPanel.batchUpdate('tps', batchData.labels, batchData.tps, maxPoints);
         if (batchData.network_rx.some(v => v !== null) || batchData.network_tx.some(v => v !== null)) {
             const filtered = this._filterNullValuesMulti(batchData.labels, [batchData.network_rx, batchData.network_tx]);
-            ChartPanel.batchUpdateMulti('network', filtered.labels, filtered.valuesArray);
+            ChartPanel.batchUpdateMulti('network', filtered.labels, filtered.valuesArray, maxPoints);
         }
-        ChartPanel.batchUpdate('latency', batchData.labels, batchData.latency);
+        ChartPanel.batchUpdate('latency', batchData.labels, batchData.latency, maxPoints);
 
         // OS charts - filter labels and data together
         if (batchData.cpu_usage.some(v => v !== null)) {
             const filtered = this._filterNullValues(batchData.labels, batchData.cpu_usage);
-            ChartPanel.batchUpdate('cpu_usage', filtered.labels, filtered.values);
+            ChartPanel.batchUpdate('cpu_usage', filtered.labels, filtered.values, maxPoints);
         }
         if (batchData.memory_usage.some(v => v !== null)) {
             const filtered = this._filterNullValues(batchData.labels, batchData.memory_usage);
-            ChartPanel.batchUpdate('memory_usage', filtered.labels, filtered.values);
+            ChartPanel.batchUpdate('memory_usage', filtered.labels, filtered.values, maxPoints);
         }
         if (batchData.disk_usage.some(v => v !== null)) {
             const filtered = this._filterNullValues(batchData.labels, batchData.disk_usage);
-            ChartPanel.batchUpdate('disk_usage', filtered.labels, filtered.values);
+            ChartPanel.batchUpdate('disk_usage', filtered.labels, filtered.values, maxPoints);
         }
         if (batchData.load_avg.some(v => v !== null)) {
             const filtered = this._filterNullValues(batchData.labels, batchData.load_avg);
-            ChartPanel.batchUpdate('load_avg', filtered.labels, filtered.values);
+            ChartPanel.batchUpdate('load_avg', filtered.labels, filtered.values, maxPoints);
         }
 
         // Multi-line charts - filter labels and data together
         if (batchData.disk_io_reads.some(v => v !== null) || batchData.disk_io_writes.some(v => v !== null)) {
             const filtered = this._filterNullValuesMulti(batchData.labels, [batchData.disk_io_reads, batchData.disk_io_writes]);
-            ChartPanel.batchUpdateMulti('disk_io', filtered.labels, filtered.valuesArray);
+            ChartPanel.batchUpdateMulti('disk_io', filtered.labels, filtered.valuesArray, maxPoints);
         }
         if (batchData.network_io_rx.some(v => v !== null) || batchData.network_io_tx.some(v => v !== null)) {
             const filtered = this._filterNullValuesMulti(batchData.labels, [batchData.network_io_rx, batchData.network_io_tx]);
-            ChartPanel.batchUpdateMulti('network_io', filtered.labels, filtered.valuesArray);
+            ChartPanel.batchUpdateMulti('network_io', filtered.labels, filtered.valuesArray, maxPoints);
         }
     },
 
@@ -974,10 +1087,8 @@ const MonitorPage = {
         this.datasourceSelector = null;
         this._stopMonitoring();
         ChartPanel.destroyAll();
-        // Reset network tracking
-        this.prevNetworkRx = null;
-        this.prevNetworkTx = null;
-        this.prevNetworkTime = null;
+        this._resetNetworkStates();
+        this._resetChartMaxPoints();
         // Reset time range state
         this.currentTimeRange = 60;
         this.isRealtime = true;

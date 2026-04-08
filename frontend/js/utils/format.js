@@ -7,6 +7,25 @@ const Format = {
         return parseFloat((bytes / Math.pow(1024, i)).toFixed(1)) + ' ' + units[i];
     },
 
+    networkRate(bytesPerSecond) {
+        if (bytesPerSecond === null || bytesPerSecond === undefined) return '--';
+
+        const value = typeof bytesPerSecond === 'number'
+            ? bytesPerSecond
+            : parseFloat(bytesPerSecond);
+
+        if (Number.isNaN(value)) return '--';
+
+        const absolute = Math.abs(value);
+        if (absolute >= 1024 * 1024) {
+            return (value / (1024 * 1024)).toFixed(2) + ' MB/s';
+        }
+        if (absolute >= 1024) {
+            return (value / 1024).toFixed(2) + ' KB/s';
+        }
+        return value.toFixed(2) + ' Bytes/s';
+    },
+
     number(num) {
         if (num === null || num === undefined) return '0';
         if (typeof num !== 'number') num = parseFloat(num) || 0;

@@ -1,6 +1,7 @@
 """Database Intelligent Inspection Service - unified threshold-based monitoring and reporting"""
 import asyncio
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 from sqlalchemy import select, and_, desc
@@ -15,6 +16,30 @@ from backend.models.soft_delete import alive_select, get_alive_by_id
 from backend.utils.datetime_helper import now as get_now
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_anomaly_metric_name(reason: Optional[str]) -> Optional[str]:
+    if not reason:
+        return None
+
+    match = re.match(r"\s*([^=\s]+)\s*=", reason)
+    if not match:
+        return None
+    return match.group(1).strip() or None
+
+
+async def _get_trigger_dedup_window_minutes(db: AsyncSession) -> int:
+    from backend.config import get_settings
+    from backend.services.config_service import get_config
+
+    dedup_minutes = await get_config(
+        db,
+        "inspection_dedup_window_minutes",
+        default=get_settings().inspection_dedup_window_minutes,
+    )
+    if not dedup_minutes:
+        return 0
+    return int(dedup_minutes)
 
 
 class InspectionService:
@@ -74,6 +99,21 @@ class InspectionService:
                                 metric_snapshot: Dict[str, Any] = None,
                                 alert_id: Optional[int] = None) -> int:
         """Manually or programmatically trigger an inspection"""
+        recent_trigger = await self._find_recent_duplicate_trigger(
+            db=db,
+            datasource_id=datasource_id,
+            trigger_type=trigger_type,
+            reason=reason,
+        )
+        if recent_trigger:
+            logger.info(
+                "Skipping duplicate %s trigger for datasource %s, reusing trigger %s",
+                trigger_type,
+                datasource_id,
+                recent_trigger.id,
+            )
+            return recent_trigger.id
+
         trigger = InspectionTrigger(
             datasource_id=datasource_id,
             trigger_type=trigger_type,
@@ -95,6 +135,41 @@ class InspectionService:
             asyncio.create_task(self._generate_report_async(trigger.id))
 
         return trigger.id
+
+    async def _find_recent_duplicate_trigger(
+        self,
+        db: AsyncSession,
+        datasource_id: int,
+        trigger_type: str,
+        reason: Optional[str],
+    ) -> Optional[InspectionTrigger]:
+        if trigger_type not in {"anomaly", "connection_failure"}:
+            return None
+
+        dedup_minutes = await _get_trigger_dedup_window_minutes(db)
+        if dedup_minutes <= 0:
+            return None
+
+        filters = [
+            InspectionTrigger.datasource_id == datasource_id,
+            InspectionTrigger.trigger_type == trigger_type,
+            InspectionTrigger.triggered_at >= get_now() - timedelta(minutes=dedup_minutes),
+        ]
+
+        if trigger_type == "anomaly":
+            metric_name = _extract_anomaly_metric_name(reason)
+            if metric_name:
+                filters.append(InspectionTrigger.trigger_reason.like(f"{metric_name}=%"))
+            elif reason:
+                filters.append(InspectionTrigger.trigger_reason == reason)
+
+        result = await db.execute(
+            select(InspectionTrigger)
+            .where(and_(*filters))
+            .order_by(desc(InspectionTrigger.triggered_at))
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
 
     async def _scheduler_loop(self):
         """Background loop to check for scheduled inspections"""

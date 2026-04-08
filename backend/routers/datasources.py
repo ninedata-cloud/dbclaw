@@ -7,6 +7,7 @@ import logging
 
 from backend.database import get_db
 from backend.models.datasource import Datasource
+from backend.models.integration import Integration
 from backend.models.soft_delete import alive_filter, alive_select, get_alive_by_id
 from backend.schemas.datasource import (
     DatasourceCreate, DatasourceUpdate, DatasourceResponse, DatasourceTestResult, DatasourceTestRequest,
@@ -14,6 +15,7 @@ from backend.schemas.datasource import (
 )
 from backend.utils.encryption import encrypt_value, decrypt_value
 from backend.services.connection_diagnostic_service import ConnectionDiagnosticService
+from backend.services.integration_scheduler import sync_datasource_schedule, unschedule_datasource
 from backend.dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -35,6 +37,33 @@ def normalize_tags(tags: list[str] | None) -> list[str]:
         seen.add(key)
         normalized.append(value)
     return normalized
+
+
+async def validate_integration_binding(
+    db: AsyncSession,
+    metric_source: str | None,
+    external_instance_id: str | None,
+    inbound_source: dict | None,
+):
+    if metric_source != 'integration':
+        return
+
+    if not inbound_source:
+        raise HTTPException(status_code=400, detail="使用集成采集时，必须配置 inbound_source")
+
+    integration_ref = inbound_source.get("integration_id")
+    if not integration_ref:
+        raise HTTPException(status_code=400, detail="使用集成采集时，必须选择入站 Integration")
+
+    integration = await get_alive_by_id(db, Integration, integration_ref)
+    if not integration:
+        raise HTTPException(status_code=400, detail="入站 Integration 不存在")
+
+    if integration.integration_type != 'inbound_metric':
+        raise HTTPException(status_code=400, detail="所选 Integration 不是入站指标集成")
+
+    if integration.integration_id in {"builtin_aliyun_rds", "builtin_huaweicloud_rds", "builtin_tencentcloud_rds"} and not (external_instance_id or "").strip():
+        raise HTTPException(status_code=400, detail="当前云厂商 RDS 外部采集必须填写实例 ID（external_instance_id）")
 
 
 router = APIRouter(prefix="/api/datasources", tags=["datasources"], dependencies=[Depends(get_current_user)])
@@ -157,6 +186,13 @@ async def check_all_datasource_status(db: AsyncSession = Depends(get_db)):
 async def create_datasource(data: DatasourceCreate, db: AsyncSession = Depends(get_db)):
     logger.info(f"Creating datasource: {data.name}")
 
+    await validate_integration_binding(
+        db,
+        data.metric_source,
+        data.external_instance_id,
+        data.inbound_source,
+    )
+
     # 先测试连接并获取版本信息
     db_version = None
     try:
@@ -199,6 +235,7 @@ async def create_datasource(data: DatasourceCreate, db: AsyncSession = Depends(g
     db.add(datasource)
     await db.commit()
     await db.refresh(datasource)
+    await sync_datasource_schedule(datasource.id)
 
     logger.info(f"Created datasource {datasource.id}: {datasource.name}")
     return datasource
@@ -228,6 +265,13 @@ async def update_datasource(datasource_id: int, data: DatasourceUpdate, db: Asyn
 
     if "tags" in update_data:
         update_data["tags"] = normalize_tags(update_data["tags"])
+
+    await validate_integration_binding(
+        db,
+        update_data.get("metric_source", datasource.metric_source),
+        update_data.get("external_instance_id", datasource.external_instance_id),
+        update_data.get("inbound_source", datasource.inbound_source),
+    )
 
     for key, value in update_data.items():
         setattr(datasource, key, value)
@@ -261,6 +305,7 @@ async def update_datasource(datasource_id: int, data: DatasourceUpdate, db: Asyn
 
     await db.commit()
     await db.refresh(datasource)
+    await sync_datasource_schedule(datasource.id)
 
     logger.info(f"Updated datasource {datasource_id}: {datasource.name}")
     return datasource
@@ -280,6 +325,7 @@ async def delete_datasource(
 
     datasource.soft_delete(current_user.id)
     await db.commit()
+    await unschedule_datasource(datasource_id)
 
     logger.info(f"Soft deleted datasource {datasource_id}")
     return {"message": "Datasource deleted"}
@@ -376,7 +422,7 @@ async def set_datasource_silence(
         silence_until=silence_until,
         silence_reason=request.reason,
         is_silenced=True,
-        remaining_hours=request.hours
+        remaining_hours=round(float(request.hours), 2)
     )
 
 
@@ -443,4 +489,3 @@ async def get_datasource_silence_status(
         is_silenced=is_silenced,
         remaining_hours=remaining_hours
     )
-

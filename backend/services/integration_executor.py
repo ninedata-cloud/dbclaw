@@ -49,13 +49,20 @@ class IntegrationContext:
             async with self._http_session.request(method, url, **kwargs) as response:
                 # 创建一个简化的响应对象
                 class SimpleResponse:
-                    def __init__(self, status, text_content, json_content):
+                    def __init__(self, status, text_content, json_content, headers):
                         self.status_code = status
                         self.text = text_content
                         self._json_content = json_content
+                        self.headers = dict(headers or {})
 
                     def json(self):
                         return self._json_content
+
+                    def header(self, name: str, default=None):
+                        for key, value in self.headers.items():
+                            if key.lower() == name.lower():
+                                return value
+                        return default
 
                 text_content = await response.text()
                 json_content = None
@@ -64,7 +71,7 @@ class IntegrationContext:
                 except:
                     pass
 
-                return SimpleResponse(response.status, text_content, json_content)
+                return SimpleResponse(response.status, text_content, json_content, response.headers)
 
         except Exception as e:
             self.logger.error(f"HTTP 请求失败: {str(e)}")

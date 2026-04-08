@@ -10,7 +10,7 @@ async def test_skill_in_conversation():
     async with async_session() as db:
         # Test with datasource 7 (no host)
         print("Testing get_os_metrics with datasource 7 (no host)...")
-        result_json, exec_time = await execute_skill_call(
+        result_json, exec_time, _, _ = await execute_skill_call(
             skill_id="get_os_metrics",
             arguments={"datasource_id": 7},
             db=db,

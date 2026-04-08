@@ -883,6 +883,7 @@ const AlertsPage = {
             sqlserver: 'SQL Server',
             oracle: 'Oracle',
             tidb: 'TiDB',
+            'tdsql-c-mysql': 'TDSQL-C MySQL',
             oceanbase: 'OceanBase',
             oceanbase_mysql: 'OceanBase MySQL',
             opengauss: 'openGauss',

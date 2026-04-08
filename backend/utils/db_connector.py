@@ -104,7 +104,7 @@ async def execute_query(datasource: Datasource, query: str, allow_write: bool = 
         password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
 
         # Get appropriate service
-        if datasource.db_type == "mysql":
+        if datasource.db_type in {"mysql", "tdsql-c-mysql"}:
             service = MySQLConnector(
                 host=datasource.host,
                 port=datasource.port,

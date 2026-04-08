@@ -746,6 +746,19 @@ async def _process_recovery_notifications(db):
                 if not await NotificationService.check_subscription_match(alert, subscription):
                     continue
 
+                # Recovery should only go to subscriptions that received
+                # the original alert notification.
+                if not await AlertService.has_alert_notification_for_subscription(
+                    db, alert.id, subscription.id
+                ):
+                    logger.debug(
+                        "Skipping recovery notification for alert %s subscription %s: "
+                        "original alert was never delivered",
+                        alert.id,
+                        subscription.id,
+                    )
+                    continue
+
                 # Check if recovery notification already sent for this alert + subscription
                 if await AlertService.has_recovery_notification_for_subscription(
                     db, alert.id, subscription.id

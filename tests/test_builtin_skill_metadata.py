@@ -79,6 +79,7 @@ def test_curated_category_examples_match_expected_groups():
         "dm_get_db_status": "DM",
         "diagnose_high_cpu": "平台运维",
         "query_monitoring_data": "平台运维",
+        "query_monitoring_history": "平台运维",
         "manage_datasource": "平台运维",
         "trigger_inspection": "平台运维",
         "send_webhook": "平台运维",

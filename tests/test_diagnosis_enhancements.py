@@ -4,6 +4,7 @@ from backend.agent.diagnosis_context import (
     render_diagnostic_brief_for_prompt,
 )
 from backend.services.chat_orchestration_service import _build_diagnosis_event_payload
+from backend.services.tool_visualization_service import build_tool_result_visualization
 
 
 def test_extract_metric_signals_flags_high_risk_indicators():
@@ -71,3 +72,68 @@ def test_build_diagnosis_event_payload_summarizes_tool_result():
     assert payload["execution_time_ms"] == 15
     assert payload["success"] is True
     assert "cache_hit_rate" in payload["summary"]
+
+
+def test_build_tool_result_visualization_for_monitoring_history():
+    visualization = build_tool_result_visualization(
+        "query_monitoring_history",
+        {
+            "success": True,
+            "datasource": {"id": 12, "name": "prod-mysql"},
+            "host": {"id": 8, "name": "db-host-01", "host": "10.0.0.8"},
+            "time_range": {
+                "start_time": "2026-04-08T00:00:00",
+                "end_time": "2026-04-08T02:00:00",
+            },
+            "aggregation": {"bucket_seconds": 900, "bucket_label": "15m", "max_points": 96},
+            "datasource_metrics": {
+                "selected_metric_names": ["cpu_usage", "qps"],
+                "summary": {
+                    "cpu_usage": {"avg": 32.4, "min": 21.0, "max": 61.3, "last": 28.5},
+                    "qps": {"avg": 128.2, "min": 97.0, "max": 166.4, "last": 143.7},
+                },
+                "series": {
+                    "cpu_usage": [
+                        {"bucket_start": "2026-04-08T00:00:00", "avg": 25.1, "last": 25.1},
+                        {"bucket_start": "2026-04-08T00:15:00", "avg": 28.5, "last": 28.5},
+                    ],
+                    "qps": [
+                        {"bucket_start": "2026-04-08T00:00:00", "avg": 118.6, "last": 118.6},
+                        {"bucket_start": "2026-04-08T00:15:00", "avg": 143.7, "last": 143.7},
+                    ],
+                },
+            },
+            "host_metrics": {
+                "available": True,
+                "selected_metric_names": ["memory_usage"],
+                "summary": {
+                    "memory_usage": {"avg": 68.4, "min": 60.0, "max": 72.1, "last": 70.8},
+                },
+                "series": {
+                    "memory_usage": [
+                        {"bucket_start": "2026-04-08T00:00:00", "avg": 66.2, "last": 66.2},
+                        {"bucket_start": "2026-04-08T00:15:00", "avg": 70.8, "last": 70.8},
+                    ],
+                },
+            },
+        },
+    )
+
+    assert visualization is not None
+    assert visualization["type"] == "monitoring_history"
+    assert visualization["aggregation"]["bucket_label"] == "15m"
+    assert len(visualization["panels"]) == 2
+    assert visualization["panels"][0]["metrics"][0]["name"] == "cpu_usage"
+    assert visualization["panels"][1]["metrics"][0]["summary"]["last"] == 70.8
+    assert visualization["panels"][0]["metrics"][0]["points"][0]["avg"] == 25.1
+    assert visualization["panels"][0]["metrics"][0]["points"][0]["min"] is None
+    assert visualization["panels"][0]["metrics"][0]["points"][0]["last"] == 25.1
+
+
+def test_build_tool_result_visualization_skips_failed_monitoring_history():
+    visualization = build_tool_result_visualization(
+        "query_monitoring_history",
+        {"success": False, "error": "当前数据源未关联主机"},
+    )
+
+    assert visualization is None

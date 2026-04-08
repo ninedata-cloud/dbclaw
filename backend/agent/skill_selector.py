@@ -23,6 +23,7 @@ GLOBAL_SKILL_IDS: Set[str] = {
     "web_search_bocha",
     # Confirmed: keep datasource listing available even when scoped.
     "list_datasources",
+    "query_monitoring_history",
 }
 
 # OS diagnostics are only useful when a datasource has an associated host.
@@ -44,6 +45,11 @@ DB_TOOL_FAMILY_MAP: dict[str, dict[str, Set[str]]] = {
         "prefixes": {"mysql_"},
         "categories": {"mysql"},
         "tags": {"mysql"},
+    },
+    "tdsql-c-mysql": {
+        "prefixes": {"mysql_"},
+        "categories": {"mysql"},
+        "tags": {"mysql", "tdsql-c-mysql", "tdsql_c_mysql"},
     },
     "postgresql": {
         "prefixes": {"pg_"},
@@ -98,6 +104,7 @@ def normalize_db_type(db_type: Optional[str]) -> Optional[str]:
         "pg": "postgresql",
         "mssql": "sqlserver",
         "sql_server": "sqlserver",
+        "tdsql_c_mysql": "tdsql-c-mysql",
     }
     return aliases.get(value, value)
 

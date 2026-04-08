@@ -44,6 +44,24 @@ class DatasourceSelector {
         this.setupEventListeners();
     }
 
+    _getDbTypeLabel(dbType) {
+        const labels = {
+            mysql: 'MySQL',
+            postgresql: 'PostgreSQL',
+            mongodb: 'MongoDB',
+            redis: 'Redis',
+            sqlserver: 'SQL Server',
+            oracle: 'Oracle',
+            tidb: 'TiDB',
+            'tdsql-c-mysql': 'TDSQL-C MySQL',
+            oceanbase: 'OceanBase',
+            oceanbase_mysql: 'OceanBase MySQL',
+            opengauss: 'openGauss',
+            dm: 'DM',
+        };
+        return labels[dbType] || dbType || 'unknown';
+    }
+
     render() {
         const { container, minWidth, maxWidth, disabled } = this.options;
 
@@ -325,7 +343,7 @@ class DatasourceSelector {
         item.appendChild(main);
         item.appendChild(DOM.el('span', {
             className: 'datasource-selector-item-type',
-            textContent: (datasource.db_type || 'unknown').toUpperCase()
+            textContent: this._getDbTypeLabel(datasource.db_type)
         }));
 
         if (showStatus) {

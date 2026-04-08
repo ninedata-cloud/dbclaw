@@ -14,6 +14,10 @@ from backend.models.metric_snapshot import MetricSnapshot
 from backend.models.inspection_trigger import InspectionTrigger
 from backend.models.alert_message import AlertMessage
 from backend.services.db_connector import get_connector
+from backend.services.metric_snapshot_merge import (
+    cleanup_obsolete_integration_keys,
+    merge_system_metric_data_for_integration,
+)
 from backend.utils.encryption import decrypt_value
 from backend.services.threshold_checker import ThresholdChecker
 from backend.utils.datetime_helper import now
@@ -149,12 +153,30 @@ async def collect_metrics_for_connection(datasource_id: int):
                     except Exception as e:
                         logger.warning(f"Failed to collect SSH metrics for datasource {datasource_id}: {e}")
 
+                snapshot_data = normalized_status
+                if datasource.metric_source == "integration":
+                    latest_result = await db.execute(
+                        select(MetricSnapshot)
+                        .where(
+                            MetricSnapshot.datasource_id == datasource_id,
+                            MetricSnapshot.metric_type == "db_status",
+                        )
+                        .order_by(desc(MetricSnapshot.collected_at))
+                        .limit(1)
+                    )
+                    latest_snapshot = latest_result.scalar_one_or_none()
+                    snapshot_data = merge_system_metric_data_for_integration(
+                        latest_snapshot.data if latest_snapshot and latest_snapshot.data else {},
+                        normalized_status,
+                    )
+                    snapshot_data = cleanup_obsolete_integration_keys(datasource.db_type, snapshot_data)
+
                 # 使用信号量保护数据库写入
                 async with _db_write_semaphore:
                     snapshot = MetricSnapshot(
                         datasource_id=datasource_id,
                         metric_type="db_status",
-                        data=normalized_status,
+                        data=snapshot_data,
                         collected_at=now(),  # 使用本地时间
                     )
                     db.add(snapshot)
@@ -165,13 +187,13 @@ async def collect_metrics_for_connection(datasource_id: int):
                     await _handle_connection_failure(db, datasource_id, datasource, status.get("error", "Unknown error"))
 
                 # Check thresholds and trigger inspection if needed
-                await _check_thresholds_and_trigger(db, datasource_id, normalized_status)
+                await _check_thresholds_and_trigger(db, datasource_id, snapshot_data)
 
                 # Push to WebSocket subscribers
                 await _push_to_subscribers(datasource_id, {
                     "type": "db_status",
                     "datasource_id": datasource_id,
-                    "data": normalized_status,
+                    "data": snapshot_data,
                     "collected_at": now().isoformat(),
                 })
     except Exception as e:

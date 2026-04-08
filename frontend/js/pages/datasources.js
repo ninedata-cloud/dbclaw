@@ -49,6 +49,97 @@ const DatasourcesPage = {
         }
     },
 
+    _escapeHtml(value) {
+        return Utils.escapeHtml(String(value ?? ''));
+    },
+
+    _escapeAttr(value) {
+        return this._escapeHtml(value).replace(/"/g, '&quot;');
+    },
+
+    _getDbTypeLabel(dbType) {
+        const labels = {
+            mysql: 'MySQL',
+            postgresql: 'PostgreSQL',
+            mongodb: 'MongoDB',
+            redis: 'Redis',
+            sqlserver: 'SQL Server',
+            oracle: 'Oracle',
+            tidb: 'TiDB',
+            'tdsql-c-mysql': 'TDSQL-C MySQL',
+            oceanbase: 'OceanBase',
+            oceanbase_mysql: 'OceanBase MySQL',
+            opengauss: 'openGauss',
+            dm: 'DM',
+        };
+        return labels[dbType] || dbType || '-';
+    },
+
+    _formatHourValue(hours) {
+        const value = Number(hours);
+        if (!Number.isFinite(value)) return '-';
+        return String(parseFloat(value.toFixed(2)));
+    },
+
+    _getSilenceState(datasource) {
+        if (!datasource?.silence_until) {
+            return {
+                isSilenced: false,
+                remainingHours: null,
+                silenceUntil: null,
+                reason: datasource?.silence_reason || null,
+            };
+        }
+
+        const silenceUntil = new Date(datasource.silence_until);
+        if (Number.isNaN(silenceUntil.getTime())) {
+            return {
+                isSilenced: false,
+                remainingHours: null,
+                silenceUntil: null,
+                reason: datasource?.silence_reason || null,
+            };
+        }
+
+        const remainingMs = silenceUntil.getTime() - Date.now();
+        if (remainingMs <= 0) {
+            return {
+                isSilenced: false,
+                remainingHours: null,
+                silenceUntil,
+                reason: datasource?.silence_reason || null,
+            };
+        }
+
+        return {
+            isSilenced: true,
+            remainingHours: Math.round((remainingMs / 3600000) * 100) / 100,
+            silenceUntil,
+            reason: datasource?.silence_reason || null,
+        };
+    },
+
+    _renderSilenceBadge(datasource) {
+        const state = this._getSilenceState(datasource);
+        if (!state.isSilenced) return '';
+
+        const titleParts = [
+            `静默至：${Format.datetime(datasource.silence_until)}`,
+            `剩余：${this._formatHourValue(state.remainingHours)} 小时`,
+        ];
+        if (state.reason) {
+            titleParts.push(`原因：${state.reason}`);
+        }
+
+        return `
+            <div style="margin-top:6px;">
+                <span class="badge badge-warning" title="${this._escapeAttr(titleParts.join('\n'))}">
+                    告警静默中 ${this._escapeHtml(this._formatHourValue(state.remainingHours))}h
+                </span>
+            </div>
+        `;
+    },
+
     async _loadLatestMetrics() {
         try {
             this.latestMetrics = await API.getDatasourcesLatestMetrics();
@@ -70,6 +161,7 @@ const DatasourcesPage = {
                 <option value="oracle">Oracle</option>
                 <option value="sqlserver">SQL Server</option>
                 <option value="dm">DM</option>
+                <option value="tdsql-c-mysql">TDSQL-C MySQL</option>
                 <option value="mongodb">MongoDB</option>
                 <option value="redis">Redis</option>
             </select>
@@ -244,10 +336,27 @@ const DatasourcesPage = {
                 </thead>
                 <tbody>
                     ${this.filteredDatasources.map(conn => {
+                        const silenceState = this._getSilenceState(conn);
+                        const silenceMenuItems = silenceState.isSilenced ? `
+                            <div class="ds-more-menu-item" onclick="DatasourcesPage._showSilenceModal(${conn.id})" style="display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;font-size:13px;color:var(--text-primary);white-space:nowrap;">
+                                <i data-lucide="bell-ring" style="width:14px;height:14px;"></i> 调整告警静默
+                            </div>
+                            <div class="ds-more-menu-item" onclick="DatasourcesPage._cancelDatasourceSilence(${conn.id})" style="display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;font-size:13px;color:#ef4444;white-space:nowrap;">
+                                <i data-lucide="bell-off" style="width:14px;height:14px;"></i> 取消告警静默
+                            </div>
+                        ` : `
+                            <div class="ds-more-menu-item" onclick="DatasourcesPage._showSilenceModal(${conn.id})" style="display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;font-size:13px;color:var(--text-primary);white-space:nowrap;">
+                                <i data-lucide="bell-off" style="width:14px;height:14px;"></i> 设置告警静默
+                            </div>
+                        `;
+
                         return `
                             <tr>
-                                <td><strong>${conn.name}</strong></td>
-                                <td><span class="badge badge-info">${conn.db_type}</span></td>
+                                <td>
+                                    <strong>${conn.name}</strong>
+                                    ${this._renderSilenceBadge(conn)}
+                                </td>
+                                <td><span class="badge badge-info">${this._escapeHtml(this._getDbTypeLabel(conn.db_type))}</span></td>
                                 <td>${this._renderTags(conn.tags || [])}</td>
                                 <td>${conn.host}:${conn.port}</td>
                                 <td>${conn.database || '-'}</td>
@@ -275,6 +384,7 @@ const DatasourcesPage = {
                                                 <div class="ds-more-menu-item" onclick="DatasourcesPage._monitorDatasource(${conn.id})" style="display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;font-size:13px;color:var(--text-primary);white-space:nowrap;">
                                                     <i data-lucide="activity" style="width:14px;height:14px;"></i> 监控
                                                 </div>
+                                                ${silenceMenuItems}
                                                 <div style="border-top:1px solid var(--border-color);margin:4px 0;"></div>
                                                 <div class="ds-more-menu-item" onclick="DatasourcesPage._deleteDatasource(${conn.id})" style="display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;font-size:13px;color:#ef4444;white-space:nowrap;">
                                                     <i data-lucide="trash-2" style="width:14px;height:14px;"></i> 删除
@@ -344,6 +454,105 @@ const DatasourcesPage = {
     _editDatasource(id) {
         const conn = this.allDatasources.find(c => c.id === id);
         if (conn) DatasourceForm.show(conn, () => this.render());
+    },
+
+    _showSilenceModal(id) {
+        const conn = this.allDatasources.find(c => c.id === id);
+        if (!conn) return;
+
+        const state = this._getSilenceState(conn);
+        const defaultHours = state.isSilenced ? this._formatHourValue(state.remainingHours) : '1';
+        const currentStatusHtml = state.isSilenced ? `
+            <div style="margin-bottom:12px;padding:10px 12px;border-radius:8px;background:rgba(217,119,6,0.12);color:var(--text-primary);">
+                <div style="font-weight:600;margin-bottom:4px;">当前处于告警静默中</div>
+                <div style="font-size:12px;color:var(--text-secondary);">截止时间：${this._escapeHtml(Format.datetime(conn.silence_until))}</div>
+                <div style="font-size:12px;color:var(--text-secondary);">剩余时长：${this._escapeHtml(this._formatHourValue(state.remainingHours))} 小时</div>
+                ${state.reason ? `<div style="font-size:12px;color:var(--text-secondary);">静默原因：${this._escapeHtml(state.reason)}</div>` : ''}
+            </div>
+        ` : '';
+
+        Modal.show({
+            title: '设置告警静默',
+            content: `
+                <div style="padding:6px 0;">
+                    <div style="margin-bottom:12px;color:var(--text-secondary);line-height:1.6;">
+                        为数据源 <strong>${this._escapeHtml(conn.name)}</strong> 设置告警静默。静默期间将暂停该数据源的告警触发与通知。
+                    </div>
+                    ${currentStatusHtml}
+                    <div class="form-group">
+                        <label for="datasource-silence-hours">静默时长（小时）</label>
+                        <input id="datasource-silence-hours" type="number" class="form-input" min="0.5" max="240" step="0.5" value="${this._escapeAttr(defaultHours)}" placeholder="1">
+                        <small class="text-muted">默认 1 小时，可设置范围 0.5 ~ 240 小时</small>
+                    </div>
+                    <div class="form-group" style="margin-top:12px;">
+                        <label for="datasource-silence-reason">静默原因（可选）</label>
+                        <textarea id="datasource-silence-reason" class="form-input" rows="3" maxlength="500" placeholder="例如：计划变更窗口、已知故障处理中">${this._escapeHtml(state.reason || '')}</textarea>
+                    </div>
+                </div>
+            `,
+            buttons: [
+                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
+                {
+                    text: state.isSilenced ? '更新静默' : '开始静默',
+                    variant: 'primary',
+                    onClick: () => this._setDatasourceSilence(id)
+                }
+            ]
+        });
+    },
+
+    async _setDatasourceSilence(id) {
+        const hoursValue = DOM.$('#datasource-silence-hours')?.value;
+        const reasonValue = DOM.$('#datasource-silence-reason')?.value?.trim() || '';
+        const hours = parseFloat(hoursValue);
+
+        if (!Number.isFinite(hours)) {
+            Toast.error('请输入有效的静默时长');
+            return;
+        }
+        if (hours < 0.5 || hours > 240) {
+            Toast.error('静默时长必须在 0.5 到 240 小时之间');
+            return;
+        }
+
+        try {
+            const result = await API.setDatasourceSilence(id, {
+                hours,
+                reason: reasonValue || null,
+            });
+            Modal.hide();
+            Toast.success(`已设置告警静默 ${this._formatHourValue(result.remaining_hours ?? hours)} 小时`);
+            await this.render();
+        } catch (err) {
+            Toast.error('设置告警静默失败: ' + err.message);
+        }
+    },
+
+    async _cancelDatasourceSilence(id) {
+        const conn = this.allDatasources.find(c => c.id === id);
+        if (!conn) return;
+
+        Modal.show({
+            title: '取消告警静默',
+            content: `确认取消数据源 <strong>${this._escapeHtml(conn.name)}</strong> 的告警静默吗？取消后将立即恢复该数据源的告警触发与通知。`,
+            buttons: [
+                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
+                {
+                    text: '确认取消',
+                    variant: 'danger',
+                    onClick: async () => {
+                        try {
+                            await API.cancelDatasourceSilence(id);
+                            Modal.hide();
+                            Toast.success('已取消告警静默');
+                            await this.render();
+                        } catch (err) {
+                            Toast.error('取消告警静默失败: ' + err.message);
+                        }
+                    }
+                }
+            ]
+        });
     },
 
     async _deleteDatasource(id) {

@@ -44,6 +44,7 @@ const DatasourceForm = {
                         <option value="oracle" ${datasource?.db_type === 'oracle' ? 'selected' : ''}>Oracle</option>
                         <option value="sqlserver" ${datasource?.db_type === 'sqlserver' ? 'selected' : ''}>SQL Server</option>
                         <option value="tidb" ${datasource?.db_type === 'tidb' ? 'selected' : ''}>TiDB</option>
+                        <option value="tdsql-c-mysql" ${datasource?.db_type === 'tdsql-c-mysql' ? 'selected' : ''}>TDSQL-C MySQL</option>
                         <option value="dm" ${datasource?.db_type === 'dm' ? 'selected' : ''}>DM (达梦)</option>
                         <option value="oceanbase" ${datasource?.db_type === 'oceanbase' ? 'selected' : ''}>OceanBase</option>
                         <option value="oceanbase_mysql" ${datasource?.db_type === 'oceanbase_mysql' ? 'selected' : ''}>OceanBase MySQL</option>
@@ -125,6 +126,18 @@ const DatasourceForm = {
             </div>
             <div id="integration-config-section" style="display: ${datasource?.metric_source === 'integration' ? 'block' : 'none'};">
                 <div class="form-group">
+                    <label id="external-instance-id-label">外部实例 ID</label>
+                    <input
+                        type="text"
+                        class="form-input"
+                        name="external_instance_id"
+                        id="external-instance-id-input"
+                        value="${datasource?.external_instance_id || ''}"
+                        placeholder="例如：云厂商或外部监控系统中的实例 ID"
+                    >
+                    <small class="text-muted" id="external-instance-id-help">外部监控系统中的实例标识。华为云/阿里云 RDS 场景通常必填。</small>
+                </div>
+                <div class="form-group">
                     <label>入站 Integration</label>
                     <select class="form-select" id="inbound-integration-select">
                         <option value="">加载中...</option>
@@ -152,26 +165,49 @@ const DatasourceForm = {
         metricSourceSelect.addEventListener('change', () => {
             if (metricSourceSelect.value === 'integration') integrationConfigSection.style.display = 'block';
             else integrationConfigSection.style.display = 'none';
+
+            const externalInstanceInput = form.querySelector('#external-instance-id-input');
+            if (externalInstanceInput) {
+                externalInstanceInput.required = metricSourceSelect.value === 'integration'
+                    && externalInstanceInput.dataset.required === 'true';
+            }
         });
 
         this._loadHosts(form.querySelector('[name="host_id"]'), datasource?.host_id);
 
         // inbound integration dynamic section
+        let inboundIntegrations = [];
         (async () => {
-            const integrations = await this._loadInboundIntegrations();
+            inboundIntegrations = await this._loadInboundIntegrations();
             const select = form.querySelector('#inbound-integration-select');
             if (!select) return;
 
             const currentId = inboundSource.integration_id ? String(inboundSource.integration_id) : '';
             select.innerHTML = `
                 <option value="">请选择</option>
-                ${integrations.map(item => `
+                ${inboundIntegrations.map(item => `
                     <option value="${item.id}" ${String(item.id) === currentId ? 'selected' : ''}>${item.name}</option>
                 `).join('')}
             `;
 
+            const updateExternalInstanceField = (integrationId) => {
+                const integration = this._getInboundIntegration(inboundIntegrations, integrationId);
+                const meta = this._getExternalInstanceFieldMeta(integration);
+                const label = form.querySelector('#external-instance-id-label');
+                const input = form.querySelector('#external-instance-id-input');
+                const help = form.querySelector('#external-instance-id-help');
+
+                if (label) label.textContent = meta.label;
+                if (help) help.textContent = meta.help;
+                if (input) {
+                    input.placeholder = meta.placeholder;
+                    input.dataset.required = meta.required ? 'true' : 'false';
+                    input.required = metricSourceSelect.value === 'integration' && meta.required;
+                }
+            };
+
             const renderParams = (integrationId, existingParams = {}) => {
-                const integration = integrations.find(item => String(item.id) === String(integrationId));
+                const integration = this._getInboundIntegration(inboundIntegrations, integrationId);
                 const container = form.querySelector('#inbound-params-container');
                 if (!container) return;
 
@@ -180,8 +216,12 @@ const DatasourceForm = {
                     return;
                 }
 
-                let html = '<div style="font-weight:600;margin-bottom:8px;">采集参数</div>';
+                let html = `
+                    <div style="font-weight:600;margin-bottom:8px;">采集参数</div>
+                    <div class="text-muted" style="margin-bottom:12px;">${this._getInboundParamIntro(integration)}</div>
+                `;
                 for (const [key, prop] of Object.entries(integration.config_schema.properties)) {
+                    if (!this._shouldRenderInboundParam(integration, key)) continue;
                     const required = integration.config_schema.required?.includes(key) ? 'required' : '';
                     const type = prop.format === 'password' ? 'password' : 'text';
                     const value = prop.format === 'password' ? '' : (existingParams[key] || prop.default || '');
@@ -197,9 +237,13 @@ const DatasourceForm = {
 
             // initial
             renderParams(select.value, inboundSource.params || {});
+            updateExternalInstanceField(select.value);
 
             // change
-            select.addEventListener('change', () => renderParams(select.value, {}));
+            select.addEventListener('change', () => {
+                renderParams(select.value, {});
+                updateExternalInstanceField(select.value);
+            });
         })();
 
         form.addEventListener('submit', async (e) => {
@@ -213,6 +257,7 @@ const DatasourceForm = {
             if (!data.host_id) data.host_id = null;
             else data.host_id = parseInt(data.host_id);
             if (!data.database) data.database = null;
+            data.external_instance_id = (data.external_instance_id || '').trim() || null;
 
             const extraParams = {};
             if (data.db_type === 'oracle' && data.oracle_conn_mode && data.oracle_conn_mode !== 'default') {
@@ -223,10 +268,17 @@ const DatasourceForm = {
 
             if (data.metric_source === 'system') {
                 data.inbound_source = null;
+                data.external_instance_id = null;
             } else if (data.metric_source === 'integration') {
                 const integrationId = form.querySelector('#inbound-integration-select')?.value;
                 if (!integrationId) {
                     Toast.error('使用集成采集时，必须选择入站 Integration');
+                    return;
+                }
+
+                const selectedIntegration = this._getInboundIntegration(inboundIntegrations, integrationId);
+                if (this._integrationRequiresExternalInstanceId(selectedIntegration) && !data.external_instance_id) {
+                    Toast.error('当前集成必须填写外部实例 ID');
                     return;
                 }
 
@@ -331,6 +383,76 @@ const DatasourceForm = {
         });
     },
 
+    _getInboundIntegration(integrations, integrationId) {
+        return (integrations || []).find(item => String(item.id) === String(integrationId)) || null;
+    },
+
+    _integrationRequiresExternalInstanceId(integration) {
+        return ['builtin_aliyun_rds', 'builtin_huaweicloud_rds', 'builtin_tencentcloud_rds'].includes(integration?.integration_id);
+    },
+
+    _shouldRenderInboundParam(integration, key) {
+        if (integration?.integration_id === 'builtin_huaweicloud_rds' && ['access_key_id', 'access_key_secret'].includes(key)) {
+            return false;
+        }
+        if (integration?.integration_id === 'builtin_tencentcloud_rds' && ['secret_id', 'secret_key'].includes(key)) {
+            return false;
+        }
+        return true;
+    },
+
+    _getExternalInstanceFieldMeta(integration) {
+        if (integration?.integration_id === 'builtin_huaweicloud_rds') {
+            return {
+                label: '华为云 RDS 实例 ID *',
+                placeholder: '例如：8ad0f7d4c0f74f7e9c0f4d8f3b1e2a6din01',
+                help: '这里填写华为云 RDS 的实例 ID。region_id 用于定位 CES/IAM 接口；AK/SK 固定从系统参数读取，无需在数据源里填写。',
+                required: true,
+            };
+        }
+
+        if (integration?.integration_id === 'builtin_aliyun_rds') {
+            return {
+                label: '阿里云 RDS 实例 ID *',
+                placeholder: '例如：rm-uf6wjk5xxxxxxx',
+                help: '这里填写阿里云 RDS 的实例 ID。AccessKey 可留空并从系统配置读取。',
+                required: true,
+            };
+        }
+
+        if (integration?.integration_id === 'builtin_tencentcloud_rds') {
+            return {
+                label: '腾讯云实例 ID *',
+                placeholder: 'MySQL 示例：cdb-xxx；PostgreSQL/SQL Server 示例：postgres-xxx / mssql-xxx；TDSQL-C 示例：cynosdbmysql-ins-xxx',
+                help: '这里填写腾讯云监控维度里的实例标识。MySQL/TDSQL-C 通常使用 InstanceId，PostgreSQL/SQL Server 使用 resourceId；SecretId/SecretKey 固定从系统参数读取，下方只需配置 region_id 等运行参数。',
+                required: true,
+            };
+        }
+
+        return {
+            label: '外部实例 ID',
+            placeholder: '例如：云厂商或外部监控系统中的实例 ID',
+            help: '外部监控系统中的实例标识。是否必填取决于所选入站 Integration。',
+            required: false,
+        };
+    },
+
+    _getInboundParamIntro(integration) {
+        if (integration?.integration_id === 'builtin_huaweicloud_rds') {
+            return '以下参数用于调用华为云 CES/IAM API，不是数据库连接信息。区域 ID 仍需填写，因为接口端点不能仅靠实例 ID 自动推断；AK/SK 固定从系统参数读取。';
+        }
+
+        if (integration?.integration_id === 'builtin_aliyun_rds') {
+            return '以下参数用于调用阿里云 RDS API，不是数据库连接信息。';
+        }
+
+        if (integration?.integration_id === 'builtin_tencentcloud_rds') {
+            return '以下参数用于调用腾讯云监控 API，不是数据库连接信息。SecretId/SecretKey 固定从系统参数读取，这里只需填写 region_id；推荐使用 ap-guangzhou 这类标准地域，也兼容 gz/1 这类监控文档里的地域简写；MySQL 如需采集只读/代理节点，可额外填写 mysql_instance_type。';
+        }
+
+        return '以下参数用于调用外部监控集成，不是数据库连接信息。';
+    },
+
     _getExtraParam(datasource, key, defaultValue) {
         if (!datasource?.extra_params) return defaultValue;
         try {
@@ -348,6 +470,7 @@ const DatasourceForm = {
             oracle: 1521,
             sqlserver: 1433,
             tidb: 4000,
+            'tdsql-c-mysql': 3306,
             dm: 5236,
             oceanbase: 2881,
             oceanbase_mysql: 2881,

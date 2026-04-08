@@ -30,7 +30,7 @@ class MetricNormalizer:
 
         if db_type == 'postgresql':
             normalized.update(cls._normalize_postgresql(datasource_id, raw_metrics))
-        elif db_type == 'mysql':
+        elif db_type in {'mysql', 'tdsql-c-mysql'}:
             normalized.update(cls._normalize_mysql(datasource_id, raw_metrics))
         elif db_type == 'oceanbase':
             normalized.update(cls._normalize_oceanbase(datasource_id, raw_metrics))

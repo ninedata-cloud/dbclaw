@@ -5,7 +5,7 @@ from datetime import datetime
 
 class DatasourceCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
-    db_type: str = Field(..., pattern="^(mysql|postgresql|mongodb|redis|sqlserver|oracle|tidb|oceanbase|oceanbase_mysql|opengauss|dm)$")
+    db_type: str = Field(..., pattern="^(mysql|postgresql|mongodb|redis|sqlserver|oracle|tidb|tdsql-c-mysql|oceanbase|oceanbase_mysql|opengauss|dm)$")
     host: str = Field(..., min_length=1)
     port: int = Field(..., gt=0, lt=65536)
     username: Optional[str] = None
@@ -92,7 +92,7 @@ class DatasourceResponse(BaseModel):
 
 class DatasourceTestRequest(BaseModel):
     datasource_id: Optional[int] = None  # If provided, use saved password when password is None
-    db_type: str = Field(..., pattern="^(mysql|postgresql|mongodb|redis|sqlserver|oracle|tidb|oceanbase|oceanbase_mysql|opengauss|dm)$")
+    db_type: str = Field(..., pattern="^(mysql|postgresql|mongodb|redis|sqlserver|oracle|tidb|tdsql-c-mysql|oceanbase|oceanbase_mysql|opengauss|dm)$")
     host: str = Field(..., min_length=1)
     port: int = Field(..., gt=0, lt=65536)
     username: Optional[str] = None
@@ -140,7 +140,7 @@ class DatasourceTestResult(BaseModel):
 
 class DatasourceSilenceRequest(BaseModel):
     """设置数据源静默的请求"""
-    hours: int = Field(..., ge=1, le=72, description="静默时长（小时），范围1-72")
+    hours: float = Field(..., ge=0.5, le=240, description="静默时长（小时），范围 0.5-240")
     reason: Optional[str] = Field(None, max_length=500, description="静默原因")
 
 
@@ -154,4 +154,3 @@ class DatasourceSilenceResponse(BaseModel):
 
     class Config:
         from_attributes = True
-

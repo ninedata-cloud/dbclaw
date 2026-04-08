@@ -100,6 +100,7 @@ def get_connector(db_type: str, host: str, port: int, username: str = None,
     """Factory function to create appropriate connector."""
     connectors = {
         "mysql": "backend.services.mysql_service.MySQLConnector",
+        "tdsql-c-mysql": "backend.services.mysql_service.MySQLConnector",
         "postgresql": "backend.services.postgres_service.PostgreSQLConnector",
         "mongodb": "backend.services.mongo_service.MongoDBConnector",
         "redis": "backend.services.redis_service.RedisConnector",

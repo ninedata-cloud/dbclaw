@@ -220,6 +220,22 @@ async def lifespan(app: FastAPI):
             ("aliyun_access_key_secret", "", "string", "阿里云 AccessKey Secret（用于 RDS 监控数据采集）"),
         ]
 
+        # Seed default Huawei Cloud configs
+        huaweicloud_defaults = [
+            ("huaweicloud_access_key_id", "", "string", "华为云 Access Key ID（用于 RDS 监控数据采集）"),
+            ("huaweicloud_access_key_secret", "", "string", "华为云 Access Key Secret（用于 RDS 监控数据采集）"),
+            ("huaweicloud_iam_username", "", "string", "华为云 IAM 用户名（用于 RDS 监控数据采集）"),
+            ("huaweicloud_iam_password", "", "string", "华为云 IAM 用户密码（用于 RDS 监控数据采集）"),
+            ("huaweicloud_domain_name", "", "string", "华为云账号名或 IAM 用户所属账号名（旧版 IAM 鉴权兼容配置）"),
+            ("huaweicloud_project_name", "", "string", "华为云项目名称（AK/SK 自动查找项目 ID 时可选，默认使用 region_id）"),
+        ]
+
+        # Seed default Tencent Cloud configs
+        tencentcloud_defaults = [
+            ("tencentcloud_secret_id", "", "string", "腾讯云 SecretId（用于 RDS/TDSQL-C 监控数据采集）", True),
+            ("tencentcloud_secret_key", "", "string", "腾讯云 SecretKey（用于 RDS/TDSQL-C 监控数据采集）", True),
+        ]
+
         from sqlalchemy import select as _select
         from backend.models.system_config import SystemConfig as _SystemConfig
 
@@ -241,6 +257,27 @@ async def lifespan(app: FastAPI):
                     _db, key=key, value=default_val,
                     value_type=val_type, description=desc,
                     category="integration"
+                )
+
+        # Seed Huawei Cloud configs
+        for key, default_val, val_type, desc in huaweicloud_defaults:
+            _exists = await _db.execute(_select(_SystemConfig).where(_SystemConfig.key == key))
+            if not _exists.scalar_one_or_none():
+                await _config_service.set_config(
+                    _db, key=key, value=default_val,
+                    value_type=val_type, description=desc,
+                    category="integration"
+                )
+
+        # Seed Tencent Cloud configs
+        for key, default_val, val_type, desc, encrypted in tencentcloud_defaults:
+            _exists = await _db.execute(_select(_SystemConfig).where(_SystemConfig.key == key))
+            if not _exists.scalar_one_or_none():
+                await _config_service.set_config(
+                    _db, key=key, value=default_val,
+                    value_type=val_type, description=desc,
+                    category="integration",
+                    is_encrypted=encrypted,
                 )
 
         # Seed network probe config

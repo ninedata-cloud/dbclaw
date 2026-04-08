@@ -57,6 +57,7 @@ SYSTEM_QUERY_SKILL_IDS = {
     "list_datasources",
     "query_system_metadata",
     "query_monitoring_data",
+    "query_monitoring_history",
     "get_metric_history",
     "query_inspection_reports",
 }
@@ -103,6 +104,7 @@ BUILTIN_PERMISSION_OVERRIDES: dict[str, list[str]] = {
     "list_datasources": ["read_datasource"],
     "query_system_metadata": ["read_datasource"],
     "query_monitoring_data": ["read_datasource"],
+    "query_monitoring_history": ["read_datasource"],
     "get_metric_history": ["read_datasource"],
     "query_inspection_reports": ["read_datasource"],
     "manage_datasource": ["admin"],

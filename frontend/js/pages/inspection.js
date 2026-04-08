@@ -71,25 +71,29 @@ const InspectionPage = {
             </select>
             <input type="date" id="filterStartDate" class="filter-input inspection-date-input" placeholder="开始日期">
             <input type="date" id="filterEndDate" class="filter-input inspection-date-input" placeholder="结束日期">
-            <button id="btn-apply-filters" class="btn btn-primary">
-                <i data-lucide="search"></i> 检索
-            </button>
-            <button id="resetFilters" class="btn btn-secondary">
-                <i data-lucide="x"></i> 重置
-            </button>
         `;
 
         // Bind events after render
         setTimeout(() => {
             this.initDatasourceSelector();
-            const btnApply = DOM.$('#btn-apply-filters');
-            const btnReset = DOM.$('#resetFilters');
-            if (btnApply) btnApply.addEventListener('click', () => this.applyFilters());
-            if (btnReset) btnReset.addEventListener('click', () => this.resetFilters());
+            this._bindFilterEvents();
             DOM.createIcons();
         }, 0);
 
         return filtersContainer;
+    },
+
+    _bindFilterEvents() {
+        const bind = (selector, eventName = 'change') => {
+            const el = DOM.$(selector);
+            if (!el) return;
+            el.addEventListener(eventName, () => this.applyFilters());
+        };
+
+        bind('#filterStatus');
+        bind('#filterTriggerType');
+        bind('#filterStartDate', 'input');
+        bind('#filterEndDate', 'input');
     },
 
     initDatasourceSelector() {
@@ -113,22 +117,6 @@ const InspectionPage = {
         this.filters.trigger_type = DOM.$('#filterTriggerType')?.value || null;
         this.filters.start_date = DOM.$('#filterStartDate')?.value || null;
         this.filters.end_date = DOM.$('#filterEndDate')?.value || null;
-        this.currentPage = 1;
-        this.loadReports();
-    },
-
-    resetFilters() {
-        this.filters = { datasource_id: null, status: null, trigger_type: null, start_date: null, end_date: null };
-
-        // 重置数据源选择器
-        if (this.datasourceSelector) {
-            this.datasourceSelector.setValue(null);
-        }
-
-        DOM.$('#filterStatus').value = '';
-        DOM.$('#filterTriggerType').value = '';
-        DOM.$('#filterStartDate').value = '';
-        DOM.$('#filterEndDate').value = '';
         this.currentPage = 1;
         this.loadReports();
     },
@@ -200,16 +188,17 @@ const InspectionPage = {
                 return `<span class="inspection-pill ${meta.className}">${this._escapeHtml(meta.label)}</span>`;
             };
 
-            container.innerHTML = `
-                <div class="data-table-container inspection-table-container">
-                    <table class="data-table inspection-table">
-                        <thead>
-                            <tr>
-                                <th class="inspection-col-source">数据源</th>
-                                <th class="inspection-col-trigger">触发类型</th>
-                                <th class="inspection-col-status">报告状态</th>
-                                <th class="inspection-col-title">标题</th>
-                                <th class="inspection-col-time">创建时间</th>
+	            container.innerHTML = `
+	                <div class="data-table-container inspection-table-container">
+	                    <table class="data-table inspection-table">
+	                        <thead>
+	                            <tr>
+	                                <th class="inspection-col-id">编号</th>
+	                                <th class="inspection-col-source">数据源</th>
+	                                <th class="inspection-col-trigger">触发类型</th>
+	                                <th class="inspection-col-status">报告状态</th>
+	                                <th class="inspection-col-title">标题</th>
+	                                <th class="inspection-col-time">创建时间</th>
                                 <th class="inspection-col-reason">触发原因</th>
                                 <th class="inspection-actions-col">操作</th>
                             </tr>
@@ -217,13 +206,16 @@ const InspectionPage = {
                         <tbody>
                             ${reports.map(r => {
                                 const statusMeta = InspectionPage.formatReportStatus(r.status);
-                                return `
-                                    <tr>
-                                        <td class="inspection-col-source">
-                                            <div class="inspection-cell-stack">
-                                                <div class="inspection-primary-text inspection-nowrap-text" title="${InspectionPage._escapeAttr(r.datasource_name || 'N/A')}">${InspectionPage._escapeHtml(r.datasource_name || 'N/A')}</div>
-                                            </div>
-                                        </td>
+	                                return `
+	                                    <tr>
+	                                        <td class="inspection-col-id">
+	                                            <div class="inspection-id-text">#${InspectionPage._escapeHtml(r.report_id)}</div>
+	                                        </td>
+	                                        <td class="inspection-col-source">
+	                                            <div class="inspection-cell-stack">
+	                                                <div class="inspection-primary-text inspection-nowrap-text" title="${InspectionPage._escapeAttr(r.datasource_name || 'N/A')}">${InspectionPage._escapeHtml(r.datasource_name || 'N/A')}</div>
+	                                            </div>
+	                                        </td>
                                         <td class="inspection-col-trigger">${renderTriggerBadge(r.trigger_type)}</td>
                                         <td class="inspection-col-status">
                                             <div class="inspection-status-cell">
@@ -233,12 +225,9 @@ const InspectionPage = {
                                                 ` : ''}
                                             </div>
                                         </td>
-                                        <td class="inspection-col-title">
-                                            <div class="inspection-cell-stack">
-                                                <div class="inspection-primary-text inspection-nowrap-text" title="${InspectionPage._escapeAttr(r.title)}">${InspectionPage._escapeHtml(r.title)}</div>
-                                                <div class="inspection-secondary-text inspection-nowrap-text">#${InspectionPage._escapeHtml(r.report_id)}</div>
-                                            </div>
-                                        </td>
+	                                        <td class="inspection-col-title">
+	                                            <div class="inspection-primary-text inspection-nowrap-text" title="${InspectionPage._escapeAttr(r.title)}">${InspectionPage._escapeHtml(r.title)}</div>
+	                                        </td>
                                         <td class="inspection-col-time">
                                             <div class="inspection-secondary-text inspection-time-text">${InspectionPage._escapeHtml(Format.datetime(r.created_at))}</div>
                                         </td>

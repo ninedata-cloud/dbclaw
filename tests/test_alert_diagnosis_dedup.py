@@ -13,7 +13,7 @@ from backend.services.alert_service import (
 
 
 @pytest.mark.asyncio
-async def test_find_recent_diagnosis_uses_alert_type_and_completion_window():
+async def test_find_recent_diagnosis_uses_metric_name_and_completion_window():
     db = AsyncMock(spec=AsyncSession)
     result = MagicMock()
     result.scalar_one_or_none.return_value = None
@@ -31,13 +31,13 @@ async def test_find_recent_diagnosis_uses_alert_type_and_completion_window():
 
     query_text = str(db.execute.call_args.args[0])
     assert "alert_events.alert_type =" in query_text
+    assert "alert_events.metric_name =" in query_text
     assert "diagnosis_completed_at" in query_text
-    assert "alert_events.metric_name =" not in query_text
     assert "alert_events.last_updated >=" not in query_text
 
 
 @pytest.mark.asyncio
-async def test_find_in_progress_diagnosis_uses_alert_type_and_started_at():
+async def test_find_in_progress_diagnosis_uses_metric_name_and_started_at():
     db = AsyncMock(spec=AsyncSession)
     result = MagicMock()
     result.scalar_one_or_none.return_value = None
@@ -47,6 +47,7 @@ async def test_find_in_progress_diagnosis_uses_alert_type_and_started_at():
         id=11,
         datasource_id=9,
         alert_type="system_error",
+        metric_name="connection_status",
     )
 
     with patch("backend.services.alert_service._get_diagnosis_dedup_window_minutes", return_value=30):
@@ -54,6 +55,7 @@ async def test_find_in_progress_diagnosis_uses_alert_type_and_started_at():
 
     query_text = str(db.execute.call_args.args[0])
     assert "alert_events.alert_type =" in query_text
+    assert "alert_events.metric_name =" in query_text
     assert "diagnosis_started_at" in query_text
     assert "diagnosis_status IN" in query_text
     assert "alert_events.diagnosis_started_at >=" in query_text

@@ -70,6 +70,12 @@
     min-width: 116px;
 }
 
+.inspection-date-input::-webkit-calendar-picker-indicator {
+    filter: brightness(0) invert(1);
+    opacity: 1;
+    cursor: pointer;
+}
+
 .inspection-header-filters .filter-select {
     min-width: 96px;
     flex: 0 1 96px;
@@ -145,12 +151,22 @@
     position: relative;
 }
 
-.inspection-col-source { width: 17%; }
+.inspection-col-id { width: 72px; }
+.inspection-col-source { width: 15%; }
 .inspection-col-trigger { width: 11%; }
 .inspection-col-status { width: 11%; }
-.inspection-col-title { width: 23%; }
+.inspection-col-title { width: 22%; }
 .inspection-col-time { width: 13%; }
 .inspection-col-reason { width: auto; }
+
+.inspection-id-text {
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
 
 .inspection-cell-stack {
     display: flex;

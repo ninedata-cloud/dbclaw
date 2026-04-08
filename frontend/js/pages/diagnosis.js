@@ -783,6 +783,7 @@ const DiagnosisPage = {
                     action_run_id: data.action_run_id,
                     action_title: data.action_title,
                     phase: data.phase,
+                    visualization: data.visualization,
                 });
                 break;
             case 'diagnosis_state':

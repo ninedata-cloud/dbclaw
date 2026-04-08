@@ -88,9 +88,14 @@ const ChartPanel = {
 
         // Deep merge config
         const merged = this._deepMerge(defaultConfig, config);
+        const valueFormatter = merged.valueFormatter;
+        delete merged.valueFormatter;
 
         try {
             this.charts[id] = new Chart(canvas, merged);
+            if (typeof valueFormatter === 'function') {
+                this.charts[id]._valueFormatter = valueFormatter;
+            }
             console.log(`[ChartPanel] Chart ${id} initialized successfully`);
             return this.charts[id];
         } catch (error) {
@@ -133,8 +138,9 @@ const ChartPanel = {
         // Update value display
         const valueEl = document.getElementById(`chart-value-${id}`);
         if (valueEl) {
-            if (Array.isArray(value)) {
-                // For multi-line charts, show all values
+            if (typeof chart._valueFormatter === 'function') {
+                valueEl.textContent = chart._valueFormatter(value);
+            } else if (Array.isArray(value)) {
                 valueEl.textContent = value.map(v =>
                     typeof v === 'number' ? v.toLocaleString() : v
                 ).join(' / ');
@@ -162,7 +168,11 @@ const ChartPanel = {
         const valueEl = document.getElementById(`chart-value-${id}`);
         if (valueEl && values.length > 0) {
             const latestValue = values[values.length - 1];
-            valueEl.textContent = typeof latestValue === 'number' ? latestValue.toLocaleString() : latestValue;
+            if (typeof chart._valueFormatter === 'function') {
+                valueEl.textContent = chart._valueFormatter(latestValue);
+            } else {
+                valueEl.textContent = typeof latestValue === 'number' ? latestValue.toLocaleString() : latestValue;
+            }
         }
     },
 
@@ -187,10 +197,14 @@ const ChartPanel = {
         // Update value display with latest values
         const valueEl = document.getElementById(`chart-value-${id}`);
         if (valueEl && valuesArray.length > 0) {
-            const latestValues = valuesArray.map(arr => arr[arr.length - 1] || 0);
-            valueEl.textContent = latestValues.map(v =>
-                typeof v === 'number' ? v.toLocaleString() : v
-            ).join(' / ');
+            const latestValues = valuesArray.map(arr => (arr.length ? arr[arr.length - 1] : null));
+            if (typeof chart._valueFormatter === 'function') {
+                valueEl.textContent = chart._valueFormatter(latestValues);
+            } else {
+                valueEl.textContent = latestValues.map(v =>
+                    typeof v === 'number' ? v.toLocaleString() : v
+                ).join(' / ');
+            }
         }
     },
 

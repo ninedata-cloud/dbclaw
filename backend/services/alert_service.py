@@ -5,7 +5,7 @@ from datetime import timedelta
 from typing import List, Optional, Dict, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, desc
+from sqlalchemy import select, and_, or_, desc, case
 
 from backend.utils.datetime_helper import now
 
@@ -301,8 +301,148 @@ def normalize_alert_diagnosis_fields(
     }
 
 
+def _normalize_prompt_field(value: Any, *, max_chars: int = 320) -> Optional[str]:
+    if value is None:
+        return None
+
+    text = str(value)
+    text = re.sub(r"```[\s\S]*?```", " ", text)
+    text = re.sub(r"`([^`]*)`", r"\1", text)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        return None
+    if len(text) > max_chars:
+        text = text[:max_chars].rstrip("，,；;。.!？? ") + "..."
+    return text
+
+
+def _format_datasource_prompt(datasource) -> Optional[str]:
+    if not datasource:
+        return None
+
+    parts: list[str] = []
+    name = _normalize_prompt_field(getattr(datasource, "name", None), max_chars=120)
+    db_type = _normalize_prompt_field(getattr(datasource, "db_type", None), max_chars=60)
+    host = _normalize_prompt_field(getattr(datasource, "host", None), max_chars=120)
+    port = getattr(datasource, "port", None)
+
+    if name:
+        parts.append(name)
+    if db_type:
+        parts.append(db_type)
+    if host and port:
+        parts.append(f"{host}:{port}")
+    elif host:
+        parts.append(host)
+
+    return " / ".join(parts) or None
+
+
+def _build_alert_diagnosis_draft(
+    event,
+    *,
+    datasource=None,
+    latest_alert=None,
+    include_now_suffix: bool = False,
+) -> str:
+    severity_emoji = "🔴" if event.severity == "critical" else "🟠" if event.severity == "high" else "🟡"
+
+    metric_name = getattr(event, "metric_name", None)
+    metric_value = None
+    threshold_value = None
+    if latest_alert:
+        metric_name = getattr(latest_alert, "metric_name", None) or metric_name
+        metric_value = getattr(latest_alert, "metric_value", None)
+        threshold_value = getattr(latest_alert, "threshold_value", None)
+
+    metric_info = "未知"
+    if metric_name and metric_value is not None:
+        metric_info = f"{metric_name}={metric_value}"
+    elif metric_name:
+        metric_info = metric_name
+
+    threshold_info = f"阈值：{threshold_value}" if threshold_value is not None else None
+    trigger_reason = _normalize_prompt_field(getattr(latest_alert, "trigger_reason", None), max_chars=320)
+    alert_content = _normalize_prompt_field(getattr(latest_alert, "content", None), max_chars=320)
+    datasource_info = _format_datasource_prompt(datasource)
+
+    if event.event_start_time:
+        duration_minutes = max((now() - event.event_start_time).total_seconds() / 60, 0)
+        duration_text = f"{duration_minutes:.0f} 分钟"
+        if include_now_suffix:
+            duration_text = f"{duration_text}（截至目前）"
+        first_seen = event.event_start_time.isoformat()
+    else:
+        duration_text = "未知"
+        first_seen = "未知"
+
+    context_lines = [
+        f"{severity_emoji} 告警：{event.title}",
+        "",
+        f"数据库：{datasource_info}" if datasource_info else None,
+        f"级别：{event.severity}",
+        f"类型：{event.alert_type or '未知'}",
+        f"指标：{metric_info}",
+        threshold_info,
+        f"最近触发原因：{trigger_reason}" if trigger_reason else None,
+        f"最近告警内容：{alert_content}" if alert_content else None,
+        f"首次时间：{first_seen}",
+        f"持续时间：{duration_text}",
+        "",
+        "这是告警通知场景，请只输出最终结论，不要输出“我来分析/让我/开始收集证据/制定计划”等过程描述。",
+        "请分析此告警的根本原因并给出处置建议。请严格按以下格式输出（使用 Markdown）：",
+        "",
+        "## 告警摘要",
+        "<用 1 句话直接说明核心根因，不超过 60 字>",
+        "",
+        "## 根本原因",
+        "- <直接描述告警核心根因，优先写已经证实的原因>",
+        "",
+        "## 处置建议",
+        "- <列出 1-3 条可操作建议>",
+        "",
+    ]
+    return "\n".join(line for line in context_lines if line is not None)
+
+
+def _build_diagnosis_identity_filters(AlertEvent, current_event) -> list[Any]:
+    filters = [
+        AlertEvent.datasource_id == current_event.datasource_id,
+        AlertEvent.alert_type == current_event.alert_type,
+    ]
+
+    metric_name = getattr(current_event, "metric_name", None)
+    if metric_name:
+        filters.append(AlertEvent.metric_name == metric_name)
+    else:
+        filters.append(AlertEvent.metric_name.is_(None))
+
+    return filters
+
+
+async def _load_latest_alert_for_event(db: AsyncSession, alert_event_id: int):
+    from backend.models.alert_message import AlertMessage
+
+    result = await db.execute(
+        select(AlertMessage)
+        .where(AlertMessage.event_id == alert_event_id)
+        .order_by(AlertMessage.created_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 class AlertService:
     """Core alert management service"""
+
+    @staticmethod
+    def _status_priority_expr():
+        return case(
+            (AlertMessage.status == "active", 0),
+            (AlertMessage.status == "acknowledged", 1),
+            else_=2,
+        )
 
     @staticmethod
     def calculate_severity(percent_over: float) -> str:
@@ -444,7 +584,11 @@ class AlertService:
         total = len(count_result.scalars().all())
 
         # Apply ordering and pagination
-        query = query.order_by(desc(AlertMessage.created_at))
+        query = query.order_by(
+            AlertService._status_priority_expr().asc(),
+            desc(AlertMessage.created_at),
+            desc(AlertMessage.id),
+        )
         query = query.limit(params.limit).offset(params.offset)
 
         result = await db.execute(query)
@@ -673,6 +817,10 @@ class AlertService:
         """
         Get recently resolved alerts that need recovery notifications.
 
+        Only returns alerts that have been successfully notified at least once.
+        If the original alert was suppressed by aggregation/cooldown and never
+        reached any subscription, the recovery notification should also be skipped.
+
         Args:
             db: Database session
             minutes: Only consider alerts resolved within this window
@@ -687,11 +835,37 @@ class AlertService:
             select(AlertMessage).where(
                 and_(
                     AlertMessage.status == "resolved",
-                    AlertMessage.resolved_at >= cutoff_time
+                    AlertMessage.resolved_at >= cutoff_time,
+                    AlertMessage.notified_at.is_not(None),
                 )
             )
         )
         return result.scalars().all()
+
+    @staticmethod
+    async def has_alert_notification_for_subscription(
+        db: AsyncSession,
+        alert_id: int,
+        subscription_id: int
+    ) -> bool:
+        """
+        Check if the original alert notification has already been sent for a
+        specific alert + subscription combination.
+
+        Recovery notifications should only be sent to subscriptions that
+        actually received the original alert.
+        """
+        delivery_result = await db.execute(
+            select(AlertDeliveryLog).where(
+                and_(
+                    AlertDeliveryLog.alert_id == alert_id,
+                    AlertDeliveryLog.subscription_id == subscription_id,
+                    AlertDeliveryLog.channel.not_like("%recovery%"),
+                    AlertDeliveryLog.status == "sent",
+                )
+            )
+        )
+        return delivery_result.scalars().first() is not None
 
     @staticmethod
     async def has_recovery_notification_for_subscription(
@@ -787,35 +961,20 @@ class AlertService:
             logger.warning(f"Datasource {event.datasource_id} not found for auto-diagnosis")
             return None
 
+        latest_alert = await _load_latest_alert_for_event(db, alert_event_id)
+
         event.diagnosis_status = "in_progress"
         event.diagnosis_started_at = now()
         event.diagnosis_completed_at = None
         event.diagnosis_source_event_id = None
         await db.commit()
 
-        # Build diagnosis context
-        severity_emoji = "🔴" if event.severity == "critical" else "🟠" if event.severity == "high" else "🟡"
-        draft = f"""{severity_emoji} 告警：{event.title}
-
-级别：{event.severity}
-类型：{event.alert_type or '未知'}
-指标：{event.metric_name or '未知'}
-首次时间：{event.event_start_time.isoformat() if event.event_start_time else '未知'}
-持续时间：{(now() - event.event_start_time).total_seconds() / 60:.0f} 分钟（截至目前）
-
-这是告警通知场景，请只输出最终结论，不要输出“我来分析/让我/开始收集证据/制定计划”等过程描述。
-请分析此告警的根本原因并给出处置建议。请严格按以下格式输出（使用 Markdown）：
-
-## 告警摘要
-<用 1 句话直接说明核心根因，不超过 60 字>
-
-## 根本原因
-- <直接描述告警核心根因，优先写已经证实的原因>
-
-## 处置建议
-- <列出 1-3 条可操作建议>
-
-"""
+        draft = _build_alert_diagnosis_draft(
+            event,
+            datasource=ds,
+            latest_alert=latest_alert,
+            include_now_suffix=True,
+        )
 
         # Create hidden diagnostic session
         session = DiagnosticSession(
@@ -939,7 +1098,7 @@ async def _reuse_diagnosis_from_event(db: AsyncSession, current_event, source_ev
 
 async def _find_recent_diagnosis(db: AsyncSession, current_event) -> Optional["AlertEvent"]:
     """
-    Check if there's a recently completed diagnosis for the same datasource + alert_type
+    Check if there's a recently completed diagnosis for the same alert identity
     within the inspection_dedup_window_minutes window.
 
     Returns the recent AlertEvent with completed diagnosis, or None.
@@ -955,11 +1114,10 @@ async def _find_recent_diagnosis(db: AsyncSession, current_event) -> Optional["A
     if not current_event.alert_type:
         return None
 
-    # Build query: same datasource, same alert_type, completed diagnosis, within window
+    # Build query: same datasource + alert_type + metric_name, completed diagnosis, within window
     filters = [
         AlertEvent.id != current_event.id,
-        AlertEvent.datasource_id == current_event.datasource_id,
-        AlertEvent.alert_type == current_event.alert_type,
+        *_build_diagnosis_identity_filters(AlertEvent, current_event),
         AlertEvent.diagnosis_status == "completed",
         AlertEvent.ai_diagnosis_summary.isnot(None),
         AlertEvent.diagnosis_completed_at.isnot(None),
@@ -977,7 +1135,7 @@ async def _find_recent_diagnosis(db: AsyncSession, current_event) -> Optional["A
 
 async def _find_in_progress_diagnosis(db: AsyncSession, current_event) -> Optional["AlertEvent"]:
     """
-    Check if a same-type diagnosis is already running or pending in the dedup window.
+    Check if a same-identity diagnosis is already running or pending in the dedup window.
     """
     from backend.models.alert_event import AlertEvent
 
@@ -992,8 +1150,7 @@ async def _find_in_progress_diagnosis(db: AsyncSession, current_event) -> Option
         .where(
             and_(
                 AlertEvent.id != current_event.id,
-                AlertEvent.datasource_id == current_event.datasource_id,
-                AlertEvent.alert_type == current_event.alert_type,
+                *_build_diagnosis_identity_filters(AlertEvent, current_event),
                 AlertEvent.diagnosis_status.in_(["in_progress", "pending"]),
                 AlertEvent.diagnosis_started_at.isnot(None),
                 AlertEvent.diagnosis_started_at >= time_threshold,
@@ -1093,21 +1250,7 @@ async def run_sync_diagnosis(
         logger.warning(f"Datasource {event.datasource_id} not found for sync diagnosis")
         return {"root_cause": None, "recommended_actions": None, "summary": None, "status": "failed"}
 
-    # Get latest metric value from related alert messages
-    metric_value = event.metric_name  # fallback
-    threshold_value = None
-    from backend.models.alert_message import AlertMessage
-    from sqlalchemy import select as sa_select
-    alert_result = await db.execute(
-        sa_select(AlertMessage)
-        .where(AlertMessage.event_id == alert_event_id)
-        .order_by(AlertMessage.created_at.desc())
-        .limit(1)
-    )
-    latest_alert = alert_result.scalar_one_or_none()
-    if latest_alert:
-        metric_value = f"{latest_alert.metric_name}={latest_alert.metric_value}" if latest_alert.metric_name else None
-        threshold_value = latest_alert.threshold_value
+    latest_alert = await _load_latest_alert_for_event(db, alert_event_id)
 
     # Update status to in_progress
     event.diagnosis_status = "in_progress"
@@ -1116,33 +1259,11 @@ async def run_sync_diagnosis(
     event.diagnosis_source_event_id = None
     await db.commit()
 
-    # Build structured diagnosis prompt
-    severity_emoji = "🔴" if event.severity == "critical" else "🟠" if event.severity == "high" else "🟡"
-    metric_info = f"{metric_value}" if metric_value else "未知"
-    threshold_info = f"阈值: {threshold_value}" if threshold_value else ""
-
-    draft = f"""{severity_emoji} 告警：{event.title}
-
-级别：{event.severity}
-类型：{event.alert_type or '未知'}
-指标：{metric_info}
-{threshold_info}
-首次时间：{event.event_start_time.isoformat() if event.event_start_time else '未知'}
-持续时间：{(now() - event.event_start_time).total_seconds() / 60:.0f} 分钟
-
-这是告警通知场景，请只输出最终结论，不要输出“我来分析/让我/开始收集证据/制定计划”等过程描述。
-请分析此告警的根本原因并给出处置建议。请严格按以下格式输出（使用 Markdown）：
-
-## 告警摘要
-<用 1 句话直接说明核心根因，不超过 60 字>
-
-## 根本原因
-- <直接描述告警核心根因，优先写已经证实的原因>
-
-## 处置建议
-- <列出 1-3 条可操作建议>
-
-"""
+    draft = _build_alert_diagnosis_draft(
+        event,
+        datasource=ds,
+        latest_alert=latest_alert,
+    )
 
     # Create hidden diagnostic session
     session = DiagnosticSession(

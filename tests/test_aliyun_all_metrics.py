@@ -113,8 +113,8 @@ async def test_all_metrics():
                 "network_out": ("出流量", "KB/秒"),
                 "qps": ("QPS", "次/秒"),
                 "tps": ("TPS", "个/秒"),
-                "active_connections": ("活跃连接数", "个"),
-                "total_connections": ("总连接数", "个")
+                "connections_active": ("活跃连接数", "个"),
+                "connections_total": ("总连接数", "个")
             }
 
             found_metrics = set()

@@ -48,6 +48,13 @@
     cursor: pointer;
 }
 
+.filter-group input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+.dashboard-filters .filter-input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    filter: brightness(0) invert(1);
+    opacity: 1;
+    cursor: pointer;
+}
+
 .filter-group select[multiple] {
     min-height: 120px;
     max-height: 200px;

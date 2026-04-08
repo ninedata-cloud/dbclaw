@@ -10,7 +10,7 @@ from backend.models.soft_delete import alive_filter, get_alive_by_id
 from backend.models.inspection_config import InspectionConfig
 from backend.schemas.metrics import MetricResponse
 from backend.dependencies import get_current_user
-from backend.utils.datetime_helper import now
+from backend.utils.datetime_helper import now, normalize_local_datetime
 from backend.services import metric_collector
 from backend.services.integration_scheduler import execute_integration
 
@@ -72,6 +72,9 @@ async def get_metrics(
     - minutes: 最近N分钟 (优先级高于start_time/end_time)
     - limit: 最大返回数量
     """
+    start_time = normalize_local_datetime(start_time)
+    end_time = normalize_local_datetime(end_time)
+
     # 检查数据源是否使用集成采集
     from backend.models.datasource import Datasource
     ds_result = await db.execute(

@@ -12,19 +12,47 @@ class IntegrationsPage {
         if (integration?.integration_id === 'builtin_aliyun_rds') {
             return '从阿里云 RDS API 采集 MySQL、PostgreSQL、SQL Server 指标，AccessKey 从系统配置中读取';
         }
+        if (integration?.integration_id === 'builtin_huaweicloud_rds') {
+            return '从华为云 CES API 采集 RDS 指标，AK/SK 从系统参数中读取';
+        }
+        if (integration?.integration_id === 'builtin_tencentcloud_rds') {
+            return '从腾讯云可观测平台采集 MySQL、PostgreSQL、SQL Server、TDSQL-C MySQL 指标，SecretId/SecretKey 从系统参数读取';
+        }
         return integration?.description || '暂无描述';
     }
 
     _renderIntegrationHint(integration) {
-        if (integration?.integration_id !== 'builtin_aliyun_rds') {
-            return '';
+        if (integration?.integration_id === 'builtin_aliyun_rds') {
+            return `
+                <div class="integration-modal-note">
+                    当前支持阿里云 RDS MySQL、PostgreSQL、SQL Server。
+                    测试前请确认数据源已配置 <code>external_instance_id</code>，并且数据库类型与阿里云实例引擎一致。
+                </div>
+            `;
         }
-        return `
-            <div class="integration-modal-note">
-                当前支持阿里云 RDS MySQL、PostgreSQL、SQL Server。
-                测试前请确认数据源已配置 <code>external_instance_id</code>，并且数据库类型与阿里云实例引擎一致。
-            </div>
-        `;
+
+        if (integration?.integration_id === 'builtin_huaweicloud_rds') {
+            return `
+                <div class="integration-modal-note">
+                    测试前请确认数据源已配置 <code>external_instance_id</code>。
+                    其中 <code>region_id</code> 用于定位华为云 CES/IAM 接口端点，不能仅靠实例 ID 自动推断；
+                    <code>AK/SK</code> 固定从系统参数读取，测试时无需填写。
+                </div>
+            `;
+        }
+
+        if (integration?.integration_id === 'builtin_tencentcloud_rds') {
+            return `
+                <div class="integration-modal-note">
+                    测试前请确认数据源已配置 <code>external_instance_id</code>，并且实例 ID 与数据库类型匹配：
+                    MySQL/TDSQL-C 使用实例 ID，PostgreSQL/SQL Server 通常使用监控维度里的 <code>resourceId</code>。
+                    <code>region_id</code> 建议填写标准地域（如 <code>ap-guangzhou</code>），也兼容腾讯云监控文档里的地域缩写/数字 ID（如 <code>gz</code> / <code>1</code>）。
+                    <code>SecretId</code>、<code>SecretKey</code> 固定从系统参数读取，无需在测试或数据源参数中填写。
+                </div>
+            `;
+        }
+
+        return '';
     }
 
     _renderIntegrationEditorForm(integration = null) {
@@ -476,11 +504,13 @@ class IntegrationsPage {
         let paramsHtml = '';
         if (schema && schema.properties) {
             for (const [key, prop] of Object.entries(schema.properties)) {
+                if (!this._shouldRenderTestParam(integration, key)) continue;
                 const required = schema.required?.includes(key) ? 'required' : '';
+                const defaultValue = prop.format === 'password' ? '' : (prop.default ?? '');
                 paramsHtml += `
                     <div class="form-group">
                         <label>${this.escapeHtml(prop.title || key)} ${required ? '*' : ''}</label>
-                        <input type="${prop.format === 'password' ? 'password' : 'text'}" class="form-input" id="test-param-${key}" placeholder="${this.escapeHtml(prop.description || '')}" ${required}>
+                        <input type="${prop.format === 'password' ? 'password' : 'text'}" class="form-input" id="test-param-${key}" value="${this.escapeHtml(String(defaultValue))}" placeholder="${this.escapeHtml(prop.description || '')}" ${required}>
                     </div>
                 `;
             }
@@ -515,6 +545,7 @@ class IntegrationsPage {
         const schema = integration.config_schema;
         if (schema && schema.properties) {
             for (const key of Object.keys(schema.properties)) {
+                if (!this._shouldRenderTestParam(integration, key)) continue;
                 const input = document.getElementById(`test-param-${key}`);
                 if (input) {
                     params[key] = schema.properties[key].format === 'password' && input.value
@@ -553,6 +584,16 @@ class IntegrationsPage {
         } catch (error) {
             Toast.error('删除失败: ' + error.message);
         }
+    }
+
+    _shouldRenderTestParam(integration, key) {
+        if (integration?.integration_id === 'builtin_huaweicloud_rds' && ['access_key_id', 'access_key_secret'].includes(key)) {
+            return false;
+        }
+        if (integration?.integration_id === 'builtin_tencentcloud_rds' && ['secret_id', 'secret_key'].includes(key)) {
+            return false;
+        }
+        return true;
     }
 
     async editIntegration(id) {
