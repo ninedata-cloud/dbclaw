@@ -322,6 +322,7 @@ const DatasourcesPage = {
             <table class="data-table">
                 <thead>
                     <tr>
+                        <th class="sortable" data-sort="id">编号 <span class="sort-icon" data-field="id"></span></th>
                         <th class="sortable" data-sort="name">名称 <span class="sort-icon" data-field="name"></span></th>
                         <th class="sortable" data-sort="db_type">类型 <span class="sort-icon" data-field="db_type"></span></th>
                         <th>标签</th>
@@ -352,6 +353,7 @@ const DatasourcesPage = {
 
                         return `
                             <tr>
+                                <td class="instance-mono">${conn.id}</td>
                                 <td>
                                     <strong>${conn.name}</strong>
                                     ${this._renderSilenceBadge(conn)}
@@ -364,6 +366,9 @@ const DatasourcesPage = {
                                 ${this._renderMetricsCell(conn)}
                                 <td>
                                     <div style="display:flex;gap:4px;align-items:center;">
+                                        <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._openInstanceDetail(${conn.id})" title="实例详情">
+                                            <i data-lucide="panel-left"></i>
+                                        </button>
                                         <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._editDatasource(${conn.id})" title="编辑">
                                             <i data-lucide="pencil"></i>
                                         </button>
@@ -454,6 +459,16 @@ const DatasourcesPage = {
     _editDatasource(id) {
         const conn = this.allDatasources.find(c => c.id === id);
         if (conn) DatasourceForm.show(conn, () => this.render());
+    },
+
+    _openInstanceDetail(id) {
+        const conn = this.allDatasources.find(c => c.id === id);
+        if (!conn) return;
+        Store.set('currentInstance', conn);
+        Store.set('currentInstanceId', conn.id);
+        Store.set('currentConnection', conn);
+        Store.set('currentDatasource', conn);
+        Router.navigate(`instance-detail?datasource=${conn.id}&tab=monitor`);
     },
 
     _showSilenceModal(id) {
@@ -570,6 +585,7 @@ const DatasourcesPage = {
     _monitorDatasource(id) {
         const conn = this.allDatasources.find(c => c.id === id);
         if (conn) {
+            Store.set('currentConnection', conn);
             Store.set('currentDatasource', conn);
             Router.navigate('monitor');
         }

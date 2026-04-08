@@ -205,17 +205,54 @@ class SQLServerConnector(DBConnector):
             try:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "SELECT TOP 50 session_id, login_name, host_name, "
-                    "program_name, status, cpu_time, memory_usage, "
-                    "last_request_start_time "
-                    "FROM sys.dm_exec_sessions WHERE is_user_process = 1 "
-                    "ORDER BY cpu_time DESC"
+                    "SELECT TOP 100 "
+                    "s.session_id, "
+                    "s.login_name, "
+                    "s.host_name, "
+                    "s.program_name, "
+                    "s.status, "
+                    "s.cpu_time, "
+                    "s.memory_usage, "
+                    "s.last_request_start_time, "
+                    "DB_NAME(COALESCE(r.database_id, c.most_recent_dbid)) AS database_name, "
+                    "c.client_net_address, "
+                    "r.wait_type, "
+                    "SUBSTRING(t.text, "
+                    "    CASE WHEN r.statement_start_offset IS NULL OR r.statement_start_offset < 0 THEN 1 ELSE (r.statement_start_offset / 2) + 1 END, "
+                    "    CASE "
+                    "        WHEN r.statement_end_offset IS NULL OR r.statement_end_offset < 0 THEN 4000 "
+                    "        ELSE ((r.statement_end_offset - r.statement_start_offset) / 2) + 1 "
+                    "    END"
+                    ") AS current_sql "
+                    "FROM sys.dm_exec_sessions s "
+                    "LEFT JOIN sys.dm_exec_requests r ON s.session_id = r.session_id "
+                    "LEFT JOIN sys.dm_exec_connections c ON s.session_id = c.session_id "
+                    "OUTER APPLY sys.dm_exec_sql_text(COALESCE(r.sql_handle, c.most_recent_sql_handle)) t "
+                    "WHERE s.is_user_process = 1 AND s.session_id <> @@SPID "
+                    "ORDER BY COALESCE(r.cpu_time, s.cpu_time) DESC, s.last_request_start_time DESC"
                 )
                 columns = [col[0] for col in cursor.description]
                 return [dict(zip(columns, row)) for row in cursor.fetchall()]
             finally:
                 conn.close()
         return await asyncio.get_event_loop().run_in_executor(None, _procs)
+
+    async def terminate_session(self, session_id: int) -> Dict[str, Any]:
+        import asyncio
+        def _terminate():
+            conn = self._connect()
+            try:
+                target_session_id = int(session_id)
+                cursor = conn.cursor()
+                cursor.execute(f"KILL {target_session_id}")
+                return {
+                    "success": True,
+                    "session_id": target_session_id,
+                    "message": f"SQL Server 会话 {target_session_id} 已终止",
+                }
+            finally:
+                conn.close()
+        return await asyncio.get_event_loop().run_in_executor(None, _terminate)
 
     async def get_slow_queries(self) -> List[Dict[str, Any]]:
         import asyncio

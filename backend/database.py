@@ -6,16 +6,56 @@ from backend.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-engine = create_async_engine(
-    get_settings().database_url,
-    echo=get_settings().debug,
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True,
-    connect_args={"ssl": False},
-)
+_engine = None
+_session_factory = None
 
-async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+def _create_engine():
+    settings = get_settings()
+    if not settings.database_url.startswith(("postgresql", "postgres")):
+        raise RuntimeError("元数据库仅支持 PostgreSQL，请检查 DATABASE_URL 配置。")
+
+    connect_args = {"ssl": False}
+    return create_async_engine(
+        settings.database_url,
+        echo=settings.debug,
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True,
+        connect_args=connect_args,
+    )
+
+
+def get_engine():
+    global _engine
+    if _engine is None:
+        _engine = _create_engine()
+    return _engine
+
+
+def get_session_factory():
+    global _session_factory
+    if _session_factory is None:
+        _session_factory = async_sessionmaker(get_engine(), class_=AsyncSession, expire_on_commit=False)
+    return _session_factory
+
+
+class _LazyAsyncEngineProxy:
+    def __getattr__(self, name):
+        return getattr(get_engine(), name)
+
+    def __repr__(self):
+        return repr(get_engine())
+
+
+class _LazyAsyncSessionProxy:
+    def __call__(self, *args, **kwargs):
+        return get_session_factory()(*args, **kwargs)
+
+
+engine = _LazyAsyncEngineProxy()
+async_engine = engine
+async_session = _LazyAsyncSessionProxy()
 
 
 class Base(DeclarativeBase):
@@ -57,7 +97,7 @@ async def init_db():
     except ImportError:
         pass
 
-    async with engine.begin() as conn:
+    async with get_engine().begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
     settings = get_settings()
@@ -92,11 +132,12 @@ async def init_db():
     async with async_session() as session:
         result = await session.execute(select(User).where(alive_filter(User)).limit(1))
         if result.scalar_one_or_none() is None:
-            if not settings.initial_admin_password:
-                raise RuntimeError("INITIAL_ADMIN_PASSWORD 未配置，无法初始化管理员账号")
+            admin_password = settings.initial_admin_password or "admin1234"
+            if admin_password == "admin1234":
+                logger.warning("Using default initial admin password 'admin1234'; change it after first login.")
             admin = User(
                 username="admin",
-                password_hash=hash_password(settings.initial_admin_password),
+                password_hash=hash_password(admin_password),
                 display_name="Administrator",
                 is_active=True,
                 is_admin=True,

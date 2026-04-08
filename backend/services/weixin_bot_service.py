@@ -442,7 +442,7 @@ async def start_weixin_bot_poller() -> None:
     _STOP_EVENT = asyncio.Event()
     _POLLING_TASK = asyncio.create_task(_polling_loop())
     _CONSUMER_TASK = asyncio.create_task(_consumer_loop())
-    logger.info("🤖 Weixin bot poller & consumer started")
+    logger.info("Weixin bot poller & consumer started")
 
 
 async def stop_weixin_bot_poller() -> None:

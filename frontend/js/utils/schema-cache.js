@@ -15,8 +15,8 @@ const SchemaCache = {
         return Date.now() - entry.timestamp > this.TTL;
     },
 
-    async getSchemas(datasourceId) {
-        const key = this._getCacheKey(datasourceId, 'schemas');
+    async getSchemas(datasourceId, options = {}) {
+        const key = this._getCacheKey(datasourceId, 'schemas', options);
         const cached = this.cache.get(key);
 
         if (cached && !this._isExpired(cached)) {
@@ -24,7 +24,7 @@ const SchemaCache = {
         }
 
         try {
-            const data = await API.getSchemas(datasourceId);
+            const data = await API.getSchemas(datasourceId, options);
             this.cache.set(key, { data, timestamp: Date.now() });
             return data;
         } catch (error) {
@@ -33,8 +33,8 @@ const SchemaCache = {
         }
     },
 
-    async getTables(datasourceId, schema = null) {
-        const key = this._getCacheKey(datasourceId, 'tables', { schema });
+    async getTables(datasourceId, options = {}) {
+        const key = this._getCacheKey(datasourceId, 'tables', options);
         const cached = this.cache.get(key);
 
         if (cached && !this._isExpired(cached)) {
@@ -42,7 +42,7 @@ const SchemaCache = {
         }
 
         try {
-            const data = await API.getTables(datasourceId, schema);
+            const data = await API.getTables(datasourceId, options);
             this.cache.set(key, { data, timestamp: Date.now() });
             return data;
         } catch (error) {
@@ -51,8 +51,8 @@ const SchemaCache = {
         }
     },
 
-    async getColumns(datasourceId, table, schema = null) {
-        const key = this._getCacheKey(datasourceId, 'columns', { table, schema });
+    async getColumns(datasourceId, table, options = {}) {
+        const key = this._getCacheKey(datasourceId, 'columns', { table, ...options });
         const cached = this.cache.get(key);
 
         if (cached && !this._isExpired(cached)) {
@@ -60,7 +60,7 @@ const SchemaCache = {
         }
 
         try {
-            const data = await API.getColumns(datasourceId, table, schema);
+            const data = await API.getColumns(datasourceId, table, options);
             this.cache.set(key, { data, timestamp: Date.now() });
             return data;
         } catch (error) {

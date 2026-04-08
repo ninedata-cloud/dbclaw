@@ -6,16 +6,17 @@
     Router.register('datasources', () => { DatasourcesPage.render(); });
     Router.register('hosts', () => { HostsPage.render(); });
     Router.register('monitor', () => MonitorPage.render());
-    Router.register('diagnosis', () => DiagnosisPage.render());
+    Router.register('diagnosis', (routeParam) => DiagnosisPage.renderFromRoute(routeParam));
     Router.register('query', () => QueryPage.render());
     Router.register('ai-models', () => AIModelsPage.render());
     Router.register('documents', () => DocumentsPage.render());
     Router.register('skills', () => SkillsPage.render());
     Router.register('system-configs', () => SystemConfigsPage.render());
     Router.register('users', () => UsersPage.render());
-    Router.register('inspection', () => { InspectionPage.render(); return () => InspectionPage.cleanup(); });
+    Router.register('inspection', (routeParam) => InspectionPage.renderFromRoute(routeParam));
     Router.register('alerts', () => AlertsPage.init());
     Router.register('integrations', () => integrationsPage.init());
+    Router.register('instance-detail', (routeParam) => InstanceDetailPage.render(routeParam));
 
     try {
         const currentUser = await API.getMe();

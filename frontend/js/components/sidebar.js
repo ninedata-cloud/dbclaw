@@ -11,11 +11,9 @@ const Sidebar = {
 
     navItems: [
         { id: 'dashboard', icon: 'layout-dashboard', label: '资源大盘' },
+        { id: 'instance-detail', icon: 'panel-left', label: '实例详情' },
         { id: 'inspection', icon: 'search-check', label: '智能巡检' },
-        { id: 'diagnosis', icon: 'bot', label: 'AI 诊断' },
-        { id: 'monitor', icon: 'activity', label: '性能监控' },
         { id: 'alerts', icon: 'bell', label: '告警管理' },
-        { id: 'query', icon: 'terminal-square', label: 'SQL 查询' },
         { section: 'AI 智能体配置', items: [
             { id: 'ai-models', icon: 'brain', label: 'AI 大模型管理' },
             { id: 'skills', icon: 'wrench', label: '技能管理' },

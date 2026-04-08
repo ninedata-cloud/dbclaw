@@ -143,6 +143,7 @@ const HostsPage = {
             <table class="data-table">
                 <thead>
                     <tr>
+                        <th class="sortable" data-sort="id">编号 <span class="sort-icon" data-field="id"></span></th>
                         <th class="sortable" data-sort="name">名称 <span class="sort-icon" data-field="name"></span></th>
                         <th class="sortable" data-sort="host">主机 <span class="sort-icon" data-field="host"></span></th>
                         <th class="sortable" data-sort="port">端口 <span class="sort-icon" data-field="port"></span></th>
@@ -177,6 +178,7 @@ const HostsPage = {
 
         return `
             <tr>
+                <td class="instance-mono">${host.id}</td>
                 <td><strong>${host.name}</strong></td>
                 <td>${host.host}</td>
                 <td>${host.port}</td>

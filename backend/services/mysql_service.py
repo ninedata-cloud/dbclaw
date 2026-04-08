@@ -133,12 +133,20 @@ class MySQLConnector(DBConnector):
             conn.close()
 
     async def get_process_list(self) -> List[Dict[str, Any]]:
+        import aiomysql
         conn = await self._connect()
         try:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT CONNECTION_ID()")
+                current_connection_id = (await cur.fetchone())[0]
+
             async with conn.cursor(aiomysql.DictCursor) as cur:
                 await cur.execute(
                     "SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO "
-                    "FROM information_schema.PROCESSLIST ORDER BY TIME DESC LIMIT 50"
+                    "FROM information_schema.PROCESSLIST "
+                    "WHERE ID != %s "
+                    "ORDER BY TIME DESC LIMIT 100",
+                    (current_connection_id,)
                 )
                 rows = await cur.fetchall()
                 return [dict(r) for r in rows]
@@ -150,7 +158,22 @@ class MySQLConnector(DBConnector):
                     {"id": r[0], "user": r[1], "host": r[2], "db": r[3],
                      "command": r[4], "time": r[5], "state": r[6], "info": r[7]}
                     for r in rows
+                    if r[0] != current_connection_id
                 ]
+        finally:
+            conn.close()
+
+    async def terminate_session(self, session_id: int) -> Dict[str, Any]:
+        conn = await self._connect()
+        try:
+            target_session_id = int(session_id)
+            async with conn.cursor() as cur:
+                await cur.execute(f"KILL {target_session_id}")
+            return {
+                "success": True,
+                "session_id": target_session_id,
+                "message": f"MySQL 会话 {target_session_id} 已终止",
+            }
         finally:
             conn.close()
 

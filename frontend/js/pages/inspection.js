@@ -5,6 +5,8 @@ const InspectionPage = {
     totalReports: 0,
     pollInterval: null,
     datasourceSelector: null,
+    _renderOptions: null,
+    _container: null,
     filters: {
         datasource_id: null,
         status: null,
@@ -23,11 +25,31 @@ const InspectionPage = {
     },
 
     async render() {
-        const content = DOM.$('#page-content');
+        return this.renderWithOptions({});
+    },
+
+    async renderFromRoute(routeParam = '') {
+        const params = new URLSearchParams(routeParam || '');
+        const datasourceId = parseInt(params.get('datasource'), 10);
+        const reportId = parseInt(params.get('report'), 10);
+        return this.renderWithOptions({
+            fixedDatasourceId: Number.isFinite(datasourceId) ? datasourceId : null,
+            initialReportId: Number.isFinite(reportId) ? reportId : null,
+        });
+    },
+
+    async renderWithOptions(options = {}) {
+        this._renderOptions = options || {};
+        this._container = options.container || DOM.$('#page-content');
+        if (options.fixedDatasourceId) {
+            this.filters.datasource_id = options.fixedDatasourceId;
+        }
+
+        const content = this._container;
         content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
         // Build header with filters (like dashboard layout)
-        Header.render('数据库智能巡检', this._buildHeaderActions());
+        const headerActions = this._buildHeaderActions();
 
         content.innerHTML = `
             <div class="inspection-page">
@@ -44,8 +66,33 @@ const InspectionPage = {
                 </section>
             </div>
         `;
+        if (options.embedded) {
+            const page = content.querySelector('.inspection-page');
+            const embeddedToolbar = DOM.el('div', {
+                className: 'instance-embedded-toolbar',
+                style: {
+                    display: 'flex',
+                    gap: '12px',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '16px',
+                    flexWrap: 'wrap'
+                }
+            });
+            embeddedToolbar.appendChild(DOM.el('div', {
+                className: 'instance-embedded-title',
+                textContent: '巡检管理'
+            }));
+            embeddedToolbar.appendChild(headerActions);
+            content.insertBefore(embeddedToolbar, page);
+        } else {
+            Header.render('数据库智能巡检', headerActions);
+        }
 
         await this.loadReports();
+        if (options.initialReportId) {
+            await this.viewReport(options.initialReportId);
+        }
         this.startPolling();
 
         // Return cleanup function for Router
@@ -56,7 +103,7 @@ const InspectionPage = {
         // Build filters container
         const filtersContainer = DOM.el('div', { className: 'dashboard-filters inspection-header-filters' });
         filtersContainer.innerHTML = `
-            <div id="filterDatasource" class="inspection-filter-datasource"></div>
+            ${this._renderOptions?.fixedDatasourceId ? '' : '<div id="filterDatasource" class="inspection-filter-datasource"></div>'}
             <select id="filterStatus" class="filter-select">
                 <option value="">所有状态</option>
                 <option value="completed">已完成</option>
@@ -75,7 +122,9 @@ const InspectionPage = {
 
         // Bind events after render
         setTimeout(() => {
-            this.initDatasourceSelector();
+            if (!this._renderOptions?.fixedDatasourceId) {
+                this.initDatasourceSelector();
+            }
             this._bindFilterEvents();
             DOM.createIcons();
         }, 0);
@@ -354,7 +403,7 @@ const InspectionPage = {
         try {
             const report = await API.get(`/api/inspections/reports/detail/${reportId}`);
             this.currentReportDetail = report;
-            const content = DOM.$('#page-content');
+            const content = this._container || DOM.$('#page-content');
             const safe = (value) => this._escapeHtml(value);
             const safeAttr = (value) => this._escapeAttr(value);
 
@@ -414,7 +463,7 @@ const InspectionPage = {
             content.innerHTML = `
                 <div class="inspection-report-shell">
                     <div class="inspection-report-toolbar">
-                        <button onclick="InspectionPage.render()" class="btn btn-secondary inspection-report-back">← 返回报告列表</button>
+                        <button onclick="InspectionPage.${this._renderOptions?.embedded ? 'renderWithOptions' : 'render'}(${this._renderOptions?.embedded ? 'InspectionPage._renderOptions' : ''})" class="btn btn-secondary inspection-report-back">← 返回报告列表</button>
                         <div class="inspection-report-toolbar-actions">
                             ${report.alert_id ? `<button onclick="InspectionPage.openLinkedAlert(${report.alert_id})" class="btn btn-secondary">查看关联告警</button>` : ''}
                             <button id="report-open-diagnosis" class="btn btn-secondary">进入 AI 诊断</button>
@@ -480,15 +529,15 @@ const InspectionPage = {
 
     async openLinkedAlert(alertId) {
         try {
-            Router.navigate('alerts');
-            setTimeout(async () => {
-                try {
-                    const alert = await API.getAlert(alertId);
-                    await AlertsPage.showAlertDetail(alert);
-                } catch (error) {
-                    Toast.show(`加载关联告警失败: ${error.message}`, 'error');
-                }
-            }, 0);
+            if (this._renderOptions?.embedded && this.filters.datasource_id) {
+                const params = new URLSearchParams();
+                params.set('datasource', this.filters.datasource_id);
+                params.set('tab', 'alerts');
+                params.set('alert', alertId);
+                Router.navigate(`instance-detail?${params.toString()}`);
+            } else {
+                Router.navigate('alerts');
+            }
         } catch (error) {
             Toast.show(`打开关联告警失败: ${error.message}`, 'error');
         }
@@ -499,7 +548,12 @@ const InspectionPage = {
         if (datasourceId) params.set('datasource', datasourceId);
         if (alertId) params.set('alert', alertId);
         if (prompt) params.set('ask', prompt);
-        Router.navigate(`diagnosis?${params.toString()}`);
+        if (this._renderOptions?.embedded) {
+            params.set('tab', 'ai');
+            Router.navigate(`instance-detail?${params.toString()}`);
+        } else {
+            Router.navigate(`diagnosis?${params.toString()}`);
+        }
     },
 
     openDiagnosisFromActionRun(runId, datasourceId, alertId, reportId) {
@@ -508,7 +562,12 @@ const InspectionPage = {
         if (alertId) params.set('alert', alertId);
         if (reportId) params.set('report', reportId);
         if (runId) params.set('action_run', runId);
-        Router.navigate(`diagnosis?${params.toString()}`);
+        if (this._renderOptions?.embedded) {
+            params.set('tab', 'ai');
+            Router.navigate(`instance-detail?${params.toString()}`);
+        } else {
+            Router.navigate(`diagnosis?${params.toString()}`);
+        }
     },
 
     async exportMarkdown(reportId) {
@@ -745,6 +804,8 @@ const InspectionPage = {
             }
             this._errorTooltipHandler = null;
         }
+        this._renderOptions = null;
+        this._container = null;
     }
 
 };

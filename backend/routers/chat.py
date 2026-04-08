@@ -3,7 +3,7 @@ import json
 import logging
 from datetime import datetime
 from urllib.parse import urlparse
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from typing import List
@@ -197,8 +197,12 @@ async def get_high_risk_tools(user=Depends(get_current_user)):
 
 
 @router.get("/api/chat/sessions", response_model=List[ChatSessionResponse])
-async def list_sessions(db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
-    result = await db.execute(
+async def list_sessions(
+    datasource_id: int | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    query = (
         alive_select(DiagnosticSession)
         .where(
             DiagnosticSession.user_id == user.id,
@@ -206,6 +210,10 @@ async def list_sessions(db: AsyncSession = Depends(get_db), user=Depends(get_cur
         )
         .order_by(desc(DiagnosticSession.updated_at))
     )
+    if datasource_id is not None:
+        query = query.where(DiagnosticSession.datasource_id == datasource_id)
+
+    result = await db.execute(query)
     return result.scalars().all()
 
 

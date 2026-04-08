@@ -83,7 +83,6 @@ def test_curated_category_examples_match_expected_groups():
         "manage_datasource": "平台运维",
         "trigger_inspection": "平台运维",
         "send_webhook": "平台运维",
-        "search_knowledge_base": "知识检索",
         "web_search_bocha": "知识检索",
         "execute_any_sql": "高危操作",
     }

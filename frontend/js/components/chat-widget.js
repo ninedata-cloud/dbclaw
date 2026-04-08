@@ -72,7 +72,7 @@ const ChatWidget = {
         return panel;
     },
 
-    createInputBar(onSend, getSessionId) {
+    createInputBar(onSend, getSessionId, options = {}) {
         const bar = DOM.el('div', { className: 'chat-input-bar' });
         this.getSessionId = getSessionId;
 
@@ -156,22 +156,23 @@ const ChatWidget = {
             }
         });
 
-        const clearBtn = DOM.el('button', {
-            className: 'chat-send-btn',
-            id: 'chat-clear-btn',
-            innerHTML: '<i data-lucide="eraser"></i>',
-            title: 'Clear session',
-            onClick: () => {
-                if (this.onClear) this.onClear();
-            }
-        });
-
         bar.appendChild(attachmentPreview);
         bar.appendChild(fileInput);
         bar.appendChild(input);
         bar.appendChild(attachBtn);
         bar.appendChild(sendBtn);
-        bar.appendChild(clearBtn);
+        if (options.showClearButton !== false) {
+            const clearBtn = DOM.el('button', {
+                className: 'chat-send-btn',
+                id: 'chat-clear-btn',
+                innerHTML: '<i data-lucide="eraser"></i>',
+                title: 'Clear session',
+                onClick: () => {
+                    if (this.onClear) this.onClear();
+                }
+            });
+            bar.appendChild(clearBtn);
+        }
         bar.appendChild(stopBtn);
         return bar;
     },

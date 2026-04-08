@@ -39,10 +39,6 @@ EXTERNAL_RESEARCH_SKILL_IDS = {
     "web_search_bocha",
 }
 
-KNOWLEDGE_SKILL_IDS = {
-    "search_knowledge_base",
-}
-
 INSPECTION_SKILL_IDS = {
     "trigger_inspection",
 }
@@ -134,7 +130,7 @@ def classify_builtin_skill(skill_id: str) -> str:
     for prefix, category in DB_CATEGORY_BY_PREFIX:
         if skill_id.startswith(prefix):
             return category
-    if skill_id in EXTERNAL_RESEARCH_SKILL_IDS or skill_id in KNOWLEDGE_SKILL_IDS:
+    if skill_id in EXTERNAL_RESEARCH_SKILL_IDS:
         return "知识检索"
     if (
         skill_id in NOTIFICATION_SKILL_IDS

@@ -121,6 +121,9 @@ async def collect_metrics_for_connection(datasource_id: int):
                 try:
                     status = await connector.get_status()
                     connection_failed = False
+                    datasource.connection_status = "normal"
+                    datasource.connection_error = None
+                    datasource.connection_checked_at = now()
 
                     # Auto-resolve connection failure alerts if connection is now successful
                     await _auto_resolve_connection_alerts(db, datasource_id)
@@ -129,6 +132,9 @@ async def collect_metrics_for_connection(datasource_id: int):
                     logger.warning(f"Failed to collect metrics for datasource {datasource_id}: {e}")
                     status = {"error": str(e), "connection_failed": True}
                     connection_failed = True
+                    datasource.connection_status = "failed"
+                    datasource.connection_error = str(e)
+                    datasource.connection_checked_at = now()
 
                 # 标准化指标
                 from backend.services.metric_normalizer import MetricNormalizer

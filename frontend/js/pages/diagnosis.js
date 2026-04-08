@@ -3,6 +3,8 @@ const DiagnosisPage = {
     ws: null,
     datasourceSelector: null,
     datasourceClickOutsideHandler: null,
+    _renderOptions: null,
+    _container: null,
     currentSessionId: null,
     selectedModelId: null,
     disabledTools: [],
@@ -18,7 +20,22 @@ const DiagnosisPage = {
     },
 
     async render() {
-        const content = DOM.$('#page-content');
+        return this.renderWithOptions({});
+    },
+
+    async renderFromRoute(routeParam = '') {
+        const params = new URLSearchParams(routeParam || '');
+        const datasourceId = parseInt(params.get('datasource'), 10);
+        return this.renderWithOptions({
+            initialDatasourceId: Number.isFinite(datasourceId) ? datasourceId : null,
+            initialAsk: params.get('ask') || null,
+        });
+    },
+
+    async renderWithOptions(options = {}) {
+        this._renderOptions = options || {};
+        const content = options.container || DOM.$('#page-content');
+        this._container = content;
 
         // Load high-risk tools list
         try {
@@ -27,36 +44,60 @@ const DiagnosisPage = {
 
         // Header with connection, model and tool safety toggle
         const headerActions = DOM.el('div', { className: 'flex gap-8', style: { flex: '1', minWidth: '0' } });
-        const datasourceContainer = DOM.el('div', {
-            id: 'diagnosis-datasource-selector',
-            style: { minWidth: '280px', maxWidth: '380px', flex: '1' }
-        });
-
         try {
             const datasources = await API.getDatasources();
             Store.set('datasources', datasources);
+            if (options.fixedDatasourceId) {
+                const fixedDatasource = datasources.find(item => item.id === options.fixedDatasourceId) || null;
+                if (fixedDatasource) {
+                    Store.set('currentDatasource', fixedDatasource);
+                }
+            } else if (options.initialDatasourceId) {
+                const initialDatasource = datasources.find(item => item.id === options.initialDatasourceId) || null;
+                if (initialDatasource) {
+                    Store.set('currentDatasource', initialDatasource);
+                }
+            }
         } catch (e) { /* ignore */ }
 
         this.datasourceSelector?.destroy();
-        this.datasourceSelector = new DatasourceSelector({
-            container: datasourceContainer,
-            allowEmpty: true,
-            emptyText: '选择数据源...',
-            placeholder: '选择数据源',
-            showStatus: true,
-            showDetails: true,
-            onLoad: () => {
-                const current = Store.get('currentDatasource');
-                if (current?.id) {
-                    this.datasourceSelector.setValue(current.id);
-                } else {
-                    this.datasourceSelector.setValue(null);
+        if (options.fixedDatasourceId) {
+            this.datasourceSelector = {
+                destroy() {},
+                getValue: () => Store.get('currentDatasource') || null,
+                getSelectedDatasource: () => Store.get('currentDatasource') || null,
+                setValue: (datasourceId) => {
+                    const allDatasources = Store.get('datasources') || [];
+                    const datasource = allDatasources.find(item => item.id === datasourceId) || null;
+                    Store.set('currentDatasource', datasource);
                 }
-            },
-            onChange: (datasource) => {
-                Store.set('currentDatasource', datasource || null);
-            }
-        });
+            };
+        } else {
+            const datasourceContainer = DOM.el('div', {
+                id: 'diagnosis-datasource-selector',
+                style: { minWidth: '280px', maxWidth: '380px', flex: '1' }
+            });
+            this.datasourceSelector = new DatasourceSelector({
+                container: datasourceContainer,
+                allowEmpty: true,
+                emptyText: '选择数据源...',
+                placeholder: '选择数据源',
+                showStatus: true,
+                showDetails: true,
+                onLoad: () => {
+                    const current = Store.get('currentDatasource');
+                    if (current?.id) {
+                        this.datasourceSelector.setValue(current.id);
+                    } else {
+                        this.datasourceSelector.setValue(null);
+                    }
+                },
+                onChange: (datasource) => {
+                    Store.set('currentDatasource', datasource || null);
+                }
+            });
+            headerActions.appendChild(datasourceContainer);
+        }
 
         // Model selector
         const modelSelect = DOM.el('select', { className: 'form-select', style: { minWidth: '150px', maxWidth: '200px', flex: '0 1 auto' } });
@@ -95,14 +136,49 @@ const DiagnosisPage = {
             onClick: () => this._showToolSafetyModal()
         });
 
-        headerActions.appendChild(datasourceContainer);
+        const clearSessionBtn = DOM.el('button', {
+            className: 'btn btn-sm btn-secondary',
+            innerHTML: '<i data-lucide="eraser"></i> 清除会话',
+            title: '清除当前会话',
+            onClick: () => this._clearSession()
+        });
+
         headerActions.appendChild(modelSelect);
         headerActions.appendChild(toolSafetyBtn);
-        Header.render('AI 诊断', headerActions);
+        headerActions.appendChild(clearSessionBtn);
 
         // Two-column layout: sessions sidebar + chat area
         content.innerHTML = '';
-        const layout = DOM.el('div', { style: { display: 'flex', height: 'calc(100vh - 56px)', gap: '0', position: 'relative' } });
+        if (options.embedded) {
+            content.style.display = 'flex';
+            content.style.flexDirection = 'column';
+            content.style.minHeight = '0';
+            content.style.height = '100%';
+            const embeddedToolbar = DOM.el('div', {
+                className: 'instance-embedded-toolbar',
+                style: {
+                    display: 'flex',
+                    gap: '12px',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '16px',
+                    flexWrap: 'wrap'
+                }
+            });
+            embeddedToolbar.appendChild(DOM.el('div', {
+                className: 'instance-embedded-title',
+                textContent: 'AI 对话诊断'
+            }));
+            embeddedToolbar.appendChild(headerActions);
+            content.appendChild(embeddedToolbar);
+        } else {
+            Header.render('AI 诊断', headerActions);
+        }
+        const layout = DOM.el('div', {
+            style: options.embedded
+                ? { display: 'flex', flex: '1', minHeight: '0', gap: '0', position: 'relative' }
+                : { display: 'flex', height: 'calc(100vh - 56px)', gap: '0', position: 'relative' }
+        });
 
         // Left sidebar: session list
         const sidebar = DOM.el('div', {
@@ -164,11 +240,11 @@ const DiagnosisPage = {
         // Main chat area
         const chatContainer = DOM.el('div', {
             className: 'chat-container',
-            style: { flex: '1', minWidth: '0', overflow: 'hidden', display: 'flex', flexDirection: 'row', height: '100%' }
+            style: { flex: '1', minWidth: '0', minHeight: '0', overflow: 'hidden', display: 'flex', flexDirection: 'row', height: '100%' }
         });
 
         const chatMain = DOM.el('div', {
-            style: { flex: '1', display: 'flex', flexDirection: 'column', minWidth: '0', position: 'relative', height: '100%' }
+            style: { flex: '1', display: 'flex', flexDirection: 'column', minWidth: '0', minHeight: '0', position: 'relative', height: '100%' }
         });
 
         const tokenUsageBar = DOM.el('div', {
@@ -178,7 +254,8 @@ const DiagnosisPage = {
                 margin: '0px',
                 padding: '10px 12px',
                 fontSize: '12px',
-                color: 'var(--text-secondary)'
+                color: 'var(--text-secondary)',
+                flexShrink: '0'
             }
         });
 
@@ -186,17 +263,19 @@ const DiagnosisPage = {
         chatMain.appendChild(tokenUsageBar);
         chatMain.appendChild(ChatWidget.createInputBar(
             (text, attachments) => this._sendMessage(text, attachments),
-            () => this.currentSessionId
+            () => this.currentSessionId,
+            { showClearButton: false }
         ));
 
         // AI disclaimer
         const disclaimer = DOM.el('div', {
             style: {
-                paddingBottom: '20px',
+                paddingBottom: options.embedded ? '8px' : '20px',
                 textAlign: 'center',
                 fontSize: '12px',
                 color: 'var(--text-muted)',
-                background: 'var(--bg-secondary)'
+                background: 'var(--bg-secondary)',
+                flexShrink: '0'
 
             }
         });
@@ -223,6 +302,9 @@ const DiagnosisPage = {
         DOM.createIcons();
 
         await this._loadSessions();
+        if (options.initialAsk) {
+            ChatWidget.setDraft(options.initialAsk);
+        }
 
         return () => this._cleanup();
     },
@@ -321,7 +403,12 @@ const DiagnosisPage = {
 
     async _loadSessions() {
         try {
-            const sessions = await API.getChatSessions();
+            const sessionParams = {};
+            const fixedDatasourceId = this._renderOptions?.sessionFilterDatasourceId || this._renderOptions?.fixedDatasourceId;
+            if (fixedDatasourceId) {
+                sessionParams.datasource_id = fixedDatasourceId;
+            }
+            const sessions = await API.getChatSessions(Object.keys(sessionParams).length ? sessionParams : null);
             Store.set('chatSessions', sessions);
             const list = DOM.$('#session-list');
             if (!list) return;
@@ -451,7 +538,10 @@ const DiagnosisPage = {
         if (!session) return;
 
         // 恢复数据源
-        if (session.datasource_id != null) {
+        if (this._renderOptions?.fixedDatasourceId != null) {
+            this.datasourceSelector.setValue(this._renderOptions.fixedDatasourceId);
+            Store.set('currentDatasource', this.datasourceSelector.getSelectedDatasource() || null);
+        } else if (session.datasource_id != null) {
             this.datasourceSelector.setValue(session.datasource_id);
             Store.set('currentDatasource', this.datasourceSelector.getSelectedDatasource() || null);
         } else {
@@ -1077,5 +1167,7 @@ const DiagnosisPage = {
         }
         this.currentSessionId = null;
         this._modelSelectEl = null;
+        this._renderOptions = null;
+        this._container = null;
     }
 };

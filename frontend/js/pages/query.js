@@ -2,6 +2,15 @@
 const QueryPage = {
     currentAbortController: null,
     datasourceSelector: null,
+    _renderOptions: null,
+    _container: null,
+    currentDatabase: null,
+    currentSchema: null,
+    currentDbType: null,
+    supportsDatabase: false,
+    supportsSchema: false,
+    databaseOptions: [],
+    schemaOptions: [],
     editorHeight: 400,
     isResizing: false,
     startY: 0,
@@ -16,6 +25,14 @@ const QueryPage = {
     },
 
     async render() {
+        return this.renderWithOptions({});
+    },
+
+    async renderWithOptions(options = {}) {
+        this._renderOptions = options || {};
+        const content = options.container || DOM.$('#page-content');
+        this._container = content;
+
         let datasources = Store.get('datasources') || [];
         if (datasources.length === 0) {
             try {
@@ -26,48 +43,81 @@ const QueryPage = {
             }
         }
 
-        let currentConn = Store.get('currentConnection');
+        let currentConn = null;
+        if (options.fixedDatasourceId) {
+            currentConn = datasources.find(ds => ds.id === options.fixedDatasourceId) || null;
+        } else {
+            currentConn = Store.get('currentConnection');
+        }
         if (!currentConn && datasources.length > 0) {
             currentConn = datasources[0];
+        }
+        if (currentConn) {
             Store.set('currentConnection', currentConn);
         }
 
         const headerActions = DOM.el('div', { className: 'flex gap-8', style: { flex: '1', minWidth: '0' } });
-        const datasourceContainer = DOM.el('div', {
-            id: 'query-datasource-selector',
-            style: { minWidth: '280px', maxWidth: '380px', flex: '1' }
-        });
-        headerActions.appendChild(datasourceContainer);
-        Header.render('SQL 查询', headerActions);
-
         this.datasourceSelector?.destroy();
-        this.datasourceSelector = new DatasourceSelector({
-            container: datasourceContainer,
-            allowEmpty: false,
-            placeholder: '选择数据源',
-            showStatus: true,
-            showDetails: true,
-            onLoad: (loadedDatasources) => {
-                if ((!currentConn || !loadedDatasources.some(ds => ds.id === currentConn.id)) && loadedDatasources.length > 0) {
-                    currentConn = loadedDatasources[0];
-                    Store.set('currentConnection', currentConn);
+        this.datasourceSelector = null;
+        if (!options.fixedDatasourceId) {
+            const datasourceContainer = DOM.el('div', {
+                id: 'query-datasource-selector',
+                style: { minWidth: '280px', maxWidth: '380px', flex: '1' }
+            });
+            headerActions.appendChild(datasourceContainer);
+            this.datasourceSelector = new DatasourceSelector({
+                container: datasourceContainer,
+                allowEmpty: false,
+                placeholder: '选择数据源',
+                showStatus: true,
+                showDetails: true,
+                onLoad: (loadedDatasources) => {
+                    if ((!currentConn || !loadedDatasources.some(ds => ds.id === currentConn.id)) && loadedDatasources.length > 0) {
+                        currentConn = loadedDatasources[0];
+                        Store.set('currentConnection', currentConn);
+                    }
+                    if (currentConn?.id) {
+                        this.datasourceSelector.setValue(currentConn.id);
+                    }
+                },
+                onChange: (datasource) => {
+                    if (!datasource) return;
+                    Store.set('currentConnection', datasource);
+                    currentConn = datasource;
+                    this.currentDatabase = null;
+                    this.currentSchema = null;
+                    this._loadQueryContext(datasource.id, { resetSelections: true });
                 }
-                if (currentConn?.id) {
-                    this.datasourceSelector.setValue(currentConn.id);
-                }
-            },
-            onChange: (datasource) => {
-                if (!datasource) return;
-                Store.set('currentConnection', datasource);
-                this._loadSchemaForDatasource(datasource.id);
-            }
-        });
+            });
+        }
 
-        const content = DOM.$('#page-content');
         content.innerHTML = '';
+        if (options.embedded) {
+            const embeddedToolbar = DOM.el('div', {
+                className: 'instance-embedded-toolbar',
+                style: {
+                    display: 'flex',
+                    gap: '12px',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '16px',
+                    flexWrap: 'wrap'
+                }
+            });
+            embeddedToolbar.appendChild(DOM.el('div', {
+                className: 'instance-embedded-title',
+                textContent: 'SQL 查询'
+            }));
+            if (headerActions.childNodes.length > 0) {
+                embeddedToolbar.appendChild(headerActions);
+            }
+            content.appendChild(embeddedToolbar);
+        } else {
+            Header.render('SQL 查询', headerActions);
+        }
         const container = DOM.el('div', { className: 'query-container' });
-
         const toolbar = DOM.el('div', { className: 'query-toolbar' });
+        const toolbarActions = DOM.el('div', { className: 'query-toolbar-main-actions' });
         const executeBtn = DOM.el('button', {
             className: 'btn btn-primary',
             id: 'execute-btn',
@@ -96,18 +146,29 @@ const QueryPage = {
             innerHTML: '<i data-lucide="refresh-cw"></i> 刷新结构',
             onClick: () => this._refreshSchema()
         });
-        toolbar.appendChild(executeBtn);
-        toolbar.appendChild(cancelBtn);
-        toolbar.appendChild(explainBtn);
-        toolbar.appendChild(historyBtn);
-        toolbar.appendChild(refreshSchemaBtn);
+        toolbarActions.appendChild(executeBtn);
+        toolbarActions.appendChild(cancelBtn);
+        toolbarActions.appendChild(explainBtn);
+        toolbarActions.appendChild(historyBtn);
+        toolbarActions.appendChild(refreshSchemaBtn);
+        toolbar.appendChild(toolbarActions);
 
-        const hint = DOM.el('span', {
-            className: 'text-muted text-sm',
-            style: { marginLeft: 'auto' },
-            textContent: '提示: 选中SQL后执行将只执行选中部分 | 最多返回10000行'
-        });
-        toolbar.appendChild(hint);
+        const contextToolbar = DOM.el('div', { className: 'query-toolbar-context', id: 'query-context-toolbar' });
+        contextToolbar.innerHTML = `
+            <div class="query-context-group" id="query-database-group">
+                <label for="query-database-select">数据库</label>
+                <select id="query-database-select" class="form-select">
+                    <option value="">加载中...</option>
+                </select>
+            </div>
+            <div class="query-context-group" id="query-schema-group" style="display:none;">
+                <label for="query-schema-select">Schema</label>
+                <select id="query-schema-select" class="form-select">
+                    <option value="">默认</option>
+                </select>
+            </div>
+        `;
+        toolbar.appendChild(contextToolbar);
         container.appendChild(toolbar);
 
         // Resizer between editor and results (appended at end, positioned via CSS order)
@@ -120,7 +181,7 @@ const QueryPage = {
         setTimeout(() => {
             const connId = this._getSelectedDatasourceId();
             if (connId) {
-                this._loadSchemaForDatasource(connId);
+                this._loadQueryContext(connId, { resetSelections: true });
             }
         }, 500);
 
@@ -148,12 +209,176 @@ const QueryPage = {
             this._cancelQuery();
             QueryEditor.destroy();
             DataTable.destroy();
+            this.currentDatabase = null;
+            this.currentSchema = null;
+            this.currentDbType = null;
+            this.supportsDatabase = false;
+            this.supportsSchema = false;
+            this.databaseOptions = [];
+            this.schemaOptions = [];
+            this._renderOptions = null;
+            this._container = null;
         };
+    },
+
+    _getCurrentExecutionContext() {
+        const databaseSelect = DOM.$('#query-database-select');
+        const schemaSelect = DOM.$('#query-schema-select');
+
+        if (databaseSelect) {
+            this.currentDatabase = this._normalizeContextValue(databaseSelect.value);
+        }
+        if (schemaSelect && this.supportsSchema) {
+            this.currentSchema = this._normalizeContextValue(schemaSelect.value);
+        }
+
+        return {
+            database: this.currentDatabase || null,
+            schema: this.supportsSchema ? (this.currentSchema || null) : null,
+        };
+    },
+
+    _normalizeContextValue(value) {
+        if (value === null || value === undefined) {
+            return null;
+        }
+        const normalized = String(value).trim();
+        return normalized || null;
+    },
+
+    _buildSelectOptions(selectElement, values, selectedValue, defaultLabel) {
+        if (!selectElement) return;
+        const normalizedValues = Array.isArray(values)
+            ? values.filter(value => value !== undefined && value !== null && String(value).trim() !== '')
+            : [];
+        const currentValue = this._normalizeContextValue(selectedValue);
+        const options = [...normalizedValues];
+
+        if (currentValue && !options.includes(currentValue)) {
+            options.unshift(currentValue);
+        }
+
+        if (options.length === 0) {
+            options.push('');
+        }
+
+        selectElement.innerHTML = '';
+        options.forEach((item) => {
+            const option = document.createElement('option');
+            option.value = item;
+            option.textContent = item || defaultLabel;
+            option.selected = item === currentValue || (!item && !currentValue);
+            selectElement.appendChild(option);
+        });
+    },
+
+    _resolveSelection(requestedValue, fallbackValue, availableValues = []) {
+        const normalizedRequested = this._normalizeContextValue(requestedValue);
+        const normalizedFallback = this._normalizeContextValue(fallbackValue);
+
+        if (normalizedRequested) {
+            return normalizedRequested;
+        }
+        if (normalizedFallback && availableValues.includes(normalizedFallback)) {
+            return normalizedFallback;
+        }
+        if (normalizedFallback && availableValues.length === 0) {
+            return normalizedFallback;
+        }
+        return availableValues[0] || null;
+    },
+
+    _renderQueryContextSelectors() {
+        const contextToolbar = DOM.$('#query-context-toolbar');
+        const databaseGroup = DOM.$('#query-database-group');
+        const databaseSelect = DOM.$('#query-database-select');
+        const schemaSelect = DOM.$('#query-schema-select');
+        const schemaGroup = DOM.$('#query-schema-group');
+
+        if (contextToolbar) {
+            contextToolbar.style.display = (this.supportsDatabase || this.supportsSchema) ? 'flex' : 'none';
+        }
+
+        if (databaseGroup) {
+            databaseGroup.style.display = this.supportsDatabase ? '' : 'none';
+        }
+
+        if (databaseSelect) {
+            this._buildSelectOptions(databaseSelect, this.databaseOptions, this.currentDatabase, '默认数据库');
+            databaseSelect.onchange = async (event) => {
+                this.currentDatabase = this._normalizeContextValue(event.target.value);
+                this.currentSchema = null;
+                const datasourceId = this._getSelectedDatasourceId();
+                if (datasourceId) {
+                    await this._loadQueryContext(datasourceId, {
+                        database: this.currentDatabase,
+                        schema: null,
+                    });
+                }
+            };
+        }
+
+        if (schemaGroup) {
+            schemaGroup.style.display = this.supportsSchema ? '' : 'none';
+        }
+
+        if (schemaSelect && this.supportsSchema) {
+            this._buildSelectOptions(schemaSelect, this.schemaOptions, this.currentSchema, '默认 Schema');
+            schemaSelect.onchange = async (event) => {
+                this.currentSchema = this._normalizeContextValue(event.target.value);
+                const datasourceId = this._getSelectedDatasourceId();
+                if (datasourceId) {
+                    await this._loadSchemaForDatasource(datasourceId);
+                }
+            };
+        }
+    },
+
+    async _loadQueryContext(datasourceId, options = {}) {
+        const requestedDatabase = Object.prototype.hasOwnProperty.call(options, 'database')
+            ? (options.database || null)
+            : (options.resetSelections ? null : this.currentDatabase);
+        const requestedSchema = Object.prototype.hasOwnProperty.call(options, 'schema')
+            ? (options.schema || null)
+            : (options.resetSelections ? null : this.currentSchema);
+
+        try {
+            const context = await API.getQueryContext(datasourceId, requestedDatabase);
+            this.currentDbType = context.db_type || null;
+            this.supportsDatabase = Boolean(context.supports_database) && (context.databases || []).length > 0;
+            this.databaseOptions = context.databases || [];
+            this.supportsSchema = Boolean(context.supports_schema);
+            this.schemaOptions = context.schemas || [];
+            this.currentDatabase = this._resolveSelection(
+                requestedDatabase,
+                context.current_database,
+                this.databaseOptions
+            );
+            this.currentSchema = this.supportsSchema
+                ? this._resolveSelection(
+                    requestedSchema,
+                    context.current_schema,
+                    this.schemaOptions
+                )
+                : null;
+        } catch (error) {
+            console.error('[Query] Failed to load query context:', error);
+            this.currentDbType = null;
+            this.supportsDatabase = false;
+            this.databaseOptions = [];
+            this.schemaOptions = [];
+            this.supportsSchema = false;
+            this.currentDatabase = null;
+            this.currentSchema = null;
+        }
+
+        this._renderQueryContextSelectors();
+        await this._loadSchemaForDatasource(datasourceId);
     },
 
     async _loadSchemaForDatasource(datasourceId) {
         try {
-            await QueryEditor.setSchema(datasourceId);
+            await QueryEditor.setSchema(datasourceId, this._getCurrentExecutionContext());
         } catch (error) {
             console.error('Error loading schema:', error);
         }
@@ -167,7 +392,10 @@ const QueryPage = {
         }
 
         window.SchemaCache.invalidate(connId);
-        await this._loadSchemaForDatasource(connId);
+        await this._loadQueryContext(connId, {
+            database: this.currentDatabase,
+            schema: this.currentSchema,
+        });
         Toast.success('结构已刷新');
     },
 
@@ -223,7 +451,7 @@ const QueryPage = {
 
         try {
             const result = await API.executeQuery(
-                { datasource_id: connId, sql, max_rows: 10000 },
+                { datasource_id: connId, sql, max_rows: 10000, ...this._getCurrentExecutionContext() },
                 { signal: this.currentAbortController.signal }
             );
 
@@ -286,7 +514,7 @@ const QueryPage = {
         results.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
         try {
-            const result = await API.explainQuery({ datasource_id: connId, sql });
+            const result = await API.explainQuery({ datasource_id: connId, sql, ...this._getCurrentExecutionContext() });
             const freshResults = DOM.$('#query-results');
             if (!freshResults) return;
             freshResults.innerHTML = '';
@@ -304,7 +532,6 @@ const QueryPage = {
             } else {
                 const pre = DOM.el('div', { className: 'explain-panel', textContent: JSON.stringify(result, null, 2) });
                 freshResults.appendChild(pre);
-                results.appendChild(pre);
             }
         } catch (err) {
             results.innerHTML = `<div style="padding:20px;color:var(--accent-red)">${err.message}</div>`;
@@ -345,12 +572,16 @@ const QueryPage = {
     async _showHistory() {
         try {
             const history = await API.getQueryHistory();
+            const datasourceId = this._renderOptions?.filterHistoryDatasourceId || this._getSelectedDatasourceId();
+            const filteredHistory = datasourceId
+                ? history.filter(item => Number(item.datasource_id) === Number(datasourceId))
+                : history;
             const container = DOM.el('div');
 
-            if (history.length === 0) {
+            if (filteredHistory.length === 0) {
                 container.innerHTML = '<p class="text-muted text-center">暂无查询历史</p>';
             } else {
-                for (const item of history.slice(0, 20)) {
+                for (const item of filteredHistory.slice(0, 20)) {
                     const row = DOM.el('div', {
                         style: { padding: '10px 0', borderBottom: '1px solid var(--border-color)', cursor: 'pointer' },
                         onClick: () => { QueryEditor.setValue(item.sql); Modal.hide(); }

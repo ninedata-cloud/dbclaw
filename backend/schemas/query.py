@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List, Any
 
 
@@ -6,16 +6,20 @@ class QueryExecuteRequest(BaseModel):
     datasource_id: int
     sql: str = Field(..., min_length=1)
     max_rows: int = Field(1000, gt=0, le=10000)
+    database: Optional[str] = None
+    schema: Optional[str] = None
 
 
 class QueryExplainRequest(BaseModel):
     datasource_id: int
     sql: str = Field(..., min_length=1)
+    database: Optional[str] = None
+    schema: Optional[str] = None
 
 
 class QueryResult(BaseModel):
-    columns: List[str] = []
-    rows: List[List[Any]] = []
+    columns: List[str] = Field(default_factory=list)
+    rows: List[List[Any]] = Field(default_factory=list)
     row_count: int = 0
     execution_time_ms: float = 0
     truncated: bool = False
@@ -35,9 +39,21 @@ class SchemaInfo(BaseModel):
     name: str
 
 
+class QueryContextResponse(BaseModel):
+    db_type: str
+    supports_database: bool = False
+    supports_schema: bool = False
+    current_database: Optional[str] = None
+    current_schema: Optional[str] = None
+    databases: List[str] = Field(default_factory=list)
+    schemas: List[str] = Field(default_factory=list)
+
+
 class TableInfo(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     name: str
-    schema: Optional[str] = None
+    schema_name: Optional[str] = Field(None, alias="schema")
     type: str
     engine: Optional[str] = None
     tablespace: Optional[str] = None
@@ -58,4 +74,3 @@ class ColumnInfo(BaseModel):
     length: Optional[int] = None
     precision: Optional[int] = None
     scale: Optional[int] = None
-

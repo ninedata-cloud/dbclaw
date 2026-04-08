@@ -3,6 +3,8 @@ const Store = {
     _state: {
         connections: [],
         currentConnection: null,
+        currentInstance: null,
+        currentInstanceId: null,
         currentPage: 'dashboard',
         hosts: [],
         chatSessions: [],

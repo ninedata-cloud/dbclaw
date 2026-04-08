@@ -1,7 +1,8 @@
 import time
 import logging
+import asyncio
 from collections import defaultdict, deque
-from typing import Optional, List
+from typing import Optional, List, Dict
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -11,9 +12,10 @@ from backend.models.datasource import Datasource
 from backend.models.soft_delete import alive_filter
 from backend.schemas.query import (
     QueryExecuteRequest, QueryExplainRequest, QueryResult,
-    SchemaInfo, TableInfo, ColumnInfo
+    SchemaInfo, TableInfo, ColumnInfo, QueryContextResponse
 )
 from backend.services.db_connector import get_connector
+from backend.services.asyncpg_query_executor import execute_asyncpg_query
 from backend.utils.encryption import decrypt_value
 from backend.utils.db_connector import _is_read_only_query
 
@@ -24,19 +26,152 @@ router = APIRouter(prefix="/api/query", tags=["query"], dependencies=[Depends(ge
 
 # Keep a small per-user in-memory history to avoid cross-user data leakage.
 _query_history_by_user: dict[int, deque] = defaultdict(lambda: deque(maxlen=100))
+_DB_TYPES_WITH_DATABASE_LIST_FROM_SCHEMAS = {"mysql", "tdsql-c-mysql", "tidb", "oceanbase_mysql"}
+_DB_TYPES_WITH_SCHEMA_SELECTOR = {"postgresql", "sqlserver"}
+_DEFAULT_SCHEMA_BY_DB_TYPE = {
+    "postgresql": "public",
+    "sqlserver": "dbo",
+}
 
 
-async def _get_connector_for(datasource_id: int, db: AsyncSession):
+def _normalize_optional_text(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _resolve_current_value(requested: Optional[str], fallback: Optional[str], available: List[str]) -> Optional[str]:
+    if requested and (not available or requested in available):
+        return requested
+    if fallback and (not available or fallback in available):
+        return fallback
+    return available[0] if available else fallback
+
+
+def _quote_postgres_identifier(identifier: str) -> str:
+    escaped = identifier.replace('"', '""')
+    return f'"{escaped}"'
+
+
+async def _get_connector_for(datasource_id: int, db: AsyncSession, database_override: Optional[str] = None):
     result = await db.execute(select(Datasource).where(Datasource.id == datasource_id, alive_filter(Datasource)))
     datasource = result.scalar_one_or_none()
     if not datasource:
         raise HTTPException(status_code=404, detail="Datasource not found")
     password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
+    target_database = database_override if database_override is not None else datasource.database
     return get_connector(
         db_type=datasource.db_type, host=datasource.host, port=datasource.port,
-        username=datasource.username, password=password, database=datasource.database,
+        username=datasource.username, password=password, database=target_database,
         extra_params=datasource.extra_params,
     ), datasource
+
+
+async def _get_postgresql_databases(connector) -> List[str]:
+    conn = await connector._connect()
+    try:
+        rows = await conn.fetch(
+            "SELECT datname "
+            "FROM pg_database "
+            "WHERE datistemplate = false AND datallowconn = true "
+            "ORDER BY datname"
+        )
+        return [row["datname"] for row in rows]
+    finally:
+        await conn.close()
+
+
+async def _get_sqlserver_databases(connector) -> List[str]:
+    def _load():
+        conn = connector._connect()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT name "
+                "FROM sys.databases "
+                "WHERE state_desc = 'ONLINE' "
+                "ORDER BY CASE WHEN database_id > 4 THEN 0 ELSE 1 END, name"
+            )
+            return [row[0] for row in cursor.fetchall()]
+        finally:
+            conn.close()
+
+    return await asyncio.get_running_loop().run_in_executor(None, _load)
+
+
+async def _get_database_options(datasource: Datasource, connector) -> List[str]:
+    if datasource.db_type in _DB_TYPES_WITH_DATABASE_LIST_FROM_SCHEMAS:
+        return await connector.get_schemas()
+    if datasource.db_type == "postgresql":
+        return await _get_postgresql_databases(connector)
+    if datasource.db_type == "sqlserver":
+        return await _get_sqlserver_databases(connector)
+    return [datasource.database] if datasource.database else []
+
+
+async def _execute_postgresql_query_with_context(connector, sql: str, max_rows: int, schema: Optional[str]) -> Dict:
+    conn = await connector._connect()
+    try:
+        if schema:
+            quoted_schema = _quote_postgres_identifier(schema)
+            await conn.execute(f"SET search_path TO {quoted_schema}, public")
+        return await execute_asyncpg_query(conn, sql, max_rows=max_rows, explain_uses_fetch=False)
+    finally:
+        await conn.close()
+
+
+async def _explain_postgresql_query_with_context(connector, sql: str, schema: Optional[str]) -> Dict:
+    conn = await connector._connect()
+    try:
+        if schema:
+            quoted_schema = _quote_postgres_identifier(schema)
+            await conn.execute(f"SET search_path TO {quoted_schema}, public")
+        rows = await conn.fetch(f"EXPLAIN (FORMAT JSON) {sql}")
+        return {"plan": [dict(r) for r in rows]}
+    finally:
+        await conn.close()
+
+
+@router.get("/context", response_model=QueryContextResponse)
+async def get_query_context(
+    datasource_id: int,
+    database: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    requested_database = _normalize_optional_text(database)
+    listing_connector, datasource = await _get_connector_for(datasource_id, db, requested_database)
+    try:
+        databases = await _get_database_options(datasource, listing_connector)
+    finally:
+        await listing_connector.close()
+
+    current_database = _resolve_current_value(requested_database, datasource.database, databases)
+    supports_schema = datasource.db_type in _DB_TYPES_WITH_SCHEMA_SELECTOR
+    schemas: List[str] = []
+    current_schema: Optional[str] = None
+
+    if supports_schema:
+        schema_connector, _ = await _get_connector_for(datasource_id, db, current_database)
+        try:
+            schemas = await schema_connector.get_schemas()
+        finally:
+            await schema_connector.close()
+        current_schema = _resolve_current_value(
+            None,
+            _DEFAULT_SCHEMA_BY_DB_TYPE.get(datasource.db_type),
+            schemas,
+        )
+
+    return QueryContextResponse(
+        db_type=datasource.db_type,
+        supports_database=bool(databases),
+        supports_schema=supports_schema,
+        current_database=current_database,
+        current_schema=current_schema,
+        databases=databases,
+        schemas=schemas,
+    )
 
 
 @router.post("/execute", response_model=QueryResult)
@@ -49,9 +184,14 @@ async def execute_query(
         raise HTTPException(status_code=400, detail="Only read-only queries are allowed. DML/DDL statements are blocked.")
 
     history = _query_history_by_user[current_user.id]
-    connector, datasource = await _get_connector_for(req.datasource_id, db)
+    selected_database = _normalize_optional_text(req.database)
+    selected_schema = _normalize_optional_text(req.schema)
+    connector, datasource = await _get_connector_for(req.datasource_id, db, selected_database)
     try:
-        result = await connector.execute_query(req.sql, max_rows=req.max_rows)
+        if datasource.db_type == "postgresql":
+            result = await _execute_postgresql_query_with_context(connector, req.sql, req.max_rows, selected_schema)
+        else:
+            result = await connector.execute_query(req.sql, max_rows=req.max_rows)
         history.append({
             "id": len(history) + 1,
             "datasource_id": req.datasource_id,
@@ -84,9 +224,14 @@ async def explain_query(req: QueryExplainRequest, db: AsyncSession = Depends(get
     if not _is_read_only_query(req.sql):
         raise HTTPException(status_code=400, detail="Only read-only queries can be explained.")
 
-    connector, datasource = await _get_connector_for(req.datasource_id, db)
+    selected_database = _normalize_optional_text(req.database)
+    selected_schema = _normalize_optional_text(req.schema)
+    connector, datasource = await _get_connector_for(req.datasource_id, db, selected_database)
     try:
-        result = await connector.explain_query(req.sql)
+        if datasource.db_type == "postgresql":
+            result = await _explain_postgresql_query_with_context(connector, req.sql, selected_schema)
+        else:
+            result = await connector.explain_query(req.sql)
         return result
     except Exception as e:
         logger.error(f"Query explain failed: datasource_id={req.datasource_id}, sql={req.sql!r}, error={e}", exc_info=True)
@@ -102,9 +247,10 @@ async def get_query_history(current_user=Depends(get_current_user)):
 
 
 @router.get("/schema/databases", response_model=List[SchemaInfo])
-async def get_databases(datasource_id: int, db: AsyncSession = Depends(get_db)):
+async def get_databases(datasource_id: int, database: Optional[str] = None, db: AsyncSession = Depends(get_db)):
     """Get list of schemas/databases for autocomplete."""
-    connector, datasource = await _get_connector_for(datasource_id, db)
+    selected_database = _normalize_optional_text(database)
+    connector, datasource = await _get_connector_for(datasource_id, db, selected_database)
     try:
         schemas = await connector.get_schemas()
         return [SchemaInfo(name=s) for s in schemas]
@@ -116,11 +262,17 @@ async def get_databases(datasource_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/schema/tables", response_model=List[TableInfo])
-async def get_tables(datasource_id: int, schema: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+async def get_tables(
+    datasource_id: int,
+    schema: Optional[str] = None,
+    database: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
     """Get list of tables for autocomplete."""
-    connector, datasource = await _get_connector_for(datasource_id, db)
+    selected_database = _normalize_optional_text(database)
+    connector, datasource = await _get_connector_for(datasource_id, db, selected_database)
     try:
-        tables = await connector.get_tables(schema)
+        tables = await connector.get_tables(_normalize_optional_text(schema))
         return [TableInfo(**t) for t in tables]
     except Exception as e:
         logger.error(f"Error fetching tables: {e}", exc_info=True)
@@ -130,11 +282,18 @@ async def get_tables(datasource_id: int, schema: Optional[str] = None, db: Async
 
 
 @router.get("/schema/columns", response_model=List[ColumnInfo])
-async def get_columns(datasource_id: int, table: str, schema: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+async def get_columns(
+    datasource_id: int,
+    table: str,
+    schema: Optional[str] = None,
+    database: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
     """Get list of columns for a specific table."""
-    connector, datasource = await _get_connector_for(datasource_id, db)
+    selected_database = _normalize_optional_text(database)
+    connector, datasource = await _get_connector_for(datasource_id, db, selected_database)
     try:
-        columns = await connector.get_columns(table, schema)
+        columns = await connector.get_columns(table, _normalize_optional_text(schema))
         return [ColumnInfo(**c) for c in columns]
     except Exception as e:
         logger.error(f"Error fetching columns: {e}")

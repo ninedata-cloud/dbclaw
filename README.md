@@ -33,7 +33,7 @@ FastAPI Backend
   └─ Integration Scheduler
         |
         +--> PostgreSQL (metadata)
-        +--> ChromaDB (vector knowledge base)
+        +--> PostgreSQL-backed document knowledge
         +--> Target Databases / Hosts
 ```
 
@@ -85,7 +85,7 @@ Copy `.env.example` to `.env`:
 cp .env.example .env
 ```
 
-至少需要修改以下配置：
+本地源码部署至少需要修改以下配置：
 
 At minimum, update the following values:
 
@@ -132,6 +132,15 @@ GRANT ALL PRIVILEGES ON DATABASE dbguard TO dbguard;
 python run.py
 ```
 
+如果基础服务未准备好，启动前会先执行一轮中文自检，优先检查：
+
+If the base services are not ready, DBGuard now performs a startup self-check before booting and prints actionable diagnostics for:
+
+- 元数据库连接 / metadata database connectivity
+- `ENCRYPTION_KEY` 与 `PUBLIC_SHARE_SECRET_KEY`
+- 运行时目录可写性 / runtime directory writability
+- 应用监听端口占用 / application port conflicts
+
 首次启动会自动完成：
 
 On first startup, DBGuard will automatically:
@@ -147,10 +156,49 @@ On first startup, DBGuard will automatically:
 - 用户名 / Username: `admin`
 - 密码 / Password: `INITIAL_ADMIN_PASSWORD` 对应的值
 
+健康检查接口：
+
+Health endpoints:
+
+- `GET /health`：进程存活检查 / liveness
+- `GET /health/live`：进程存活检查 / liveness
+- `GET /health/ready`：关键依赖就绪检查 / readiness
+- `GET /health/checks`：启动自检结果与当前检查详情 / startup and current self-check details
+
+### Docker 单容器部署 / Single-Container Docker
+
+内置 PostgreSQL 元数据库，首次启动不再强制要求你手工准备 `ENCRYPTION_KEY`、`PUBLIC_SHARE_SECRET_KEY`、`POSTGRES_PASSWORD`。容器会自动生成这些值并持久化到 `/app/data/bootstrap/runtime.env`。
+
+The single-container image bundles PostgreSQL for metadata storage. On first startup, the container automatically generates and persists `ENCRYPTION_KEY`, `PUBLIC_SHARE_SECRET_KEY`, and `POSTGRES_PASSWORD` under `/app/data/bootstrap/runtime.env`.
+
+```bash
+docker build -t dbguard:latest .
+
+docker run -d \
+  --name dbguard \
+  -p 9939:9939 \
+  -v dbguard-pgdata:/var/lib/postgresql/data \
+  -v dbguard-appdata:/app/data \
+  -v dbguard-uploads:/app/uploads \
+  dbguard:latest
+```
+
+首次登录信息：
+
+First-login credentials:
+
+- 用户名 / Username: `admin`
+- 密码 / Password: `admin1234`
+
+建议首次登录后立即修改管理员密码。
+
+Change the admin password immediately after the first login.
+
 ### 生产环境建议 / Production Notes
 
 - 将 `DEBUG` 设置为 `false`
-- 使用强随机值配置 `ENCRYPTION_KEY`、`PUBLIC_SHARE_SECRET_KEY`、`INITIAL_ADMIN_PASSWORD`
+- 如需自定义或纳管密钥，可显式传入 `ENCRYPTION_KEY`、`PUBLIC_SHARE_SECRET_KEY`、`POSTGRES_PASSWORD`
+- 建议显式覆盖 `INITIAL_ADMIN_PASSWORD`，或在首次登录后立即修改默认密码 `admin1234`
 - 通过 systemd、supervisor 或容器编排守护 `python run.py`
 - 确保 PostgreSQL、目标数据库、SSH 网络访问策略已放通
 - 若需通过 HTTPS 对外提供，建议在 Nginx / Caddy 后挂载运行
@@ -159,16 +207,15 @@ On first startup, DBGuard will automatically:
 
 | 变量 / Variable | 说明 / Description |
 | --- | --- |
-| `ENCRYPTION_KEY` | 必填。用于加密数据库密码等敏感信息 / Required. Used to encrypt sensitive credentials |
+| `ENCRYPTION_KEY` | Docker 单容器下可自动生成并持久化；本地源码部署建议显式设置 / Auto-generated in single-container Docker; set explicitly for local source deployment |
 | `DATABASE_URL` | PostgreSQL 元数据库连接串 / PostgreSQL metadata database URL |
-| `PUBLIC_SHARE_SECRET_KEY` | 公开分享链接签名密钥 / Signing secret for public share links |
-| `INITIAL_ADMIN_PASSWORD` | 首次启动初始化管理员密码 / Initial admin password for first bootstrap |
+| `PUBLIC_SHARE_SECRET_KEY` | Docker 单容器下可自动生成并持久化 / Auto-generated and persisted in single-container Docker |
+| `INITIAL_ADMIN_PASSWORD` | 默认 `admin1234`，可通过环境变量覆盖 / Defaults to `admin1234`, can be overridden |
+| `POSTGRES_PASSWORD` | Docker 单容器下可自动生成并持久化 / Auto-generated and persisted in single-container Docker |
 | `OPENAI_API_KEY` | AI 模型服务密钥 / API key for AI model service |
 | `OPENAI_BASE_URL` | AI 服务基础地址 / Base URL for AI service |
 | `OPENAI_MODEL` | 默认模型名称 / Default model name |
 | `BOCHA_API_KEY` | 博查 AI 网络搜索密钥（可选）/ Optional Bocha web search API key |
-| `CHROMA_PERSIST_DIR` | ChromaDB 持久化目录 / ChromaDB persistence directory |
-| `EMBEDDING_MODEL` | 向量化模型名称 / Embedding model name |
 | `METRIC_INTERVAL` | 指标采集间隔（秒）/ Metric collection interval in seconds |
 | `INSPECTION_DEDUP_WINDOW_MINUTES` | 巡检去重窗口（分钟）/ Inspection deduplication window |
 | `ALERT_AGGREGATION_TIME_WINDOW_MINUTES` | 告警聚合窗口（分钟）/ Alert aggregation window |

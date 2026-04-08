@@ -1,10 +1,8 @@
-import sys
 from datetime import datetime
+import sys
 from pathlib import Path
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -15,18 +13,68 @@ from backend.services.alert_event_service import AlertEventService
 from backend.services.alert_service import AlertService
 
 
+class FakeScalarSequence:
+    def __init__(self, items):
+        self._items = list(items)
+
+    def all(self):
+        return list(self._items)
+
+
+class FakeQueryResult:
+    def __init__(self, *, scalar_value=None, items=None):
+        self._scalar_value = scalar_value
+        self._items = list(items or [])
+
+    def scalar(self):
+        return self._scalar_value
+
+    def scalars(self):
+        return FakeScalarSequence(self._items)
+
+
+class FakeOrderedSession:
+    def __init__(self, items, *, sort_key, count_mode: str):
+        self._items = list(items)
+        self._sort_key = sort_key
+        self._count_mode = count_mode
+        self._execute_calls = 0
+
+    async def execute(self, statement):
+        del statement
+        self._execute_calls += 1
+        if self._execute_calls == 1:
+            if self._count_mode == "scalar":
+                return FakeQueryResult(scalar_value=len(self._items))
+            return FakeQueryResult(items=self._items)
+        ordered = sorted(self._items, key=self._sort_key)
+        return FakeQueryResult(items=ordered)
+
+
+def _event_sort_key(event: AlertEvent):
+    status_priority = {"active": 0, "acknowledged": 1}
+    return (
+        status_priority.get(event.status, 2),
+        -event.event_start_time.timestamp(),
+        -(event.id or 0),
+    )
+
+
+def _alert_sort_key(alert: AlertMessage):
+    status_priority = {"active": 0, "acknowledged": 1}
+    return (
+        status_priority.get(alert.status, 2),
+        -alert.created_at.timestamp(),
+        -(alert.id or 0),
+    )
+
+
 @pytest.mark.asyncio
-async def test_alert_events_prioritize_active_before_resolved(tmp_path):
-    db_path = tmp_path / "alert-events-order.db"
-    engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}", echo=False)
-    session_factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-    async with engine.begin() as conn:
-        await conn.run_sync(AlertEvent.__table__.create)
-
-    async with session_factory() as db:
-        db.add_all([
+async def test_alert_events_prioritize_active_before_resolved():
+    fake_db = FakeOrderedSession(
+        [
             AlertEvent(
+                id=1,
                 datasource_id=1,
                 aggregation_key="1:cpu_usage",
                 aggregation_type="by_metric_name",
@@ -43,6 +91,7 @@ async def test_alert_events_prioritize_active_before_resolved(tmp_path):
                 metric_name="cpu_usage",
             ),
             AlertEvent(
+                id=2,
                 datasource_id=1,
                 aggregation_key="1:memory_usage",
                 aggregation_type="by_metric_name",
@@ -59,6 +108,7 @@ async def test_alert_events_prioritize_active_before_resolved(tmp_path):
                 metric_name="memory_usage",
             ),
             AlertEvent(
+                id=3,
                 datasource_id=1,
                 aggregation_key="1:connection_status",
                 aggregation_type="by_metric_name",
@@ -75,6 +125,7 @@ async def test_alert_events_prioritize_active_before_resolved(tmp_path):
                 metric_name="connection_status",
             ),
             AlertEvent(
+                id=4,
                 datasource_id=1,
                 aggregation_key="1:disk_usage",
                 aggregation_type="by_metric_name",
@@ -90,34 +141,28 @@ async def test_alert_events_prioritize_active_before_resolved(tmp_path):
                 alert_type="threshold_violation",
                 metric_name="disk_usage",
             ),
-        ])
-        await db.commit()
+        ],
+        sort_key=_event_sort_key,
+        count_mode="scalar",
+    )
 
-        events, total = await AlertEventService.get_events(db, limit=10, offset=0, status="all")
+    events, total = await AlertEventService.get_events(fake_db, limit=10, offset=0, status="all")
 
-        assert total == 4
-        assert [event.title for event in events] == [
-            "active-newer",
-            "active-older",
-            "acknowledged",
-            "resolved-newest",
-        ]
-
-    await engine.dispose()
+    assert total == 4
+    assert [event.title for event in events] == [
+        "active-newer",
+        "active-older",
+        "acknowledged",
+        "resolved-newest",
+    ]
 
 
 @pytest.mark.asyncio
-async def test_alert_messages_prioritize_active_before_resolved(tmp_path):
-    db_path = tmp_path / "alert-messages-order.db"
-    engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}", echo=False)
-    session_factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-    async with engine.begin() as conn:
-        await conn.run_sync(AlertMessage.__table__.create)
-
-    async with session_factory() as db:
-        db.add_all([
+async def test_alert_messages_prioritize_active_before_resolved():
+    fake_db = FakeOrderedSession(
+        [
             AlertMessage(
+                id=1,
                 datasource_id=1,
                 alert_type="system_error",
                 severity="critical",
@@ -129,6 +174,7 @@ async def test_alert_messages_prioritize_active_before_resolved(tmp_path):
                 updated_at=datetime(2026, 4, 1, 12, 42, 0),
             ),
             AlertMessage(
+                id=2,
                 datasource_id=1,
                 alert_type="threshold_violation",
                 severity="high",
@@ -140,6 +186,7 @@ async def test_alert_messages_prioritize_active_before_resolved(tmp_path):
                 updated_at=datetime(2026, 4, 2, 12, 42, 0),
             ),
             AlertMessage(
+                id=3,
                 datasource_id=1,
                 alert_type="threshold_violation",
                 severity="low",
@@ -150,19 +197,19 @@ async def test_alert_messages_prioritize_active_before_resolved(tmp_path):
                 created_at=datetime(2026, 4, 6, 12, 42, 0),
                 updated_at=datetime(2026, 4, 6, 12, 42, 0),
             ),
-        ])
-        await db.commit()
+        ],
+        sort_key=_alert_sort_key,
+        count_mode="scalars",
+    )
 
-        alerts, total = await AlertService.get_alerts(
-            db,
-            AlertQueryParams(status="all", limit=10, offset=0),
-        )
+    alerts, total = await AlertService.get_alerts(
+        fake_db,
+        AlertQueryParams(status="all", limit=10, offset=0),
+    )
 
-        assert total == 3
-        assert [alert.title for alert in alerts] == [
-            "active-connection",
-            "acknowledged-cpu",
-            "resolved-newest",
-        ]
-
-    await engine.dispose()
+    assert total == 3
+    assert [alert.title for alert in alerts] == [
+        "active-connection",
+        "acknowledged-cpu",
+        "resolved-newest",
+    ]

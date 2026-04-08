@@ -17,6 +17,26 @@ from backend.services.integration_scheduler import execute_integration
 router = APIRouter(prefix="/api/metrics", tags=["metrics"], dependencies=[Depends(get_current_user)])
 
 
+def _build_connection_failure_health(datasource) -> Dict[str, Any]:
+    error_message = (getattr(datasource, "connection_error", None) or "").strip()
+    message = f"数据库连接失败: {error_message}" if error_message else "数据库连接失败"
+    violation: Dict[str, Any] = {
+        "type": "connection_failure",
+        "metric": "connection_status",
+        "value": 0,
+        "threshold": 1,
+    }
+    if error_message:
+        violation["detail"] = error_message
+
+    return {
+        "healthy": False,
+        "status": "critical",
+        "violations": [violation],
+        "message": message,
+    }
+
+
 async def _get_db_status_snapshots(
     db: AsyncSession,
     conn_id: int,
@@ -186,6 +206,7 @@ async def get_batch_dashboard(
     stale_threshold = 300  # 5分钟
     for cid in conn_ids:
         snap = latest_metrics.get(cid)
+        datasource = datasources.get(cid)
 
         # --- 构建 metric 部分 ---
         if snap:
@@ -200,7 +221,9 @@ async def get_batch_dashboard(
             metric_data = None
 
         # --- 构建 health 部分 ---
-        if not snap:
+        if datasource and datasource.connection_status == "failed":
+            health = _build_connection_failure_health(datasource)
+        elif not snap:
             health = {"healthy": False, "status": "unknown", "violations": [], "message": "无监控数据"}
         else:
             metric_age = (now() - snap.collected_at).total_seconds()
@@ -262,6 +285,9 @@ async def get_datasource_health(
         select(Datasource).where(Datasource.id == conn_id, alive_filter(Datasource))
     )
     datasource = ds_result.scalar_one_or_none()
+
+    if datasource and datasource.connection_status == "failed":
+        return _build_connection_failure_health(datasource)
 
     latest_snaps = await _get_db_status_snapshots(db, conn_id, 1, datasource)
     latest_metric = latest_snaps[0] if latest_snaps else None

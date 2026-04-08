@@ -146,8 +146,19 @@ const API = {
     getBatchDashboard(connIds) { return this.post('/api/metrics/batch/dashboard', { conn_ids: connIds }); },
     refreshMetrics(connId) { return this.post(`/api/metrics/${connId}/refresh`); },
 
+    // Instance detail endpoints
+    getInstanceSummary(datasourceId) { return this.get(`/api/instances/${datasourceId}/summary`); },
+    getInstanceVariables(datasourceId) { return this.get(`/api/instances/${datasourceId}/variables`); },
+    getInstanceSessions(datasourceId) { return this.get(`/api/instances/${datasourceId}/sessions`); },
+    terminateInstanceSession(datasourceId, sessionId) {
+        return this.post(`/api/instances/${datasourceId}/sessions/${encodeURIComponent(sessionId)}/terminate`, {});
+    },
+
     // Chat endpoints
-    getChatSessions() { return this.get('/api/chat/sessions'); },
+    getChatSessions(params = null) {
+        const queryString = params ? `?${new URLSearchParams(params).toString()}` : '';
+        return this.get(`/api/chat/sessions${queryString}`);
+    },
     createChatSession(data) { return this.post('/api/chat/sessions', data); },
     deleteChatSession(id) { return this.delete(`/api/chat/sessions/${id}`); },
     clearSessionMessages(id) { return this.delete(`/api/chat/sessions/${id}/messages`); },
@@ -166,15 +177,26 @@ const API = {
     },
     explainQuery(data) { return this.post('/api/query/explain', data); },
     getQueryHistory() { return this.get('/api/query/history'); },
-    getSchemas(datasourceId) { return this.get(`/api/query/schema/databases?datasource_id=${datasourceId}`); },
-    getTables(datasourceId, schema = null) {
-        let url = `/api/query/schema/tables?datasource_id=${datasourceId}`;
-        if (schema) url += `&schema=${encodeURIComponent(schema)}`;
+    getQueryContext(datasourceId, database = null) {
+        let url = `/api/query/context?datasource_id=${datasourceId}`;
+        if (database) url += `&database=${encodeURIComponent(database)}`;
         return this.get(url);
     },
-    getColumns(datasourceId, table, schema = null) {
+    getSchemas(datasourceId, options = {}) {
+        let url = `/api/query/schema/databases?datasource_id=${datasourceId}`;
+        if (options.database) url += `&database=${encodeURIComponent(options.database)}`;
+        return this.get(url);
+    },
+    getTables(datasourceId, options = {}) {
+        let url = `/api/query/schema/tables?datasource_id=${datasourceId}`;
+        if (options.schema) url += `&schema=${encodeURIComponent(options.schema)}`;
+        if (options.database) url += `&database=${encodeURIComponent(options.database)}`;
+        return this.get(url);
+    },
+    getColumns(datasourceId, table, options = {}) {
         let url = `/api/query/schema/columns?datasource_id=${datasourceId}&table=${encodeURIComponent(table)}`;
-        if (schema) url += `&schema=${encodeURIComponent(schema)}`;
+        if (options.schema) url += `&schema=${encodeURIComponent(options.schema)}`;
+        if (options.database) url += `&database=${encodeURIComponent(options.database)}`;
         return this.get(url);
     },
 

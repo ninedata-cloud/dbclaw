@@ -90,12 +90,6 @@ class SkillContext:
         result = await execute_host_command(self.db, datasource.host_id, command, allow_write=allow_write, timeout=exec_timeout)
         return result
 
-    async def search_kb(
-        self, query: str, kb_ids: Optional[List[int]] = None, top_k: int = 5
-    ) -> List[Dict[str, Any]]:
-        """Search knowledge base documents (legacy method, returns empty list - use list_documents/read_document tools instead)"""
-        return []
-
     async def get_metrics(
         self, datasource_id: int, minutes: int = 60
     ) -> List[Dict[str, Any]]:

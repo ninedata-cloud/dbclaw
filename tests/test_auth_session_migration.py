@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""最小认证回归测试：Cookie 会话登录、恢复、登出、改密失效"""
+"""最小认证回归测试：Cookie 会话登录、恢复、登出、改密失效。"""
 import asyncio
 import os
 import sys
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy.sql.dml import Update
+from sqlalchemy.sql.selectable import Select
 
 # 先配置环境变量，确保后续 import 使用测试配置
-_TEMP_DIR = TemporaryDirectory()
-_DB_PATH = Path(_TEMP_DIR.name) / "auth_test.db"
-os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{_DB_PATH}"
-os.environ["ENCRYPTION_KEY"] = "test-encryption-key-1234567890"
+os.environ["DATABASE_URL"] = "postgresql+asyncpg://dbguard:test-pass@127.0.0.1:5432/dbguard"
+os.environ["ENCRYPTION_KEY"] = "4WEqnK34-IxW8xugCJ8SrLw6VHgxHpM5LOAQWAxPd1c="
 os.environ["PUBLIC_SHARE_SECRET_KEY"] = "test-public-share-secret-1234567890"
 os.environ["INITIAL_ADMIN_PASSWORD"] = "admin123456"
 os.environ["SESSION_COOKIE_NAME"] = "dbguard_session"
@@ -23,14 +23,137 @@ os.environ["DEBUG"] = "false"
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from backend.config import get_settings
+
 get_settings.cache_clear()
 
-from backend.app import create_app
-from backend.database import Base, engine, async_session
-from backend.models.user import User
+from backend.database import get_db
 from backend.models.login_log import LoginLog
+from backend.models.user import User
 from backend.models.user_session import UserSession
+from backend.routers import auth
 from backend.utils.security import hash_password
+
+
+class FakeScalarSequence:
+    def __init__(self, items):
+        self._items = list(items)
+
+    def all(self):
+        return list(self._items)
+
+
+class FakeResult:
+    def __init__(self, value=None, values=None):
+        self._value = value
+        self._values = list(values or [])
+
+    def scalar_one_or_none(self):
+        return self._value
+
+    def scalar(self):
+        return self._value
+
+    def scalars(self):
+        if self._values:
+            return FakeScalarSequence(self._values)
+        if self._value is None:
+            return FakeScalarSequence([])
+        return FakeScalarSequence([self._value])
+
+
+def _extract_where_value(statement, field_name: str):
+    for criterion in getattr(statement, "_where_criteria", ()):
+        left = getattr(criterion, "left", None)
+        right = getattr(criterion, "right", None)
+        if getattr(left, "key", None) != field_name:
+            continue
+        if hasattr(right, "value"):
+            return right.value
+    return None
+
+
+class FakeAuthDBSession:
+    def __init__(self):
+        self.users_by_id = {}
+        self.users_by_username = {}
+        self.sessions = []
+        self.login_logs = []
+        self._next_login_log_id = 1
+        self._next_session_id = 1
+
+    def seed_admin(self, password: str):
+        admin = User(
+            id=1,
+            username="admin",
+            password_hash=hash_password(password),
+            display_name="Administrator",
+            is_active=True,
+            is_admin=True,
+            session_version=1,
+        )
+        self.users_by_id[admin.id] = admin
+        self.users_by_username[admin.username] = admin
+
+    def add(self, obj):
+        if isinstance(obj, LoginLog):
+            obj.id = self._next_login_log_id
+            self._next_login_log_id += 1
+            self.login_logs.append(obj)
+            return
+        if isinstance(obj, UserSession):
+            obj.id = self._next_session_id
+            self._next_session_id += 1
+            self.sessions.append(obj)
+            return
+        if isinstance(obj, User):
+            self.users_by_id[obj.id] = obj
+            self.users_by_username[obj.username] = obj
+
+    async def commit(self):
+        return None
+
+    async def flush(self):
+        return None
+
+    async def refresh(self, obj):
+        return obj
+
+    async def execute(self, statement):
+        if isinstance(statement, Select):
+            entity = statement.column_descriptions[0].get("entity")
+            if entity is User:
+                username = _extract_where_value(statement, "username")
+                if username is not None:
+                    user = self.users_by_username.get(username)
+                    if user and getattr(user, "deleted_at", None) is None:
+                        return FakeResult(value=user)
+                    return FakeResult()
+
+                user_id = _extract_where_value(statement, "id")
+                user = self.users_by_id.get(user_id)
+                if user and getattr(user, "deleted_at", None) is None:
+                    return FakeResult(value=user)
+                return FakeResult()
+
+            if entity is UserSession:
+                session_hash = _extract_where_value(statement, "session_id_hash")
+                for session in self.sessions:
+                    if session.session_id_hash == session_hash:
+                        return FakeResult(value=session)
+                return FakeResult()
+
+        if isinstance(statement, Update) and statement.table.name == UserSession.__tablename__:
+            user_id = _extract_where_value(statement, "user_id")
+            status = _extract_where_value(statement, "status")
+            values = dict(getattr(statement, "_values", {}))
+            for session in self.sessions:
+                if session.user_id == user_id and session.status == status:
+                    for field, value in values.items():
+                        key = getattr(field, "key", str(field))
+                        setattr(session, key, getattr(value, "value", value))
+            return FakeResult()
+
+        raise AssertionError(f"Unexpected statement: {statement}")
 
 
 class TestResults:
@@ -58,33 +181,15 @@ class TestResults:
         return self.failed == 0
 
 
-async def reset_database():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
+def build_test_app(fake_db: FakeAuthDBSession) -> FastAPI:
+    app = FastAPI()
+    app.include_router(auth.router)
 
-    async with async_session() as session:
-        admin = User(
-            username="admin",
-            password_hash=hash_password("admin123456"),
-            display_name="Administrator",
-            is_active=True,
-            is_admin=True,
-        )
-        session.add(admin)
-        await session.commit()
+    async def override_get_db():
+        yield fake_db
 
-
-async def count_user_sessions() -> int:
-    async with async_session() as session:
-        result = await session.execute(UserSession.__table__.select())
-        return len(result.fetchall())
-
-
-async def get_user_session_statuses() -> list[str]:
-    async with async_session() as session:
-        result = await session.execute(UserSession.__table__.select().order_by(UserSession.id))
-        return [row.status for row in result.fetchall()]
+    app.dependency_overrides[get_db] = override_get_db
+    return app
 
 
 def run_tests() -> bool:
@@ -92,8 +197,9 @@ def run_tests() -> bool:
     print("=" * 60)
     results = TestResults()
 
-    asyncio.run(reset_database())
-    app = create_app()
+    fake_db = FakeAuthDBSession()
+    fake_db.seed_admin("admin123456")
+    app = build_test_app(fake_db)
 
     with TestClient(app) as client:
         try:
@@ -131,7 +237,7 @@ def run_tests() -> bool:
             assert response.status_code == 200, response.text
             response = client.get("/api/auth/me")
             assert response.status_code == 401, response.text
-            statuses = asyncio.run(get_user_session_statuses())
+            statuses = [session.status for session in fake_db.sessions]
             assert statuses == ["revoked"], statuses
             results.record_pass("登出后当前会话失效")
         except Exception as e:
@@ -152,7 +258,7 @@ def run_tests() -> bool:
             response = client.get("/api/auth/me")
             assert response.status_code == 401, response.text
 
-            statuses = asyncio.run(get_user_session_statuses())
+            statuses = [session.status for session in fake_db.sessions]
             assert statuses == ["revoked", "revoked"], statuses
             results.record_pass("改密后当前 Cookie 会话被撤销")
         except Exception as e:

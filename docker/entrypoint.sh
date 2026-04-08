@@ -1,9 +1,95 @@
 #!/bin/bash
-# Docker entrypoint: initialize DB on first run, then start supervisord
-set -e
+# Docker entrypoint: bootstrap runtime secrets, initialize DB, then start supervisord
+set -euo pipefail
 
-# Initialize PostgreSQL if needed
+RUNTIME_ENV_FILE="${RUNTIME_ENV_FILE:-/app/data/bootstrap/runtime.env}"
+BOOTSTRAP_DIR="$(dirname "$RUNTIME_ENV_FILE")"
+DEFAULT_ADMIN_PASSWORD="${DEFAULT_ADMIN_PASSWORD:-admin1234}"
+
+generate_fernet_key() {
+    python - <<'PY'
+from cryptography.fernet import Fernet
+print(Fernet.generate_key().decode())
+PY
+}
+
+generate_hex_secret() {
+    openssl rand -hex 32
+}
+
+generate_password() {
+    openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | head -c 24
+    echo
+}
+
+build_database_url() {
+    python - "$POSTGRES_USER" "$POSTGRES_PASSWORD" "$POSTGRES_DB" <<'PY'
+import sys
+from urllib.parse import quote
+
+user, password, database = sys.argv[1:4]
+print(f"postgresql+asyncpg://{quote(user)}:{quote(password)}@127.0.0.1:5432/{quote(database)}")
+PY
+}
+
+mkdir -p "$BOOTSTRAP_DIR"
+chmod 700 "$BOOTSTRAP_DIR"
+
+if [ -f "$RUNTIME_ENV_FILE" ]; then
+    set -a
+    . "$RUNTIME_ENV_FILE"
+    set +a
+fi
+
+POSTGRES_DB="${POSTGRES_DB:-dbguard}"
+POSTGRES_USER="${POSTGRES_USER:-dbguard}"
+
+if [ -z "${ENCRYPTION_KEY:-}" ]; then
+    ENCRYPTION_KEY="$(generate_fernet_key)"
+fi
+
+if [ -z "${PUBLIC_SHARE_SECRET_KEY:-}" ]; then
+    PUBLIC_SHARE_SECRET_KEY="$(generate_hex_secret)"
+fi
+
+if [ -z "${POSTGRES_PASSWORD:-}" ]; then
+    POSTGRES_PASSWORD="$(generate_password)"
+fi
+
+if [ -z "${INITIAL_ADMIN_PASSWORD:-}" ]; then
+    INITIAL_ADMIN_PASSWORD="$DEFAULT_ADMIN_PASSWORD"
+fi
+
+if [ -z "${DATABASE_URL:-}" ]; then
+    DATABASE_URL="$(build_database_url)"
+fi
+
+export ENCRYPTION_KEY
+export PUBLIC_SHARE_SECRET_KEY
+export POSTGRES_DB
+export POSTGRES_USER
+export POSTGRES_PASSWORD
+export INITIAL_ADMIN_PASSWORD
+export DATABASE_URL
+
+umask 077
+cat > "$RUNTIME_ENV_FILE" <<EOF
+ENCRYPTION_KEY=$ENCRYPTION_KEY
+PUBLIC_SHARE_SECRET_KEY=$PUBLIC_SHARE_SECRET_KEY
+POSTGRES_DB=$POSTGRES_DB
+POSTGRES_USER=$POSTGRES_USER
+POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+INITIAL_ADMIN_PASSWORD=$INITIAL_ADMIN_PASSWORD
+DATABASE_URL=$DATABASE_URL
+EOF
+chmod 600 "$RUNTIME_ENV_FILE"
+
+echo "Bootstrap runtime config ready: $RUNTIME_ENV_FILE"
+if [ "$INITIAL_ADMIN_PASSWORD" = "$DEFAULT_ADMIN_PASSWORD" ]; then
+    echo "Default admin credentials: admin / $DEFAULT_ADMIN_PASSWORD"
+    echo "Please change the admin password after first login."
+fi
+
 /app/docker/init-db.sh
 
-# Start all services via supervisord
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf

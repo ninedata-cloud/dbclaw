@@ -6,11 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     APP_HOST=0.0.0.0 \
     APP_PORT=9939 \
-    DEBUG=false \
-    POSTGRES_DB=dbguard \
-    POSTGRES_USER=dbguard \
-    POSTGRES_PASSWORD=DbGuard2026 \
-    DATABASE_URL=postgresql+asyncpg://dbguard:DbGuard2026@localhost:5432/dbguard?ssl=disable
+    DEBUG=false
 
 WORKDIR /app
 
@@ -51,8 +47,7 @@ COPY .env.example ./
 
 # 创建运行目录并设置权限
 RUN mkdir -p \
-    /app/data/chroma \
-    /app/data/knowledge_bases \
+    /app/data/bootstrap \
     /app/uploads/chat_attachments \
     /var/log/supervisor \
     /etc/supervisor/conf.d \
@@ -64,7 +59,7 @@ RUN mkdir -p \
 # supervisor 配置
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# 数据卷：PostgreSQL 数据、知识库/向量数据、上传附件
+# 数据卷：PostgreSQL 数据、应用运行数据、上传附件
 VOLUME ["/var/lib/postgresql/data", "/app/data", "/app/uploads"]
 
 EXPOSE 9939

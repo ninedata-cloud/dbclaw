@@ -46,7 +46,7 @@ const QueryEditor = {
                 language: 'sql',
                 theme: 'vs-dark',
                 automaticLayout: true,
-                minimap: { enabled: true },
+                minimap: { enabled: false },
                 lineNumbers: 'on',
                 wordWrap: 'on',
                 fontSize: 14,
@@ -87,7 +87,7 @@ const QueryEditor = {
         this.fallbackTextarea = textarea;
     },
 
-    async setSchema(datasourceId) {
+    async setSchema(datasourceId, context = {}) {
         console.log('[QueryEditor] setSchema called with datasourceId:', datasourceId);
         console.log('[QueryEditor] editor exists:', !!this.editor);
         console.log('[QueryEditor] monaco exists:', typeof monaco !== 'undefined');
@@ -105,7 +105,7 @@ const QueryEditor = {
 
         // Create new completion provider
         console.log('[QueryEditor] Creating new SQLCompletionProvider');
-        const provider = new window.SQLCompletionProvider(datasourceId, window.SchemaCache);
+        const provider = new window.SQLCompletionProvider(datasourceId, window.SchemaCache, context);
         await provider.loadSchema();
 
         // Register completion provider

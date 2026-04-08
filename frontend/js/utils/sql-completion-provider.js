@@ -15,9 +15,11 @@ const SQL_KEYWORDS = [
 ];
 
 class SQLCompletionProvider {
-    constructor(datasourceId, schemaCache) {
+    constructor(datasourceId, schemaCache, context = {}) {
         this.datasourceId = datasourceId;
         this.schemaCache = schemaCache;
+        this.database = context.database || null;
+        this.schema = context.schema || null;
         this.schemas = [];
         this.tables = [];
         this.tableColumns = new Map();
@@ -26,9 +28,14 @@ class SQLCompletionProvider {
     async loadSchema() {
         try {
             console.log('[SQLCompletionProvider] Loading schema for datasource:', this.datasourceId);
-            this.schemas = await this.schemaCache.getSchemas(this.datasourceId);
+            this.schemas = await this.schemaCache.getSchemas(this.datasourceId, {
+                database: this.database,
+            });
             console.log('[SQLCompletionProvider] Loaded schemas:', this.schemas);
-            this.tables = await this.schemaCache.getTables(this.datasourceId);
+            this.tables = await this.schemaCache.getTables(this.datasourceId, {
+                database: this.database,
+                schema: this.schema,
+            });
             console.log('[SQLCompletionProvider] Loaded tables:', this.tables);
         } catch (error) {
             console.error('Error loading schema:', error);
@@ -177,7 +184,10 @@ class SQLCompletionProvider {
         }
 
         try {
-            const columns = await this.schemaCache.getColumns(this.datasourceId, tableName);
+            const columns = await this.schemaCache.getColumns(this.datasourceId, tableName, {
+                database: this.database,
+                schema: this.schema,
+            });
             this.tableColumns.set(tableName, columns);
             return columns;
         } catch (error) {
@@ -186,8 +196,10 @@ class SQLCompletionProvider {
         }
     }
 
-    setDatasource(datasourceId) {
+    setDatasource(datasourceId, context = {}) {
         this.datasourceId = datasourceId;
+        this.database = context.database || null;
+        this.schema = context.schema || null;
         this.schemas = [];
         this.tables = [];
         this.tableColumns.clear();

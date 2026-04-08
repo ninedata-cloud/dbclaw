@@ -142,10 +142,30 @@ class PostgreSQLConnector(DBConnector):
             rows = await conn.fetch(
                 "SELECT pid, usename, client_addr, datname, state, "
                 "query_start, wait_event_type, wait_event, query "
-                "FROM pg_stat_activity"
-                "ORDER BY query_start DESC NULLS LAST LIMIT 50"
+                "FROM pg_stat_activity "
+                "WHERE pid <> pg_backend_pid() "
+                "ORDER BY query_start DESC NULLS LAST LIMIT 100"
             )
             return [dict(r) for r in rows]
+        finally:
+            await conn.close()
+
+    async def terminate_session(self, session_id: int) -> Dict[str, Any]:
+        conn = await self._connect()
+        try:
+            target_session_id = int(session_id)
+            row = await conn.fetchrow(
+                "SELECT pg_terminate_backend($1) AS terminated",
+                target_session_id,
+            )
+            terminated = bool(row["terminated"]) if row else False
+            if not terminated:
+                raise RuntimeError(f"PostgreSQL 会话 {target_session_id} 终止失败")
+            return {
+                "success": True,
+                "session_id": target_session_id,
+                "message": f"PostgreSQL 会话 {target_session_id} 已终止",
+            }
         finally:
             await conn.close()
 

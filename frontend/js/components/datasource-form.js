@@ -126,6 +126,13 @@ const DatasourceForm = {
             </div>
             <div id="integration-config-section" style="display: ${datasource?.metric_source === 'integration' ? 'block' : 'none'};">
                 <div class="form-group">
+                    <label>入站 Integration</label>
+                    <select class="form-select" id="inbound-integration-select">
+                        <option value="">加载中...</option>
+                    </select>
+                    <small class="text-muted">选择 inbound_metric 类型的 Integration，用于拉取外部监控指标</small>
+                </div>
+                <div class="form-group">
                     <label id="external-instance-id-label">外部实例 ID</label>
                     <input
                         type="text"
@@ -136,13 +143,6 @@ const DatasourceForm = {
                         placeholder="例如：云厂商或外部监控系统中的实例 ID"
                     >
                     <small class="text-muted" id="external-instance-id-help">外部监控系统中的实例标识。华为云/阿里云 RDS 场景通常必填。</small>
-                </div>
-                <div class="form-group">
-                    <label>入站 Integration</label>
-                    <select class="form-select" id="inbound-integration-select">
-                        <option value="">加载中...</option>
-                    </select>
-                    <small class="text-muted">选择 inbound_metric 类型的 Integration，用于拉取外部监控指标</small>
                 </div>
                 <div class="form-group">
                     <label>采集间隔（秒）</label>

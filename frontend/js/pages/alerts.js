@@ -1,6 +1,8 @@
 /* Alert Management Page */
 const AlertsPage = {
     datasourceSelector: null,
+    _renderOptions: null,
+    _container: null,
     datasources: [],
     events: [],
     subscriptions: [],
@@ -26,18 +28,29 @@ const AlertsPage = {
         events: 0
     },
 
-    async init() {
+    async init(options = {}) {
+        this._renderOptions = options || {};
+        this._container = options.container || DOM.$('#page-content');
         this.currentUser = Store.get('currentUser');
         if (!this.currentUser) {
             Router.navigate('login');
             return;
         }
 
+        if (options.fixedDatasourceId) {
+            this.filters.datasource_id = options.fixedDatasourceId;
+        }
+
         await this.loadDatasources();
-        await this.loadNotificationIntegrations();
+        if (!options.hideSubscriptions) {
+            await this.loadNotificationIntegrations();
+        }
         await this.loadEvents();
-        await this.loadSubscriptions();
+        if (!options.hideSubscriptions) {
+            await this.loadSubscriptions();
+        }
         this.render();
+        return () => this._cleanup();
     },
 
     async loadNotificationIntegrations() {
@@ -143,37 +156,95 @@ const AlertsPage = {
     _cleanup() {
         this.datasourceSelector?.destroy();
         this.datasourceSelector = null;
+        this._renderOptions = null;
+        this._container = null;
     },
 
     render() {
-        Header.render('告警管理', this._buildHeaderActions());
-
-        const container = DOM.$('#page-content');
+        const container = this._container || DOM.$('#page-content');
         DOM.clear(container);
+        const headerActions = this._buildHeaderActions();
+        if (this._renderOptions?.embedded) {
+            const embeddedToolbar = DOM.el('div', {
+                className: 'instance-embedded-toolbar',
+                style: {
+                    display: 'flex',
+                    gap: '12px',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '16px',
+                    flexWrap: 'wrap'
+                }
+            });
+            embeddedToolbar.appendChild(DOM.el('div', {
+                className: 'instance-embedded-title',
+                textContent: '告警管理'
+            }));
+            if (Array.isArray(headerActions)) {
+                headerActions.forEach(action => {
+                    if (action instanceof Node) {
+                        embeddedToolbar.appendChild(action);
+                    }
+                });
+            } else if (headerActions instanceof Node) {
+                embeddedToolbar.appendChild(headerActions);
+            }
+            container.appendChild(embeddedToolbar);
+        } else {
+            Header.render('告警管理', headerActions);
+        }
 
-        const tabs = DOM.el('div', { className: 'tabs' });
-        const alertsTab = DOM.el('button', {
-            className: 'tab active',
-            textContent: '告警列表',
-            onClick: (e) => this.switchTab(e.target, 'alerts')
-        });
-        const subscriptionsTab = DOM.el('button', {
-            className: 'tab',
-            textContent: '订阅管理',
-            onClick: (e) => this.switchTab(e.target, 'subscriptions')
-        });
-        tabs.appendChild(alertsTab);
-        tabs.appendChild(subscriptionsTab);
-        container.appendChild(tabs);
+        if (this._renderOptions?.hideSubscriptions) {
+            const note = DOM.el('div', {
+                className: 'instance-inline-note',
+                style: {
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '12px',
+                    marginBottom: '12px',
+                    padding: '12px 14px',
+                    borderRadius: '10px',
+                    background: 'var(--bg-secondary)'
+                }
+            });
+            note.appendChild(DOM.el('div', {
+                textContent: '当前仅展示该实例的告警事件与详情，订阅管理继续保留在全局告警页。'
+            }));
+            note.appendChild(DOM.el('button', {
+                className: 'btn btn-secondary btn-sm',
+                textContent: '打开全局告警页',
+                onClick: () => Router.navigate('alerts')
+            }));
+            container.appendChild(note);
+            const alertsContent = DOM.el('div', { className: 'tab-pane active', id: 'alerts-pane' });
+            alertsContent.appendChild(this.renderAlertsPane());
+            container.appendChild(alertsContent);
+        } else {
+            const tabs = DOM.el('div', { className: 'tabs' });
+            const alertsTab = DOM.el('button', {
+                className: 'tab active',
+                textContent: '告警列表',
+                onClick: (e) => this.switchTab(e.target, 'alerts')
+            });
+            const subscriptionsTab = DOM.el('button', {
+                className: 'tab',
+                textContent: '订阅管理',
+                onClick: (e) => this.switchTab(e.target, 'subscriptions')
+            });
+            tabs.appendChild(alertsTab);
+            tabs.appendChild(subscriptionsTab);
+            container.appendChild(tabs);
 
-        const tabContent = DOM.el('div', { className: 'tab-content' });
-        const alertsContent = DOM.el('div', { className: 'tab-pane active', id: 'alerts-pane' });
-        alertsContent.appendChild(this.renderAlertsPane());
-        const subscriptionsContent = DOM.el('div', { className: 'tab-pane', id: 'subscriptions-pane' });
-        subscriptionsContent.appendChild(this.renderSubscriptionsList());
-        tabContent.appendChild(alertsContent);
-        tabContent.appendChild(subscriptionsContent);
-        container.appendChild(tabContent);
+            const tabContent = DOM.el('div', { className: 'tab-content' });
+            const alertsContent = DOM.el('div', { className: 'tab-pane active', id: 'alerts-pane' });
+            alertsContent.appendChild(this.renderAlertsPane());
+            const subscriptionsContent = DOM.el('div', { className: 'tab-pane', id: 'subscriptions-pane' });
+            subscriptionsContent.appendChild(this.renderSubscriptionsList());
+            tabContent.appendChild(alertsContent);
+            tabContent.appendChild(subscriptionsContent);
+            container.appendChild(tabContent);
+        }
 
         DOM.createIcons();
     },
@@ -181,33 +252,35 @@ const AlertsPage = {
     _buildHeaderActions() {
         const filtersContainer = DOM.el('div', { className: 'dashboard-filters' });
 
-        const datasourceContainer = DOM.el('div', {
-            id: 'alerts-datasource-selector',
-            style: { minWidth: '280px', maxWidth: '380px', flex: '1' }
-        });
-        filtersContainer.appendChild(datasourceContainer);
-
-        setTimeout(() => {
-            const container = DOM.$('#alerts-datasource-selector');
-            if (!container) return;
-
-            this.datasourceSelector?.destroy();
-            this.datasourceSelector = new DatasourceSelector({
-                container,
-                allowEmpty: true,
-                emptyText: '全部数据源',
-                showStatus: true,
-                showDetails: true,
-                onLoad: () => {
-                    if (this.filters.datasource_id) this.datasourceSelector.setValue(this.filters.datasource_id);
-                },
-                onChange: (datasource) => {
-                    this.filters.datasource_id = datasource ? datasource.id : null;
-                    this.resetPagination();
-                    this.loadEvents().then(() => this.updateAlertsList());
-                }
+        if (!this._renderOptions?.fixedDatasourceId) {
+            const datasourceContainer = DOM.el('div', {
+                id: 'alerts-datasource-selector',
+                style: { minWidth: '280px', maxWidth: '380px', flex: '1' }
             });
-        }, 0);
+            filtersContainer.appendChild(datasourceContainer);
+
+            setTimeout(() => {
+                const container = DOM.$('#alerts-datasource-selector');
+                if (!container) return;
+
+                this.datasourceSelector?.destroy();
+                this.datasourceSelector = new DatasourceSelector({
+                    container,
+                    allowEmpty: true,
+                    emptyText: '全部数据源',
+                    showStatus: true,
+                    showDetails: true,
+                    onLoad: () => {
+                        if (this.filters.datasource_id) this.datasourceSelector.setValue(this.filters.datasource_id);
+                    },
+                    onChange: (datasource) => {
+                        this.filters.datasource_id = datasource ? datasource.id : null;
+                        this.resetPagination();
+                        this.loadEvents().then(() => this.updateAlertsList());
+                    }
+                });
+            }, 0);
+        }
 
         const statusSelect = DOM.el('select', {
             className: 'filter-select',
@@ -394,7 +467,7 @@ const AlertsPage = {
                 title: 'AI 诊断',
                 onClick: (e) => {
                     e.stopPropagation();
-                    window.location.hash = `diagnosis?alertId=${event.id}&datasource=${event.datasource_id}`;
+                    this._navigateToDiagnosis(event);
                 }
             }));
             row.appendChild(actionsCell);
@@ -870,7 +943,33 @@ const AlertsPage = {
     // Helper: View report
     viewReport(reportId) {
         Modal.hide();
-        Router.navigate('inspection', { reportId });
+        if (this._renderOptions?.embedded && this.filters.datasource_id) {
+            const params = new URLSearchParams();
+            params.set('datasource', this.filters.datasource_id);
+            params.set('tab', 'inspections');
+            params.set('report', reportId);
+            Router.navigate(`instance-detail?${params.toString()}`);
+            return;
+        }
+        Router.navigate(`inspection?report=${encodeURIComponent(reportId)}`);
+    },
+
+    _navigateToDiagnosis(event) {
+        const prompt = `请结合该告警事件进行根因分析，并给出处置建议。\n\n事件标题：${event.title || '-'}\n严重程度：${event.severity || '-'}\n告警类型：${event.alert_type || '-'}\n指标：${event.metric_name || '-'}\n告警数量：${event.alert_count || 0}`;
+        if (this._renderOptions?.embedded) {
+            const params = new URLSearchParams();
+            params.set('datasource', event.datasource_id);
+            params.set('tab', 'ai');
+            params.set('alert', event.id);
+            params.set('ask', prompt);
+            Router.navigate(`instance-detail?${params.toString()}`);
+            return;
+        }
+        const params = new URLSearchParams();
+        params.set('datasource', event.datasource_id);
+        params.set('alert', event.id);
+        params.set('ask', prompt);
+        Router.navigate(`diagnosis?${params.toString()}`);
     },
 
     // Helper: Get database type label

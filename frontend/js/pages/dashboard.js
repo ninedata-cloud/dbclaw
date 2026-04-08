@@ -4,6 +4,7 @@ const DashboardPage = {
     _datasources: [],
     _hosts: [],
     _healthStatuses: {},
+    _healthReasons: {},
     _metricCache: {},
     _filters: { health: '', dbType: '', hostId: '', search: '' },
 
@@ -36,6 +37,14 @@ const DashboardPage = {
     _dbDotClass(type) {
         const known = ['mysql','postgresql','oracle','sqlserver','mongodb','redis'];
         return known.includes(type) ? `db-dot-${type}` : 'db-dot-other';
+    },
+
+    _isConnectionFailureHealth(health) {
+        if (!health) return false;
+        if (Array.isArray(health.violations) && health.violations.some(item => item?.type === 'connection_failure')) {
+            return true;
+        }
+        return String(health.message || '').includes('连接失败');
     },
 
     openAlertFromDashboard(alertId) {
@@ -304,7 +313,13 @@ const DashboardPage = {
             const m = this._metricCache[conn.id] || null;
             const card = DOM.el('div', {
                 className: `dash-card status-${statusCls}`,
-                onClick: () => { Store.set('currentConnection', conn); Router.navigate('monitor'); }
+                onClick: () => {
+                    Store.set('currentConnection', conn);
+                    Store.set('currentDatasource', conn);
+                    Store.set('currentInstance', conn);
+                    Store.set('currentInstanceId', conn.id);
+                    Router.navigate(`instance-detail?datasource=${conn.id}&tab=monitor`);
+                }
             });
             card.innerHTML = `
                 <div class="dash-card-header">
@@ -313,7 +328,7 @@ const DashboardPage = {
                         ${conn.name}
                     </div>
                     <div class="dash-card-header-right">
-                        <span class="dash-card-health health-badge-${statusCls}" id="health-${conn.id}">${this._healthLabelShort(status)}</span>
+                        <span class="dash-card-health health-badge-${statusCls}" id="health-${conn.id}">${this._healthLabelShort(status, this._healthReasons[conn.id])}</span>
                         <span class="dash-card-type type-${conn.db_type}">${conn.db_type}</span>
                     </div>
                 </div>
@@ -332,12 +347,14 @@ const DashboardPage = {
         }
     },
 
-    _healthLabel(status) {
+    _healthLabel(status, reason = '') {
+        if (reason === 'connection_failure') return '✗ 连接失败';
         const map = { healthy: '✓ 健康', warning: '⚠ 警告', critical: '✗ 异常', error: '✗ 异常', unknown: '-- 未知' };
         return map[status] || '-- 未知';
     },
 
-    _healthLabelShort(status) {
+    _healthLabelShort(status, reason = '') {
+        if (reason === 'connection_failure') return '连接失败';
         const map = { healthy: '健康', warning: '警告', critical: '异常', error: '异常', unknown: '未知' };
         return map[status] || '未知';
     },
@@ -382,9 +399,10 @@ const DashboardPage = {
                     else if (h.status === 'warning') status = 'warning';
                     else if (h.status === 'error' || h.status === 'critical') status = 'critical';
                     this._healthStatuses[c.id] = status;
+                    this._healthReasons[c.id] = this._isConnectionFailureHealth(h) ? 'connection_failure' : '';
                     const hEl = DOM.$(`#health-${c.id}`);
                     if (hEl) {
-                        hEl.textContent = this._healthLabelShort(status);
+                        hEl.textContent = this._healthLabelShort(status, this._healthReasons[c.id]);
                         hEl.className = `dash-card-health health-badge-${this._statusClass(status)}`;
                     }
                 }

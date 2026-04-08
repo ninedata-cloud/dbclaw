@@ -55,14 +55,14 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 2. 写入默认系统配置（巡检去重、SMTP、阿里云）
 3. 启动 SSH 连接池
 4. 启动指标收集器（metric_collector）
-5. 初始化知识库处理器（KB processor + ChromaDB）
+5. 初始化文档知识与内置文档种子
 6. 启动巡检服务（InspectionService）
 7. 启动主机指标收集器（host_collector）
 8. 启动通知分发器（notification_dispatcher）
 9. 加载集成模板 + 启动集成调度器（integration_scheduler）
 
 **已注册的 Router**：
-- `backend/routers/`：auth、users、datasources、hosts、metrics、monitor_ws、chat、query、ai_models、knowledge_bases、inspections、system_configs、alerts、integrations
+- `backend/routers/`：auth、users、datasources、hosts、metrics、monitor_ws、chat、query、ai_models、documents、inspections、system_configs、alerts、integrations
 - `backend/api/skills.py`：技能管理 API
 
 **核心架构模式**：
@@ -108,7 +108,6 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 await context.get_connection(connection_id)
 await context.execute_query(query, connection_id)
 await context.execute_command(command, connection_id)  # 需要主机配置
-await context.search_kb(query, kb_ids, top_k=5)
 await context.get_metrics(connection_id, minutes=60)
 await context.call_skill(skill_id, params)
 ```
@@ -153,6 +152,5 @@ from backend.utils.encryption import encrypt_password, decrypt_password
 所有设置在 `backend/config.py` 中从 `.env` 加载。关键配置项：
 - `METRIC_INTERVAL`：指标收集间隔（默认 60s）
 - `JWT_SECRET_KEY` / `JWT_EXPIRE_MINUTES`（默认 1440）
-- `CHROMA_PERSIST_DIR` / `EMBEDDING_MODEL`：向量库配置
 - `INSPECTION_DEDUP_WINDOW_MINUTES`（默认 60）
 - `ALERT_AGGREGATION_TIME_WINDOW_MINUTES`（默认 5）

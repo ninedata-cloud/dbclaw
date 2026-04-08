@@ -74,6 +74,10 @@ class DBConnector(ABC):
         """Get table fragmentation information."""
         return []
 
+    async def terminate_session(self, session_id: int) -> Dict[str, Any]:
+        """Terminate a database session/process when supported."""
+        raise NotImplementedError("terminate_session is not supported for this database type")
+
     @abstractmethod
     async def get_schemas(self) -> List[str]:
         """Get list of schema/database names."""

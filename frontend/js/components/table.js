@@ -21,7 +21,7 @@ const DataTable = {
             sortable: true,
             resizable: true,
             minWidth: 80,
-            filter: options.enableFilter !== false,
+            filter: options.enableFilter === true,
             cellStyle: params => {
                 if (params.value === null || params.value === undefined) {
                     return { color: 'var(--text-muted)', fontStyle: 'italic' };
@@ -57,6 +57,7 @@ const DataTable = {
                 sortable: true,
                 resizable: true,
                 minWidth: 80,
+                filter: options.enableFilter === true,
             },
             rowBuffer: 20,
             rowModelType: 'clientSide',
@@ -66,9 +67,9 @@ const DataTable = {
             enableCellTextSelection: true,
             copyHeadersToClipboard: false,
             domLayout: 'normal',
-            headerHeight: 40,
+            headerHeight: options.headerHeight || 40,
             rowHeight: 36,
-            floatingFilter: options.enableFilter !== false,
+            floatingFilter: options.enableFilter === true && options.enableFloatingFilter === true,
             suppressContextMenu: false,
             theme: 'legacy',
             pagination: options.pagination === true,

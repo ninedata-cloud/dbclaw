@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     debug: bool = True
 
     encryption_key: str = "temporary-encryption-key"
-    initial_admin_password: str = ""
+    initial_admin_password: str = "admin1234"
 
     openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
@@ -54,4 +54,3 @@ def get_settings() -> Settings:
 settings = get_settings()
 DATABASE_URL = settings.database_url
 ALERT_AGGREGATION_TIME_WINDOW_MINUTES = settings.alert_aggregation_time_window_minutes
-

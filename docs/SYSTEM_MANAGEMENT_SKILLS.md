@@ -401,7 +401,7 @@ Query system metadata with 5 different modes.
 ### Query Modes
 
 1. **sql**: Execute safe SELECT queries
-2. **config**: Get system configuration (AI models, KBs, inspection configs)
+2. **config**: Get system configuration (AI models, document categories, inspection configs)
 3. **statistics**: Get system statistics (counts, breakdowns)
 4. **users**: Get user list
 5. **health**: Check service health status
@@ -428,7 +428,7 @@ Query system metadata with 5 different modes.
 
 **Allowed**:
 - SELECT queries only
-- Whitelisted tables: datasources, hosts, skills, metric_snapshots, diagnostic_sessions, reports, users, knowledge_bases, skill_executions, inspection_configs, inspection_triggers, ai_models, host_metrics, login_logs
+- Whitelisted tables: datasources, hosts, skills, metric_snapshots, diagnostic_sessions, reports, users, doc_categories, doc_documents, skill_executions, inspection_configs, inspection_triggers, ai_models, host_metrics, login_logs
 - Max 1000 rows
 
 **Forbidden**:
@@ -628,4 +628,3 @@ These skills are designed for AI conversation use only. For programmatic access,
 ## Version History
 
 - **1.0.0** (2026-03-15): Initial release with 7 system management skills
-

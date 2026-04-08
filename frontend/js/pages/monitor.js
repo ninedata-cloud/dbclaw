@@ -2,6 +2,8 @@
 const MonitorPage = {
     ws: null,
     datasourceSelector: null,
+    _renderOptions: null,
+    _container: null,
     chartIds: ['connections', 'qps', 'cache_hit', 'tps', 'network', 'latency'],
     osChartIds: ['cpu_usage', 'memory_usage', 'disk_usage', 'load_avg', 'disk_io', 'network_io'],
     dbNetworkState: { rx: null, tx: null, time: null },
@@ -242,6 +244,14 @@ const MonitorPage = {
     },
 
     async render() {
+        return this.renderWithOptions({});
+    },
+
+    async renderWithOptions(options = {}) {
+        this._renderOptions = options || {};
+        const content = options.container || DOM.$('#page-content');
+        this._container = content;
+
         // Load datasources first if not in store
         let connections = Store.get('datasources') || [];
         if (connections.length === 0) {
@@ -254,9 +264,16 @@ const MonitorPage = {
         }
 
         // Get or auto-select current connection
-        let conn = Store.get('currentConnection');
+        let conn = null;
+        if (options.fixedDatasourceId) {
+            conn = connections.find(item => item.id === options.fixedDatasourceId) || null;
+        } else {
+            conn = Store.get('currentConnection');
+        }
         if (!conn && connections.length > 0) {
             conn = connections[0];
+        }
+        if (conn) {
             Store.set('currentConnection', conn);
         }
 
@@ -264,35 +281,38 @@ const MonitorPage = {
         const headerActions = DOM.el('div', { className: 'flex gap-8', style: { flex: '1', minWidth: '0' } });
 
         // Connection selector
-        const datasourceContainer = DOM.el('div', {
-            id: 'monitor-datasource-selector',
-            style: { minWidth: '280px', maxWidth: '380px', flex: '1' }
-        });
-        headerActions.appendChild(datasourceContainer);
-
         this.datasourceSelector?.destroy();
-        this.datasourceSelector = new DatasourceSelector({
-            container: datasourceContainer,
-            allowEmpty: false,
-            placeholder: '选择数据源',
-            showStatus: true,
-            showDetails: true,
-            onLoad: (loadedDatasources) => {
-                if ((!conn || !loadedDatasources.some(ds => ds.id === conn.id)) && loadedDatasources.length > 0) {
-                    conn = loadedDatasources[0];
-                    Store.set('currentConnection', conn);
+        this.datasourceSelector = null;
+        if (!options.fixedDatasourceId) {
+            const datasourceContainer = DOM.el('div', {
+                id: 'monitor-datasource-selector',
+                style: { minWidth: '280px', maxWidth: '380px', flex: '1' }
+            });
+            headerActions.appendChild(datasourceContainer);
+
+            this.datasourceSelector = new DatasourceSelector({
+                container: datasourceContainer,
+                allowEmpty: false,
+                placeholder: '选择数据源',
+                showStatus: true,
+                showDetails: true,
+                onLoad: (loadedDatasources) => {
+                    if ((!conn || !loadedDatasources.some(ds => ds.id === conn.id)) && loadedDatasources.length > 0) {
+                        conn = loadedDatasources[0];
+                        Store.set('currentConnection', conn);
+                    }
+                    if (conn?.id) {
+                        this.datasourceSelector.setValue(conn.id);
+                    }
+                },
+                onChange: (datasource) => {
+                    if (!datasource) return;
+                    conn = datasource;
+                    Store.set('currentConnection', datasource);
+                    this._reloadData(datasource.id);
                 }
-                if (conn?.id) {
-                    this.datasourceSelector.setValue(conn.id);
-                }
-            },
-            onChange: (datasource) => {
-                if (!datasource) return;
-                conn = datasource;
-                Store.set('currentConnection', datasource);
-                this._reloadData(datasource.id);
-            }
-        });
+            });
+        }
 
         // Time range selector
         const timeRangeSelect = DOM.el('select', {
@@ -384,10 +404,28 @@ const MonitorPage = {
         });
         headerActions.appendChild(refreshBtn);
 
-        Header.render('性能监控', headerActions);
-
-        const content = DOM.$('#page-content');
         content.innerHTML = '';
+        if (options.embedded) {
+            const embeddedToolbar = DOM.el('div', {
+                className: 'instance-embedded-toolbar',
+                style: {
+                    display: 'flex',
+                    gap: '12px',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '16px',
+                    flexWrap: 'wrap'
+                }
+            });
+            embeddedToolbar.appendChild(DOM.el('div', {
+                className: 'instance-embedded-title',
+                textContent: '性能监控'
+            }));
+            embeddedToolbar.appendChild(headerActions);
+            content.appendChild(embeddedToolbar);
+        } else {
+            Header.render('性能监控', headerActions);
+        }
 
         if (!conn && connections.length === 0) {
             content.innerHTML = `
@@ -395,7 +433,7 @@ const MonitorPage = {
                     <i data-lucide="activity"></i>
                     <h3>No Connections</h3>
                     <p>Add a database connection first to start monitoring.</p>
-                    <button class="btn btn-primary mt-16" onclick="Router.navigate('connections')">Add Connection</button>
+                    <button class="btn btn-primary mt-16" onclick="Router.navigate('datasources')">Add Connection</button>
                 </div>
             `;
             DOM.createIcons();
@@ -615,10 +653,19 @@ const MonitorPage = {
         }
     },
 
+    _isConnectionFailureHealth(health) {
+        if (!health) return false;
+        if (Array.isArray(health.violations) && health.violations.some(item => item?.type === 'connection_failure')) {
+            return true;
+        }
+        return String(health.message || '').includes('连接失败');
+    },
+
     _updateHealthBanner(health) {
         const banner = DOM.$('#health-banner');
         if (!banner) return;
 
+        const isConnectionFailure = this._isConnectionFailureHealth(health);
         const statusMap = {
             'healthy': { icon: '✓', text: '健康', color: 'var(--accent-green)' },
             'warning': { icon: '⚠', text: '警告', color: 'var(--accent-yellow)' },
@@ -627,6 +674,7 @@ const MonitorPage = {
         };
 
         const statusInfo = statusMap[health.status] || statusMap.unknown;
+        const statusText = isConnectionFailure ? '连接失败' : statusInfo.text;
 
         // Update icon with color
         const iconEl = banner.querySelector('.health-banner-icon');
@@ -635,7 +683,7 @@ const MonitorPage = {
 
         // Update status text
         const statusEl = banner.querySelector('.health-banner-status');
-        statusEl.innerHTML = `数据库健康状态: <span style="color:${statusInfo.color}">${statusInfo.text}</span> - ${health.message}`;
+        statusEl.innerHTML = `数据库健康状态: <span style="color:${statusInfo.color}">${statusText}</span> - ${health.message}`;
 
         // Update details section
         const detailsEl = DOM.$('#health-details');
@@ -651,6 +699,11 @@ const MonitorPage = {
                     item.innerHTML = `
                         <span style="color:var(--accent-red)">✗</span>
                         <span>${violation.metric}: ${violation.value.toFixed(2)} (阈值: ${violation.threshold})</span>
+                    `;
+                } else if (violation.type === 'connection_failure') {
+                    item.innerHTML = `
+                        <span style="color:var(--accent-red)">✗</span>
+                        <span>${violation.detail || health.message || '数据库连接失败'}</span>
                     `;
                 } else if (violation.type === 'custom_expression') {
                     item.innerHTML = `
@@ -1092,5 +1145,7 @@ const MonitorPage = {
         // Reset time range state
         this.currentTimeRange = 60;
         this.isRealtime = true;
+        this._renderOptions = null;
+        this._container = null;
     }
 };

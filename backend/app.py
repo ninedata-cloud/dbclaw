@@ -4,9 +4,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse
 
 from backend.config import get_settings
 from backend.database import init_db
+from backend.services.startup_self_check import (
+    get_last_startup_report,
+    run_readiness_self_check,
+    run_startup_self_check,
+    set_last_startup_report,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +27,13 @@ async def lifespan(app: FastAPI):
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
     logger.info(f"Starting {settings.app_name}...")
+
+    startup_report = await run_startup_self_check(settings, include_app_port_check=False)
+    set_last_startup_report(startup_report)
+    app.state.startup_self_check_report = startup_report.to_dict()
+    if not startup_report.ok:
+        logger.error("\n%s", startup_report.to_console_text())
+        raise RuntimeError("启动自检失败，请根据上方中文诊断结果修复后重试。")
 
     # Initialize database
     await init_db()
@@ -321,33 +335,28 @@ async def lifespan(app: FastAPI):
     inspection_service = InspectionService(async_session)
     await inspection_service.start()
     metric_collector.set_inspection_service(inspection_service)
-    logger.info("🔍 Inspection Service activated")
+    logger.info("Inspection Service activated")
 
     # Start SSH host metrics collector
     from backend.services.host_collector import collect_host_metrics
     asyncio.create_task(collect_host_metrics())
-    logger.info("📊 Host metrics collector started")
+    logger.info("Host metrics collector started")
 
     # Start notification dispatcher
     from backend.services.notification_dispatcher import start_notification_dispatcher
     asyncio.create_task(start_notification_dispatcher())
-    logger.info("🔔 Notification dispatcher started")
+    logger.info("Notification dispatcher started")
 
     # Load builtin integration templates
     from backend.services.integration_service import IntegrationService
     async with async_session() as _db:
         await IntegrationService.load_builtin_templates(_db)
-    logger.info("📦 Integration templates loaded")
+    logger.info("ntegration templates loaded")
 
     # Start integration scheduler
     from backend.services.integration_scheduler import start_integration_scheduler
     asyncio.create_task(start_integration_scheduler())
-    logger.info("🔄 Integration scheduler started")
-
-    # Start AI Perception Service
-    from backend.services.ai_perception_service import start_perception_service
-    asyncio.create_task(start_perception_service(interval_minutes=5))
-    logger.info("🧠 AI Perception Service started")
+    logger.info("Integration scheduler started")
 
     # Start Weixin bot poller
     from backend.services.weixin_bot_service import start_weixin_bot_poller
@@ -360,12 +369,10 @@ async def lifespan(app: FastAPI):
     from backend.services.ssh_connection_pool import stop_ssh_pool
     from backend.services.integration_scheduler import stop_integration_scheduler
     from backend.services.weixin_bot_service import stop_weixin_bot_poller
-    from backend.services.ai_perception_service import stop_perception_service
 
     stop_scheduler()
     stop_integration_scheduler()
     await stop_weixin_bot_poller()
-    await stop_perception_service()
     await inspection_service.stop()
     await stop_ssh_pool()
     logger.info("Application shutdown complete")
@@ -377,10 +384,10 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         lifespan=lifespan,
     )
+    app.state.startup_self_check_report = get_last_startup_report()
 
     @app.exception_handler(Exception)
     async def global_exception_handler(request, exc):
-        from fastapi.responses import JSONResponse
         import traceback
 
         logger.error(
@@ -404,8 +411,27 @@ def create_app() -> FastAPI:
     async def health_check():
         return {"status": "ok"}
 
+    @app.get("/health/live")
+    async def health_live():
+        return {"status": "ok"}
+
+    @app.get("/health/ready")
+    async def health_ready():
+        readiness_report = await run_readiness_self_check(settings)
+        app.state.last_readiness_report = readiness_report.to_dict()
+        status_code = 200 if readiness_report.ok else 503
+        return JSONResponse(status_code=status_code, content=readiness_report.to_dict())
+
+    @app.get("/health/checks")
+    async def health_checks():
+        current_report = await run_startup_self_check(settings, phase="health_checks", include_app_port_check=False)
+        return {
+            "startup": app.state.startup_self_check_report or get_last_startup_report(),
+            "current": current_report.to_dict(),
+        }
+
     # Register routers
-    from backend.routers import datasources, hosts, metrics, monitor_ws, chat, query, ai_models, auth, users, inspections, system_configs, alerts, integrations, documents, feishu_bot, integration_bots, weixin_bot, perception
+    from backend.routers import datasources, hosts, metrics, monitor_ws, chat, query, ai_models, auth, users, inspections, system_configs, alerts, integrations, documents, feishu_bot, integration_bots, weixin_bot, instances
     from backend.api import skills
     app.include_router(auth.router)
     app.include_router(users.router)
@@ -415,6 +441,7 @@ def create_app() -> FastAPI:
     app.include_router(monitor_ws.router)
     app.include_router(chat.router)
     app.include_router(query.router)
+    app.include_router(instances.router)
     app.include_router(ai_models.router)
     app.include_router(documents.router)
     app.include_router(skills.router)
@@ -425,8 +452,6 @@ def create_app() -> FastAPI:
     app.include_router(integration_bots.router)
     app.include_router(feishu_bot.router)
     app.include_router(weixin_bot.router)
-    app.include_router(perception.router)
-
     # Serve frontend static files
     app.mount("/css", StaticFiles(directory="frontend/css"), name="css")
     app.mount("/js", StaticFiles(directory="frontend/js"), name="js")
