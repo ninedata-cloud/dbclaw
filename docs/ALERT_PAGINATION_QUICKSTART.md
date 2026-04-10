@@ -87,13 +87,10 @@
 
 运行验证脚本：
 ```bash
-python verify_pagination.py
+python docs/archive/manual-checks/scripts/verify_pagination.py
 ```
 
-访问测试页面：
-```
-http://localhost:9939/test_alert_pagination.html
-```
+历史测试页面已归档到：`docs/archive/manual-checks/tests/test_alert_pagination.html`
 
 ## 常见问题
 

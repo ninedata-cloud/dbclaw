@@ -391,5 +391,5 @@ grep -r "DOM.el('select'" frontend/js/pages/ | grep datasource
 如果在迁移过程中遇到问题，请参考：
 
 1. [数据源选择器使用文档](./DATASOURCE_SELECTOR_GUIDE.md)
-2. [示例页面](/datasource-selector-demo.html)
+2. `docs/archive/manual-checks/frontend/datasource-selector-demo.html`
 3. 查看已迁移页面的代码作为参考

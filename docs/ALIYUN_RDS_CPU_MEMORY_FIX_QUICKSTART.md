@@ -141,7 +141,7 @@ python test_integration_merge.py
 
 ## 相关文档
 
-- 详细修复说明：`docs/fixes/2026-03-19-aliyun-rds-cpu-memory-refresh-fix.md`
+- 详细修复说明：`docs/archive/fixes/2026-03-19-aliyun-rds-cpu-memory-refresh-fix.md`
 - 测试脚本：`test_integration_merge.py`
 
 ## 修复日期

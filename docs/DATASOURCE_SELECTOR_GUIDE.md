@@ -401,7 +401,7 @@ const selector = new DatasourceSelector({
 
 ## 示例页面
 
-访问 `/datasource-selector-demo.html` 查看完整的交互式示例。
+历史交互式示例已归档到 `docs/archive/manual-checks/frontend/datasource-selector-demo.html`。
 
 ## 浏览器兼容性
 

@@ -222,12 +222,13 @@ Change the admin password immediately after the first login.
 
 ## 📚 文档 / Documentation
 
-- `CLAUDE.md`：代码库协作说明与架构概览
-- `docs/PROGRAMMABLE_ADAPTER_GUIDE.md`：可编程适配器使用指南
+- `AGENTS.md`：仓库协作说明与架构概览
+- `docs/PRODUCT_INTRODUCTION.md`：产品介绍文档
+- `docs/INTEGRATION_QUICKSTART.md`：集成系统快速上手
+- `docs/DATASOURCE_SELECTOR_GUIDE.md`：数据源选择器说明
 - `docs/SYSTEM_MANAGEMENT_SKILLS.md`：系统管理技能说明
 - `docs/BOCHA_WEB_SEARCH_SKILL.md`：博查搜索技能说明
-- `docs/fixes/`：历史修复记录
-- `docs/superpowers/specs/`：功能设计文档
+- `docs/archive/`：历史修复记录、设计稿与手工验证资料归档
 
 ## 📄 许可证 / License
 
