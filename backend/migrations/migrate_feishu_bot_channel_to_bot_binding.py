@@ -1,51 +1,107 @@
-"""
-Migration: promote Feishu bot channel config into integration_bot_bindings.
-"""
+"""Migration: promote Feishu bot channel config into integration_bot_bindings."""
 
 import asyncio
+import json
 import logging
-from sqlalchemy import select, desc
-from backend.database import async_session
+
+from sqlalchemy import text
+
+from backend.database import engine
 
 logger = logging.getLogger(__name__)
 
 
-async def migrate():
-    from backend.models.integration import Integration, AlertChannel
-    from backend.models.integration_bot_binding import IntegrationBotBinding
+def _load_json_value(value):
+    if value is None:
+        return None
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return None
+    return value
 
-    async with async_session() as db:
-        result = await db.execute(select(Integration).where(Integration.integration_id == 'builtin_feishu_bot'))
-        integration = result.scalar_one_or_none()
-        if not integration:
+
+async def _table_exists(conn, table_name: str) -> bool:
+    result = await conn.execute(
+        text("SELECT to_regclass(:table_name)"),
+        {"table_name": f"public.{table_name}"},
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def migrate():
+    async with engine.begin() as conn:
+        if not await _table_exists(conn, "integrations"):
+            return
+        if not await _table_exists(conn, "integration_bot_bindings"):
+            return
+        if not await _table_exists(conn, "alert_channels"):
+            return
+
+        integration_result = await conn.execute(
+            text(
+                """
+                SELECT id
+                FROM integrations
+                WHERE integration_id = 'builtin_feishu_bot'
+                LIMIT 1
+                """
+            )
+        )
+        integration_id = integration_result.scalar_one_or_none()
+        if not integration_id:
             logger.warning('builtin_feishu_bot not found, skipping bot binding migration')
             return
 
-        existing_result = await db.execute(select(IntegrationBotBinding).where(IntegrationBotBinding.code == 'feishu_bot'))
-        if existing_result.scalar_one_or_none():
+        binding_result = await conn.execute(
+            text(
+                """
+                SELECT 1
+                FROM integration_bot_bindings
+                WHERE code = 'feishu_bot'
+                LIMIT 1
+                """
+            )
+        )
+        if binding_result.scalar_one_or_none():
             logger.info('feishu_bot binding already exists')
             return
 
-        channel_result = await db.execute(
-            select(AlertChannel)
-            .where(AlertChannel.integration_id == integration.id, AlertChannel.enabled == True)
-            .order_by(desc(AlertChannel.updated_at))
-            .limit(1)
+        channel_result = await conn.execute(
+            text(
+                """
+                SELECT name, enabled, params
+                FROM alert_channels
+                WHERE integration_id = :integration_id
+                  AND enabled = TRUE
+                ORDER BY updated_at DESC NULLS LAST, id DESC
+                LIMIT 1
+                """
+            ),
+            {"integration_id": integration_id},
         )
-        channel = channel_result.scalar_one_or_none()
+        channel = channel_result.first()
         if not channel:
             logger.warning('No enabled alert channel found for builtin_feishu_bot')
             return
 
-        binding = IntegrationBotBinding(
-            integration_id=integration.id,
-            code='feishu_bot',
-            name=channel.name or '飞书机器人',
-            enabled=channel.enabled,
-            params=channel.params or {}
+        await conn.execute(
+            text(
+                """
+                INSERT INTO integration_bot_bindings (integration_id, code, name, enabled, params)
+                VALUES (:integration_id, 'feishu_bot', :name, :enabled, CAST(:params AS JSONB))
+                """
+            ),
+            {
+                "integration_id": integration_id,
+                "name": channel.name or '飞书机器人',
+                "enabled": channel.enabled,
+                "params": json.dumps(_load_json_value(channel.params) or {}, ensure_ascii=False),
+            },
         )
-        db.add(binding)
-        await db.commit()
         logger.info('Migrated Feishu bot channel to integration_bot_bindings')
 
 

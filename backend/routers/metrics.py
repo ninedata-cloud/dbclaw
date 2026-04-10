@@ -43,10 +43,6 @@ async def _get_db_status_snapshots(
     limit: int,
     datasource=None,
 ) -> List[MetricSnapshot]:
-    actual_limit = limit
-    if datasource and datasource.metric_source == 'integration':
-        actual_limit = max(limit, 100)
-
     result = await db.execute(
         select(MetricSnapshot)
         .where(
@@ -54,23 +50,9 @@ async def _get_db_status_snapshots(
             MetricSnapshot.metric_type == 'db_status',
         )
         .order_by(desc(MetricSnapshot.collected_at))
-        .limit(actual_limit)
+        .limit(limit)
     )
-    snapshots = result.scalars().all()
-
-    if snapshots or not datasource or datasource.metric_source != 'integration':
-        return snapshots
-
-    legacy_result = await db.execute(
-        select(MetricSnapshot)
-        .where(
-            MetricSnapshot.datasource_id == conn_id,
-            MetricSnapshot.metric_type == 'integration_metric',
-        )
-        .order_by(desc(MetricSnapshot.collected_at))
-        .limit(limit * 15)
-    )
-    return _convert_integration_metrics_to_db_status(legacy_result.scalars().all())
+    return result.scalars().all()
 
 
 @router.get("/{conn_id}", response_model=List[MetricResponse])
@@ -433,59 +415,6 @@ def _to_float(value: Any) -> Optional[float]:
         except ValueError:
             return None
     return None
-
-
-def _convert_integration_metrics_to_db_status(snapshots: List[MetricSnapshot]) -> List[MetricSnapshot]:
-    """
-    将集成采集的指标转换为 db_status 格式
-
-    集成指标格式: 每个 snapshot 包含一个指标
-    {
-        "metric_name": "cpu_usage",
-        "value": 0.82,
-        "labels": {...}
-    }
-
-    db_status 格式: 每个 snapshot 包含所有指标
-    {
-        "cpu_usage": 0.82,
-        "memory_usage": 45.2,
-        ...
-    }
-    """
-    # 按时间戳分组
-    grouped = {}
-    for snapshot in snapshots:
-        timestamp = snapshot.collected_at
-        if timestamp not in grouped:
-            grouped[timestamp] = {
-                'datasource_id': snapshot.datasource_id,
-                'metric_type': 'db_status',
-                'collected_at': timestamp,
-                'data': {}
-            }
-
-        # 提取指标名和值
-        metric_name = snapshot.data.get('metric_name')
-        metric_value = snapshot.data.get('value')
-        if metric_name and metric_value is not None:
-            grouped[timestamp]['data'][metric_name] = metric_value
-
-    # 转换为 MetricSnapshot 对象
-    result = []
-    for timestamp in sorted(grouped.keys(), reverse=True):
-        item = grouped[timestamp]
-        snapshot = MetricSnapshot(
-            datasource_id=item['datasource_id'],
-            metric_type=item['metric_type'],
-            collected_at=item['collected_at'],
-            data=item['data']
-        )
-        # 设置 ID（用于响应）
-        snapshot.id = hash(timestamp)
-        result.append(snapshot)
-
-    return result
 
 
 @router.post("/{conn_id}/refresh")

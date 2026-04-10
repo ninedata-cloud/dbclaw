@@ -711,7 +711,6 @@ class AlertService:
             datasource_ids=subscription_data.datasource_ids,
             severity_levels=subscription_data.severity_levels,
             time_ranges=time_ranges_dict,
-            channel_ids=[],
             integration_targets=[target.model_dump() for target in subscription_data.integration_targets],
             enabled=subscription_data.enabled,
             aggregation_script=subscription_data.aggregation_script

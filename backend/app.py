@@ -204,6 +204,18 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Feishu bot channel to bot binding migration: {e}")
 
+    try:
+        from backend.migrations.migrate_integration_metric_snapshots_to_db_status import migrate as migrate_integration_metric_snapshots_to_db_status
+        await migrate_integration_metric_snapshots_to_db_status()
+    except Exception as e:
+        logger.warning(f"Integration metric snapshot migration: {e}")
+
+    try:
+        from backend.migrations.drop_legacy_alert_channel_schema import migrate as drop_legacy_alert_channel_schema
+        await drop_legacy_alert_channel_schema()
+    except Exception as e:
+        logger.warning(f"Drop legacy alert channel schema migration: {e}")
+
 
     # Seed default system configs
     from backend.database import async_session as _async_session

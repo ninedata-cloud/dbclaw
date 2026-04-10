@@ -1,47 +1,142 @@
-"""
-Migration: copy alert_channels/channel_ids into subscription.integration_targets.
-"""
+"""Migration: copy alert_channels/channel_ids into subscription.integration_targets."""
 
 import asyncio
+import json
 import logging
-from sqlalchemy import select
-from backend.database import async_session
+
+from sqlalchemy import text
+
+from backend.database import engine
 
 logger = logging.getLogger(__name__)
 
 
+def _load_json_value(value):
+    if value is None:
+        return None
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return None
+    return value
+
+
+async def _table_exists(conn, table_name: str) -> bool:
+    result = await conn.execute(
+        text("SELECT to_regclass(:table_name)"),
+        {"table_name": f"public.{table_name}"},
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def _column_exists(conn, table_name: str, column_name: str) -> bool:
+    result = await conn.execute(
+        text(
+            """
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = :table_name
+              AND column_name = :column_name
+            """
+        ),
+        {"table_name": table_name, "column_name": column_name},
+    )
+    return result.scalar_one_or_none() is not None
+
+
 async def migrate():
-    from backend.models.alert_subscription import AlertSubscription
-    from backend.models.integration import AlertChannel
+    async with engine.begin() as conn:
+        if not await _table_exists(conn, "alert_subscriptions"):
+            return
+        if not await _table_exists(conn, "alert_channels"):
+            return
+        if not await _column_exists(conn, "alert_subscriptions", "channel_ids"):
+            return
+        if not await _column_exists(conn, "alert_subscriptions", "integration_targets"):
+            return
 
-    async with async_session() as db:
-        result = await db.execute(select(AlertSubscription))
-        subscriptions = result.scalars().all()
+        channel_result = await conn.execute(
+            text(
+                """
+                SELECT id, name, integration_id, enabled, params
+                FROM alert_channels
+                """
+            )
+        )
+        channels = {
+            row.id: {
+                "id": row.id,
+                "name": row.name,
+                "integration_id": row.integration_id,
+                "enabled": row.enabled,
+                "params": _load_json_value(row.params) or {},
+            }
+            for row in channel_result.fetchall()
+        }
+
+        if not channels:
+            return
+
+        subscription_result = await conn.execute(
+            text(
+                """
+                SELECT id, channel_ids, integration_targets
+                FROM alert_subscriptions
+                """
+            )
+        )
+
         migrated = 0
+        for row in subscription_result.fetchall():
+            integration_targets = _load_json_value(row.integration_targets) or []
+            if integration_targets:
+                continue
 
-        for sub in subscriptions:
-            if sub.integration_targets:
+            channel_ids = _load_json_value(row.channel_ids) or []
+            if not isinstance(channel_ids, list) or not channel_ids:
                 continue
 
             targets = []
-            for channel_id in (sub.channel_ids or []):
-                channel = await db.get(AlertChannel, channel_id)
+            for channel_id in channel_ids:
+                try:
+                    channel = channels.get(int(channel_id))
+                except (TypeError, ValueError):
+                    channel = None
                 if not channel:
                     continue
-                targets.append({
-                    "target_id": f"migrated-channel-{channel.id}",
-                    "integration_id": channel.integration_id,
-                    "name": channel.name,
-                    "enabled": channel.enabled,
-                    "notify_on": ["alert", "recovery"],
-                    "params": channel.params or {}
-                })
+                targets.append(
+                    {
+                        "target_id": f"migrated-channel-{channel['id']}",
+                        "integration_id": channel["integration_id"],
+                        "name": channel["name"],
+                        "enabled": channel["enabled"],
+                        "notify_on": ["alert", "recovery"],
+                        "params": channel["params"],
+                    }
+                )
 
-            if targets:
-                sub.integration_targets = targets
-                migrated += 1
+            if not targets:
+                continue
 
-        await db.commit()
+            await conn.execute(
+                text(
+                    """
+                    UPDATE alert_subscriptions
+                    SET integration_targets = CAST(:integration_targets AS JSONB)
+                    WHERE id = :subscription_id
+                    """
+                ),
+                {
+                    "integration_targets": json.dumps(targets, ensure_ascii=False),
+                    "subscription_id": row.id,
+                },
+            )
+            migrated += 1
+
         logger.info("Migrated %s subscriptions from channel_ids to integration_targets", migrated)
 
 

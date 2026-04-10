@@ -31,32 +31,12 @@ class Integration(SoftDeleteMixin, Base):
     updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
 
 
-class AlertChannel(Base):
-    """告警通知渠道（引用集成实例）"""
-    __tablename__ = "alert_channels"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(200), nullable=False)
-    description = Column(String(500))
-    # 引用的集成 ID
-    integration_id = Column(Integer, nullable=False, index=True)
-    # 渠道参数（实例化参数）
-    params = Column(JSON, nullable=False, default=dict)
-    enabled = Column(Boolean, nullable=False, default=True, index=True)
-    # 关联用户（用于权限控制）
-    user_id = Column(Integer, nullable=True, index=True)
-    created_at = Column(DateTime, nullable=False, server_default=func.now())
-    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
-
-
 class IntegrationExecutionLog(Base):
     """集成执行日志"""
     __tablename__ = "integration_execution_logs"
 
     id = Column(Integer, primary_key=True, index=True)
     integration_id = Column(Integer, nullable=False, index=True)
-    # deprecated: legacy channel reference
-    channel_id = Column(Integer, nullable=True, index=True)
     target_type = Column(String(50), nullable=True, index=True)
     target_ref = Column(String(100), nullable=True, index=True)
     subscription_id = Column(Integer, nullable=True, index=True)

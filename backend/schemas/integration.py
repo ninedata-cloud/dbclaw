@@ -76,7 +76,6 @@ class IntegrationBotBindingResponse(BaseModel):
 class IntegrationExecutionLogResponse(BaseModel):
     id: int
     integration_id: int
-    channel_id: Optional[int]
     target_type: Optional[str]
     target_ref: Optional[str]
     subscription_id: Optional[int]
