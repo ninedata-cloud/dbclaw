@@ -148,6 +148,7 @@ const API = {
 
     // Instance detail endpoints
     getInstanceSummary(datasourceId) { return this.get(`/api/instances/${datasourceId}/summary`); },
+    getInstanceTraffic(datasourceId) { return this.get(`/api/instances/${datasourceId}/traffic`); },
     getInstanceVariables(datasourceId) { return this.get(`/api/instances/${datasourceId}/variables`); },
     getInstanceSessions(datasourceId) { return this.get(`/api/instances/${datasourceId}/sessions`); },
     terminateInstanceSession(datasourceId, sessionId) {

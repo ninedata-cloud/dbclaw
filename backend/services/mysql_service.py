@@ -37,16 +37,11 @@ class MySQLConnector(DBConnector):
                 rows = await cur.fetchall()
                 status = {r[0]: r[1] for r in rows}
 
-                await cur.execute("SELECT CONNECTION_ID()")
-                current_connection_id = (await cur.fetchone())[0]
-
                 await cur.execute(
                     "SELECT "
                     "COUNT(*) as total, "
                     "SUM(CASE WHEN COMMAND != 'Sleep' THEN 1 ELSE 0 END) as active "
                     "FROM information_schema.PROCESSLIST "
-                    "WHERE ID != %s",
-                    (current_connection_id,)
                 )
                 process_stats = await cur.fetchone()
                 process_count = process_stats[0] if process_stats else 0
@@ -60,7 +55,7 @@ class MySQLConnector(DBConnector):
                 visible_threads_connected = int(process_stats[0] or 0) if process_stats else 0
                 global_threads_running = int(status.get("Threads_running", 0))
                 global_threads_connected = int(status.get("Threads_connected", 0))
-                threads_running = max(visible_threads_running, max(global_threads_running - 1, 0))
+                threads_running = max(visible_threads_running, global_threads_running)
                 threads_connected = max(visible_threads_connected, global_threads_connected)
 
                 return {
@@ -136,17 +131,11 @@ class MySQLConnector(DBConnector):
         import aiomysql
         conn = await self._connect()
         try:
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT CONNECTION_ID()")
-                current_connection_id = (await cur.fetchone())[0]
-
             async with conn.cursor(aiomysql.DictCursor) as cur:
                 await cur.execute(
                     "SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO "
                     "FROM information_schema.PROCESSLIST "
-                    "WHERE ID != %s "
                     "ORDER BY TIME DESC LIMIT 100",
-                    (current_connection_id,)
                 )
                 rows = await cur.fetchall()
                 return [dict(r) for r in rows]
@@ -158,7 +147,6 @@ class MySQLConnector(DBConnector):
                     {"id": r[0], "user": r[1], "host": r[2], "db": r[3],
                      "command": r[4], "time": r[5], "state": r[6], "info": r[7]}
                     for r in rows
-                    if r[0] != current_connection_id
                 ]
         finally:
             conn.close()

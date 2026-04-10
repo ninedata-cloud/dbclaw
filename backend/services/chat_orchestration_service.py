@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, AsyncGenerator, Awaitable, Callable, Optional
 
 from sqlalchemy import desc, select
@@ -15,6 +15,7 @@ from backend.models.diagnosis_event import DiagnosisEvent
 from backend.models.diagnostic_session import ChatMessage, DiagnosticSession
 from backend.models.soft_delete import alive_filter, alive_select
 from backend.services.knowledge_router import build_knowledge_context
+from backend.utils.datetime_helper import now as local_now
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,35 @@ async def rebuild_llm_messages(all_msgs):
         messages.append(msg_dict)
 
     return messages
+
+
+async def load_session_messages_for_llm(
+    db: AsyncSession,
+    *,
+    session_id: int,
+    history_window_hours: int | None = None,
+):
+    query = (
+        alive_select(ChatMessage)
+        .where(ChatMessage.session_id == session_id)
+        .order_by(ChatMessage.created_at)
+    )
+    if history_window_hours is not None:
+        cutoff = local_now() - timedelta(hours=history_window_hours)
+        query = query.where(ChatMessage.created_at >= cutoff)
+
+    result = await db.execute(query)
+    all_msgs = result.scalars().all()
+
+    # Keep a Python-side safety filter so tests and non-standard DB responses stay consistent.
+    if history_window_hours is not None:
+        cutoff = local_now() - timedelta(hours=history_window_hours)
+        all_msgs = [
+            msg for msg in all_msgs
+            if not getattr(msg, "created_at", None) or msg.created_at >= cutoff
+        ]
+
+    return all_msgs
 
 
 async def _emit(event: dict[str, Any], on_event: EventCallback = None):
@@ -247,6 +277,7 @@ async def _store_approval_request(
     knowledge_context,
     disabled_tools,
     user_id: int | None,
+    history_window_hours: int | None,
 ) -> None:
     approval_id = event["approval_id"]
     pending_approvals.setdefault(session_id, {})[approval_id] = {
@@ -260,6 +291,7 @@ async def _store_approval_request(
         "knowledge_context": knowledge_context,
         "disabled_tools": disabled_tools,
         "user_id": user_id,
+        "history_window_hours": history_window_hours,
         "risk_level": event.get("risk_level", "high"),
         "risk_reason": event.get("risk_reason"),
         "suppressible": event.get("suppressible", False),
@@ -279,6 +311,7 @@ async def _store_approval_request(
             "tool_call_id": event.get("tool_call_id"),
             "summary": event.get("summary"),
             "plan_markdown": event.get("plan_markdown"),
+            "history_window_hours": history_window_hours,
             "risk_level": event.get("risk_level", "high"),
             "risk_reason": event.get("risk_reason"),
             "suppressible": event.get("suppressible", False),
@@ -339,6 +372,7 @@ async def _load_pending_approval_from_db(
         "knowledge_context": session.knowledge_snapshot if session else None,
         "disabled_tools": session.disabled_tools if session else None,
         "user_id": user_id,
+        "history_window_hours": data.get("history_window_hours"),
         "risk_level": data.get("risk_level", "high"),
         "risk_reason": data.get("risk_reason"),
         "suppressible": data.get("suppressible", False),
@@ -623,6 +657,7 @@ async def process_stream_events(
     system_prompt_override: str | None = None,
     run_id: str | None = None,
     skip_approval: bool = False,
+    history_window_hours: int | None = None,
 ) -> tuple[str, dict[str, int], bool]:
     full_response = ""
     usage_totals = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
@@ -696,6 +731,7 @@ async def process_stream_events(
                         knowledge_context,
                         disabled_tools,
                         user_id,
+                        history_window_hours,
                     )
                     await _emit(event, on_event)
                 elif event_type == "usage":
@@ -789,6 +825,7 @@ async def prepare_user_turn(
     attachments: Optional[list[dict[str, Any]]] = None,
     payload_datasource_id: int | None = None,
     model_id: int | None = None,
+    history_window_hours: int | None = None,
 ) -> tuple[list[dict[str, Any]], int | None, int | None, Any, Any, Any]:
     attachments = attachments or []
     effective_datasource_id = payload_datasource_id
@@ -843,12 +880,11 @@ async def prepare_user_turn(
 
     await db.commit()
 
-    msgs_result = await db.execute(
-        alive_select(ChatMessage)
-        .where(ChatMessage.session_id == session_id)
-        .order_by(ChatMessage.created_at)
+    all_msgs = await load_session_messages_for_llm(
+        db,
+        session_id=session_id,
+        history_window_hours=history_window_hours,
     )
-    all_msgs = msgs_result.scalars().all()
     messages = await rebuild_llm_messages(all_msgs)
     return messages, effective_datasource_id, effective_model_id, kb_ids, knowledge_context, disabled_tools
 
@@ -865,13 +901,13 @@ async def continue_conversation_after_tool(
     disabled_tools,
     pending_approvals: PendingApprovalsStore,
     on_event: EventCallback = None,
+    history_window_hours: int | None = None,
 ) -> tuple[str, dict[str, int], bool]:
-    msgs_result = await db.execute(
-        alive_select(ChatMessage)
-        .where(ChatMessage.session_id == session_id)
-        .order_by(ChatMessage.created_at)
+    all_msgs = await load_session_messages_for_llm(
+        db,
+        session_id=session_id,
+        history_window_hours=history_window_hours,
     )
-    all_msgs = msgs_result.scalars().all()
     messages = await rebuild_llm_messages(all_msgs)
     return await process_stream_events(
         db,
@@ -886,6 +922,7 @@ async def continue_conversation_after_tool(
         pending_approvals=pending_approvals,
         on_event=on_event,
         run_id=f"resume_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{session_id}",
+        history_window_hours=history_window_hours,
     )
 
 
@@ -997,5 +1034,6 @@ async def resolve_pending_approval(
         disabled_tools=pending.get("disabled_tools"),
         pending_approvals=pending_approvals,
         on_event=on_event,
+        history_window_hours=pending.get("history_window_hours"),
     )
     return {"approval_id": approval_id, "status": "approved", "pending": pending}

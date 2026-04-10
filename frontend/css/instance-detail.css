@@ -129,12 +129,64 @@
 }
 
 .instance-list-group-title {
+    width: 100%;
     margin-bottom: 6px;
+    padding: 4px 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border: 0;
+    background: transparent;
+    border-radius: 8px;
+    cursor: pointer;
     font-size: 12px;
     font-weight: 700;
     color: var(--text-tertiary);
     text-transform: uppercase;
     letter-spacing: 0.04em;
+    text-align: left;
+}
+
+.instance-list-group-title:hover {
+    background: var(--bg-secondary);
+}
+
+.instance-list-group-title-main {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.instance-list-group-title-main i {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.instance-list-group-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 11px;
+    letter-spacing: normal;
+    text-transform: none;
+}
+
+.instance-list-group-items {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.instance-list-group.collapsed .instance-list-group-items {
+    display: none;
 }
 
 .instance-list-item {

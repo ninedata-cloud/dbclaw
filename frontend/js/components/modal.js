@@ -1,6 +1,8 @@
 /* Modal component */
 const Modal = {
-    show({ title, content, buttons, footer, size = 'medium', width, maxHeight, containerClassName = '', bodyClassName = '' }) {
+    _onHide: null,
+
+    show({ title, content, buttons, footer, size = 'medium', width, maxHeight, containerClassName = '', bodyClassName = '', onHide = null }) {
         const overlay = DOM.$('#modal-overlay');
         const container = DOM.$('#modal-container');
 
@@ -14,6 +16,7 @@ const Modal = {
         container.style.width = resolvedWidth;
         container.style.maxWidth = 'calc(100vw - 24px)';
         container.style.maxHeight = maxHeight || '90vh';
+        this._onHide = typeof onHide === 'function' ? onHide : null;
 
         container.innerHTML = '';
         const header = DOM.el('div', { className: 'modal-header' },
@@ -56,12 +59,26 @@ const Modal = {
         }
 
         DOM.show(overlay);
+        overlay.onclick = (event) => {
+            if (event.target === overlay) {
+                this.hide();
+            }
+        };
         DOM.createIcons();
     },
 
     hide() {
         const overlay = DOM.$('#modal-overlay');
+        const onHide = this._onHide;
+        this._onHide = null;
         DOM.hide(overlay);
         overlay.onclick = null;
+        if (typeof onHide === 'function') {
+            try {
+                onHide();
+            } catch (error) {
+                console.error('Modal onHide failed:', error);
+            }
+        }
     }
 };

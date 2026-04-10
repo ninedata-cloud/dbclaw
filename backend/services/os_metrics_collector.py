@@ -42,9 +42,13 @@ class OSMetricsCollector:
                 metrics['cpu_usage'] = cpu_usage
 
             # 2. 内存使用率
-            memory_usage = await OSMetricsCollector._get_linux_memory_usage(ssh_client)
-            if memory_usage is not None:
-                metrics['memory_usage'] = memory_usage
+            memory_stats = await OSMetricsCollector._get_linux_memory_stats(ssh_client)
+            if memory_stats:
+                metrics.update(memory_stats)
+            else:
+                memory_usage = await OSMetricsCollector._get_linux_memory_usage(ssh_client)
+                if memory_usage is not None:
+                    metrics['memory_usage'] = memory_usage
 
             # 3. 磁盘使用率
             disk_usage = await OSMetricsCollector._get_linux_disk_usage(ssh_client)
@@ -116,9 +120,18 @@ class OSMetricsCollector:
     async def _get_linux_memory_usage(ssh_client) -> Optional[float]:
         """获取内存使用率"""
         try:
+            memory_stats = await OSMetricsCollector._get_linux_memory_stats(ssh_client)
+            usage = memory_stats.get('memory_usage')
+            if usage is not None:
+                return round(float(usage), 2)
+        except Exception:
+            pass
+
+        # 备用方法：使用 free 命令，兼容较老或极简系统
+        try:
             output = await OSMetricsCollector._exec(
                 ssh_client,
-                "free | grep Mem | awk '{print ($3/$2) * 100.0}'"
+                "free | awk '/^Mem:/ {print ($3/$2) * 100.0}'"
             )
             if output:
                 return round(float(output), 2)
@@ -126,6 +139,74 @@ class OSMetricsCollector:
             pass
 
         return None
+
+    @staticmethod
+    async def _get_linux_memory_stats(ssh_client) -> Dict[str, float]:
+        """从 /proc/meminfo 获取更可靠的内存统计，兼容老内核。
+
+        `memory_usage` 采用 `(MemTotal - MemAvailable) / MemTotal` 口径，更贴近
+        Linux 的真实可用内存压力。
+        """
+        try:
+            output = await OSMetricsCollector._exec(
+                ssh_client,
+                "cat /proc/meminfo"
+            )
+        except Exception:
+            return {}
+
+        if not output:
+            return {}
+
+        meminfo: Dict[str, int] = {}
+        for line in output.splitlines():
+            parts = line.split(":", 1)
+            if len(parts) != 2:
+                continue
+            key = parts[0].strip()
+            match = re.search(r"(\d+)", parts[1])
+            if not match:
+                continue
+            meminfo[key] = int(match.group(1))
+
+        total_kb = meminfo.get("MemTotal")
+        if not total_kb:
+            return {}
+
+        free_kb = meminfo.get("MemFree", 0)
+        reclaimable_cache_kb = (
+            meminfo.get("Buffers", 0)
+            + meminfo.get("Cached", 0)
+            + meminfo.get("SReclaimable", 0)
+            - meminfo.get("Shmem", 0)
+        )
+        reclaimable_cache_kb = max(reclaimable_cache_kb, 0)
+
+        available_kb = meminfo.get("MemAvailable")
+        if available_kb is None:
+            # 老内核没有 MemAvailable，按 kernel 文档近似估算可用内存
+            available_kb = (
+                free_kb
+                + meminfo.get("Buffers", 0)
+                + meminfo.get("Cached", 0)
+                + meminfo.get("SReclaimable", 0)
+                - meminfo.get("Shmem", 0)
+            )
+
+        available_kb = max(0, min(available_kb, total_kb))
+        pressure_used_kb = max(total_kb - available_kb, 0)
+        pressure_usage = round((pressure_used_kb / total_kb) * 100, 2)
+
+        return {
+            "memory_total_kb": float(total_kb),
+            "memory_free_kb": float(free_kb),
+            "memory_reclaimable_cache_kb": float(reclaimable_cache_kb),
+            "memory_available_kb": float(available_kb),
+            "memory_used_kb": float(pressure_used_kb),
+            "memory_pressure_used_kb": float(pressure_used_kb),
+            "memory_usage": pressure_usage,
+            "memory_pressure_usage": pressure_usage,
+        }
 
     @staticmethod
     async def _get_linux_disk_usage(ssh_client, mount_point: str = '/') -> Optional[float]:
@@ -213,14 +294,23 @@ class OSMetricsCollector:
             pass
 
         try:
-            output = await OSMetricsCollector._exec(
-                ssh_client,
-                "free -m | grep Mem | awk '{print $2}'"
-            )
-            if output:
-                info['total_memory_mb'] = int(output)
+            memory_stats = await OSMetricsCollector._get_linux_memory_stats(ssh_client)
+            total_memory_kb = memory_stats.get('memory_total_kb')
+            if total_memory_kb is not None:
+                info['total_memory_mb'] = int(round(total_memory_kb / 1024))
         except Exception:
             pass
+
+        if 'total_memory_mb' not in info:
+            try:
+                output = await OSMetricsCollector._exec(
+                    ssh_client,
+                    "free -m | awk '/^Mem:/ {print $2}'"
+                )
+                if output:
+                    info['total_memory_mb'] = int(output)
+            except Exception:
+                pass
 
         try:
             output = await OSMetricsCollector._exec(ssh_client, "uptime -s")

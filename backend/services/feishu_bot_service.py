@@ -10,6 +10,7 @@ from backend.models.chat_channel_binding import ChatChannelBinding
 from backend.models.chat_event_dedup import ChatEventDedup
 from backend.models.diagnostic_session import ChatMessage, DiagnosticSession
 from backend.models.integration import Integration
+from backend.models.integration_bot_binding import IntegrationBotBinding
 from backend.models.soft_delete import alive_filter, alive_select
 from backend.services.chat_orchestration_service import prepare_user_turn, process_stream_events, resolve_pending_approval
 from backend.services.feishu_service import feishu_service, format_reply_text
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 PENDING_APPROVALS: dict[int, dict[str, dict[str, Any]]] = {}
 PROCESSING_APPROVALS: set[str] = set()
+BOT_HISTORY_WINDOW_HOURS = 24
 
 _CONFIG_VAR_PATTERNS = {
     "app_id": re.compile(r'^\s*APP_ID\s*=\s*(["\'])(.*?)\1\s*$', re.MULTILINE),
@@ -187,6 +189,26 @@ def _finalize_reply_text(chunks: list[str]) -> str:
     return format_reply_text("".join(chunks))
 
 
+def _create_reply_state() -> dict[str, Any]:
+    return {
+        "chunks": [],
+        "errors": [],
+        "approval_sent": False,
+    }
+
+
+def _summarize_reply_errors(errors: list[str]) -> str:
+    rendered: list[str] = []
+    seen: set[str] = set()
+    for raw in errors:
+        text = format_reply_text(str(raw or "").strip())
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        rendered.append(text)
+    return "\n\n".join(rendered[:3])
+
+
 async def _reply_normal_message(
     *,
     text: str,
@@ -208,7 +230,7 @@ async def _reply_normal_message(
     )
 
 
-async def _build_followup_event_handler(
+def _build_reply_event_handler(
     *,
     session_id: int,
     app_id: str,
@@ -216,22 +238,63 @@ async def _build_followup_event_handler(
     message_id: str | None,
     open_id: str | None,
     chat_id: str | None,
-) -> tuple[list[str], Any]:
-    chunks: list[str] = []
+) -> tuple[dict[str, Any], Any]:
+    state = _create_reply_state()
 
     async def on_event(event_obj: dict[str, Any]) -> None:
         event_type_local = event_obj.get("type")
         if event_type_local == "content":
-            chunks.append(event_obj.get("content", ""))
+            state["chunks"].append(event_obj.get("content", ""))
+            return
+        if event_type_local == "approval_request":
+            state["approval_sent"] = True
+            try:
+                await feishu_service.send_interactive_card(
+                    _build_approval_card(event_obj, session_id),
+                    message_id=message_id,
+                    open_id=open_id,
+                    chat_id=chat_id,
+                    app_id=app_id,
+                    app_secret=app_secret,
+                )
+            except Exception as exc:
+                logger.exception(
+                    "飞书审批卡片发送失败: session_id=%s approval_id=%s",
+                    session_id,
+                    event_obj.get("approval_id"),
+                )
+                state["errors"].append(f"需要确认的操作未能发送审批卡片：{str(exc)}")
             return
         if event_type_local == "tool_call":
             logger.info("飞书审批后执行工具: session_id=%s tool=%s args=%s", session_id, event_obj.get("tool_name"), event_obj.get("tool_args"))
         elif event_type_local == "tool_result":
             logger.info("飞书审批后工具完成: session_id=%s tool=%s", session_id, event_obj.get("tool_name"))
         elif event_type_local == "error":
-            logger.error("飞书审批后续跑报错: session_id=%s error=%s", session_id, event_obj.get("content"))
+            error_text = str(event_obj.get("content") or event_obj.get("message") or "").strip()
+            if error_text:
+                state["errors"].append(error_text)
+                logger.error("飞书会话处理报错: session_id=%s error=%s", session_id, error_text)
 
-    return chunks, on_event
+    return state, on_event
+
+
+def _build_followup_event_handler(
+    *,
+    session_id: int,
+    app_id: str,
+    app_secret: str,
+    message_id: str | None,
+    open_id: str | None,
+    chat_id: str | None,
+) -> tuple[dict[str, Any], Any]:
+    return _build_reply_event_handler(
+        session_id=session_id,
+        app_id=app_id,
+        app_secret=app_secret,
+        message_id=message_id,
+        open_id=open_id,
+        chat_id=chat_id,
+    )
 
 
 async def _get_latest_approval_request(db: AsyncSession, session_id: int, approval_id: str) -> ChatMessage | None:
@@ -258,6 +321,49 @@ class FeishuBotService:
             )
         )
         return result.scalar_one_or_none()
+
+    @staticmethod
+    async def ensure_bot_binding(db: AsyncSession, integration: Integration | None = None) -> Optional[IntegrationBotBinding]:
+        integration = integration or await FeishuBotService.get_bot_integration(db)
+        if not integration:
+            return None
+
+        result = await db.execute(
+            select(IntegrationBotBinding).where(IntegrationBotBinding.code == "feishu_bot")
+        )
+        binding = result.scalar_one_or_none()
+        if binding:
+            if binding.integration_id != integration.id:
+                binding.integration_id = integration.id
+                await db.commit()
+                await db.refresh(binding)
+            return binding
+
+        binding = IntegrationBotBinding(
+            integration_id=integration.id,
+            code="feishu_bot",
+            name="飞书机器人",
+            enabled=False,
+            params={},
+        )
+        db.add(binding)
+        await db.commit()
+        await db.refresh(binding)
+        return binding
+
+    @staticmethod
+    async def update_binding_status(db: AsyncSession, *, login_status: str, last_error: str = "") -> None:
+        integration = await FeishuBotService.get_bot_integration(db)
+        binding = await FeishuBotService.ensure_bot_binding(db, integration=integration)
+        if not binding:
+            return
+
+        params = dict(binding.params or {})
+        params["login_status"] = login_status
+        params["last_error"] = last_error
+        binding.params = params
+        binding.enabled = login_status == "confirmed"
+        await db.commit()
 
     @staticmethod
     async def is_duplicate_event(db: AsyncSession, *, event_id: str | None, message_id: str | None, event_type: str) -> bool:
@@ -370,14 +476,19 @@ class FeishuBotService:
         app_secret = (config.get("app_secret") or "").strip()
 
         if app_id and app_secret:
-            await _reply_normal_message(
-                text="收到，正在分析你的需求。",
-                message_id=message_id,
-                open_id=sender_open_id,
-                chat_id=chat_id,
-                app_id=app_id,
-                app_secret=app_secret,
-            )
+            try:
+                await _reply_normal_message(
+                    text="收到，正在分析你的需求。",
+                    message_id=message_id,
+                    open_id=sender_open_id,
+                    chat_id=chat_id,
+                    app_id=app_id,
+                    app_secret=app_secret,
+                )
+            except Exception:
+                logger.exception("飞书预回复发送失败: session_id=%s message_id=%s", binding.session_id, message_id)
+        else:
+            logger.warning("飞书机器人未配置 APP_ID/APP_SECRET，session_id=%s 无法发送回复", binding.session_id)
 
         messages, effective_datasource_id, model_id, kb_ids, knowledge_context, disabled_tools = await prepare_user_turn(
             db,
@@ -387,17 +498,17 @@ class FeishuBotService:
             attachments=[],
             payload_datasource_id=None,
             model_id=None,
+            history_window_hours=BOT_HISTORY_WINDOW_HOURS,
         )
 
-        chunks: list[str] = []
-        approval_sent = False
-
-        async def on_event(event_obj: dict[str, Any]) -> None:
-            nonlocal approval_sent
-            event_type_local = event_obj.get("type")
-            if event_type_local == "content":
-                chunks.append(event_obj.get("content", ""))
-                return
+        reply_state, on_event = _build_reply_event_handler(
+            session_id=binding.session_id,
+            app_id=app_id,
+            app_secret=app_secret,
+            message_id=message_id,
+            open_id=sender_open_id,
+            chat_id=chat_id,
+        )
 
         await process_stream_events(
             db,
@@ -411,11 +522,13 @@ class FeishuBotService:
             disabled_tools=disabled_tools,
             pending_approvals=PENDING_APPROVALS,
             on_event=on_event,
+            history_window_hours=BOT_HISTORY_WINDOW_HOURS,
         )
 
         await FeishuBotService.mark_event_processed(db, event_id=event_id, message_id=message_id, event_type=event_type)
 
-        final_text = _finalize_reply_text(chunks)
+        final_text = _finalize_reply_text(reply_state["chunks"])
+        error_text = _summarize_reply_errors(reply_state["errors"])
         if app_id and app_secret and final_text:
             await _reply_normal_message(
                 text=final_text,
@@ -425,9 +538,27 @@ class FeishuBotService:
                 app_id=app_id,
                 app_secret=app_secret,
             )
-        elif app_id and app_secret and approval_sent:
+        elif app_id and app_secret and error_text:
+            await _reply_normal_message(
+                text=error_text,
+                message_id=message_id,
+                open_id=sender_open_id,
+                chat_id=chat_id,
+                app_id=app_id,
+                app_secret=app_secret,
+            )
+        elif app_id and app_secret and reply_state["approval_sent"]:
             await _reply_normal_message(
                 text="请在上面的卡片中确认是否执行该操作。",
+                message_id=message_id,
+                open_id=sender_open_id,
+                chat_id=chat_id,
+                app_id=app_id,
+                app_secret=app_secret,
+            )
+        elif app_id and app_secret:
+            await _reply_normal_message(
+                text="本次请求已处理，但没有生成可返回内容。请查看后端日志确认执行情况。",
                 message_id=message_id,
                 open_id=sender_open_id,
                 chat_id=chat_id,
@@ -482,10 +613,10 @@ class FeishuBotService:
         )
         binding = binding_result.scalar_one_or_none()
 
-        followup_chunks: list[str] = []
+        followup_state = None
         followup_on_event = None
         if app_id and app_secret and binding:
-            followup_chunks, followup_on_event = await _build_followup_event_handler(
+            followup_state, followup_on_event = _build_followup_event_handler(
                 session_id=int(session_id),
                 app_id=app_id,
                 app_secret=app_secret,
@@ -513,7 +644,6 @@ class FeishuBotService:
             PROCESSING_APPROVALS.discard(approval_key)
 
         if binding and app_id and app_secret:
-            latest_approval = await _get_latest_approval_request(db, int(session_id), str(approval_id))
             if decision == "rejected":
                 await _reply_normal_message(
                     text="已拒绝执行该操作。",
@@ -525,7 +655,7 @@ class FeishuBotService:
                 )
 
             if decision == "approved":
-                final_text = _finalize_reply_text(followup_chunks)
+                final_text = _finalize_reply_text((followup_state or {}).get("chunks", []))
                 if final_text:
                     await _reply_normal_message(
                         text=final_text,
@@ -537,6 +667,30 @@ class FeishuBotService:
                     )
                     return _toast_response("已批准执行，结果已返回。", "success")
 
+                error_text = _summarize_reply_errors((followup_state or {}).get("errors", []))
+                if error_text:
+                    await _reply_normal_message(
+                        text=error_text,
+                        message_id=open_message_id,
+                        open_id=sender_open_id,
+                        chat_id=binding.external_chat_id,
+                        app_id=app_id,
+                        app_secret=app_secret,
+                    )
+                    return _toast_response("已批准执行，但处理过程中出现错误。", "warning")
+
+                if (followup_state or {}).get("approval_sent"):
+                    await _reply_normal_message(
+                        text="后续还有高风险操作，请继续在新卡片中确认。",
+                        message_id=open_message_id,
+                        open_id=sender_open_id,
+                        chat_id=binding.external_chat_id,
+                        app_id=app_id,
+                        app_secret=app_secret,
+                    )
+                    return _toast_response("已批准执行，请继续确认后续操作。", "success")
+
+                latest_approval = await _get_latest_approval_request(db, int(session_id), str(approval_id))
                 follow_up_result = await db.execute(
                     alive_select(ChatMessage)
                     .where(

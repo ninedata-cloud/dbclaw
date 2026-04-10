@@ -88,6 +88,10 @@
     border-bottom-right-radius: 4px;
 }
 
+.chat-user-text {
+    white-space: pre-wrap;
+}
+
 .chat-message.assistant .chat-bubble {
     background: var(--bg-card);
     border: 1px solid var(--border-color);

@@ -23,7 +23,7 @@ const Format = {
         if (absolute >= 1024) {
             return (value / 1024).toFixed(2) + ' KB/s';
         }
-        return value.toFixed(2) + ' Bytes/s';
+        return Math.round(value) + ' Bytes/s';
     },
 
     number(num) {

@@ -358,6 +358,14 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(start_integration_scheduler())
     logger.info("Integration scheduler started")
 
+    # Start Feishu bot long connection client
+    from backend.services.feishu_longconn_service import start_feishu_longconn_client
+    await start_feishu_longconn_client()
+
+    # Start DingTalk bot stream client
+    from backend.services.dingtalk_stream_service import start_dingtalk_stream_client
+    await start_dingtalk_stream_client()
+
     # Start Weixin bot poller
     from backend.services.weixin_bot_service import start_weixin_bot_poller
     await start_weixin_bot_poller()
@@ -368,10 +376,14 @@ async def lifespan(app: FastAPI):
     from backend.services.metric_collector import stop_scheduler
     from backend.services.ssh_connection_pool import stop_ssh_pool
     from backend.services.integration_scheduler import stop_integration_scheduler
+    from backend.services.dingtalk_stream_service import stop_dingtalk_stream_client
+    from backend.services.feishu_longconn_service import stop_feishu_longconn_client
     from backend.services.weixin_bot_service import stop_weixin_bot_poller
 
     stop_scheduler()
     stop_integration_scheduler()
+    await stop_dingtalk_stream_client()
+    await stop_feishu_longconn_client()
     await stop_weixin_bot_poller()
     await inspection_service.stop()
     await stop_ssh_pool()

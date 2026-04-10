@@ -23,12 +23,31 @@ from backend.utils.encryption import decrypt_value
 logger = logging.getLogger(__name__)
 
 PENDING_APPROVALS: dict[int, dict[str, dict[str, Any]]] = {}
+BOT_HISTORY_WINDOW_HOURS = 24
 _POLLING_TASK: asyncio.Task | None = None
 _CONSUMER_TASK: asyncio.Task | None = None
 _STOP_EVENT: asyncio.Event | None = None
 _PROCESSING_BINDINGS: set[int] = set()
 # 消息队列：将收到的微信消息排队，串行处理避免丢失/乱序
 _MESSAGE_QUEUE: asyncio.Queue[tuple[IntegrationBotBinding, dict[str, Any]]] = asyncio.Queue()
+
+
+class _SuppressWeixinPollingHttpxFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name != "httpx" or record.levelno > logging.INFO:
+            return True
+        try:
+            message = record.getMessage()
+        except Exception:
+            message = str(record.msg)
+        return "/ilink/bot/getupdates" not in message
+
+
+def _configure_weixin_polling_logging() -> logging.Logger:
+    httpx_logger = logging.getLogger("httpx")
+    if not any(isinstance(log_filter, _SuppressWeixinPollingHttpxFilter) for log_filter in httpx_logger.filters):
+        httpx_logger.addFilter(_SuppressWeixinPollingHttpxFilter())
+    return httpx_logger
 
 
 class WeixinBotService:
@@ -184,7 +203,7 @@ class WeixinBotService:
         if not api_baseurl or not bot_token:
             logger.warning("微信 Bot 未配置 api_baseurl 或 bot_token，跳过回复")
             return {}
-        logger.info(f"[微信发送] to={to_user_id[:30]}, context={context_token[:20]}")
+        logger.debug(f"[微信发送] to={to_user_id[:30]}, context={context_token[:20]}")
         resp = await weixin_service.send_text_message(
             baseurl=api_baseurl,
             bot_token=bot_token,
@@ -192,7 +211,7 @@ class WeixinBotService:
             context_token=context_token,
             text=text,
         )
-        logger.info(f"[微信发送] resp={resp}")
+        logger.debug(f"[微信发送] resp={resp}")
         return resp
 
     @staticmethod
@@ -305,6 +324,7 @@ class WeixinBotService:
             attachments=[],
             payload_datasource_id=None,
             model_id=None,
+            history_window_hours=BOT_HISTORY_WINDOW_HOURS,
         )
 
         chunks: list[str] = []
@@ -326,6 +346,7 @@ class WeixinBotService:
             disabled_tools=disabled_tools,
             pending_approvals=PENDING_APPROVALS,
             on_event=on_event,
+            history_window_hours=BOT_HISTORY_WINDOW_HOURS,
         )
 
         await WeixinBotService.mark_event_processed(db, event_id=event_id, message_id=raw_message_id or None, event_type=event_type)
@@ -334,7 +355,7 @@ class WeixinBotService:
         reply_text = final_text or "已收到消息。"
         # outbound 的 to_user_id 应为消息发送者（用户），而非 bot 自己的 ID
         reply_to = sender_user_id if not group_id else receiver_user_id or sender_user_id
-        logger.info(f"[微信回复] to={reply_to[:30]}, context={context_token[:20]}")
+        logger.debug(f"[微信回复] to={reply_to[:30]}, context={context_token[:20]}")
 
         resp = await WeixinBotService._send_text_reply(
             bot_binding,
@@ -355,13 +376,16 @@ class WeixinBotService:
         api_baseurl = str(params.get("api_baseurl") or params.get("gateway_url") or "").strip()
         bot_token = WeixinBotService._decrypt_bot_token(params)
         qrcode_status = str(params.get("login_status") or "")
-        logger.info(f"[微信轮询] api_baseurl={api_baseurl[:30] if api_baseurl else 'None'}, has_token={bool(bot_token)}, status={qrcode_status}")
+        logger.debug(
+            f"[微信轮询] api_baseurl={api_baseurl[:30] if api_baseurl else 'None'}, "
+            f"has_token={bool(bot_token)}, status={qrcode_status}"
+        )
         if not api_baseurl or not bot_token or qrcode_status != "confirmed":
             return
 
         timeout_seconds = int(params.get("receive_timeout_seconds") or 40)
         cursor = str(params.get("get_updates_buf") or "")
-        logger.info(f"[微信轮询] 开始调用get_updates, cursor='{cursor[:20]}', token_len={len(bot_token)}")
+        logger.debug(f"[微信轮询] 开始调用get_updates, cursor='{cursor[:20]}', token_len={len(bot_token)}")
         response = await weixin_service.get_updates(
             baseurl=api_baseurl,
             bot_token=bot_token,
@@ -370,12 +394,14 @@ class WeixinBotService:
         )
         msgs = response.get("msgs") or []
         new_cursor = str(response.get("get_updates_buf") or cursor)
-        logger.info(f"[微信轮询] get_updates返回: msgs_count={len(msgs)}, cursor_changed={new_cursor != cursor}")
+        logger.debug(f"[微信轮询] get_updates返回: msgs_count={len(msgs)}, cursor_changed={new_cursor != cursor}")
 
         for msg in msgs:
             # 入队而非直接处理，避免 AI 处理阻塞轮询
             await _MESSAGE_QUEUE.put((binding, msg))
-            logger.info(f"[微信轮询] 消息已入队 (队列长度={_MESSAGE_QUEUE.qsize()})")
+
+        if msgs:
+            logger.info(f"[微信轮询] 收到 {len(msgs)} 条新消息，当前队列长度={_MESSAGE_QUEUE.qsize()}")
 
         if new_cursor != cursor:
             params["get_updates_buf"] = new_cursor
@@ -383,7 +409,7 @@ class WeixinBotService:
             from sqlalchemy.orm.attributes import flag_modified
             flag_modified(binding, "params")
             await db.commit()
-            logger.info(f"[微信轮询] cursor已更新并保存")
+            logger.debug("[微信轮询] cursor已更新并保存")
             await db.commit()
 
 
@@ -427,7 +453,7 @@ async def _consumer_loop() -> None:
             continue
 
         text = str(msg.get("item_list", [{}])[0].get("text_item", {}).get("text") or msg.get("message_id", ""))
-        logger.info(f"[微信消费者] 取到消息: text='{text}', queue_len={_MESSAGE_QUEUE.qsize()}")
+        logger.debug(f"[微信消费者] 取到消息: text='{text}', queue_len={_MESSAGE_QUEUE.qsize()}")
         try:
             async with async_session() as db:
                 await WeixinBotService.handle_message(db, bot_binding=binding, message=msg)
@@ -439,6 +465,7 @@ async def start_weixin_bot_poller() -> None:
     global _POLLING_TASK, _CONSUMER_TASK, _STOP_EVENT
     if _POLLING_TASK and not _POLLING_TASK.done():
         return
+    _configure_weixin_polling_logging()
     _STOP_EVENT = asyncio.Event()
     _POLLING_TASK = asyncio.create_task(_polling_loop())
     _CONSUMER_TASK = asyncio.create_task(_consumer_loop())

@@ -19,6 +19,10 @@ SUPPORTED_BOT_BINDINGS = {
         "integration_id": "builtin_feishu_bot",
         "default_name": "飞书机器人",
     },
+    "dingtalk_bot": {
+        "integration_id": "builtin_dingtalk_bot",
+        "default_name": "钉钉机器人",
+    },
     "weixin_bot": {
         "integration_id": "builtin_weixin_bot",
         "default_name": "微信机器人",

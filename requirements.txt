@@ -22,6 +22,8 @@ anthropic>=0.40.0
 aiohttp>=3.9.0
 requests>=2.31.0
 apscheduler>=3.10.0
+lark-oapi>=1.5.3
+dingtalk-stream>=0.20.0
 
 # Infrastructure integrations
 paramiko>=3.0.0

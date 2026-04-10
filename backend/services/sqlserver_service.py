@@ -3,6 +3,40 @@ from typing import Any, Dict, List, Optional
 from backend.services.db_connector import DBConnector
 
 
+_PROCESS_LIST_SQL = """
+SELECT TOP 100
+    s.session_id,
+    s.login_name,
+    s.host_name,
+    s.program_name,
+    s.status,
+    s.cpu_time,
+    s.memory_usage,
+    s.last_request_start_time,
+    DB_NAME(COALESCE(r.database_id, sp.dbid, sql_text.dbid)) AS database_name,
+    c.client_net_address,
+    r.wait_type,
+    SUBSTRING(
+        sql_text.text,
+        CASE
+            WHEN r.statement_start_offset IS NULL OR r.statement_start_offset < 0 THEN 1
+            ELSE (r.statement_start_offset / 2) + 1
+        END,
+        CASE
+            WHEN r.statement_end_offset IS NULL OR r.statement_end_offset < 0 THEN 4000
+            ELSE ((r.statement_end_offset - r.statement_start_offset) / 2) + 1
+        END
+    ) AS current_sql
+FROM sys.dm_exec_sessions s
+LEFT JOIN sys.dm_exec_requests r ON s.session_id = r.session_id
+LEFT JOIN sys.dm_exec_connections c ON s.session_id = c.session_id
+LEFT JOIN sys.sysprocesses sp ON s.session_id = sp.spid
+OUTER APPLY sys.dm_exec_sql_text(COALESCE(r.sql_handle, c.most_recent_sql_handle)) sql_text
+WHERE s.is_user_process = 1
+ORDER BY COALESCE(r.cpu_time, s.cpu_time) DESC, s.last_request_start_time DESC
+"""
+
+
 class SQLServerConnector(DBConnector):
     """SQL Server connector using pyodbc."""
 
@@ -55,8 +89,7 @@ class SQLServerConnector(DBConnector):
                     "(SELECT count(*) FROM sys.dm_exec_requests WHERE status = 'running') as active_requests, "
                     "(SELECT count(*) FROM sys.dm_exec_sessions WHERE is_user_process = 1 AND status = 'sleeping') as idle_sessions, "
                     "(SELECT count(*) FROM sys.dm_exec_requests WHERE blocking_session_id <> 0) as blocked_requests, "
-                    "(SELECT sqlserver_start_time FROM sys.dm_os_sys_info) as start_time, "
-                    "@@SPID as current_session_id"
+                    "(SELECT sqlserver_start_time FROM sys.dm_os_sys_info) as start_time "
                 )
                 row = cursor.fetchone()
 
@@ -65,22 +98,8 @@ class SQLServerConnector(DBConnector):
                 active_requests = row[2] if row else 0
                 idle_sessions = row[3] if row else 0
                 blocked_requests = row[4] if row else 0
-                current_session_id = row[6] if row else None
-
-                if current_session_id is not None:
-                    cursor.execute(
-                        "SELECT "
-                        "SUM(CASE WHEN is_user_process = 1 AND session_id <> ? THEN 1 ELSE 0 END) as total_user_sessions, "
-                        "SUM(CASE WHEN is_user_process = 1 AND status = 'sleeping' AND session_id <> ? THEN 1 ELSE 0 END) as idle_user_sessions "
-                        "FROM sys.dm_exec_sessions",
-                        current_session_id, current_session_id
-                    )
-                    visible_row = cursor.fetchone()
-                    visible_user_sessions = visible_row[0] if visible_row and visible_row[0] is not None else 0
-                    visible_idle_sessions = visible_row[1] if visible_row and visible_row[1] is not None else 0
-                else:
-                    visible_user_sessions = user_sessions
-                    visible_idle_sessions = idle_sessions
+                visible_user_sessions = user_sessions
+                visible_idle_sessions = idle_sessions
 
                 cursor.execute(
                     "SELECT CAST(value_in_use AS BIGINT) FROM sys.configurations WHERE name = 'user connections'"
@@ -204,33 +223,7 @@ class SQLServerConnector(DBConnector):
             conn = self._connect()
             try:
                 cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT TOP 100 "
-                    "s.session_id, "
-                    "s.login_name, "
-                    "s.host_name, "
-                    "s.program_name, "
-                    "s.status, "
-                    "s.cpu_time, "
-                    "s.memory_usage, "
-                    "s.last_request_start_time, "
-                    "DB_NAME(COALESCE(r.database_id, c.most_recent_dbid)) AS database_name, "
-                    "c.client_net_address, "
-                    "r.wait_type, "
-                    "SUBSTRING(t.text, "
-                    "    CASE WHEN r.statement_start_offset IS NULL OR r.statement_start_offset < 0 THEN 1 ELSE (r.statement_start_offset / 2) + 1 END, "
-                    "    CASE "
-                    "        WHEN r.statement_end_offset IS NULL OR r.statement_end_offset < 0 THEN 4000 "
-                    "        ELSE ((r.statement_end_offset - r.statement_start_offset) / 2) + 1 "
-                    "    END"
-                    ") AS current_sql "
-                    "FROM sys.dm_exec_sessions s "
-                    "LEFT JOIN sys.dm_exec_requests r ON s.session_id = r.session_id "
-                    "LEFT JOIN sys.dm_exec_connections c ON s.session_id = c.session_id "
-                    "OUTER APPLY sys.dm_exec_sql_text(COALESCE(r.sql_handle, c.most_recent_sql_handle)) t "
-                    "WHERE s.is_user_process = 1 AND s.session_id <> @@SPID "
-                    "ORDER BY COALESCE(r.cpu_time, s.cpu_time) DESC, s.last_request_start_time DESC"
-                )
+                cursor.execute(_PROCESS_LIST_SQL)
                 columns = [col[0] for col in cursor.description]
                 return [dict(zip(columns, row)) for row in cursor.fetchall()]
             finally:

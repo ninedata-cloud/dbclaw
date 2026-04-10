@@ -14,9 +14,91 @@ const DiagnosisPage = {
     _pendingResumeState: null,
     _toolCheckboxes: null,
     _modelSelectEl: null,
+    _pendingAutoAsk: null,
+    _initialAskSent: false,
 
     _getSelectedDatasource() {
         return this.datasourceSelector?.getValue() || Store.get('currentDatasource') || null;
+    },
+
+    _getWelcomeQuickAsks() {
+        return [
+            {
+                icon: 'activity',
+                label: '运行总览',
+                prompt: '请结合当前数据源给我一个数据库运行健康总览，说明整体状态、主要风险和优先排查项。'
+            },
+            {
+                icon: 'gauge',
+                label: '性能诊断',
+                prompt: '请从连接数、负载、慢 SQL、锁等待和缓存命中率几个角度，帮我分析当前性能风险。'
+            },
+            {
+                icon: 'shield-alert',
+                label: '异常排查',
+                prompt: '请帮我识别当前实例最值得关注的异常信号，并按严重程度排序给出处置建议。'
+            },
+            {
+                icon: 'sliders-horizontal',
+                label: '参数检查',
+                prompt: '请检查当前实例的关键参数配置，指出明显不合理项和优化建议。'
+            },
+        ];
+    },
+
+    _buildWelcomeStateHtml() {
+        const quickAsks = this._getWelcomeQuickAsks();
+        const quickAskHtml = quickAsks.map((item) => `
+            <button
+                type="button"
+                class="diagnosis-welcome-action"
+                data-diagnosis-quickask="${Utils.escapeHtml(item.prompt)}"
+            >
+                <span class="diagnosis-welcome-action-icon">
+                    <i data-lucide="${item.icon}"></i>
+                </span>
+                <span class="diagnosis-welcome-action-label">${Utils.escapeHtml(item.label)}</span>
+            </button>
+        `).join('');
+
+        return `
+            <div class="diagnosis-welcome">
+                <section class="diagnosis-welcome-card">
+                    <div class="diagnosis-welcome-hero">
+                        <div class="diagnosis-welcome-icon">
+                            <i data-lucide="sparkles"></i>
+                        </div>
+                        <div class="diagnosis-welcome-copy">
+                            <div class="diagnosis-welcome-eyebrow">AI Diagnosis Workspace</div>
+                            <h3>数据库智能卫士</h3>
+                            <p>围绕实例状态、连接、慢 SQL、锁等待与关键参数，快速给出可落地的诊断建议。</p>
+                        </div>
+                    </div>
+                    <div class="diagnosis-welcome-highlights">
+                        <div class="diagnosis-welcome-pill"><i data-lucide="database"></i><span>实例运行概览</span></div>
+                        <div class="diagnosis-welcome-pill"><i data-lucide="timer"></i><span>慢查询与等待分析</span></div>
+                        <div class="diagnosis-welcome-pill"><i data-lucide="network"></i><span>连接与会话画像</span></div>
+                        <div class="diagnosis-welcome-pill"><i data-lucide="settings-2"></i><span>参数与容量建议</span></div>
+                    </div>
+                    <div class="diagnosis-welcome-actions">
+                        ${quickAskHtml}
+                    </div>
+                    <div class="diagnosis-welcome-footnote">从上面的快捷入口开始，或直接在下方输入你的问题。</div>
+                </section>
+            </div>
+        `;
+    },
+
+    _renderWelcomeState(container) {
+        if (!container) return;
+        container.innerHTML = this._buildWelcomeStateHtml();
+        container.querySelectorAll('[data-diagnosis-quickask]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const prompt = button.dataset.diagnosisQuickask || '';
+                ChatWidget.setDraft(prompt);
+            });
+        });
+        DOM.createIcons();
     },
 
     async render() {
@@ -36,6 +118,8 @@ const DiagnosisPage = {
         this._renderOptions = options || {};
         const content = options.container || DOM.$('#page-content');
         this._container = content;
+        this._pendingAutoAsk = null;
+        this._initialAskSent = false;
 
         // Load high-risk tools list
         try {
@@ -43,7 +127,15 @@ const DiagnosisPage = {
         } catch (e) { /* ignore */ }
 
         // Header with connection, model and tool safety toggle
-        const headerActions = DOM.el('div', { className: 'flex gap-8', style: { flex: '1', minWidth: '0' } });
+        const isCompactEmbedded = Boolean(options.embedded && options.compactEmbeddedToolbar);
+        const headerActions = DOM.el('div', {
+            className: 'flex gap-8',
+            style: {
+                flex: isCompactEmbedded ? '0 1 auto' : '1',
+                minWidth: '0',
+                justifyContent: isCompactEmbedded ? 'flex-end' : 'flex-start'
+            }
+        });
         try {
             const datasources = await API.getDatasources();
             Store.set('datasources', datasources);
@@ -129,23 +221,25 @@ const DiagnosisPage = {
         document.addEventListener('click', this.datasourceClickOutsideHandler);
 
         // Tool safety settings button
-        const toolSafetyBtn = DOM.el('button', {
-            className: 'btn btn-sm btn-secondary',
-            innerHTML: '<i data-lucide="shield"></i> 工具安全',
-            title: 'Configure high-risk tool permissions',
-            onClick: () => this._showToolSafetyModal()
-        });
-
-        const clearSessionBtn = DOM.el('button', {
-            className: 'btn btn-sm btn-secondary',
-            innerHTML: '<i data-lucide="eraser"></i> 清除会话',
-            title: '清除当前会话',
-            onClick: () => this._clearSession()
-        });
-
         headerActions.appendChild(modelSelect);
-        headerActions.appendChild(toolSafetyBtn);
-        headerActions.appendChild(clearSessionBtn);
+        if (!options.hideToolSafetyButton) {
+            const toolSafetyBtn = DOM.el('button', {
+                className: 'btn btn-sm btn-secondary',
+                innerHTML: '<i data-lucide="shield"></i> 工具安全',
+                title: 'Configure high-risk tool permissions',
+                onClick: () => this._showToolSafetyModal()
+            });
+            headerActions.appendChild(toolSafetyBtn);
+        }
+        if (!options.hideClearSessionButton) {
+            const clearSessionBtn = DOM.el('button', {
+                className: 'btn btn-sm btn-secondary',
+                innerHTML: '<i data-lucide="eraser"></i> 清除会话',
+                title: '清除当前会话',
+                onClick: () => this._clearSession()
+            });
+            headerActions.appendChild(clearSessionBtn);
+        }
 
         // Two-column layout: sessions sidebar + chat area
         content.innerHTML = '';
@@ -155,20 +249,22 @@ const DiagnosisPage = {
             content.style.minHeight = '0';
             content.style.height = '100%';
             const embeddedToolbar = DOM.el('div', {
-                className: 'instance-embedded-toolbar',
+                className: `instance-embedded-toolbar${isCompactEmbedded ? ' instance-embedded-toolbar-compact' : ''}`,
                 style: {
                     display: 'flex',
-                    gap: '12px',
+                    gap: isCompactEmbedded ? '8px' : '12px',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    marginBottom: '16px',
+                    marginBottom: isCompactEmbedded ? '8px' : '16px',
                     flexWrap: 'wrap'
                 }
             });
-            embeddedToolbar.appendChild(DOM.el('div', {
-                className: 'instance-embedded-title',
-                textContent: 'AI 对话诊断'
-            }));
+            if (!options.hideEmbeddedTitle) {
+                embeddedToolbar.appendChild(DOM.el('div', {
+                    className: 'instance-embedded-title',
+                    textContent: options.embeddedTitle || 'AI 对话诊断'
+                }));
+            }
             embeddedToolbar.appendChild(headerActions);
             content.appendChild(embeddedToolbar);
         } else {
@@ -296,13 +392,15 @@ const DiagnosisPage = {
                 this._removeApprovalUI(data.approval_id);
             }
         };
-        layout.appendChild(sidebar);
+        if (!options.hideSessionSidebar) {
+            layout.appendChild(sidebar);
+        }
         layout.appendChild(chatContainer);
         content.appendChild(layout);
         DOM.createIcons();
 
         await this._loadSessions();
-        if (options.initialAsk) {
+        if (options.initialAsk && !options.autoSendInitialAsk) {
             ChatWidget.setDraft(options.initialAsk);
         }
 
@@ -402,6 +500,16 @@ const DiagnosisPage = {
     },
 
     async _loadSessions() {
+        if (this._renderOptions?.hideSessionSidebar || this._renderOptions?.autoCreateSession) {
+            if (!this.currentSessionId) {
+                await this._createSession({ reloadList: false, switchSession: false });
+            }
+            if (this.currentSessionId) {
+                await this._switchSession(this.currentSessionId);
+            }
+            return;
+        }
+
         try {
             const sessionParams = {};
             const fixedDatasourceId = this._renderOptions?.sessionFilterDatasourceId || this._renderOptions?.fixedDatasourceId;
@@ -505,20 +613,27 @@ const DiagnosisPage = {
         }
     },
 
-    async _createSession() {
+    async _createSession(options = {}) {
+        const { reloadList = true, switchSession = true } = options;
         const conn = this._getSelectedDatasource();
         try {
             const session = await API.createChatSession({
                 datasource_id: conn?.id || null,
-                title: '新建会话',
+                title: this._renderOptions?.initialSessionTitle || '新建会话',
                 ai_model_id: this.selectedModelId,
                 disabled_tools: this.disabledTools.length > 0 ? this.disabledTools : null
             });
             this.currentSessionId = session.id;
-            await this._loadSessions();
-            this._switchSession(session.id);
+            if (reloadList && !this._renderOptions?.hideSessionSidebar) {
+                await this._loadSessions();
+            }
+            if (switchSession) {
+                await this._switchSession(session.id);
+            }
+            return session;
         } catch (e) {
             Toast.error('Failed to create session: ' + e.message);
+            return null;
         }
     },
 
@@ -594,28 +709,20 @@ const DiagnosisPage = {
                 API.getSessionMessages(sessionId),
                 API.getSessionInsights(sessionId).catch(() => null)
             ]);
-            const hasToolHistory = Array.isArray(messages) && messages.some((msg) =>
+            const visibleMessages = this._filterVisibleMessages(messages);
+            const hasToolHistory = Array.isArray(visibleMessages) && visibleMessages.some((msg) =>
                 ['tool_call', 'tool_result', 'approval_request', 'approval_response'].includes(msg.role)
             );
             this.sessionTokenUsage = this._getSessionTokenUsage(sessionId);
             this._updateTokenUsageDisplay();
             console.log(`Loaded ${messages.length} messages for session ${sessionId}`, messages);
 
-            if (messages && messages.length > 0) {
-                ChatWidget.loadMessages(messages);
+            if (visibleMessages && visibleMessages.length > 0) {
+                ChatWidget.loadMessages(visibleMessages);
             } else {
                 // Empty session - show welcome message
                 const container = DOM.$('#chat-messages');
-                if (container) {
-                    container.innerHTML = `
-                        <div class="empty-state" style="padding:40px">
-                            <i data-lucide="bot"></i>
-                            <h3>数据库智能卫士</h3>
-                            <p>关于您的数据库，有任何问题都可以问我。我可以分析性能、诊断问题、审查配置并提出优化建议。</p>
-                        </div>
-                    `;
-                    DOM.createIcons();
-                }
+                this._renderWelcomeState(container);
             }
 
             if (!hasToolHistory) {
@@ -626,6 +733,7 @@ const DiagnosisPage = {
                 ChatWidget.loadDiagnosticInsights(insights);
             }
             this._applyPendingStreamResume();
+            this._queueInitialAskIfNeeded(sessionId, messages);
         } catch (e) {
             console.error('加载失败 messages:', e);
             Toast.error('加载失败 session messages: ' + e.message);
@@ -654,6 +762,7 @@ const DiagnosisPage = {
         const ws = new WSManager(`/ws/chat/${sessionId}`);
         this.ws = ws;
 
+        ws.on('open', () => this._flushPendingAutoAsk());
         ws.on('message', (data) => this._handleWSMessage(data));
         ws.on('error', (error) => {
             // Log error for debugging
@@ -697,8 +806,9 @@ const DiagnosisPage = {
         ws.connect();
     },
 
-    async _sendMessage(text) {
-        if (!text && (!ChatWidget.attachments || ChatWidget.attachments.length === 0)) return;
+    async _sendMessage(text, attachments = [], messageOptions = {}) {
+        const resolvedAttachments = Array.isArray(attachments) ? attachments : (ChatWidget.attachments || []);
+        if (!text && (!resolvedAttachments || resolvedAttachments.length === 0)) return;
         if (ChatWidget.isStreaming) return;
         if (!this.ws || !this.currentSessionId) {
             Toast.warning('No active session');
@@ -706,9 +816,12 @@ const DiagnosisPage = {
         }
 
         const conn = this._getSelectedDatasource();
-        const attachments = ChatWidget.attachments || [];
 
-        ChatWidget.addUserMessage(text, attachments);
+        if (!messageOptions.suppressUserMessage) {
+            ChatWidget.addUserMessage(text, resolvedAttachments);
+        } else {
+            ChatWidget.setDraft('');
+        }
         ChatWidget.startAssistantMessage();
         ChatWidget.isStreaming = true;
         this._pendingResumeState = {
@@ -721,7 +834,53 @@ const DiagnosisPage = {
             message: text,
             datasource_id: conn?.id || null,
             model_id: this.selectedModelId,
-            attachments: attachments
+            attachments: resolvedAttachments
+        });
+    },
+
+    _queueInitialAskIfNeeded(sessionId, messages = []) {
+        const initialAsk = this._renderOptions?.initialAsk;
+        if (!this._renderOptions?.autoSendInitialAsk || !initialAsk || this._initialAskSent) {
+            return;
+        }
+        if (Array.isArray(messages) && messages.length > 0) {
+            this._initialAskSent = true;
+            return;
+        }
+        this._pendingAutoAsk = {
+            sessionId,
+            text: initialAsk,
+        };
+        this._flushPendingAutoAsk();
+    },
+
+    _flushPendingAutoAsk() {
+        const pending = this._pendingAutoAsk;
+        if (!pending || this._initialAskSent) return;
+        if (this.currentSessionId !== pending.sessionId) return;
+        if (!this.ws?.ws || this.ws.ws.readyState !== WebSocket.OPEN) return;
+        this._pendingAutoAsk = null;
+        this._initialAskSent = true;
+        this._sendMessage(pending.text, [], {
+            suppressUserMessage: Boolean(this._renderOptions?.hideInitialAskMessage)
+        });
+    },
+
+    _filterVisibleMessages(messages = []) {
+        if (!this._renderOptions?.hideInitialAskMessage || !Array.isArray(messages) || messages.length === 0) {
+            return messages;
+        }
+
+        const expectedPrompt = String(this._renderOptions.initialAsk || '').trim();
+        if (!expectedPrompt) return messages;
+
+        let skipped = false;
+        return messages.filter((msg) => {
+            if (skipped || msg?.role !== 'user') return true;
+            const content = String(msg?.content || '').trim();
+            if (content !== expectedPrompt) return true;
+            skipped = true;
+            return false;
         });
     },
 
@@ -911,7 +1070,9 @@ const DiagnosisPage = {
                 ChatWidget.finishAssistantMessage();
                 this._clearResumeState();
                 // Refresh session list to update title after first message
-                this._loadSessions();
+                if (!this._renderOptions?.hideSessionSidebar && !this._renderOptions?.autoCreateSession) {
+                    this._loadSessions();
+                }
                 break;
             case 'stream_resuming':
                 this._pendingResumeState = {
@@ -1035,16 +1196,7 @@ const DiagnosisPage = {
                         ChatWidget.resetToolPanel();
                         ChatWidget.pendingTools = new Map();
                         const container = DOM.$('#chat-messages');
-                        if (container) {
-                            container.innerHTML = `
-                                <div class="empty-state" style="padding:40px">
-                                    <i data-lucide="bot"></i>
-                                    <h3>数据库智能卫士</h3>
-                                    <p>关于您的数据库，有任何问题都可以问我。我可以分析性能、诊断问题、审查配置并提出优化建议。</p>
-                                </div>
-                            `;
-                            DOM.createIcons();
-                        }
+                        this._renderWelcomeState(container);
                         await this._loadSessions();
                         Toast.success('Session cleared');
                     } catch (e) {
@@ -1162,11 +1314,14 @@ const DiagnosisPage = {
         this.datasourceSelector?.destroy();
         this.datasourceSelector = null;
         if (this.ws) {
+            this.ws.shouldReconnect = false;
             this.ws.disconnect();
             this.ws = null;
         }
         this.currentSessionId = null;
         this._modelSelectEl = null;
+        this._pendingAutoAsk = null;
+        this._initialAskSent = false;
         this._renderOptions = null;
         this._container = null;
     }

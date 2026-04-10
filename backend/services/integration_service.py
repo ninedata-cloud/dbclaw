@@ -5,6 +5,7 @@ Integration 管理服务
 实例化参数由订阅(integration_targets)、数据源(inbound_source)、bot binding(params) 承载。
 """
 
+import asyncio
 import logging
 from typing import List, Optional, Dict, Any
 from datetime import datetime
@@ -69,7 +70,7 @@ class IntegrationService:
             raise ValueError("Integration 不存在")
 
         if integration.is_builtin:
-            if integration.integration_id == "builtin_feishu_bot":
+            if integration.integration_id in {"builtin_feishu_bot", "builtin_dingtalk_bot"}:
                 if data.name is not None:
                     integration.name = data.name
                 if data.description is not None:
@@ -229,11 +230,36 @@ class IntegrationService:
                     await feishu_service.get_tenant_access_token(app_id, app_secret)
                     return {
                         "success": True,
-                        "message": "飞书机器人配置可用，tenant_access_token 获取成功",
+                        "message": "飞书机器人配置可用，tenant_access_token 获取成功，可用于长连接模式",
                         "data": {"app_id": app_id, "signing_secret_configured": bool(signing_secret)},
                     }
                 except Exception as e:
                     return {"success": False, "message": f"飞书机器人测试失败: {str(e)}"}
+
+            if integration.integration_id == "builtin_dingtalk_bot":
+                try:
+                    from backend.services.dingtalk_bot_service import _extract_dingtalk_bot_config
+
+                    config = _extract_dingtalk_bot_config(integration)
+                    client_id = (config.get("client_id") or "").strip()
+                    client_secret = (config.get("client_secret") or "").strip()
+                    if not client_id or not client_secret:
+                        return {"success": False, "message": "请先在 Integration 代码中配置 CLIENT_ID 和 CLIENT_SECRET"}
+
+                    try:
+                        from dingtalk_stream import Credential, DingTalkStreamClient
+                    except Exception:
+                        return {"success": False, "message": "未安装 dingtalk-stream，请先执行 pip install -r requirements.txt"}
+
+                    client = DingTalkStreamClient(Credential(client_id, client_secret))
+                    access_token = await asyncio.to_thread(client.get_access_token)
+                    return {
+                        "success": bool(access_token),
+                        "message": "钉钉机器人配置可用，access_token 获取成功，可用于 Stream 模式" if access_token else "钉钉机器人 access_token 获取失败",
+                        "data": {"client_id": client_id, "has_access_token": bool(access_token)},
+                    }
+                except Exception as e:
+                    return {"success": False, "message": f"钉钉机器人测试失败: {str(e)}"}
 
             if integration.integration_id == "builtin_weixin_bot":
                 baseurl = str(test_params.get("baseurl") or "").strip()
@@ -268,12 +294,17 @@ class IntegrationService:
             existing = result.scalar_one_or_none()
 
             if existing:
-                if existing.integration_id == "builtin_feishu_bot":
+                if existing.integration_id in {"builtin_feishu_bot", "builtin_dingtalk_bot"}:
                     if not existing.description:
                         existing.description = template["description"]
                     if existing.config_schema in (None, {}, {"type": "object", "properties": {}, "required": []}):
                         existing.config_schema = template["config_schema"]
-                    if not existing.code or "APP_ID" not in existing.code:
+                    preserve_marker = "APP_ID" if existing.integration_id == "builtin_feishu_bot" else "CLIENT_ID"
+                    fallback_marker = None if existing.integration_id == "builtin_feishu_bot" else "APP_KEY"
+                    if not existing.code or (
+                        preserve_marker not in existing.code
+                        and (fallback_marker is None or fallback_marker not in existing.code)
+                    ):
                         existing.code = template["code"]
                 else:
                     existing.code = template["code"]

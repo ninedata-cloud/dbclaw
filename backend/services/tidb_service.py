@@ -37,17 +37,12 @@ class TiDBConnector(DBConnector):
                 await cur.execute("SELECT * FROM INFORMATION_SCHEMA.CLUSTER_INFO")
                 cluster_rows = await cur.fetchall()
 
-                await cur.execute("SELECT CONNECTION_ID()")
-                current_connection_id = (await cur.fetchone())[0]
-
                 # Get process count for reference
                 await cur.execute(
                     "SELECT "
                     "COUNT(*) as total, "
                     "SUM(CASE WHEN COMMAND != 'Sleep' THEN 1 ELSE 0 END) as active "
                     "FROM information_schema.PROCESSLIST "
-                    "WHERE ID != %s",
-                    (current_connection_id,)
                 )
                 process_stats = await cur.fetchone()
                 process_count = process_stats[0] if process_stats else 0
@@ -65,7 +60,7 @@ class TiDBConnector(DBConnector):
                 visible_threads_connected = int(process_stats[0] or 0) if process_stats else 0
                 global_threads_running = int(status.get("Threads_running", 0))
                 global_threads_connected = int(status.get("Threads_connected", 0))
-                threads_running = max(visible_threads_running, max(global_threads_running - 1, 0))
+                threads_running = max(visible_threads_running, global_threads_running)
                 threads_connected = max(visible_threads_connected, global_threads_connected)
 
                 return {

@@ -24,12 +24,18 @@ const InstanceDetailPage = {
         direction: 'asc'
     },
     sidebarCollapsed: false,
+    sidebarListScrollTop: 0,
+    instanceSearchText: '',
+    collapsedInstanceGroups: {},
+    sessionAiDialogCleanup: null,
 
-    validTabs: ['config', 'monitor', 'sessions', 'ai', 'query', 'alerts', 'inspections', 'parameters'],
+    validTabs: ['config', 'monitor', 'traffic', 'sessions', 'ai', 'query', 'alerts', 'inspections', 'parameters'],
 
     async render(routeParam = '') {
+        this._rememberInstanceListScroll();
         this.cleanup();
         this.currentRoute = this._parseRoute(routeParam);
+        this.sidebarListScrollTop = this._loadInstanceListScrollState();
 
         Header.render('实例详情');
         const content = DOM.$('#page-content');
@@ -39,6 +45,7 @@ const InstanceDetailPage = {
             this.datasources = await API.getDatasources();
             Store.set('datasources', this.datasources);
             this.sidebarCollapsed = this._loadSidebarState();
+            this.collapsedInstanceGroups = this._loadInstanceGroupCollapseState();
 
             if (this.datasources.length === 0) {
                 content.innerHTML = `
@@ -93,6 +100,7 @@ const InstanceDetailPage = {
             if (searchInput) {
                 searchInput.addEventListener('input', () => this._renderInstanceList(searchInput.value.trim()));
             }
+            DOM.$('#instance-list')?.addEventListener('scroll', () => this._rememberInstanceListScroll());
             DOM.$('#instance-sidebar-toggle')?.addEventListener('click', () => this._toggleSidebar());
 
             this._renderInstanceList('');
@@ -118,6 +126,19 @@ const InstanceDetailPage = {
     },
 
     cleanup() {
+        if (this.sessionAiDialogCleanup) {
+            const overlay = DOM.$('#modal-overlay');
+            if (overlay && !overlay.classList.contains('hidden')) {
+                Modal.hide();
+            } else {
+                try {
+                    this.sessionAiDialogCleanup();
+                } catch (error) {
+                    console.error('Instance session AI dialog cleanup failed:', error);
+                }
+                this.sessionAiDialogCleanup = null;
+            }
+        }
         if (typeof this.tabCleanup === 'function') {
             try {
                 this.tabCleanup();
@@ -187,6 +208,91 @@ const InstanceDetailPage = {
         }
     },
 
+    _loadInstanceListScrollState() {
+        try {
+            const raw = window.sessionStorage.getItem('instanceDetailListScrollTop');
+            const value = Number.parseFloat(raw || '');
+            return Number.isFinite(value) && value >= 0 ? value : 0;
+        } catch (error) {
+            return 0;
+        }
+    },
+
+    _saveInstanceListScrollState(scrollTop) {
+        const nextScrollTop = Number.isFinite(scrollTop) && scrollTop >= 0 ? scrollTop : 0;
+        this.sidebarListScrollTop = nextScrollTop;
+        try {
+            window.sessionStorage.setItem('instanceDetailListScrollTop', String(nextScrollTop));
+        } catch (error) {
+            // Ignore storage errors and keep runtime state only.
+        }
+    },
+
+    _rememberInstanceListScroll() {
+        const listEl = DOM.$('#instance-list');
+        if (!listEl) return;
+        this._saveInstanceListScrollState(listEl.scrollTop || 0);
+    },
+
+    _loadInstanceGroupCollapseState() {
+        try {
+            const raw = window.localStorage.getItem('instanceDetailCollapsedGroups');
+            const parsed = raw ? JSON.parse(raw) : {};
+            return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch (error) {
+            return {};
+        }
+    },
+
+    _saveInstanceGroupCollapseState() {
+        try {
+            window.localStorage.setItem('instanceDetailCollapsedGroups', JSON.stringify(this.collapsedInstanceGroups || {}));
+        } catch (error) {
+            // Ignore storage errors and keep runtime state only.
+        }
+    },
+
+    _isInstanceGroupCollapsed(groupKey) {
+        return Boolean(this.collapsedInstanceGroups?.[groupKey]);
+    },
+
+    _toggleInstanceGroupCollapse(groupKey) {
+        this._rememberInstanceListScroll();
+        this.collapsedInstanceGroups = {
+            ...(this.collapsedInstanceGroups || {}),
+            [groupKey]: !this._isInstanceGroupCollapsed(groupKey),
+        };
+        this._saveInstanceGroupCollapseState();
+        this._renderInstanceList(this.instanceSearchText);
+    },
+
+    _isElementVisibleInContainer(element, container) {
+        if (!element || !container) return false;
+        const elementTop = element.offsetTop;
+        const elementBottom = elementTop + element.offsetHeight;
+        const viewTop = container.scrollTop;
+        const viewBottom = viewTop + container.clientHeight;
+        return elementTop >= viewTop && elementBottom <= viewBottom;
+    },
+
+    _restoreInstanceListScroll(listEl, activeItem, fallbackScrollTop = 0) {
+        if (!listEl) return;
+
+        const targetScrollTop = Number.isFinite(fallbackScrollTop) && fallbackScrollTop > 0
+            ? fallbackScrollTop
+            : this.sidebarListScrollTop;
+
+        if (Number.isFinite(targetScrollTop) && targetScrollTop > 0) {
+            listEl.scrollTop = targetScrollTop;
+        }
+
+        if (activeItem && !this._isElementVisibleInContainer(activeItem, listEl)) {
+            activeItem.scrollIntoView({ block: 'nearest' });
+        }
+
+        this._saveInstanceListScrollState(listEl.scrollTop || 0);
+    },
+
     _applySidebarState() {
         const layout = DOM.$('#instance-detail-layout');
         const toggleButton = DOM.$('#instance-sidebar-toggle');
@@ -237,6 +343,9 @@ const InstanceDetailPage = {
         if (!listEl) return;
 
         const keyword = (searchText || '').trim().toLowerCase();
+        const searchChanged = keyword !== this.instanceSearchText;
+        this.instanceSearchText = keyword;
+        const currentScrollTop = searchChanged ? 0 : (listEl.scrollTop || this.sidebarListScrollTop || 0);
         const grouped = new Map();
         const filtered = this.datasources.filter(item => {
             if (!keyword) return true;
@@ -251,23 +360,49 @@ const InstanceDetailPage = {
         });
 
         filtered.forEach(item => {
-            const typeLabel = this._getDbTypeLabel(item.db_type);
-            if (!grouped.has(typeLabel)) grouped.set(typeLabel, []);
-            grouped.get(typeLabel).push(item);
+            const groupKey = String(item.db_type || 'unknown');
+            if (!grouped.has(groupKey)) {
+                grouped.set(groupKey, {
+                    label: this._getDbTypeLabel(item.db_type),
+                    items: [],
+                });
+            }
+            grouped.get(groupKey).items.push(item);
         });
 
         listEl.innerHTML = '';
         if (filtered.length === 0) {
+            this._saveInstanceListScrollState(0);
             listEl.innerHTML = '<div class="instance-list-empty">没有匹配的实例</div>';
             return;
         }
 
-        Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b)).forEach(([typeLabel, items]) => {
+        let activeButton = null;
+        Array.from(grouped.entries())
+            .sort(([, left], [, right]) => left.label.localeCompare(right.label))
+            .forEach(([groupKey, group]) => {
+            const { label: typeLabel, items } = group;
+            const collapsed = this._isInstanceGroupCollapsed(groupKey);
             const section = DOM.el('div', { className: 'instance-list-group' });
-            section.appendChild(DOM.el('div', {
+            if (collapsed) {
+                section.classList.add('collapsed');
+            }
+
+            const groupHeader = DOM.el('button', {
                 className: 'instance-list-group-title',
-                textContent: `${typeLabel} (${items.length})`
-            }));
+                type: 'button',
+                onClick: () => this._toggleInstanceGroupCollapse(groupKey),
+            });
+            groupHeader.innerHTML = `
+                <span class="instance-list-group-title-main">
+                    <i data-lucide="${collapsed ? 'chevron-right' : 'chevron-down'}"></i>
+                    <span>${this._escapeHtml(typeLabel)}</span>
+                </span>
+                <span class="instance-list-group-count">${items.length}</span>
+            `;
+            section.appendChild(groupHeader);
+
+            const itemsWrap = DOM.el('div', { className: 'instance-list-group-items' });
 
             items.forEach(item => {
                 const active = this.currentInstance?.id === item.id;
@@ -275,6 +410,7 @@ const InstanceDetailPage = {
                     className: `instance-list-item ${active ? 'active' : ''}`,
                     onClick: () => {
                         if (this.currentInstance?.id === item.id) return;
+                        this._rememberInstanceListScroll();
                         Router.navigate(this._buildUrl(item.id, this.currentTab));
                     }
                 });
@@ -287,11 +423,18 @@ const InstanceDetailPage = {
                         <span class="instance-status-dot status-${this._escapeHtml(item.connection_status || 'unknown')}"></span>
                     </div>
                 `;
-                section.appendChild(button);
+                if (active && !collapsed) {
+                    activeButton = button;
+                }
+                itemsWrap.appendChild(button);
             });
 
+            section.appendChild(itemsWrap);
             listEl.appendChild(section);
         });
+
+        this._restoreInstanceListScroll(listEl, activeButton, currentScrollTop);
+        DOM.createIcons();
     },
 
     async _refreshSummary() {
@@ -345,6 +488,7 @@ const InstanceDetailPage = {
         const tabs = [
             { id: 'config', label: '实例基本信息' },
             { id: 'monitor', label: '性能监控' },
+            { id: 'traffic', label: '流量拓扑' },
             { id: 'sessions', label: '实时会话查看' },
             { id: 'ai', label: 'AI 对话诊断' },
             { id: 'query', label: 'SQL 查询' },
@@ -375,7 +519,7 @@ const InstanceDetailPage = {
         this.cleanup();
         container.className = 'instance-tab-content';
         container.style.cssText = '';
-        if (this.currentTab === 'ai') {
+        if (this.currentTab === 'ai' || this.currentTab === 'traffic') {
             container.classList.add('instance-tab-content-no-scroll');
         } else {
             container.classList.add('instance-tab-content-scroll');
@@ -404,6 +548,15 @@ const InstanceDetailPage = {
                 container,
                 embedded: true,
                 fixedDatasourceId: datasourceId,
+            });
+            return;
+        }
+
+        if (this.currentTab === 'traffic') {
+            this.tabCleanup = await InstanceTrafficPage.render({
+                container,
+                datasourceId,
+                datasource: this.currentInstance,
             });
             return;
         }
@@ -792,8 +945,7 @@ const InstanceDetailPage = {
             tableContainer.querySelectorAll('[data-analyze-session]').forEach(button => {
                 button.addEventListener('click', () => {
                     const session = this.sessionItems.find(item => String(item.session_id) === String(button.dataset.analyzeSession));
-                    const prompt = `请分析这个数据库会话的风险和可能问题，并给出处置建议。\n\n会话 ID：${session?.session_id || '-'}\n用户：${session?.user || '-'}\n数据库：${session?.database || '-'}\n客户端：${session?.client || '-'}\n状态：${session?.status || '-'}\n持续时间：${session?.duration_seconds ?? '-'} 秒\n等待事件：${session?.wait_event || '-'}\nSQL：${session?.sql_text || '-'}`;
-                    Router.navigate(this._buildUrl(this.currentInstance.id, 'ai', { ask: prompt }));
+                    this._openSessionAiAnalysis(session);
                 });
             });
 
@@ -803,6 +955,214 @@ const InstanceDetailPage = {
             DOM.createIcons();
         } catch (error) {
             tableContainer.innerHTML = `<div class="empty-state">加载会话失败：${this._escapeHtml(error.message)}</div>`;
+        }
+    },
+
+    _buildSessionAnalysisPrompt(session) {
+        const datasource = this.currentSummary?.datasource || this.currentInstance || {};
+        const raw = session?.raw && typeof session.raw === 'object' ? session.raw : {};
+        const sessionId = this._resolveSessionAnalysisValue(session?.session_id, raw.ID);
+        const sessionUser = this._resolveSessionAnalysisValue(session?.user, raw.USER);
+        const sessionDatabase = this._resolveSessionAnalysisValue(session?.database, raw.DB);
+        const sessionClient = this._resolveSessionAnalysisValue(session?.client, raw.HOST);
+        const sessionStatus = this._resolveSessionAnalysisValue(session?.status, raw.COMMAND);
+        const durationSeconds = this._resolveSessionAnalysisNumber(session?.duration_seconds, raw.TIME);
+        const waitEvent = this._resolveSessionAnalysisValue(session?.wait_event, raw.STATE);
+        const sqlSourceText = this._resolveSessionAnalysisValue(session?.sql_text, raw.INFO);
+        const sqlText = this._truncateSessionAnalysisBlock(sqlSourceText, 3200) || '无 SQL 文本';
+        const extraRawText = this._buildSessionAnalysisRawExtra(raw, {
+            ID: sessionId,
+            USER: sessionUser,
+            DB: sessionDatabase,
+            HOST: sessionClient,
+            COMMAND: sessionStatus,
+            TIME: durationSeconds,
+            STATE: waitEvent,
+            INFO: sqlSourceText,
+        });
+        const durationText = durationSeconds != null
+            ? `${durationSeconds} 秒（${Format.uptime(durationSeconds)}）`
+            : '-';
+        const hostText = datasource.host
+            ? `${datasource.host}:${datasource.port || '-'}`
+            : '-';
+        const versionText = this._formatSessionAnalysisValue(datasource.db_version);
+        const datasourceDatabaseText = this._formatSessionAnalysisValue(datasource.database);
+        const sessionDatabaseText = this._formatSessionAnalysisValue(sessionDatabase);
+        const sessionSummaryParts = [
+            `会话 ID ${this._formatSessionAnalysisValue(sessionId)}`,
+            `用户 ${this._formatSessionAnalysisValue(sessionUser)}`,
+            `客户端 ${this._formatSessionAnalysisValue(sessionClient)}`,
+        ];
+        const sessionStateParts = [
+            `状态 ${this._formatSessionAnalysisValue(sessionStatus)}`,
+            `等待事件 ${this._formatSessionAnalysisValue(waitEvent)}`,
+            `持续时间 ${durationText}`,
+        ];
+
+        return [
+            '请你作为资深数据库运维专家，针对下面这个数据库实例中的实时会话做诊断分析，并支持后续多轮追问。',
+            '',
+            '【分析目标】',
+            '请判断当前会话是否异常、风险等级如何，并给出下一步排查和处置建议。',
+            '',
+            '【实例信息】',
+            `- 实例名称：${this._formatSessionAnalysisValue(datasource.name)}`,
+            `- 数据库类型：${this._formatSessionAnalysisValue(this._getDbTypeLabel(datasource.db_type) || datasource.db_type)}`,
+            `- 主机：${hostText}`,
+            `- 数据库：${datasourceDatabaseText}`,
+            versionText !== '-' ? `- 版本：${versionText}` : null,
+            '',
+            '【会话信息】',
+            `- ${sessionSummaryParts.join('，')}`,
+            sessionDatabaseText !== '-' && sessionDatabaseText !== datasourceDatabaseText
+                ? `- 会话数据库：${sessionDatabaseText}`
+                : null,
+            `- ${sessionStateParts.join('，')}`,
+            '',
+            '【SQL 文本】',
+            sqlText,
+            extraRawText ? '' : null,
+            extraRawText ? '【补充字段】' : null,
+            extraRawText || null,
+            '',
+            '【输出要求】',
+            '1. 当前会话状态与现象判断',
+            '2. 主要风险点或异常信号',
+            '3. 最可能的根因分析',
+            '4. 建议的排查步骤和处置建议',
+            '5. 如果信息不足，请明确指出下一步建议补充哪些信息',
+        ].filter(Boolean).join('\n');
+    },
+
+    _formatSessionAnalysisValue(value) {
+        if (value == null) return '-';
+        const text = String(value).trim();
+        return text || '-';
+    },
+
+    _resolveSessionAnalysisValue(...values) {
+        for (const value of values) {
+            if (value == null) continue;
+            const text = String(value).trim();
+            if (text) return text;
+        }
+        return null;
+    },
+
+    _resolveSessionAnalysisNumber(...values) {
+        for (const value of values) {
+            if (value == null || value === '') continue;
+            const parsed = Number(value);
+            if (Number.isFinite(parsed)) return parsed;
+        }
+        return null;
+    },
+
+    _buildSessionAnalysisRawExtra(raw, normalizedValues = {}) {
+        if (!raw || typeof raw !== 'object') return '';
+
+        const extras = Object.entries(raw).filter(([key, value]) => {
+            if (value == null) return false;
+            if (typeof value === 'string' && !value.trim()) return false;
+
+            const normalizedKey = String(key).toUpperCase();
+            if (!(normalizedKey in normalizedValues)) {
+                return true;
+            }
+
+            return this._normalizeSessionAnalysisCompareValue(value)
+                !== this._normalizeSessionAnalysisCompareValue(normalizedValues[normalizedKey]);
+        });
+
+        if (extras.length === 0) return '';
+
+        const compactExtra = Object.fromEntries(extras);
+        return this._truncateSessionAnalysisBlock(JSON.stringify(compactExtra, null, 2), 1600);
+    },
+
+    _normalizeSessionAnalysisCompareValue(value) {
+        if (value == null) return '';
+        if (typeof value === 'number') return String(value);
+        return String(value).trim();
+    },
+
+    _truncateSessionAnalysisBlock(value, maxLength = 2400) {
+        const text = String(value ?? '').trim();
+        if (!text) return '';
+        if (text.length <= maxLength) return text;
+        return `${text.slice(0, maxLength).trimEnd()}\n...（已截断）`;
+    },
+
+    async _openSessionAiAnalysis(session) {
+        if (!session) {
+            Toast.warning('未找到要分析的会话');
+            return;
+        }
+
+        if (this.sessionAiDialogCleanup) {
+            try {
+                this.sessionAiDialogCleanup();
+            } catch (error) {
+                console.error('Previous session AI dialog cleanup failed:', error);
+            }
+            this.sessionAiDialogCleanup = null;
+        }
+
+        const datasource = this.currentSummary?.datasource || this.currentInstance || {};
+        const content = DOM.el('div', { className: 'instance-session-ai-shell' });
+        content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
+
+        let dialogCleanup = null;
+        const title = `会话 AI 分析 · ${datasource.name || '实例'} · Session ${session.session_id || '-'}`;
+
+        Modal.show({
+            title,
+            content,
+            width: '1280px',
+            maxHeight: '92vh',
+            containerClassName: 'instance-session-ai-modal',
+            bodyClassName: 'instance-session-ai-modal-body',
+            onHide: () => {
+                if (typeof dialogCleanup === 'function') {
+                    try {
+                        dialogCleanup();
+                    } catch (error) {
+                        console.error('Session AI dialog cleanup failed:', error);
+                    }
+                }
+                if (this.sessionAiDialogCleanup === dialogCleanup) {
+                    this.sessionAiDialogCleanup = null;
+                }
+            }
+        });
+
+        try {
+            dialogCleanup = await DiagnosisPage.renderWithOptions({
+                container: content,
+                embedded: true,
+                hideEmbeddedTitle: true,
+                compactEmbeddedToolbar: true,
+                fixedDatasourceId: datasource.id,
+                hideSessionSidebar: true,
+                autoCreateSession: true,
+                autoSendInitialAsk: true,
+                hideInitialAskMessage: true,
+                initialAsk: this._buildSessionAnalysisPrompt(session),
+                initialSessionTitle: `实例会话分析 ${datasource.name || datasource.id || ''} #${session.session_id || ''}`.trim(),
+                hideToolSafetyButton: true,
+                hideClearSessionButton: true,
+            });
+            this.sessionAiDialogCleanup = dialogCleanup;
+        } catch (error) {
+            content.innerHTML = `
+                <div class="empty-state" style="padding:40px;">
+                    <i data-lucide="alert-circle"></i>
+                    <h3>会话 AI 分析打开失败</h3>
+                    <p>${this._escapeHtml(error.message || '未知错误')}</p>
+                </div>
+            `;
+            DOM.createIcons();
         }
     },
 
@@ -876,9 +1236,10 @@ const InstanceDetailPage = {
 
     _sessionStatusRank(status) {
         const normalized = String(status || '').toLowerCase();
-        if (/(active|running|query|execute|executing|locked|lock wait)/.test(normalized)) return 0;
-        if (/(idle in transaction|idle)/.test(normalized)) return 1;
-        if (/(sleep|sleeping)/.test(normalized)) return 2;
+        if (/\binactive\b/.test(normalized)) return 2;
+        if (/\bidle in transaction\b|\bidle\b/.test(normalized)) return 1;
+        if (/\bsleep\b|\bsleeping\b/.test(normalized)) return 2;
+        if (/\bactive\b|\brunning\b|\bquery\b|\bexecute(?:d|ing)?\b|\blocked\b|lock wait/.test(normalized)) return 0;
         return 3;
     },
 

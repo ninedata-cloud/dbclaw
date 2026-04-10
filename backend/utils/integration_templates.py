@@ -1938,6 +1938,16 @@ FEISHU_BOT_TEMPLATE = {
     "code": "APP_ID = \"\"\nAPP_SECRET = \"\"\nSIGNING_SECRET = \"\"\n\nasync def handle_event(context, params, payload):\n    return {\"success\": True, \"message\": \"Feishu bot is handled by dedicated router/service\"}\n"
 }
 
+DINGTALK_BOT_TEMPLATE = {
+    "integration_id": "builtin_dingtalk_bot",
+    "name": "钉钉机器人对话",
+    "description": "钉钉机器人入站对话配置，使用 Stream Mode 长连接接收消息并回复",
+    "integration_type": "bot",
+    "category": "im",
+    "config_schema": {"type": "object", "properties": {}, "required": []},
+    "code": "CLIENT_ID = \"\"\nCLIENT_SECRET = \"\"\n\nasync def handle_event(context, params, payload):\n    return {\"success\": True, \"message\": \"DingTalk bot is handled by dedicated stream service\"}\n"
+}
+
 WEIXIN_BOT_TEMPLATE = {
     "integration_id": "builtin_weixin_bot",
     "name": "微信机器人对话",
@@ -1951,6 +1961,7 @@ WEIXIN_BOT_TEMPLATE = {
 BUILTIN_TEMPLATES = [
     FEISHU_WEBHOOK_TEMPLATE,
     FEISHU_BOT_TEMPLATE,
+    DINGTALK_BOT_TEMPLATE,
     WEIXIN_BOT_TEMPLATE,
     DINGTALK_WEBHOOK_TEMPLATE,
     EMAIL_TEMPLATE,

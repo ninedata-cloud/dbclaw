@@ -65,7 +65,17 @@ class IntegrationsPage {
         const codeNote = integration?.integration_id === 'builtin_feishu_bot'
             ? `
                 <div class="integration-modal-note">
-                    直接修改代码顶部的 APP_ID、APP_SECRET、SIGNING_SECRET 三个常量即可配置飞书机器人。
+                    当前默认使用飞书长连接模式。
+                    直接修改代码顶部的 <code>APP_ID</code>、<code>APP_SECRET</code> 即可启用；
+                    <code>SIGNING_SECRET</code> 仅在保留公网事件回调模式时才需要。
+                </div>
+            `
+            : integration?.integration_id === 'builtin_dingtalk_bot'
+                ? `
+                <div class="integration-modal-note">
+                    当前默认使用钉钉 Stream Mode 长连接。
+                    直接修改代码顶部的 <code>CLIENT_ID</code>、<code>CLIENT_SECRET</code> 即可启用；
+                    保存并重启后端后，机器人会自动建立长连接收消息。
                 </div>
             `
             : `
@@ -209,7 +219,8 @@ class IntegrationsPage {
     _bindingMeta(binding) {
         const map = {
             weixin_bot: { icon: 'message-circle-more', label: '微信机器人' },
-            feishu_bot: { icon: 'send', label: '飞书机器人' }
+            feishu_bot: { icon: 'send', label: '飞书机器人' },
+            dingtalk_bot: { icon: 'message-square-dot', label: '钉钉机器人' }
         };
         return map[binding?.code] || { icon: 'bot', label: binding?.name || '机器人' };
     }
@@ -218,10 +229,20 @@ class IntegrationsPage {
         const map = {
             not_ready: { label: '未配置', className: 'idle' },
             pending: { label: '等待扫码', className: 'warning' },
-            confirmed: { label: '已登录', className: 'success' },
+            configured: { label: '已配置', className: 'warning' },
+            confirmed: { label: '运行中', className: 'success' },
             error: { label: '失败', className: 'danger' }
         };
         return map[status] || map.not_ready;
+    }
+
+    _resolveBindingStatus(binding) {
+        const params = binding?.params || {};
+        const loginStatus = params.login_status;
+        if (loginStatus) return loginStatus;
+        if (params.last_error) return 'error';
+        if (binding?.enabled) return 'configured';
+        return 'not_ready';
     }
 
     _integrationStatusMeta(enabled) {
@@ -254,8 +275,8 @@ class IntegrationsPage {
         try {
             const bindings = await API.getWeixinBotBindings();
             const rows = bindings.map(b => {
-                const rawParams = b.params?.raw?.params || {};
-                const statusMeta = this._bindingStatusMeta(rawParams.login_status || 'not_ready');
+                const rawParams = b.params || {};
+                const statusMeta = this._bindingStatusMeta(this._resolveBindingStatus(b));
                 const bindingMeta = this._bindingMeta(b);
                 const isWeixin = b.code === 'weixin_bot';
                 const configureBtn = isWeixin
@@ -284,7 +305,7 @@ class IntegrationsPage {
                             <div>
                                 <div class="integrations-eyebrow">机器人接入</div>
                                 <h2>Bot 绑定状态</h2>
-                                <p>统一查看当前机器人登录情况，并在需要时完成扫码配置。</p>
+                                <p>统一查看当前机器人接入状态，包括是否已配置、是否已连上后端监听。</p>
                             </div>
                         </div>
                         <div class="integration-binding-grid">

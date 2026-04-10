@@ -280,12 +280,13 @@ const ChatWidget = {
                 '</div>';
         }
 
+        const textHtml = text
+            ? `<div class="chat-user-text">${this._escapeHtml(text)}</div>`
+            : '';
+
         msg.innerHTML = `
             <div class="chat-avatar">U</div>
-            <div class="chat-bubble">
-                ${attachmentHtml}
-                ${text ? this._escapeHtml(text) : ''}
-            </div>
+            <div class="chat-bubble">${attachmentHtml}${textHtml}</div>
             <button class="message-copy-btn" title="复制内容">
                 <i data-lucide="copy"></i>
             </button>

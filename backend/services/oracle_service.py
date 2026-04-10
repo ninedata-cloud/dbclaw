@@ -56,7 +56,7 @@ class OracleConnector(DBConnector):
                 "SUM(CASE WHEN status = 'INACTIVE' THEN 1 ELSE 0 END) as inactive, "
                 "SUM(CASE WHEN wait_class != 'Idle' AND status = 'ACTIVE' THEN 1 ELSE 0 END) as waiting "
                 "FROM v$session "
-                "WHERE type = 'USER' AND audsid != SYS_CONTEXT('USERENV', 'SESSIONID')"
+                "WHERE type = 'USER'"
             )
             session_stats = await cursor.fetchone()
 

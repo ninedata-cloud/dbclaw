@@ -61,3 +61,49 @@ class TerminateSessionResponse(BaseModel):
     datasource_id: int
     db_type: str
     result: Optional[Dict[str, Any]] = None
+
+
+class InstanceTrafficHistoryPoint(BaseModel):
+    timestamp: datetime
+    rx_rate: Optional[float] = None
+    tx_rate: Optional[float] = None
+    total_rate: Optional[float] = None
+    mode: str = "measured"
+
+
+class InstanceTrafficClientItem(BaseModel):
+    client_id: str
+    client_label: str
+    session_count: int = 0
+    active_session_count: int = 0
+    waiting_session_count: int = 0
+    idle_session_count: int = 0
+    user_count: int = 0
+    users: List[str] = Field(default_factory=list)
+    databases: List[str] = Field(default_factory=list)
+    max_duration_seconds: Optional[int] = None
+    sample_sql: Optional[str] = None
+    sql_samples: List[str] = Field(default_factory=list)
+    heat_score: float = 0
+    status: str = "idle"
+    estimated_rx_rate: Optional[float] = None
+    estimated_tx_rate: Optional[float] = None
+    estimated_total_rate: Optional[float] = None
+
+
+class InstanceTrafficSnapshotResponse(BaseModel):
+    datasource: DatasourceResponse
+    captured_at: datetime
+    poll_interval_seconds: int = 5
+    rate_mode: str = "unavailable"
+    rate_label: str = "暂无实时网络字节指标"
+    total_client_count: int = 0
+    total_session_count: int = 0
+    active_session_count: int = 0
+    waiting_session_count: int = 0
+    idle_session_count: int = 0
+    total_rx_rate: Optional[float] = None
+    total_tx_rate: Optional[float] = None
+    total_rate: Optional[float] = None
+    clients: List[InstanceTrafficClientItem] = Field(default_factory=list)
+    history: List[InstanceTrafficHistoryPoint] = Field(default_factory=list)
