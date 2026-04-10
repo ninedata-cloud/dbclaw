@@ -33,7 +33,7 @@ python run.py
 
 **方法 1：运行测试脚本**
 ```bash
-python test_integration_merge.py
+python docs/archive/manual-checks/tests/test_integration_merge.py
 ```
 
 等待 1-2 分钟后再次运行，确认输出中显示：
@@ -91,7 +91,7 @@ WHERE metric_type = 'integration_metric';
 
 ```bash
 # 运行测试脚本
-python test_integration_merge.py
+python docs/archive/manual-checks/tests/test_integration_merge.py
 ```
 
 查看输出中的"[步骤 4] 检查集成配置"部分，确认：
@@ -142,7 +142,7 @@ python test_integration_merge.py
 ## 相关文档
 
 - 详细修复说明：`docs/archive/fixes/2026-03-19-aliyun-rds-cpu-memory-refresh-fix.md`
-- 测试脚本：`test_integration_merge.py`
+- 测试脚本：`docs/archive/manual-checks/tests/test_integration_merge.py`
 
 ## 修复日期
 
