@@ -28,6 +28,21 @@ const Router = {
             return;
         }
 
+        if (page === 'query') {
+            const currentDatasource =
+                Store.get('currentConnection') ||
+                Store.get('currentDatasource') ||
+                (Store.get('datasources') || [])[0] ||
+                null;
+
+            if (currentDatasource?.id) {
+                window.location.hash = `instance-detail?datasource=${currentDatasource.id}&tab=query`;
+            } else {
+                window.location.hash = 'datasources';
+            }
+            return;
+        }
+
         // Cleanup previous page
         if (this.currentCleanup && typeof this.currentCleanup === 'function') {
             this.currentCleanup();

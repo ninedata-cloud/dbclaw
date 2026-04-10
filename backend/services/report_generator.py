@@ -5,12 +5,10 @@ from sqlalchemy import select
 
 from backend.models.datasource import Datasource
 from backend.models.report import Report
-from backend.models.soft_delete import alive_filter, get_alive_by_id
+from backend.models.soft_delete import alive_filter
 from backend.agent.prompts import REPORT_GENERATION_PROMPT
-from backend.database import async_session
 from backend.agent.conversation_skills import generate_report_with_skills
 from backend.services.action_run_service import ensure_report_recommended_actions
-from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
 
@@ -44,30 +42,6 @@ def _extract_recommended_action(content_md: str) -> str:
         if any(keyword in normalized for keyword in ["建议", "处置", "操作", "下一步", "优化"]):
             return _strip_markdown(normalized)[:220]
     return ""
-
-
-async def generate_report(report_id: int, datasource_id: int, report_type: str = "comprehensive"):
-    """Generate a comprehensive diagnostic report for a database datasource.
-
-    DEPRECATED: This rule-based report path is no longer used.
-    Use ReportGenerator.generate_inspection_report() for AI-driven reports instead.
-    """
-    logger.warning("generate_report() is deprecated. Use ReportGenerator.generate_inspection_report() instead.")
-    await _update_report_status(report_id, "failed", summary="Rule-based report generation is deprecated. Please use AI-driven inspection instead.")
-
-
-async def _update_report_status(report_id: int, status: str, **kwargs):
-    async with async_session() as db:
-        report = await get_alive_by_id(db, Report, report_id)
-        if report:
-            report.status = status
-            if status == "generating":
-                report.completed_at = None
-            else:
-                report.completed_at = now()
-            for k, v in kwargs.items():
-                setattr(report, k, v)
-            await db.commit()
 
 
 class ReportGenerator:

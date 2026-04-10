@@ -7,7 +7,6 @@
     Router.register('hosts', () => { HostsPage.render(); });
     Router.register('monitor', () => MonitorPage.render());
     Router.register('diagnosis', (routeParam) => DiagnosisPage.renderFromRoute(routeParam));
-    Router.register('query', () => QueryPage.render());
     Router.register('ai-models', () => AIModelsPage.render());
     Router.register('documents', () => DocumentsPage.render());
     Router.register('skills', () => SkillsPage.render());
