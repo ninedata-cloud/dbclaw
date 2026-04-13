@@ -8,7 +8,7 @@ class AlertMessage(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     datasource_id = Column(Integer, nullable=False, index=True)
-    alert_type = Column(String(50), nullable=False, index=True)  # threshold_violation, custom_expression, system_error
+    alert_type = Column(String(50), nullable=False, index=True)  # threshold_violation, custom_expression, system_error, ai_policy_violation
     severity = Column(String(20), nullable=False, index=True)  # critical, high, medium, low
     title = Column(String(255), nullable=False)
     content = Column(Text, nullable=False)
@@ -25,4 +25,3 @@ class AlertMessage(Base):
     notified_at = Column(DateTime, nullable=True, index=True)  # 首次通知完成时间，非空表示已通知
     created_at = Column(DateTime, nullable=False, server_default=func.now(), index=True)
     updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
-

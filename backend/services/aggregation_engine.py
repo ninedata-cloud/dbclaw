@@ -18,19 +18,32 @@ logger = logging.getLogger(__name__)
 class AggregationEngine:
     """Alert aggregation logic to prevent notification storms"""
 
+    SEVERITY_ORDER = {"critical": 4, "high": 3, "medium": 2, "low": 1}
+
     @staticmethod
     async def _get_notification_cooldown_minutes(db: AsyncSession) -> int:
-        from backend.config import get_settings
         from backend.services.config_service import get_config
 
         cooldown_minutes = await get_config(
             db,
-            "inspection_dedup_window_minutes",
-            default=get_settings().inspection_dedup_window_minutes,
+            "notification_cooldown_minutes",
+            default=60,
         )
         if not cooldown_minutes:
             return 0
         return int(cooldown_minutes)
+
+    @staticmethod
+    def _severity_rank(severity: str | None) -> int:
+        return AggregationEngine.SEVERITY_ORDER.get((severity or "").lower(), 0)
+
+    @staticmethod
+    def _is_severity_escalated(current_severity: str | None, previous_severities: List[str | None]) -> bool:
+        current_rank = AggregationEngine._severity_rank(current_severity)
+        if current_rank <= 0:
+            return False
+        previous_max_rank = max((AggregationEngine._severity_rank(item) for item in previous_severities), default=0)
+        return current_rank > previous_max_rank
 
     @staticmethod
     def _build_similarity_filters(alert: AlertMessage) -> List[Any]:
@@ -101,23 +114,38 @@ class AggregationEngine:
         if alert.event_id:
             # 查询该事件的所有告警的投递记录
             result = await db.execute(
-                select(AlertDeliveryLog).join(
+                select(AlertDeliveryLog, AlertMessage.severity).join(
                     AlertMessage, AlertDeliveryLog.alert_id == AlertMessage.id
                 ).where(
                     and_(
                         AlertDeliveryLog.subscription_id == subscription.id,
                         AlertMessage.event_id == alert.event_id,
-                        AlertDeliveryLog.status == "sent"
+                        AlertDeliveryLog.status == "sent",
+                        AlertDeliveryLog.channel.not_like("%recovery%"),
                     )
                 )
             )
-            event_deliveries = result.scalars().all()
+            event_deliveries = result.all()
 
             if event_deliveries:
                 # 检查最近一次投递是否超过60分钟，超过则允许重新通知
-                latest_delivery = max(event_deliveries, key=lambda d: d.sent_at or d.created_at)
-                latest_sent_at = latest_delivery.sent_at or latest_delivery.created_at
+                latest_delivery_log, _latest_delivery_severity = max(
+                    event_deliveries,
+                    key=lambda row: row[0].sent_at or row[0].created_at,
+                )
+                previous_severities = [row[1] for row in event_deliveries]
+                latest_sent_at = latest_delivery_log.sent_at or latest_delivery_log.created_at
                 minutes_since_last = (current_time - latest_sent_at).total_seconds() / 60
+
+                if AggregationEngine._is_severity_escalated(alert.severity, previous_severities):
+                    logger.info(
+                        "Allowing alert %s despite cooldown: severity escalated from %s to %s for event %s",
+                        alert.id,
+                        max(previous_severities, key=AggregationEngine._severity_rank, default=None),
+                        alert.severity,
+                        alert.event_id,
+                    )
+                    return True
 
                 if cooldown_minutes > 0 and minutes_since_last < cooldown_minutes:
                     logger.info(
@@ -139,20 +167,35 @@ class AggregationEngine:
 
         # Check for recent deliveries with same datasource and alert_type
         result = await db.execute(
-            select(AlertDeliveryLog).join(
+            select(AlertDeliveryLog, AlertMessage.severity).join(
                 AlertMessage, AlertDeliveryLog.alert_id == AlertMessage.id
             ).where(
                 and_(
                     AlertDeliveryLog.subscription_id == subscription.id,
                     AlertDeliveryLog.sent_at >= cutoff_time,
                     AlertDeliveryLog.status == "sent",
+                    AlertDeliveryLog.channel.not_like("%recovery%"),
                     *similarity_filters,
                 )
             )
         )
-        recent_deliveries = result.scalars().all()
+        recent_deliveries = result.all()
 
         if recent_deliveries:
+            previous_severities = [row[1] for row in recent_deliveries]
+            if AggregationEngine._is_severity_escalated(alert.severity, previous_severities):
+                logger.info(
+                    "Allowing alert %s despite cooldown: severity escalated from %s to %s "
+                    "(datasource=%s, type=%s, metric=%s)",
+                    alert.id,
+                    max(previous_severities, key=AggregationEngine._severity_rank, default=None),
+                    alert.severity,
+                    alert.datasource_id,
+                    alert.alert_type,
+                    alert.metric_name or "-",
+                )
+                return True
+
             logger.info(
                 f"Suppressing alert {alert.id} due to recent delivery "
                 f"(datasource={alert.datasource_id}, type={alert.alert_type}, "

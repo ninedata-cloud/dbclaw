@@ -710,6 +710,11 @@ const MonitorPage = {
                         <span style="color:var(--accent-red)">✗</span>
                         <span>自定义规则触发: ${violation.expression}</span>
                     `;
+                } else if (violation.type === 'ai_policy') {
+                    item.innerHTML = `
+                        <span style="color:var(--accent-red)">✗</span>
+                        <span>AI 规则触发: ${violation.policy || 'AI 告警规则'}${violation.confidence != null ? `（置信度 ${(Number(violation.confidence) * 100).toFixed(0)}%）` : ''}</span>
+                    `;
                 }
 
                 violationsList.appendChild(item);

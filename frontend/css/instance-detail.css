@@ -227,6 +227,12 @@
     word-break: break-all;
 }
 
+.instance-list-item-side {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
 .instance-status-dot {
     display: inline-flex;
     width: 10px;

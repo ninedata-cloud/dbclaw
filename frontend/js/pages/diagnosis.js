@@ -16,9 +16,250 @@ const DiagnosisPage = {
     _modelSelectEl: null,
     _pendingAutoAsk: null,
     _initialAskSent: false,
+    _sessionSidebarCollapsed: false,
 
     _getSelectedDatasource() {
         return this.datasourceSelector?.getValue() || Store.get('currentDatasource') || null;
+    },
+
+    _hasPinnedInitialContext(options = this._renderOptions || {}) {
+        return Boolean(
+            options.preferFreshSession ||
+            options.initialAsk ||
+            options.initialAlertId ||
+            options.initialEventId ||
+            options.initialReportId ||
+            options.initialActionRunId
+        );
+    },
+
+    _buildInitialSessionTitle(options = this._renderOptions || {}) {
+        if (options.initialSessionTitle) {
+            return options.initialSessionTitle;
+        }
+        if (options.initialActionRunId) {
+            return `动作执行诊断 #${options.initialActionRunId}`;
+        }
+        if (options.initialReportId) {
+            return `巡检报告诊断 #${options.initialReportId}`;
+        }
+        if (options.initialEventId) {
+            return `告警事件诊断 #${options.initialEventId}`;
+        }
+        if (options.initialAlertId) {
+            return `告警诊断 #${options.initialAlertId}`;
+        }
+        return '新建会话';
+    },
+
+    _stripMarkdownText(value) {
+        return String(value || '')
+            .replace(/```[\s\S]*?```/g, ' ')
+            .replace(/`([^`]*)`/g, '$1')
+            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+            .replace(/[#>*_~\-]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    },
+
+    _compactPromptText(value, maxChars = 240) {
+        const text = this._stripMarkdownText(value);
+        if (!text) return '';
+        if (text.length <= maxChars) return text;
+        return `${text.slice(0, maxChars).trimEnd()}...`;
+    },
+
+    _buildDiagnosisContextBlock(label, context = {}) {
+        const lines = [label];
+        const datasourceName = context.datasource_name || context.datasource_info?.name;
+        const datasourceType = context.datasource_type || context.datasource_info?.db_type;
+        const triggerType = context.latest_trigger_type;
+        const linkedReport = context.linked_report;
+
+        if (datasourceName || datasourceType) {
+            lines.push(`数据源：${[datasourceName, datasourceType].filter(Boolean).join(' / ')}`);
+        }
+        if (triggerType) {
+            lines.push(`触发类型：${this._compactPromptText(triggerType, 120)}`);
+        }
+        if (context.case_summary) {
+            lines.push(`案例摘要：${this._compactPromptText(context.case_summary, 220)}`);
+        }
+        if (context.diagnosis_summary) {
+            lines.push(`诊断摘要：${this._compactPromptText(context.diagnosis_summary, 260)}`);
+        }
+        if (context.root_cause) {
+            lines.push(`根因：${this._compactPromptText(context.root_cause, 260)}`);
+        }
+        if (context.recommended_action) {
+            lines.push(`建议：${this._compactPromptText(context.recommended_action, 260)}`);
+        }
+        if (linkedReport?.report_id) {
+            lines.push(`关联报告：#${linkedReport.report_id} ${this._compactPromptText(linkedReport.title || '', 120)}`.trim());
+        }
+        return lines.filter(Boolean).join('\n');
+    },
+
+    _buildReportContextBlock(reportId, report = {}) {
+        const lines = [`关联巡检报告 #${reportId}`];
+        if (report.title) {
+            lines.push(`标题：${this._compactPromptText(report.title, 160)}`);
+        }
+        if (report.trigger_type) {
+            lines.push(`触发类型：${this._compactPromptText(report.trigger_type, 120)}`);
+        }
+        if (report.status) {
+            lines.push(`状态：${this._compactPromptText(report.status, 80)}`);
+        }
+        if (report.trigger_reason) {
+            lines.push(`触发原因：${this._compactPromptText(report.trigger_reason, 220)}`);
+        }
+        const reportSummary = this._compactPromptText(report.content_md, 320);
+        if (reportSummary) {
+            lines.push(`报告摘要：${reportSummary}`);
+        }
+        return lines.join('\n');
+    },
+
+    async _hydrateInitialContextOptions() {
+        const options = this._renderOptions || {};
+        if (!this._hasPinnedInitialContext(options)) {
+            return;
+        }
+
+        options.preferFreshSession = true;
+        if (!options.initialSessionTitle) {
+            options.initialSessionTitle = this._buildInitialSessionTitle(options);
+        }
+
+        const contextBlocks = [];
+
+        if (Number.isFinite(options.initialEventId)) {
+            try {
+                const eventContext = await API.getAlertEventContext(options.initialEventId);
+                const block = this._buildDiagnosisContextBlock(`关联告警事件 #${options.initialEventId}`, eventContext);
+                if (block) contextBlocks.push(block);
+            } catch (error) {
+                console.warn('Failed to load alert event context:', error);
+            }
+        }
+
+        if (Number.isFinite(options.initialAlertId)) {
+            let contextBlock = '';
+            try {
+                const alertContext = await API.getAlertContext(options.initialAlertId);
+                contextBlock = this._buildDiagnosisContextBlock(`关联告警 #${options.initialAlertId}`, alertContext);
+            } catch (error) {
+                try {
+                    const eventContext = await API.getAlertEventContext(options.initialAlertId);
+                    contextBlock = this._buildDiagnosisContextBlock(`关联告警事件 #${options.initialAlertId}`, eventContext);
+                } catch (eventError) {
+                    console.warn('Failed to load alert context:', error, eventError);
+                }
+            }
+            if (contextBlock) {
+                contextBlocks.push(contextBlock);
+            }
+        }
+
+        if (Number.isFinite(options.initialReportId)) {
+            try {
+                const report = await API.getInspectionReportDetail(options.initialReportId);
+                const block = this._buildReportContextBlock(options.initialReportId, report);
+                if (block) contextBlocks.push(block);
+            } catch (error) {
+                console.warn('Failed to load inspection report detail:', error);
+            }
+        }
+
+        if (Number.isFinite(options.initialActionRunId)) {
+            contextBlocks.push(`关联动作执行 #${options.initialActionRunId}`);
+        }
+
+        if (contextBlocks.length === 0) {
+            return;
+        }
+
+        const contextText = contextBlocks.join('\n\n');
+        const contextHeading = '系统补充上下文：';
+        if (options.initialAsk) {
+            if (!String(options.initialAsk).includes(contextHeading)) {
+                options.initialAsk = `${options.initialAsk}\n\n${contextHeading}\n${contextText}`;
+            }
+        } else {
+            options.initialAsk = `请基于以下上下文进行诊断分析，并给出处置建议。\n\n${contextHeading}\n${contextText}`;
+        }
+    },
+
+    _getSessionSidebarStorageKey(options = this._renderOptions || {}) {
+        return `diagnosisSessionSidebarCollapsed:${options.embedded ? 'embedded' : 'page'}`;
+    },
+
+    _getDefaultSessionSidebarCollapsed(options = this._renderOptions || {}) {
+        if (typeof options.defaultSidebarCollapsed === 'boolean') {
+            return options.defaultSidebarCollapsed;
+        }
+        return false;
+    },
+
+    _loadSessionSidebarCollapsed(options = this._renderOptions || {}) {
+        try {
+            const raw = window.localStorage.getItem(this._getSessionSidebarStorageKey(options));
+            if (raw === '1') return true;
+            if (raw === '0') return false;
+        } catch (error) {
+            // Ignore storage errors and fall back to defaults.
+        }
+        return this._getDefaultSessionSidebarCollapsed(options);
+    },
+
+    _saveSessionSidebarCollapsed(collapsed, options = this._renderOptions || {}) {
+        try {
+            window.localStorage.setItem(this._getSessionSidebarStorageKey(options), collapsed ? '1' : '0');
+        } catch (error) {
+            // Ignore storage errors and keep runtime state only.
+        }
+    },
+
+    _applySidebarCollapsed(collapsed, persist = true) {
+        const sidebar = DOM.$('#session-sidebar');
+        const btn = DOM.$('#sidebar-toggle-btn');
+        const header = DOM.$('#sidebar-header');
+        const sessionList = DOM.$('#session-list');
+
+        if (!sidebar || !btn) return;
+
+        this._sessionSidebarCollapsed = Boolean(collapsed);
+
+        if (this._sessionSidebarCollapsed) {
+            sidebar.style.width = '40px';
+            sidebar.style.minWidth = '40px';
+            btn.innerHTML = '<i data-lucide="panel-left-open"></i>';
+            btn.title = '显示会话列表';
+            if (header) {
+                header.style.justifyContent = 'center';
+            }
+            if (sessionList) {
+                sessionList.style.display = 'none';
+            }
+        } else {
+            sidebar.style.width = '280px';
+            sidebar.style.minWidth = '280px';
+            btn.innerHTML = '<i data-lucide="panel-left-close"></i>';
+            btn.title = '隐藏会话列表';
+            if (header) {
+                header.style.justifyContent = 'space-between';
+            }
+            if (sessionList) {
+                sessionList.style.display = 'block';
+            }
+        }
+
+        if (persist) {
+            this._saveSessionSidebarCollapsed(this._sessionSidebarCollapsed);
+        }
+
+        requestAnimationFrame(() => DOM.createIcons());
     },
 
     _getWelcomeQuickAsks() {
@@ -47,7 +288,11 @@ const DiagnosisPage = {
     },
 
     _buildWelcomeStateHtml() {
-        const quickAsks = this._getWelcomeQuickAsks();
+        const options = this._renderOptions || {};
+        const isCompactEmbedded = Boolean(options.embedded);
+        const quickAsks = isCompactEmbedded
+            ? this._getWelcomeQuickAsks().slice(0, 3)
+            : this._getWelcomeQuickAsks();
         const quickAskHtml = quickAsks.map((item) => `
             <button
                 type="button"
@@ -62,28 +307,30 @@ const DiagnosisPage = {
         `).join('');
 
         return `
-            <div class="diagnosis-welcome">
-                <section class="diagnosis-welcome-card">
+            <div class="diagnosis-welcome${isCompactEmbedded ? ' compact-embedded' : ''}">
+                <section class="diagnosis-welcome-card${isCompactEmbedded ? ' compact-embedded' : ''}">
                     <div class="diagnosis-welcome-hero">
                         <div class="diagnosis-welcome-icon">
                             <i data-lucide="sparkles"></i>
                         </div>
                         <div class="diagnosis-welcome-copy">
-                            <div class="diagnosis-welcome-eyebrow">AI Diagnosis Workspace</div>
-                            <h3>数据库智能卫士</h3>
-                            <p>围绕实例状态、连接、慢 SQL、锁等待与关键参数，快速给出可落地的诊断建议。</p>
+                            ${isCompactEmbedded ? '' : '<div class="diagnosis-welcome-eyebrow">AI Diagnosis Workspace</div>'}
+                            <h3>${isCompactEmbedded ? '开始 AI 诊断' : '数据库智能卫士'}</h3>
+                            <p>${isCompactEmbedded ? '可直接提问，或先使用下面的快捷入口。' : '围绕实例状态、连接、慢 SQL、锁等待与关键参数，快速给出可落地的诊断建议。'}</p>
                         </div>
                     </div>
+                    ${isCompactEmbedded ? '' : `
                     <div class="diagnosis-welcome-highlights">
                         <div class="diagnosis-welcome-pill"><i data-lucide="database"></i><span>实例运行概览</span></div>
                         <div class="diagnosis-welcome-pill"><i data-lucide="timer"></i><span>慢查询与等待分析</span></div>
                         <div class="diagnosis-welcome-pill"><i data-lucide="network"></i><span>连接与会话画像</span></div>
                         <div class="diagnosis-welcome-pill"><i data-lucide="settings-2"></i><span>参数与容量建议</span></div>
                     </div>
+                    `}
                     <div class="diagnosis-welcome-actions">
                         ${quickAskHtml}
                     </div>
-                    <div class="diagnosis-welcome-footnote">从上面的快捷入口开始，或直接在下方输入你的问题。</div>
+                    <div class="diagnosis-welcome-footnote">${isCompactEmbedded ? '下方输入问题即可开始。' : '从上面的快捷入口开始，或直接在下方输入你的问题。'}</div>
                 </section>
             </div>
         `;
@@ -92,6 +339,7 @@ const DiagnosisPage = {
     _renderWelcomeState(container) {
         if (!container) return;
         container.innerHTML = this._buildWelcomeStateHtml();
+        ChatWidget.resetScrollState();
         container.querySelectorAll('[data-diagnosis-quickask]').forEach((button) => {
             button.addEventListener('click', () => {
                 const prompt = button.dataset.diagnosisQuickask || '';
@@ -99,6 +347,7 @@ const DiagnosisPage = {
             });
         });
         DOM.createIcons();
+        ChatWidget.scrollToBottomAndResume({ smooth: false });
     },
 
     async render() {
@@ -108,9 +357,24 @@ const DiagnosisPage = {
     async renderFromRoute(routeParam = '') {
         const params = new URLSearchParams(routeParam || '');
         const datasourceId = parseInt(params.get('datasource'), 10);
+        const alertId = parseInt(params.get('alert'), 10);
+        const eventId = parseInt(params.get('event'), 10);
+        const reportId = parseInt(params.get('report'), 10);
+        const actionRunId = parseInt(params.get('action_run'), 10);
         return this.renderWithOptions({
             initialDatasourceId: Number.isFinite(datasourceId) ? datasourceId : null,
+            initialAlertId: Number.isFinite(alertId) ? alertId : null,
+            initialEventId: Number.isFinite(eventId) ? eventId : null,
+            initialReportId: Number.isFinite(reportId) ? reportId : null,
+            initialActionRunId: Number.isFinite(actionRunId) ? actionRunId : null,
             initialAsk: params.get('ask') || null,
+            preferFreshSession: Boolean(
+                params.get('ask') ||
+                Number.isFinite(alertId) ||
+                Number.isFinite(eventId) ||
+                Number.isFinite(reportId) ||
+                Number.isFinite(actionRunId)
+            ),
         });
     },
 
@@ -151,6 +415,8 @@ const DiagnosisPage = {
                 }
             }
         } catch (e) { /* ignore */ }
+
+        await this._hydrateInitialContextOptions();
 
         this.datasourceSelector?.destroy();
         if (options.fixedDatasourceId) {
@@ -397,6 +663,9 @@ const DiagnosisPage = {
         }
         layout.appendChild(chatContainer);
         content.appendChild(layout);
+        if (!options.hideSessionSidebar) {
+            this._applySidebarCollapsed(this._loadSessionSidebarCollapsed(options), false);
+        }
         DOM.createIcons();
 
         await this._loadSessions();
@@ -511,6 +780,12 @@ const DiagnosisPage = {
         }
 
         try {
+            let pinnedSessionId = this.currentSessionId;
+            if (this._renderOptions?.preferFreshSession && !pinnedSessionId) {
+                const createdSession = await this._createSession({ reloadList: false, switchSession: false });
+                pinnedSessionId = createdSession?.id || null;
+            }
+
             const sessionParams = {};
             const fixedDatasourceId = this._renderOptions?.sessionFilterDatasourceId || this._renderOptions?.fixedDatasourceId;
             if (fixedDatasourceId) {
@@ -604,8 +879,15 @@ const DiagnosisPage = {
                 list.appendChild(item);
             }
 
+            const preferredSessionId =
+                (pinnedSessionId && sessions.some(s => s.id === pinnedSessionId)) ? pinnedSessionId : null;
+
+            if (preferredSessionId) {
+                await this._switchSession(preferredSessionId);
+                return;
+            }
+
             if (!this.currentSessionId && sessions.length > 0) {
-                // Load the most recent session (first one in the list)
                 await this._switchSession(sessions[0].id);
             }
         } catch (e) {
@@ -684,6 +966,7 @@ const DiagnosisPage = {
         this._pendingResumeState = null;
         this._restoreSessionContext(sessionId);
         this._connectWebSocket(sessionId);
+        ChatWidget.resetScrollState();
         ChatWidget.loadMessages([]);
         ChatWidget.showToolPanelLoading();
 
@@ -748,6 +1031,8 @@ const DiagnosisPage = {
                     </div>
                 `;
                 DOM.createIcons();
+                ChatWidget.resetScrollState();
+                ChatWidget.scrollToBottomAndResume({ smooth: false });
                 ChatWidget.resetToolPanel();
             }
         }
@@ -1129,7 +1414,7 @@ const DiagnosisPage = {
             </div>
         `;
         messages.appendChild(card);
-        ChatWidget._scrollToBottom();
+        ChatWidget._maybeAutoScroll();
     },
 
     _removeApprovalUI(approvalId) {
@@ -1197,6 +1482,7 @@ const DiagnosisPage = {
                         ChatWidget.pendingTools = new Map();
                         const container = DOM.$('#chat-messages');
                         this._renderWelcomeState(container);
+                        ChatWidget.resetScrollState();
                         await this._loadSessions();
                         Toast.success('Session cleared');
                     } catch (e) {
@@ -1268,42 +1554,7 @@ const DiagnosisPage = {
     },
 
     _toggleSidebar() {
-        const sidebar = DOM.$('#session-sidebar');
-        const btn = DOM.$('#sidebar-toggle-btn');
-        const header = DOM.$('#sidebar-header');
-        const sessionList = DOM.$('#session-list');
-
-        if (!sidebar || !btn) return;
-
-        const isCollapsed = sidebar.style.width === '40px';
-
-        if (isCollapsed) {
-            // Expand
-            sidebar.style.width = '280px';
-            sidebar.style.minWidth = '280px';
-            btn.innerHTML = '<i data-lucide="panel-left-close"></i>';
-            btn.title = '隐藏会话列表';
-            if (header) {
-                header.style.justifyContent = 'space-between';
-            }
-            if (sessionList) {
-                sessionList.style.display = 'block';
-            }
-        } else {
-            // Collapse
-            sidebar.style.width = '40px';
-            sidebar.style.minWidth = '40px';
-            btn.innerHTML = '<i data-lucide="panel-left-open"></i>';
-            btn.title = '显示会话列表';
-            if (header) {
-                header.style.justifyContent = 'center';
-            }
-            if (sessionList) {
-                sessionList.style.display = 'none';
-            }
-        }
-
-        requestAnimationFrame(() => DOM.createIcons());
+        this._applySidebarCollapsed(!this._sessionSidebarCollapsed);
     },
 
     _cleanup() {

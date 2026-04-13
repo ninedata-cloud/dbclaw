@@ -13,7 +13,13 @@
     Router.register('system-configs', () => SystemConfigsPage.render());
     Router.register('users', () => UsersPage.render());
     Router.register('inspection', (routeParam) => InspectionPage.renderFromRoute(routeParam));
-    Router.register('alerts', () => AlertsPage.init());
+    Router.register('alerts', (routeParam) => AlertsPage.init({ routeParam }));
+    Router.register('alert-ai-policies', () => {
+        Router.navigate('alerts?tab=templates');
+    });
+    Router.register('alert-templates', () => {
+        Router.navigate('alerts?tab=templates');
+    });
     Router.register('integrations', () => integrationsPage.init());
     Router.register('instance-detail', (routeParam) => InstanceDetailPage.render(routeParam));
 

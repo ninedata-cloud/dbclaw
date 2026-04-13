@@ -9,6 +9,7 @@ from backend.models.soft_delete import alive_filter
 from backend.agent.prompts import REPORT_GENERATION_PROMPT
 from backend.agent.conversation_skills import generate_report_with_skills
 from backend.services.action_run_service import ensure_report_recommended_actions
+from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
 

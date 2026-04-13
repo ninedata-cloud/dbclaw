@@ -785,8 +785,10 @@ class NotificationService:
         """Map alert_type code to Chinese label"""
         labels = {
             'threshold_violation': '超过阈值',
+            'baseline_deviation': '偏离基线',
             'custom_expression': '自定义表达式',
-            'system_error': '系统错误'
+            'system_error': '系统错误',
+            'ai_policy_violation': 'AI 判警',
         }
         return labels.get(alert_type, alert_type)
 

@@ -15,6 +15,8 @@ const InspectionPage = {
         end_date: null
     },
     currentReportDetail: null,
+    _errorTooltipEl: null,
+    _errorTooltipHideHandler: null,
 
     _escapeHtml(value) {
         return Utils.escapeHtml(String(value ?? ''));
@@ -194,6 +196,8 @@ const InspectionPage = {
             return;
         }
 
+        this._removeErrorTooltip();
+
         // Show loading indicator only on initial load or filter change
         if (!this.pollInterval || container.innerHTML === '') {
             container.innerHTML = `
@@ -207,6 +211,7 @@ const InspectionPage = {
         try {
             const response = await API.get(`/api/inspections/reports?${params.toString()}`);
             const reports = Array.isArray(response) ? response : response.reports || [];
+            const showDatasourceColumn = !this._renderOptions?.fixedDatasourceId;
             this.totalReports = response.total || reports.length;
             const meta = DOM.$('#inspection-list-meta');
             if (meta) {
@@ -239,11 +244,11 @@ const InspectionPage = {
 
 	            container.innerHTML = `
 	                <div class="data-table-container inspection-table-container">
-	                    <table class="data-table inspection-table">
+	                    <table class="data-table inspection-table ${showDatasourceColumn ? '' : 'inspection-table-instance'}">
 	                        <thead>
 	                            <tr>
 	                                <th class="inspection-col-id">编号</th>
-	                                <th class="inspection-col-source">数据源</th>
+	                                ${showDatasourceColumn ? '<th class="inspection-col-source">数据源</th>' : ''}
 	                                <th class="inspection-col-trigger">触发类型</th>
 	                                <th class="inspection-col-status">报告状态</th>
 	                                <th class="inspection-col-title">标题</th>
@@ -260,11 +265,13 @@ const InspectionPage = {
 	                                        <td class="inspection-col-id">
 	                                            <div class="inspection-id-text">#${InspectionPage._escapeHtml(r.report_id)}</div>
 	                                        </td>
+	                                        ${showDatasourceColumn ? `
 	                                        <td class="inspection-col-source">
 	                                            <div class="inspection-cell-stack">
 	                                                <div class="inspection-primary-text inspection-nowrap-text" title="${InspectionPage._escapeAttr(r.datasource_name || 'N/A')}">${InspectionPage._escapeHtml(r.datasource_name || 'N/A')}</div>
 	                                            </div>
 	                                        </td>
+	                                        ` : ''}
                                         <td class="inspection-col-trigger">${renderTriggerBadge(r.trigger_type)}</td>
                                         <td class="inspection-col-status">
                                             <div class="inspection-status-cell">
@@ -635,26 +642,42 @@ const InspectionPage = {
         const container = DOM.$('#reportList');
         if (!container) return;
 
+        this._removeErrorTooltip();
+
         // Remove old handler before adding new one
         if (this._errorTooltipHandler) {
-            container.removeEventListener('mouseenter', this._errorTooltipHandler, true);
-            container.removeEventListener('mouseleave', this._errorTooltipHandler, true);
+            container.removeEventListener('mouseover', this._errorTooltipHandler, true);
+            container.removeEventListener('mouseout', this._errorTooltipHandler, true);
+        }
+        if (this._errorTooltipHideHandler) {
+            window.removeEventListener('scroll', this._errorTooltipHideHandler, true);
+            window.removeEventListener('blur', this._errorTooltipHideHandler);
+            document.removeEventListener('click', this._errorTooltipHideHandler, true);
         }
 
-        let currentTooltip = null;
         this._errorTooltipHandler = (e) => {
             const icon = e.target.closest('.error-icon');
             if (!icon) return;
 
-            if (e.type === 'mouseenter') {
+            if (e.type === 'mouseover') {
+                if (this._errorTooltipEl && this._errorTooltipEl.dataset.anchorId === icon.dataset.tooltipAnchorId) {
+                    return;
+                }
                 const errorMessage = icon.getAttribute('data-error');
-                currentTooltip = document.createElement('div');
-                currentTooltip.className = 'error-tooltip';
-                currentTooltip.textContent = errorMessage;
-                document.body.appendChild(currentTooltip);
+                this._removeErrorTooltip();
+                if (!icon.dataset.tooltipAnchorId) {
+                    icon.dataset.tooltipAnchorId = `error-tooltip-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                }
+
+                const tooltip = document.createElement('div');
+                tooltip.className = 'error-tooltip';
+                tooltip.textContent = errorMessage;
+                tooltip.dataset.anchorId = icon.dataset.tooltipAnchorId;
+                document.body.appendChild(tooltip);
+                this._errorTooltipEl = tooltip;
 
                 const rect = icon.getBoundingClientRect();
-                const tooltipRect = currentTooltip.getBoundingClientRect();
+                const tooltipRect = tooltip.getBoundingClientRect();
 
                 let top = rect.top - tooltipRect.height - 10;
                 let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
@@ -665,17 +688,31 @@ const InspectionPage = {
                     left = window.innerWidth - tooltipRect.width - 10;
                 }
 
-                currentTooltip.style.top = top + 'px';
-                currentTooltip.style.left = left + 'px';
-                currentTooltip.style.opacity = '1';
-            } else if (e.type === 'mouseleave' && currentTooltip) {
-                currentTooltip.remove();
-                currentTooltip = null;
+                tooltip.style.top = top + 'px';
+                tooltip.style.left = left + 'px';
+                tooltip.style.opacity = '1';
+            } else if (e.type === 'mouseout') {
+                const nextIcon = e.relatedTarget?.closest?.('.error-icon');
+                if (nextIcon === icon) {
+                    return;
+                }
+                this._removeErrorTooltip();
             }
         };
 
-        container.addEventListener('mouseenter', this._errorTooltipHandler, true);
-        container.addEventListener('mouseleave', this._errorTooltipHandler, true);
+        this._errorTooltipHideHandler = () => this._removeErrorTooltip();
+        container.addEventListener('mouseover', this._errorTooltipHandler, true);
+        container.addEventListener('mouseout', this._errorTooltipHandler, true);
+        window.addEventListener('scroll', this._errorTooltipHideHandler, true);
+        window.addEventListener('blur', this._errorTooltipHideHandler);
+        document.addEventListener('click', this._errorTooltipHideHandler, true);
+    },
+
+    _removeErrorTooltip() {
+        if (this._errorTooltipEl) {
+            this._errorTooltipEl.remove();
+            this._errorTooltipEl = null;
+        }
     },
 
     confirmDelete(reportId) {
@@ -799,11 +836,18 @@ const InspectionPage = {
         if (this._errorTooltipHandler) {
             const container = DOM.$('#reportList');
             if (container) {
-                container.removeEventListener('mouseenter', this._errorTooltipHandler, true);
-                container.removeEventListener('mouseleave', this._errorTooltipHandler, true);
+                container.removeEventListener('mouseover', this._errorTooltipHandler, true);
+                container.removeEventListener('mouseout', this._errorTooltipHandler, true);
             }
             this._errorTooltipHandler = null;
         }
+        if (this._errorTooltipHideHandler) {
+            window.removeEventListener('scroll', this._errorTooltipHideHandler, true);
+            window.removeEventListener('blur', this._errorTooltipHideHandler);
+            document.removeEventListener('click', this._errorTooltipHideHandler, true);
+            this._errorTooltipHideHandler = null;
+        }
+        this._removeErrorTooltip();
         this._renderOptions = null;
         this._container = null;
     }

@@ -13,6 +13,7 @@ from backend.dependencies import get_current_user
 from backend.utils.datetime_helper import now, normalize_local_datetime
 from backend.services import metric_collector
 from backend.services.integration_scheduler import execute_integration
+from backend.services.alert_template_service import resolve_effective_inspection_config
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"], dependencies=[Depends(get_current_user)])
 
@@ -26,6 +27,91 @@ def _build_connection_failure_health(datasource) -> Dict[str, Any]:
         "value": 0,
         "threshold": 1,
     }
+
+
+def _healthy_payload(message: str, *, alert_engine: str) -> Dict[str, Any]:
+    return {
+        "healthy": True,
+        "status": "healthy",
+        "violations": [],
+        "message": message,
+        "alert_engine": alert_engine,
+    }
+
+
+def _unhealthy_payload(message: str, violations: list[dict[str, Any]], *, status: str = "critical", alert_engine: str) -> Dict[str, Any]:
+    return {
+        "healthy": False,
+        "status": status,
+        "violations": violations,
+        "message": message,
+        "alert_engine": alert_engine,
+    }
+
+
+def _build_threshold_health(config, metrics: Dict[str, Any]) -> Dict[str, Any]:
+    violations = []
+
+    if not config or not config.threshold_rules:
+        return _healthy_payload("正常（未配置阈值）", alert_engine="threshold")
+
+    if "custom_expression" in config.threshold_rules:
+        custom_rule = config.threshold_rules["custom_expression"]
+        expression = custom_rule.get("expression", "")
+        eval_context = _prepare_eval_context(metrics)
+        try:
+            if eval(expression, {"__builtins__": {}}, eval_context):
+                violations.append({"type": "custom_expression", "expression": expression, "metrics": eval_context})
+        except Exception:
+            pass
+    else:
+        for metric_name, rule in config.threshold_rules.items():
+            threshold = rule.get("threshold")
+            if threshold is None:
+                continue
+
+            current_value = _extract_metric_value(metrics, metric_name)
+            if current_value is not None and current_value > threshold:
+                violations.append({
+                    "type": "threshold",
+                    "metric": metric_name,
+                    "value": current_value,
+                    "threshold": threshold,
+                })
+
+    if not violations:
+        return _healthy_payload("正常", alert_engine="threshold")
+    return _unhealthy_payload(f"检测到 {len(violations)} 个指标异常", violations, alert_engine="threshold")
+
+
+async def _build_ai_health(db: AsyncSession, datasource_id: int, config) -> Dict[str, Any]:
+    from backend.services.alert_ai_service import (
+        get_latest_runtime_state_for_config,
+        resolve_configured_alert_ai_policy_binding,
+    )
+
+    binding = await resolve_configured_alert_ai_policy_binding(db, config)
+    if not binding:
+        return _healthy_payload("正常（未配置 AI 告警规则）", alert_engine="ai")
+
+    runtime_state = await get_latest_runtime_state_for_config(db, datasource_id, config)
+    if not runtime_state or not runtime_state.active:
+        last_reason = getattr(runtime_state, "last_reason", None) if runtime_state else None
+        return _healthy_payload(last_reason or "正常", alert_engine="ai")
+
+    return _unhealthy_payload(
+        runtime_state.last_reason or f"AI 判定命中规则：{binding.display_name}",
+        violations=[
+            {
+                "type": "ai_policy",
+                "policy": binding.display_name,
+                "decision": runtime_state.last_decision,
+                "confidence": runtime_state.last_confidence,
+                "evidence": runtime_state.last_evidence or [],
+            }
+        ],
+        alert_engine="ai",
+    )
     if error_message:
         violation["detail"] = error_message
 
@@ -213,32 +299,13 @@ async def get_batch_dashboard(
                 health = {"healthy": False, "status": "unknown", "violations": [], "message": f"监控数据过期 ({int(metric_age/60)}分钟前)"}
             else:
                 config = configs.get(cid)
-                if not config or not config.threshold_rules:
-                    health = {"healthy": True, "status": "healthy", "violations": [], "message": "正常（未配置阈值）"}
+                effective_config = await resolve_effective_inspection_config(db, config) if config else None
+                from backend.services.alert_ai_service import resolve_effective_alert_engine_mode
+                effective_mode = await resolve_effective_alert_engine_mode(db, effective_config) if effective_config else "threshold"
+                if effective_mode == "ai":
+                    health = await _build_ai_health(db, cid, effective_config)
                 else:
-                    metrics_data = snap.data or {}
-                    violations = []
-                    if "custom_expression" in config.threshold_rules:
-                        custom_rule = config.threshold_rules["custom_expression"]
-                        expression = custom_rule.get("expression", "")
-                        eval_context = _prepare_eval_context(metrics_data)
-                        try:
-                            if eval(expression, {"__builtins__": {}}, eval_context):
-                                violations.append({"type": "custom_expression", "expression": expression, "metrics": eval_context})
-                        except Exception:
-                            pass
-                    else:
-                        for metric_name, rule in config.threshold_rules.items():
-                            threshold = rule.get("threshold")
-                            if threshold is None:
-                                continue
-                            current_value = _extract_metric_value(metrics_data, metric_name)
-                            if current_value is not None and current_value > threshold:
-                                violations.append({"type": "threshold", "metric": metric_name, "value": current_value, "threshold": threshold})
-                    if not violations:
-                        health = {"healthy": True, "status": "healthy", "violations": [], "message": "正常"}
-                    else:
-                        health = {"healthy": False, "status": "critical", "violations": violations, "message": f"检测到 {len(violations)} 个指标异常"}
+                    health = _build_threshold_health(effective_config, snap.data or {})
 
         result[str(cid)] = {"health": health, "metric": metric_data}
 
@@ -297,72 +364,15 @@ async def get_datasource_health(
         select(InspectionConfig).where(InspectionConfig.datasource_id == conn_id)
     )
     config = config_result.scalar_one_or_none()
+    effective_config = await resolve_effective_inspection_config(db, config) if config else None
 
-    if not config or not config.threshold_rules:
-        # No threshold rules configured, consider healthy
-        return {
-            "healthy": True,
-            "status": "healthy",
-            "violations": [],
-            "message": "正常（未配置阈值）"
-        }
+    from backend.services.alert_ai_service import resolve_effective_alert_engine_mode
+    effective_mode = await resolve_effective_alert_engine_mode(db, effective_config) if effective_config else "threshold"
 
-    # Check thresholds using ThresholdChecker logic
-    metrics = latest_metric.data or {}
-    violations = []
+    if effective_mode == "ai":
+        return await _build_ai_health(db, conn_id, effective_config)
 
-    # Check custom expression if configured
-    if "custom_expression" in config.threshold_rules:
-        custom_rule = config.threshold_rules["custom_expression"]
-        expression = custom_rule.get("expression", "")
-
-        # Prepare eval context
-        eval_context = _prepare_eval_context(metrics)
-
-        # Evaluate expression
-        try:
-            is_violated = eval(expression, {"__builtins__": {}}, eval_context)
-            if is_violated:
-                violations.append({
-                    "type": "custom_expression",
-                    "expression": expression,
-                    "metrics": eval_context
-                })
-        except Exception:
-            pass
-    else:
-        # Check simple threshold rules
-        for metric_name, rule in config.threshold_rules.items():
-            threshold = rule.get("threshold")
-            if threshold is None:
-                continue
-
-            current_value = _extract_metric_value(metrics, metric_name)
-            if current_value is not None and current_value > threshold:
-                violations.append({
-                    "type": "threshold",
-                    "metric": metric_name,
-                    "value": current_value,
-                    "threshold": threshold
-                })
-
-    # Determine status based on violations
-    if not violations:
-        return {
-            "healthy": True,
-            "status": "healthy",
-            "violations": [],
-            "message": "正常"
-        }
-
-    # Has violations - determine severity
-    # For now, any violation is considered critical
-    return {
-        "healthy": False,
-        "status": "critical",
-        "violations": violations,
-        "message": f"检测到 {len(violations)} 个指标异常"
-    }
+    return _build_threshold_health(effective_config, latest_metric.data or {})
 
 
 def _prepare_eval_context(metrics: Dict[str, Any]) -> Dict[str, float]:

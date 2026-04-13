@@ -68,6 +68,14 @@ class InspectionService:
 
     async def initialize_all_configs(self, db: AsyncSession):
         """Create default inspection configs for datasources that don't have one"""
+        from backend.services.alert_template_service import (
+            bind_default_template_to_all_inspection_configs,
+            ensure_default_alert_templates,
+            get_default_alert_template,
+        )
+
+        await ensure_default_alert_templates(db)
+        default_template = await get_default_alert_template(db)
         result = await db.execute(alive_select(Datasource))
         datasources = result.scalars().all()
 
@@ -81,15 +89,18 @@ class InspectionService:
                     enabled=True,
                     schedule_interval=86400,  # daily
                     use_ai_analysis=True,
-                    threshold_rules={
-                        "cpu_usage": {"threshold": 50, "duration": 60},
-                        "disk_usage": {"threshold": 80, "duration": 60},
-                        "memory_usage": {"threshold": 95, "duration": 60},
-                        "connections": {"threshold": 20, "duration": 60}
-                    },
+                    alert_template_id=default_template.id if default_template else None,
+                    threshold_rules={},
+                    alert_engine_mode="inherit",
+                    ai_policy_source="inline",
+                    ai_shadow_enabled=False,
+                    baseline_config={},
+                    event_ai_config={},
                     next_scheduled_at=get_now() + timedelta(seconds=86400)
                 )
                 db.add(config)
+
+        await bind_default_template_to_all_inspection_configs(db)
 
         await db.commit()
         logger.info(f"Initialized inspection configs for {len(datasources)} datasources")
@@ -128,11 +139,8 @@ class InspectionService:
 
         logger.info(f"Created {trigger_type} trigger {trigger.id} for datasource {datasource_id}")
 
-        # Generate report synchronously for manual triggers
-        if trigger_type == "manual":
-            await self._generate_report(db, trigger.id)
-        else:
-            asyncio.create_task(self._generate_report_async(trigger.id))
+        # Always generate the report asynchronously so the caller only creates a task.
+        asyncio.create_task(self._generate_report_async(trigger.id))
 
         return trigger.id
 

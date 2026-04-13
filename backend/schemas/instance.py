@@ -102,6 +102,7 @@ class InstanceTrafficSnapshotResponse(BaseModel):
     active_session_count: int = 0
     waiting_session_count: int = 0
     idle_session_count: int = 0
+    max_session_count: Optional[int] = None
     total_rx_rate: Optional[float] = None
     total_tx_rate: Optional[float] = None
     total_rate: Optional[float] = None

@@ -51,6 +51,13 @@ CONNECTION_FAILURE_PREFIXES = [
     "数据库连接失败:",
     "数据库连接失败",
 ]
+DEFAULT_EVENT_AI_CONFIG = {
+    "enabled": True,
+    "trigger_on_create": True,
+    "trigger_on_severity_upgrade": True,
+    "trigger_on_recovery": False,
+    "stale_recheck_minutes": 30,
+}
 
 
 def _strip_markdown_text(text: str) -> str:
@@ -261,6 +268,10 @@ def build_alert_title_and_content(
 
     if alert_type == "threshold_violation" and metric_name:
         title = f"{metric_name} 阈值告警"
+    elif alert_type == "baseline_deviation" and metric_name:
+        title = f"{metric_name} 基线偏移告警"
+    elif alert_type == "ai_policy_violation":
+        title = f"{metric_name or 'AI 告警策略'} 告警"
     else:
         title = f"{alert_type.replace('_', ' ').title()}"
 
@@ -299,6 +310,72 @@ def normalize_alert_diagnosis_fields(
         "recommended_actions": final_actions,
         "summary": final_summary,
     }
+
+
+def normalize_event_ai_config(config: Optional[dict[str, Any]]) -> dict[str, Any]:
+    merged = dict(DEFAULT_EVENT_AI_CONFIG)
+    if not isinstance(config, dict):
+        return merged
+    for key in ("enabled", "trigger_on_create", "trigger_on_severity_upgrade", "trigger_on_recovery"):
+        if key in config:
+            merged[key] = bool(config.get(key))
+    if config.get("stale_recheck_minutes") is not None:
+        merged["stale_recheck_minutes"] = max(5, min(1440, int(config.get("stale_recheck_minutes"))))
+    return merged
+
+
+def should_refresh_event_diagnosis(event, event_ai_config: Optional[dict[str, Any]]) -> bool:
+    config = normalize_event_ai_config(event_ai_config)
+    if not config.get("enabled", True):
+        return False
+    if not event:
+        return False
+    if not getattr(event, "ai_diagnosis_summary", None):
+        return True
+
+    trigger_reason = getattr(event, "diagnosis_trigger_reason", None)
+    refresh_needed = bool(getattr(event, "diagnosis_refresh_needed", False))
+    if refresh_needed:
+        if trigger_reason == "event_created":
+            return bool(config.get("trigger_on_create"))
+        if trigger_reason == "severity_escalated":
+            return bool(config.get("trigger_on_severity_upgrade"))
+        if trigger_reason == "event_recovered":
+            return bool(config.get("trigger_on_recovery"))
+        return True
+
+    completed_at = getattr(event, "diagnosis_completed_at", None)
+    if getattr(event, "status", None) in {"active", "acknowledged"} and completed_at:
+        stale_minutes = int(config.get("stale_recheck_minutes") or DEFAULT_EVENT_AI_CONFIG["stale_recheck_minutes"])
+        return completed_at <= now() - timedelta(minutes=stale_minutes)
+    return False
+
+
+def mark_event_diagnosis_requested(event) -> None:
+    if not event:
+        return
+    event.last_diagnosis_requested_at = now()
+
+
+def mark_event_diagnosis_completed(event) -> None:
+    if not event:
+        return
+    event.diagnosis_refresh_needed = False
+    event.last_diagnosed_severity = getattr(event, "severity", None)
+    event.last_diagnosed_alert_count = getattr(event, "alert_count", None)
+    event.last_diagnosis_requested_at = now()
+
+
+async def get_event_ai_config_for_datasource(db: AsyncSession, datasource_id: int) -> dict[str, Any]:
+    from backend.models.inspection_config import InspectionConfig
+    from backend.services.alert_template_service import resolve_effective_inspection_config
+
+    result = await db.execute(
+        select(InspectionConfig).where(InspectionConfig.datasource_id == datasource_id)
+    )
+    config = result.scalar_one_or_none()
+    effective_config = await resolve_effective_inspection_config(db, config) if config else None
+    return normalize_event_ai_config(getattr(effective_config, "event_ai_config", None) if effective_config else None)
 
 
 def _normalize_prompt_field(value: Any, *, max_chars: int = 320) -> Optional[str]:
@@ -481,7 +558,7 @@ class AlertService:
         Args:
             db: Database session
             datasource_id: ID of the datasource
-            alert_type: Type of alert (threshold_violation, custom_expression, system_error)
+            alert_type: Type of alert (threshold_violation, custom_expression, system_error, ai_policy_violation)
             severity: Severity level (critical, high, medium, low)
             metric_name: Name of the metric (optional)
             metric_value: Current metric value (optional)
@@ -921,8 +998,8 @@ class AlertService:
             logger.warning(f"Alert event {alert_event_id} not found for auto-diagnosis")
             return None
 
-        # Skip if diagnosis already completed
-        if event.diagnosis_status == "completed" and event.ai_diagnosis_summary:
+        # Skip if diagnosis already completed and no refresh is pending
+        if event.diagnosis_status == "completed" and event.ai_diagnosis_summary and not event.diagnosis_refresh_needed:
             logger.info(f"Auto-diagnosis skipped for event {alert_event_id}: already completed")
             normalized = normalize_alert_diagnosis_fields(
                 root_cause=event.root_cause,
@@ -966,6 +1043,7 @@ class AlertService:
         event.diagnosis_started_at = now()
         event.diagnosis_completed_at = None
         event.diagnosis_source_event_id = None
+        mark_event_diagnosis_requested(event)
         await db.commit()
 
         draft = _build_alert_diagnosis_draft(
@@ -1020,6 +1098,10 @@ async def _run_auto_diagnosis(session_id: int, alert_event_id: int, datasource_i
                         diagnosis_status="completed",
                         diagnosis_completed_at=now(),
                         diagnosis_source_event_id=None,
+                        diagnosis_refresh_needed=False,
+                        last_diagnosed_severity=select(AlertEvent.severity).where(AlertEvent.id == alert_event_id).scalar_subquery(),
+                        last_diagnosed_alert_count=select(AlertEvent.alert_count).where(AlertEvent.id == alert_event_id).scalar_subquery(),
+                        last_diagnosis_requested_at=now(),
                     )
                 )
                 await db.commit()
@@ -1092,6 +1174,7 @@ async def _reuse_diagnosis_from_event(db: AsyncSession, current_event, source_ev
     current_event.diagnosis_status = "completed"
     current_event.diagnosis_completed_at = source_event.diagnosis_completed_at or now()
     current_event.diagnosis_source_event_id = source_event.id
+    mark_event_diagnosis_completed(current_event)
     await db.commit()
 
 
@@ -1190,8 +1273,8 @@ async def run_sync_diagnosis(
         logger.warning(f"Alert event {alert_event_id} not found for sync diagnosis")
         return {"root_cause": None, "recommended_actions": None, "summary": None, "status": "failed"}
 
-    # If diagnosis already completed, return cached result
-    if event.diagnosis_status == "completed" and event.ai_diagnosis_summary:
+    # If diagnosis already completed and this event has not reached a refresh point, return cached result
+    if event.diagnosis_status == "completed" and event.ai_diagnosis_summary and not event.diagnosis_refresh_needed:
         logger.info(f"Using cached diagnosis for alert event {alert_event_id}")
         normalized = normalize_alert_diagnosis_fields(
             root_cause=event.root_cause,
@@ -1256,6 +1339,7 @@ async def run_sync_diagnosis(
     event.diagnosis_started_at = now()
     event.diagnosis_completed_at = None
     event.diagnosis_source_event_id = None
+    mark_event_diagnosis_requested(event)
     await db.commit()
 
     draft = _build_alert_diagnosis_draft(
@@ -1293,6 +1377,7 @@ async def run_sync_diagnosis(
         event.recommended_actions = recommended_actions
         event.diagnosis_status = "completed"
         event.diagnosis_completed_at = now()
+        mark_event_diagnosis_completed(event)
         await db.commit()
 
         logger.info(f"Sync diagnosis complete for alert event {alert_event_id}")

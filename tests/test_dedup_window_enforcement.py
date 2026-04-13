@@ -45,7 +45,7 @@ async def test_aggregation_rule_suppresses_recent_recurrence_within_cooldown():
         created_at=now() - timedelta(minutes=6),
     )
     result = MagicMock()
-    result.scalars.return_value.all.return_value = [recent_delivery]
+    result.all.return_value = [(recent_delivery, "critical")]
     db.execute.return_value = result
 
     alert = SimpleNamespace(
@@ -54,6 +54,7 @@ async def test_aggregation_rule_suppresses_recent_recurrence_within_cooldown():
         alert_type="system_error",
         metric_name="connection_status",
         event_id=None,
+        severity="critical",
     )
     subscription = SimpleNamespace(id=3, aggregation_script=None)
 
@@ -69,6 +70,47 @@ async def test_aggregation_rule_suppresses_recent_recurrence_within_cooldown():
     query_text = str(db.execute.call_args.args[0])
     assert "alert_messages.alert_type =" in query_text
     assert "alert_messages.metric_name =" in query_text
+
+
+@pytest.mark.asyncio
+async def test_aggregation_rule_allows_severity_escalation_within_cooldown():
+    db = AsyncMock(spec=AsyncSession)
+    recent_delivery = SimpleNamespace(
+        sent_at=now() - timedelta(minutes=6),
+        created_at=now() - timedelta(minutes=6),
+    )
+    result = MagicMock()
+    result.all.return_value = [(recent_delivery, "medium")]
+    db.execute.return_value = result
+
+    alert = SimpleNamespace(
+        id=102,
+        datasource_id=9,
+        alert_type="system_error",
+        metric_name="connection_status",
+        event_id=None,
+        severity="critical",
+    )
+    subscription = SimpleNamespace(id=3, aggregation_script=None)
+
+    with patch.object(
+        AggregationEngine,
+        "_get_notification_cooldown_minutes",
+        new=AsyncMock(return_value=60),
+    ):
+        should_send = await AggregationEngine._default_aggregation_rule(db, alert, subscription)
+
+    assert should_send is True
+
+
+@pytest.mark.asyncio
+async def test_notification_cooldown_reads_dedicated_config():
+    db = AsyncMock(spec=AsyncSession)
+
+    with patch("backend.services.config_service.get_config", new=AsyncMock(return_value=90)):
+        cooldown = await AggregationEngine._get_notification_cooldown_minutes(db)
+
+    assert cooldown == 90
 
 
 def test_build_alert_diagnosis_draft_includes_latest_error_context():

@@ -7,12 +7,37 @@ const ChatWidget = {
     thinkingPhase: null,
     thinkingMessage: '',
     attachments: [],
+    autoScrollEnabled: true,
+    hasUnreadWhileDetached: false,
     _streamTimeoutTimer: null,
     _streamTimeoutMs: 600 * 1000,
+    _bottomThresholdPx: 48,
+    _ignoreScrollStateChanges: false,
+    _scrollResumeRaf: null,
+    _suppressMessageAutoScroll: false,
     diagnosticInsights: null,
 
     createMessagesContainer() {
-        return DOM.el('div', { className: 'chat-messages', id: 'chat-messages' });
+        const shell = DOM.el('div', { className: 'chat-messages-shell' });
+        const messages = DOM.el('div', { className: 'chat-messages', id: 'chat-messages' });
+        const scrollBtn = DOM.el('button', {
+            type: 'button',
+            className: 'chat-scroll-bottom-btn',
+            id: 'chat-scroll-bottom-btn',
+            title: '回到底部',
+            onClick: () => this.scrollToBottomAndResume({ smooth: true })
+        });
+
+        scrollBtn.innerHTML = `
+            <i data-lucide="arrow-down"></i>
+            <span class="chat-scroll-bottom-label">回到底部</span>
+        `;
+
+        messages.addEventListener('scroll', () => this._handleMessagesScroll());
+        shell.appendChild(messages);
+        shell.appendChild(scrollBtn);
+        this.resetScrollState();
+        return shell;
     },
 
     createToolPanel() {
@@ -263,10 +288,11 @@ const ChatWidget = {
         input.focus();
     },
 
-    addUserMessage(text, attachments = []) {
+    addUserMessage(text, attachments = [], options = {}) {
         const messages = DOM.$('#chat-messages');
         if (!messages) return;
         const msg = DOM.el('div', { className: 'chat-message user' });
+        msg.setAttribute('data-raw-content', text || '');
 
         let attachmentHtml = '';
         if (attachments && attachments.length > 0) {
@@ -298,7 +324,9 @@ const ChatWidget = {
 
         messages.appendChild(msg);
         DOM.createIcons();
-        this._scrollToBottom();
+        if (options.forceScroll !== false) {
+            this.scrollToBottomAndResume({ smooth: false });
+        }
     },
 
     startAssistantMessage() {
@@ -318,7 +346,7 @@ const ChatWidget = {
         messages.appendChild(msg);
         this._updateSendButton(true);
         this._resetStreamTimeout();
-        this._scrollToBottom();
+        this._maybeAutoScroll();
     },
 
     resumeAssistantMessage(content = '') {
@@ -366,7 +394,7 @@ const ChatWidget = {
         }
 
         streamingMsg.setAttribute('data-raw-content', this.currentContent);
-        this._scrollToBottom();
+        this._maybeAutoScroll();
     },
 
     startThinkingMessage(phase, message) {
@@ -378,7 +406,7 @@ const ChatWidget = {
         const bubble = streamingMsg.querySelector('.chat-bubble');
         bubble.innerHTML = this._buildThinkingMarkup(phase, message, true);
         DOM.createIcons();
-        this._scrollToBottom();
+        this._maybeAutoScroll();
     },
 
     showThinkingIndicator(phase, message) {
@@ -399,7 +427,7 @@ const ChatWidget = {
         indicator.innerHTML = this._buildThinkingMarkup(phase, message);
         messages.appendChild(indicator);
         DOM.createIcons();
-        this._scrollToBottom();
+        this._maybeAutoScroll();
     },
 
     updateThinkingIndicator(phase, message) {
@@ -474,8 +502,23 @@ const ChatWidget = {
         `;
     },
 
+    _getThinkBlockOpenStates(container) {
+        if (!container) return [];
+        return Array.from(container.querySelectorAll('.assistant-think-block')).map((block) => block.open);
+    },
+
+    _restoreThinkBlockOpenStates(container, openStates = []) {
+        if (!container || !Array.isArray(openStates) || openStates.length === 0) return;
+        Array.from(container.querySelectorAll('.assistant-think-block')).forEach((block, index) => {
+            if (openStates[index]) {
+                block.open = true;
+            }
+        });
+    },
+
     _renderAssistantBubble(bubble, content) {
         if (!bubble) return;
+        const thinkBlockOpenStates = this._getThinkBlockOpenStates(bubble);
 
         const segments = this._parseAssistantSegments(content);
         bubble.innerHTML = segments.map((segment) => {
@@ -485,6 +528,7 @@ const ChatWidget = {
             return this._renderMarkdown(segment.content);
         }).join('');
 
+        this._restoreThinkBlockOpenStates(bubble, thinkBlockOpenStates);
         this._highlightCode(bubble);
     },
 
@@ -496,7 +540,7 @@ const ChatWidget = {
             const bubble = streamingMsg.querySelector('.chat-bubble');
             this._renderAssistantBubble(bubble, this.currentContent);
             streamingMsg.setAttribute('data-raw-content', this.currentContent);
-            this._scrollToBottom();
+            this._maybeAutoScroll();
         }
     },
 
@@ -1186,7 +1230,7 @@ const ChatWidget = {
 
         messages.appendChild(card);
         DOM.createIcons();
-        this._scrollToBottom();
+        this._maybeAutoScroll();
     },
 
     setVisualizationMetricMode(visualizationId, panelKey, metricName, mode) {
@@ -1307,7 +1351,7 @@ const ChatWidget = {
         `;
         messages.appendChild(step);
         DOM.createIcons();
-        this._scrollToBottom();
+        this._maybeAutoScroll();
     },
 
     updateInlineToolStep(toolCallId, status, result, executionTimeMs = null, metadata = {}) {
@@ -1329,7 +1373,7 @@ const ChatWidget = {
             </div>
         `;
         DOM.createIcons();
-        this._scrollToBottom();
+        this._maybeAutoScroll();
 
         // Auto-hide after 3 seconds
         setTimeout(() => {
@@ -1358,13 +1402,19 @@ const ChatWidget = {
         if (event) event.stopPropagation();
         const element = DOM.$(`#${elementId}`);
         if (!element) return;
-        const text = element.textContent;
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(text).then(() => Toast.success('已复制到剪贴板')).catch(() => Toast.error('复制失败'));
-        }
+        const text = element.innerText || element.textContent || '';
+        this._writeTextToClipboard(text)
+            .then((success) => {
+                if (success) {
+                    Toast.success('已复制到剪贴板');
+                } else {
+                    Toast.error('复制失败');
+                }
+            })
+            .catch(() => Toast.error('复制失败'));
     },
 
-    addError(message) {
+    addError(message, options = {}) {
         const messages = DOM.$('#chat-messages');
         if (!messages) return;
         const errorMsg = DOM.el('div', { className: 'chat-message error' });
@@ -1373,7 +1423,11 @@ const ChatWidget = {
             <div class="chat-bubble">${this._escapeHtml(message)}</div>
         `;
         messages.appendChild(errorMsg);
-        this._scrollToBottom();
+        if (options.forceScroll) {
+            this.scrollToBottomAndResume({ smooth: false });
+        } else {
+            this._maybeAutoScroll();
+        }
     },
 
     showError(message) {
@@ -1390,69 +1444,74 @@ const ChatWidget = {
         const container = DOM.$('#chat-messages');
         if (!container) return;
         container.innerHTML = '';
+        this.resetScrollState();
         this.resetToolPanel();
         this.pendingTools = new Map();
         this.toolVisualizations = new Map();
         this.toolVisualizationModes = new Map();
-
-        for (const msg of messages) {
-            if (msg.role === 'user') {
-                this.addUserMessage(msg.content, msg.attachments || []);
-            } else if (msg.role === 'assistant') {
-                const msgEl = DOM.el('div', { className: 'chat-message assistant' });
-                msgEl.setAttribute('data-raw-content', msg.content || '');
-                msgEl.innerHTML = `
-                    <div class="chat-avatar">AI</div>
-                    <div class="chat-bubble"></div>
-                `;
-                this._renderAssistantBubble(msgEl.querySelector('.chat-bubble'), msg.content);
-                const copyBtn = DOM.el('button', { className: 'message-copy-btn', title: '复制', innerHTML: '<i data-lucide="copy"></i>' });
-                msgEl.appendChild(copyBtn);
-                copyBtn.addEventListener('click', () => this._copyMessageContent(msgEl));
-                container.appendChild(msgEl);
-            } else if (msg.role === 'tool_call') {
-                try {
-                    const data = JSON.parse(msg.content);
-                    this.addToolCall(data.tool_name, data.tool_args, data.tool_call_id || msg.tool_call_id || null);
-                } catch (e) {
-                    console.error('Failed to parse tool_call message:', e);
-                }
-            } else if (msg.role === 'tool_result') {
-                try {
-                    const data = JSON.parse(msg.content);
-                    this.addToolResult(
-                        data.tool_name,
-                        data.result,
-                        data.execution_time_ms,
-                        data.tool_call_id || msg.tool_call_id || null,
-                        {
-                            skill_execution_id: data.skill_execution_id,
-                            action_run_id: data.action_run_id,
-                            action_title: data.action_title,
-                            phase: data.phase,
-                            visualization: data.visualization,
-                        }
-                    );
-                } catch (e) {
-                    console.error('Failed to parse tool_result message:', e);
-                }
-            } else if (msg.role === 'approval_request') {
-                try {
-                    const data = JSON.parse(msg.content);
-                    // Check if this approval has been resolved
-                    const resolved = messages.some(m =>
-                        m.role === 'approval_response' && m.content && m.content.includes(data.approval_id)
-                    );
-                    if (this.onApprovalRequest) {
-                        this.onApprovalRequest(data, resolved);
+        this._suppressMessageAutoScroll = true;
+        try {
+            for (const msg of messages) {
+                if (msg.role === 'user') {
+                    this.addUserMessage(msg.content, msg.attachments || [], { forceScroll: false });
+                } else if (msg.role === 'assistant') {
+                    const msgEl = DOM.el('div', { className: 'chat-message assistant' });
+                    msgEl.setAttribute('data-raw-content', msg.content || '');
+                    msgEl.innerHTML = `
+                        <div class="chat-avatar">AI</div>
+                        <div class="chat-bubble"></div>
+                    `;
+                    this._renderAssistantBubble(msgEl.querySelector('.chat-bubble'), msg.content);
+                    const copyBtn = DOM.el('button', { className: 'message-copy-btn', title: '复制', innerHTML: '<i data-lucide="copy"></i>' });
+                    msgEl.appendChild(copyBtn);
+                    copyBtn.addEventListener('click', () => this._copyMessageContent(msgEl));
+                    container.appendChild(msgEl);
+                } else if (msg.role === 'tool_call') {
+                    try {
+                        const data = JSON.parse(msg.content);
+                        this.addToolCall(data.tool_name, data.tool_args, data.tool_call_id || msg.tool_call_id || null);
+                    } catch (e) {
+                        console.error('Failed to parse tool_call message:', e);
                     }
-                } catch (e) {
-                    console.error('Failed to parse approval_request message:', e);
+                } else if (msg.role === 'tool_result') {
+                    try {
+                        const data = JSON.parse(msg.content);
+                        this.addToolResult(
+                            data.tool_name,
+                            data.result,
+                            data.execution_time_ms,
+                            data.tool_call_id || msg.tool_call_id || null,
+                            {
+                                skill_execution_id: data.skill_execution_id,
+                                action_run_id: data.action_run_id,
+                                action_title: data.action_title,
+                                phase: data.phase,
+                                visualization: data.visualization,
+                            }
+                        );
+                    } catch (e) {
+                        console.error('Failed to parse tool_result message:', e);
+                    }
+                } else if (msg.role === 'approval_request') {
+                    try {
+                        const data = JSON.parse(msg.content);
+                        // Check if this approval has been resolved
+                        const resolved = messages.some(m =>
+                            m.role === 'approval_response' && m.content && m.content.includes(data.approval_id)
+                        );
+                        if (this.onApprovalRequest) {
+                            this.onApprovalRequest(data, resolved);
+                        }
+                    } catch (e) {
+                        console.error('Failed to parse approval_request message:', e);
+                    }
                 }
             }
+        } finally {
+            this._suppressMessageAutoScroll = false;
         }
 
-        this._scrollToBottom();
+        this.scrollToBottomAndResume({ smooth: false });
         this._scrollToolPanelToBottom();
     },
 
@@ -1538,9 +1597,130 @@ const ChatWidget = {
         }
     },
 
-    _scrollToBottom() {
+    resetScrollState() {
+        this.autoScrollEnabled = true;
+        this.hasUnreadWhileDetached = false;
+        this._suppressMessageAutoScroll = false;
+        this._cancelScrollResumeTracking();
+        this._updateScrollBottomButton();
+    },
+
+    _cancelScrollResumeTracking() {
+        this._ignoreScrollStateChanges = false;
+        if (this._scrollResumeRaf) {
+            cancelAnimationFrame(this._scrollResumeRaf);
+            this._scrollResumeRaf = null;
+        }
+    },
+
+    _isNearBottom() {
         const messages = DOM.$('#chat-messages');
-        if (messages) messages.scrollTop = messages.scrollHeight;
+        if (!messages) return true;
+        const distanceToBottom = messages.scrollHeight - messages.scrollTop - messages.clientHeight;
+        return distanceToBottom <= this._bottomThresholdPx;
+    },
+
+    _handleMessagesScroll() {
+        const nearBottom = this._isNearBottom();
+        if (this._ignoreScrollStateChanges && !nearBottom) {
+            return;
+        }
+
+        if (nearBottom) {
+            this._cancelScrollResumeTracking();
+            this.autoScrollEnabled = true;
+            this.hasUnreadWhileDetached = false;
+        } else {
+            this.autoScrollEnabled = false;
+        }
+
+        this._updateScrollBottomButton();
+    },
+
+    _scrollToBottom(options = {}) {
+        const messages = DOM.$('#chat-messages');
+        if (!messages) return;
+
+        const smooth = options.smooth === true;
+        const top = messages.scrollHeight;
+
+        if (smooth) {
+            if (typeof messages.scrollTo !== 'function') {
+                messages.scrollTop = top;
+                return;
+            }
+
+            this._cancelScrollResumeTracking();
+            this._ignoreScrollStateChanges = true;
+            messages.scrollTo({ top, behavior: 'smooth' });
+            const startedAt = (typeof performance !== 'undefined' && typeof performance.now === 'function')
+                ? performance.now()
+                : Date.now();
+            const waitForBottom = () => {
+                if (!this._ignoreScrollStateChanges) return;
+
+                const now = (typeof performance !== 'undefined' && typeof performance.now === 'function')
+                    ? performance.now()
+                    : Date.now();
+
+                if (this._isNearBottom() || now - startedAt > 700) {
+                    this._cancelScrollResumeTracking();
+                    this._handleMessagesScroll();
+                    return;
+                }
+
+                this._scrollResumeRaf = requestAnimationFrame(waitForBottom);
+            };
+
+            this._scrollResumeRaf = requestAnimationFrame(waitForBottom);
+            return;
+        }
+
+        messages.scrollTop = top;
+    },
+
+    scrollToBottomAndResume(options = {}) {
+        const smooth = options.smooth === true;
+        this.autoScrollEnabled = true;
+        this.hasUnreadWhileDetached = false;
+        this._updateScrollBottomButton();
+        this._scrollToBottom({ smooth });
+    },
+
+    _maybeAutoScroll(options = {}) {
+        if (this._suppressMessageAutoScroll && !options.force) return;
+
+        if (options.force) {
+            this.scrollToBottomAndResume({ smooth: options.smooth === true });
+            return;
+        }
+
+        if (this.autoScrollEnabled || this._isNearBottom()) {
+            this.autoScrollEnabled = true;
+            this.hasUnreadWhileDetached = false;
+            this._updateScrollBottomButton();
+            this._scrollToBottom({ smooth: false });
+            return;
+        }
+
+        this.hasUnreadWhileDetached = true;
+        this._updateScrollBottomButton();
+    },
+
+    _updateScrollBottomButton() {
+        const button = DOM.$('#chat-scroll-bottom-btn');
+        if (!button) return;
+
+        const shouldShow = !this.autoScrollEnabled || this.hasUnreadWhileDetached;
+        const label = button.querySelector('.chat-scroll-bottom-label');
+        const text = this.hasUnreadWhileDetached ? '有新内容，回到底部' : '回到底部';
+
+        button.classList.toggle('visible', shouldShow);
+        button.classList.toggle('has-unread', this.hasUnreadWhileDetached);
+        button.tabIndex = shouldShow ? 0 : -1;
+        button.setAttribute('aria-hidden', shouldShow ? 'false' : 'true');
+        button.title = text;
+        if (label) label.textContent = text;
     },
 
     _scrollToolPanelToBottom() {
@@ -1656,11 +1836,69 @@ const ChatWidget = {
         }
     },
 
+    async _writeTextToClipboard(text) {
+        const value = String(text || '');
+        if (!value) return false;
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            try {
+                await navigator.clipboard.writeText(value);
+                return true;
+            } catch (error) {
+                console.warn('Clipboard API write failed, falling back to execCommand:', error);
+            }
+        }
+
+        const textarea = document.createElement('textarea');
+        textarea.value = value;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.top = '-9999px';
+        textarea.style.left = '-9999px';
+        textarea.style.opacity = '0';
+        textarea.style.pointerEvents = 'none';
+        document.body.appendChild(textarea);
+
+        const selection = document.getSelection ? document.getSelection() : null;
+        const originalRanges = [];
+        if (selection) {
+            for (let i = 0; i < selection.rangeCount; i += 1) {
+                originalRanges.push(selection.getRangeAt(i));
+            }
+        }
+
+        textarea.focus();
+        textarea.select();
+        textarea.setSelectionRange(0, textarea.value.length);
+
+        let copied = false;
+        try {
+            copied = document.execCommand('copy');
+        } catch (error) {
+            console.warn('execCommand copy failed:', error);
+            copied = false;
+        }
+
+        document.body.removeChild(textarea);
+
+        if (selection) {
+            selection.removeAllRanges();
+            originalRanges.forEach((range) => selection.addRange(range));
+        }
+
+        return copied;
+    },
+
     _copyMessageContent(messageElement) {
         const bubble = messageElement.querySelector('.chat-bubble');
         if (!bubble) return;
-        const text = bubble.innerText || bubble.textContent;
-        navigator.clipboard.writeText(text).then(() => {
+        const rawContent = messageElement.getAttribute('data-raw-content');
+        const text = (rawContent && rawContent.trim()) || bubble.innerText || bubble.textContent || '';
+        this._writeTextToClipboard(text).then((success) => {
+            if (!success) {
+                Toast.error('复制失败');
+                return;
+            }
             const copyBtn = messageElement.querySelector('.message-copy-btn');
             if (copyBtn) {
                 const icon = copyBtn.querySelector('i');

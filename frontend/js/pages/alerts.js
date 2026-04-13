@@ -3,6 +3,8 @@ const AlertsPage = {
     datasourceSelector: null,
     _renderOptions: null,
     _container: null,
+    activeTab: 'alerts',
+    _templatesMounted: false,
     datasources: [],
     events: [],
     subscriptions: [],
@@ -10,6 +12,7 @@ const AlertsPage = {
     currentUser: null,
     expandedEvents: new Set(),
     eventAlerts: {},
+    eventContexts: {},
     filters: {
         datasource_id: null,
         status: 'all',
@@ -36,6 +39,9 @@ const AlertsPage = {
             Router.navigate('login');
             return;
         }
+
+        this.activeTab = this._resolveInitialTab(options);
+        this._templatesMounted = false;
 
         if (options.fixedDatasourceId) {
             this.filters.datasource_id = options.fixedDatasourceId;
@@ -98,7 +104,7 @@ const AlertsPage = {
 
     async loadSubscriptions() {
         try {
-            this.subscriptions = await API.get(`/api/alerts/subscriptions/list?user_id=${this.currentUser.id}`);
+            this.subscriptions = await API.getSubscriptions();
         } catch (error) {
             console.error('Failed to load subscriptions:', error);
             this.subscriptions = [];
@@ -118,9 +124,21 @@ const AlertsPage = {
         }
     },
 
+    async loadEventContext(eventId) {
+        if (this.eventContexts[eventId]) return this.eventContexts[eventId];
+        try {
+            const context = await API.getAlertEventContext(eventId);
+            this.eventContexts[eventId] = context || {};
+            return this.eventContexts[eventId];
+        } catch (error) {
+            console.error('Failed to load event context:', error);
+            return {};
+        }
+    },
+
     async acknowledgeEvent(eventId) {
         try {
-            await API.post(`/api/alerts/events/${eventId}/acknowledge`, { user_id: this.currentUser.id });
+            await API.post(`/api/alerts/events/${eventId}/acknowledge`, {});
             await this.loadEvents();
             this.updateAlertsList();
             Toast.success('事件已确认');
@@ -147,7 +165,10 @@ const AlertsPage = {
             this.expandedEvents.delete(eventId);
         } else {
             this.expandedEvents.add(eventId);
-            await this.loadEventAlerts(eventId);
+            await Promise.all([
+                this.loadEventAlerts(eventId),
+                this.loadEventContext(eventId)
+            ]);
         }
         this.updateAlertsList();
     },
@@ -156,13 +177,18 @@ const AlertsPage = {
     _cleanup() {
         this.datasourceSelector?.destroy();
         this.datasourceSelector = null;
+        AlertTemplatesPage.cleanup?.();
+        DOM.$('#page-header')?.classList.remove('page-header-alerts');
         this._renderOptions = null;
         this._container = null;
+        this.activeTab = 'alerts';
+        this._templatesMounted = false;
     },
 
     render() {
         const container = this._container || DOM.$('#page-content');
         DOM.clear(container);
+        DOM.$('#page-header')?.classList.remove('page-header-alerts');
         const headerActions = this._buildHeaderActions();
         if (this._renderOptions?.embedded) {
             const embeddedToolbar = DOM.el('div', {
@@ -192,6 +218,7 @@ const AlertsPage = {
             container.appendChild(embeddedToolbar);
         } else {
             Header.render('告警管理', headerActions);
+            DOM.$('#page-header')?.classList.add('page-header-alerts');
         }
 
         if (this._renderOptions?.hideSubscriptions) {
@@ -209,7 +236,7 @@ const AlertsPage = {
                 }
             });
             note.appendChild(DOM.el('div', {
-                textContent: '当前仅展示该实例的告警事件与详情，订阅管理继续保留在全局告警页。'
+                textContent: '当前仅展示该实例的告警事件与详情，订阅管理和告警模板继续保留在全局告警页。'
             }));
             note.appendChild(DOM.el('button', {
                 className: 'btn btn-secondary btn-sm',
@@ -223,39 +250,71 @@ const AlertsPage = {
         } else {
             const tabs = DOM.el('div', { className: 'tabs' });
             const alertsTab = DOM.el('button', {
-                className: 'tab active',
+                className: `tab ${this.activeTab === 'alerts' ? 'active' : ''}`,
                 textContent: '告警列表',
                 onClick: (e) => this.switchTab(e.target, 'alerts')
             });
             const subscriptionsTab = DOM.el('button', {
-                className: 'tab',
+                className: `tab ${this.activeTab === 'subscriptions' ? 'active' : ''}`,
                 textContent: '订阅管理',
                 onClick: (e) => this.switchTab(e.target, 'subscriptions')
             });
+            const templatesTab = DOM.el('button', {
+                className: `tab ${this.activeTab === 'templates' ? 'active' : ''}`,
+                textContent: '告警模板',
+                onClick: (e) => this.switchTab(e.target, 'templates')
+            });
             tabs.appendChild(alertsTab);
             tabs.appendChild(subscriptionsTab);
+            tabs.appendChild(templatesTab);
             container.appendChild(tabs);
 
             const tabContent = DOM.el('div', { className: 'tab-content' });
-            const alertsContent = DOM.el('div', { className: 'tab-pane active', id: 'alerts-pane' });
+            const alertsContent = DOM.el('div', {
+                className: `tab-pane ${this.activeTab === 'alerts' ? 'active' : ''}`,
+                id: 'alerts-pane'
+            });
             alertsContent.appendChild(this.renderAlertsPane());
-            const subscriptionsContent = DOM.el('div', { className: 'tab-pane', id: 'subscriptions-pane' });
+            const subscriptionsContent = DOM.el('div', {
+                className: `tab-pane ${this.activeTab === 'subscriptions' ? 'active' : ''}`,
+                id: 'subscriptions-pane'
+            });
             subscriptionsContent.appendChild(this.renderSubscriptionsList());
+            const templatesContent = DOM.el('div', {
+                className: `tab-pane ${this.activeTab === 'templates' ? 'active' : ''}`,
+                id: 'templates-pane'
+            });
+            templatesContent.appendChild(DOM.el('div', {
+                className: 'alert-ai-pane-placeholder text-muted text-sm',
+                textContent: '正在加载告警模板...'
+            }));
             tabContent.appendChild(alertsContent);
             tabContent.appendChild(subscriptionsContent);
+            tabContent.appendChild(templatesContent);
             container.appendChild(tabContent);
+        }
+
+        if (!this._renderOptions?.hideSubscriptions && this.activeTab === 'templates') {
+            this.ensureTemplatesPaneRendered();
         }
 
         DOM.createIcons();
     },
 
     _buildHeaderActions() {
-        const filtersContainer = DOM.el('div', { className: 'dashboard-filters' });
+        if (!this._renderOptions?.hideSubscriptions && this.activeTab !== 'alerts') {
+            this.datasourceSelector?.destroy();
+            this.datasourceSelector = null;
+            return [];
+        }
+
+        const filtersContainer = DOM.el('div', { className: 'dashboard-filters alerts-header-filters' });
 
         if (!this._renderOptions?.fixedDatasourceId) {
             const datasourceContainer = DOM.el('div', {
                 id: 'alerts-datasource-selector',
-                style: { minWidth: '280px', maxWidth: '380px', flex: '1' }
+                className: 'alerts-filter-datasource',
+                style: { minWidth: '240px', maxWidth: '320px', flex: '0 1 320px' }
             });
             filtersContainer.appendChild(datasourceContainer);
 
@@ -268,6 +327,8 @@ const AlertsPage = {
                     container,
                     allowEmpty: true,
                     emptyText: '全部数据源',
+                    minWidth: '240px',
+                    maxWidth: '320px',
                     showStatus: true,
                     showDetails: true,
                     onLoad: () => {
@@ -283,7 +344,7 @@ const AlertsPage = {
         }
 
         const statusSelect = DOM.el('select', {
-            className: 'filter-select',
+            className: 'filter-select alerts-status-select',
             onChange: (e) => {
                 this.filters.status = e.target.value;
                 this.resetPagination();
@@ -298,7 +359,7 @@ const AlertsPage = {
         filtersContainer.appendChild(statusSelect);
 
         const severitySelect = DOM.el('select', {
-            className: 'filter-select',
+            className: 'filter-select alerts-severity-select',
             onChange: (e) => {
                 this.filters.severity = e.target.value || null;
                 this.resetPagination();
@@ -315,7 +376,7 @@ const AlertsPage = {
 
         const startTimeInput = DOM.el('input', {
             type: 'datetime-local',
-            className: 'filter-input',
+            className: 'filter-input alerts-date-input',
             title: '开始时间',
             value: this.filters.start_time || '',
             onChange: (e) => {
@@ -328,7 +389,7 @@ const AlertsPage = {
 
         const endTimeInput = DOM.el('input', {
             type: 'datetime-local',
-            className: 'filter-input',
+            className: 'filter-input alerts-date-input',
             title: '结束时间',
             value: this.filters.end_time || '',
             onChange: (e) => {
@@ -341,7 +402,7 @@ const AlertsPage = {
 
         const searchInput = DOM.el('input', {
             type: 'text',
-            className: 'filter-input',
+            className: 'filter-input alerts-search-input',
             placeholder: '搜索标题或内容',
             value: this.filters.search || '',
             onInput: (e) => {
@@ -366,18 +427,26 @@ const AlertsPage = {
 
     renderEventsList() {
         const list = DOM.el('div', { className: 'events-list', id: 'events-list' });
+        const showDatasourceColumn = !this._renderOptions?.fixedDatasourceId;
 
         if (this.events.length === 0) {
             list.appendChild(DOM.el('div', { className: 'empty-state', textContent: '暂无事件' }));
             return list;
         }
 
-        const table = DOM.el('table', { className: 'data-table events-table' });
+        const tableWrap = DOM.el('div', { className: 'data-table-container alerts-events-table-wrap' });
+        const table = DOM.el('table', {
+            className: `data-table events-table ${showDatasourceColumn ? '' : 'events-table-instance'}`.trim()
+        });
         const thead = DOM.el('thead');
         const headerRow = DOM.el('tr');
         headerRow.appendChild(DOM.el('th', { textContent: '', style: 'width: 40px' }));
         headerRow.appendChild(DOM.el('th', { textContent: '严重程度' }));
-        headerRow.appendChild(DOM.el('th', { textContent: '数据源' }));
+        if (showDatasourceColumn) {
+            headerRow.appendChild(DOM.el('th', { textContent: '数据源' }));
+        }
+        headerRow.appendChild(DOM.el('th', { textContent: '故障域' }));
+        headerRow.appendChild(DOM.el('th', { textContent: '生命周期' }));
         headerRow.appendChild(DOM.el('th', { textContent: '类型/指标' }));
         headerRow.appendChild(DOM.el('th', { textContent: '标题' }));
         headerRow.appendChild(DOM.el('th', { textContent: '开始时间' }));
@@ -410,8 +479,16 @@ const AlertsPage = {
             }));
             row.appendChild(severityCell);
 
-            const datasource = this.datasources.find(ds => ds.id === event.datasource_id);
-            row.appendChild(DOM.el('td', { textContent: datasource ? datasource.name : `ID: ${event.datasource_id}` }));
+            if (showDatasourceColumn) {
+                const datasource = this.datasources.find(ds => ds.id === event.datasource_id);
+                row.appendChild(DOM.el('td', { textContent: datasource ? datasource.name : `ID: ${event.datasource_id}` }));
+            }
+            row.appendChild(DOM.el('td', {
+                innerHTML: `<span class="event-pill fault-domain-${this._escapeHtml(event.fault_domain || 'general')}">${this._escapeHtml(this.getFaultDomainLabel(event.fault_domain))}</span>`
+            }));
+            row.appendChild(DOM.el('td', {
+                innerHTML: `<span class="event-pill lifecycle-${this._escapeHtml(event.lifecycle_stage || 'active')}">${this._escapeHtml(this.getLifecycleStageLabel(event.lifecycle_stage))}</span>`
+            }));
 
             const typeMetric = event.metric_name || this.getAlertTypeLabel(event.alert_type);
             row.appendChild(DOM.el('td', { textContent: typeMetric || '-' }));
@@ -437,9 +514,10 @@ const AlertsPage = {
             }));
             row.appendChild(statusCell);
 
-            const actionsCell = DOM.el('td', { className: 'actions-cell' });
+            const actionsCell = DOM.el('td');
+            const actionsWrap = DOM.el('div', { className: 'actions-cell' });
             if (event.status === 'active') {
-                actionsCell.appendChild(DOM.el('button', {
+                actionsWrap.appendChild(DOM.el('button', {
                     className: 'btn btn-sm btn-secondary',
                     textContent: '✓',
                     title: '确认',
@@ -450,7 +528,7 @@ const AlertsPage = {
                 }));
             }
             if (event.status !== 'resolved') {
-                actionsCell.appendChild(DOM.el('button', {
+                actionsWrap.appendChild(DOM.el('button', {
                     className: 'btn btn-sm btn-success',
                     textContent: '✓✓',
                     title: '解决',
@@ -460,22 +538,20 @@ const AlertsPage = {
                     }
                 }));
             }
-            // AI diagnosis button
-            actionsCell.appendChild(DOM.el('button', {
-                className: 'btn btn-sm btn-ai',
-                textContent: '🤖 AI',
-                title: 'AI 诊断',
-                onClick: (e) => {
-                    e.stopPropagation();
-                    this._navigateToDiagnosis(event);
-                }
-            }));
+            if (!actionsWrap.childNodes.length) {
+                actionsWrap.appendChild(DOM.el('span', {
+                    className: 'text-muted',
+                    textContent: '-'
+                }));
+            }
+            actionsCell.appendChild(actionsWrap);
             row.appendChild(actionsCell);
             tbody.appendChild(row);
 
             if (isExpanded) {
+                const eventContext = this.eventContexts[event.id] || {};
                 const expandedRow = DOM.el('tr', { className: 'expanded-row' });
-                const expandedCell = DOM.el('td', { colSpan: 11 });
+                const expandedCell = DOM.el('td', { colSpan: showDatasourceColumn ? 12 : 11 });
                 const alertsContainer = DOM.el('div', { className: 'event-alerts-container' });
                 const alerts = this.eventAlerts[event.id] || [];
 
@@ -509,6 +585,28 @@ const AlertsPage = {
                     });
                     diagPending.textContent = '⏳ 诊断超时，正在后台继续分析...';
                     alertsContainer.appendChild(diagPending);
+                }
+
+                if (Array.isArray(eventContext.baseline_comparisons) && eventContext.baseline_comparisons.length > 0) {
+                    const baselineDiv = DOM.el('div', { className: 'event-baseline-panel' });
+                    baselineDiv.appendChild(DOM.el('div', {
+                        className: 'event-panel-title',
+                        textContent: '实例基线对比'
+                    }));
+                    const compareGrid = DOM.el('div', { className: 'event-baseline-grid' });
+                    for (const item of eventContext.baseline_comparisons) {
+                        const card = DOM.el('div', { className: `event-baseline-card status-${item.status || 'unknown'}` });
+                        card.innerHTML = `
+                            <div class="event-baseline-card-title">${this._escapeHtml(this.getMetricLabel(item.metric_name))}</div>
+                            <div class="event-baseline-card-main">${this.formatNumber(item.current_value)}</div>
+                            <div class="event-baseline-card-meta">P95: ${this.formatNumber(item.baseline_p95)} / 上界: ${this.formatNumber(item.upper_bound)}</div>
+                            <div class="event-baseline-card-meta">均值: ${this.formatNumber(item.baseline_avg)} / 样本: ${item.sample_count || 0}</div>
+                            <div class="event-baseline-card-meta">状态: ${this._escapeHtml(this.getBaselineStatusLabel(item.status))}${item.deviation_ratio ? ` / 偏离: ${item.deviation_ratio.toFixed(2)}x` : ''}</div>
+                        `;
+                        compareGrid.appendChild(card);
+                    }
+                    baselineDiv.appendChild(compareGrid);
+                    alertsContainer.appendChild(baselineDiv);
                 }
 
                 if (alerts.length > 0) {
@@ -560,7 +658,8 @@ const AlertsPage = {
         }
 
         table.appendChild(tbody);
-        list.appendChild(table);
+        tableWrap.appendChild(table);
+        list.appendChild(tableWrap);
         list.appendChild(this.renderPagination('events'));
         return list;
     },
@@ -616,25 +715,27 @@ const AlertsPage = {
             }));
             row.appendChild(statusCell);
 
-            const actionsCell = DOM.el('td', { className: 'actions-cell' });
-            actionsCell.appendChild(DOM.el('button', {
+            const actionsCell = DOM.el('td');
+            const actionsWrap = DOM.el('div', { className: 'actions-cell' });
+            actionsWrap.appendChild(DOM.el('button', {
                 className: 'btn btn-sm btn-secondary',
                 innerHTML: '<i data-lucide="edit"></i>',
                 title: '编辑',
                 onClick: () => this.showSubscriptionModal(sub)
             }));
-            actionsCell.appendChild(DOM.el('button', {
+            actionsWrap.appendChild(DOM.el('button', {
                 className: 'btn btn-sm btn-primary',
                 innerHTML: '<i data-lucide="send"></i>',
                 title: '测试通知',
                 onClick: () => this.testNotification(sub.id)
             }));
-            actionsCell.appendChild(DOM.el('button', {
+            actionsWrap.appendChild(DOM.el('button', {
                 className: 'btn btn-sm btn-danger',
                 innerHTML: '<i data-lucide="trash-2"></i>',
                 title: '删除',
                 onClick: () => this.deleteSubscription(sub.id)
             }));
+            actionsCell.appendChild(actionsWrap);
             row.appendChild(actionsCell);
             tbody.appendChild(row);
         }
@@ -644,10 +745,24 @@ const AlertsPage = {
     },
 
     switchTab(tabEl, tabName) {
-        DOM.$$('.tab').forEach(t => t.classList.remove('active'));
+        this.activeTab = this._normalizeTab(tabName);
+
+        const scope = this._container || document;
+        scope.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         tabEl.classList.add('active');
-        DOM.$$('.tab-pane').forEach(p => p.classList.remove('active'));
-        DOM.$(`#${tabName}-pane`).classList.add('active');
+        scope.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+
+        const nextPane = scope.querySelector(`#${this.activeTab}-pane`);
+        nextPane?.classList.add('active');
+
+        if (!this._renderOptions?.embedded) {
+            Header.render('告警管理', this._buildHeaderActions());
+            DOM.$('#page-header')?.classList.add('page-header-alerts');
+        }
+
+        if (this.activeTab === 'templates') {
+            this.ensureTemplatesPaneRendered();
+        }
     },
 
     updateAlertsList() {
@@ -960,16 +1075,45 @@ const AlertsPage = {
             const params = new URLSearchParams();
             params.set('datasource', event.datasource_id);
             params.set('tab', 'ai');
-            params.set('alert', event.id);
+            params.set('event', event.id);
             params.set('ask', prompt);
             Router.navigate(`instance-detail?${params.toString()}`);
             return;
         }
         const params = new URLSearchParams();
         params.set('datasource', event.datasource_id);
-        params.set('alert', event.id);
+        params.set('event', event.id);
         params.set('ask', prompt);
         Router.navigate(`diagnosis?${params.toString()}`);
+    },
+
+    ensureTemplatesPaneRendered(force = false) {
+        const scope = this._container || document;
+        const pane = scope.querySelector('#templates-pane');
+        if (!pane) return;
+        if (this._templatesMounted && !force) return;
+
+        this._templatesMounted = true;
+        AlertTemplatesPage.render({
+            container: pane,
+            embedded: true,
+        }).catch((error) => {
+            console.error('Failed to render alert templates pane:', error);
+        });
+    },
+
+    _resolveInitialTab(options = {}) {
+        if (options.hideSubscriptions) {
+            return 'alerts';
+        }
+
+        const query = new URLSearchParams(options.routeParam || '');
+        const requested = options.initialTab || query.get('tab');
+        return this._normalizeTab(requested);
+    },
+
+    _normalizeTab(tabName) {
+        return ['alerts', 'subscriptions', 'templates'].includes(tabName) ? tabName : 'alerts';
     },
 
     // Helper: Get database type label
@@ -1043,7 +1187,6 @@ const AlertsPage = {
                             if (isEdit) {
                                 await API.put(`/api/alerts/subscriptions/${subscription.id}`, data);
                             } else {
-                                data.user_id = this.currentUser.id;
                                 await API.post('/api/alerts/subscriptions', data);
                             }
                             await this.loadSubscriptions();
@@ -1293,10 +1436,57 @@ const AlertsPage = {
     getAlertTypeLabel(type) {
         const labels = {
             threshold_violation: '超过阈值',
+            baseline_deviation: '偏离基线',
             custom_expression: '自定义表达式',
-            system_error: '系统错误'
+            system_error: '系统错误',
+            ai_policy_violation: 'AI 判警'
         };
         return labels[type] || type;
+    },
+
+    getFaultDomainLabel(domain) {
+        const labels = {
+            availability: '可用性',
+            performance: '性能',
+            storage: '存储',
+            replication: '复制',
+            general: '通用'
+        };
+        return labels[domain] || domain || '通用';
+    },
+
+    getLifecycleStageLabel(stage) {
+        const labels = {
+            created: '新建',
+            active: '处理中',
+            escalated: '已升级',
+            acknowledged: '已确认',
+            recovered: '已恢复'
+        };
+        return labels[stage] || stage || '处理中';
+    },
+
+    getMetricLabel(metric) {
+        const labels = {
+            cpu_usage: 'CPU 使用率',
+            disk_usage: '磁盘使用率',
+            connections: '活跃连接',
+            connections_active: '活跃连接',
+            connection_status: '连接状态',
+            qps: 'QPS',
+            tps: 'TPS'
+        };
+        return labels[metric] || metric || '-';
+    },
+
+    getBaselineStatusLabel(status) {
+        const labels = {
+            above_baseline: '高于基线',
+            within_baseline: '基线内',
+            no_profile: '暂无画像',
+            unknown: '未知'
+        };
+        return labels[status] || status || '未知';
     },
 
     formatNumber(value) {

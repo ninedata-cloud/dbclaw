@@ -62,6 +62,37 @@ def _json_safe(value: Any) -> Any:
     return value
 
 
+@router.get("/alert-summary", response_model=dict)
+async def get_instance_alert_summary(db: AsyncSession = Depends(get_db)):
+    active_statuses = ["active", "acknowledged"]
+
+    event_rows = await db.execute(
+        select(AlertEvent.datasource_id, func.count(AlertEvent.id))
+        .where(AlertEvent.status.in_(active_statuses))
+        .group_by(AlertEvent.datasource_id)
+    )
+    alert_rows = await db.execute(
+        select(AlertMessage.datasource_id, func.count(AlertMessage.id))
+        .where(AlertMessage.status.in_(active_statuses))
+        .group_by(AlertMessage.datasource_id)
+    )
+
+    event_counts = {int(datasource_id): int(count or 0) for datasource_id, count in event_rows.all()}
+    alert_counts = {int(datasource_id): int(count or 0) for datasource_id, count in alert_rows.all()}
+    datasource_ids = sorted(set(event_counts) | set(alert_counts))
+
+    return {
+        "items": [
+            {
+                "datasource_id": datasource_id,
+                "active_alert_event_count": event_counts.get(datasource_id, 0),
+                "active_alert_count": alert_counts.get(datasource_id, 0),
+            }
+            for datasource_id in datasource_ids
+        ]
+    }
+
+
 def _pick(raw: Dict[str, Any], *keys: str) -> Any:
     lowered = {str(key).lower(): value for key, value in raw.items()}
     for key in keys:
@@ -454,6 +485,23 @@ def _aggregate_traffic_clients(
     }
 
 
+def _extract_max_session_count(snapshot: Optional[MetricSnapshot]) -> Optional[int]:
+    if not snapshot or not isinstance(snapshot.data, dict):
+        return None
+
+    for key in ("max_connections", "max_conn", "connection_limit", "max_sessions"):
+        value = snapshot.data.get(key)
+        if value is None:
+            continue
+        try:
+            normalized = int(float(value))
+        except (TypeError, ValueError):
+            continue
+        if normalized > 0:
+            return normalized
+    return None
+
+
 @router.get("/{datasource_id}/summary", response_model=InstanceSummaryResponse)
 async def get_instance_summary(datasource_id: int, db: AsyncSession = Depends(get_db)):
     datasource = await get_alive_by_id(db, Datasource, datasource_id)
@@ -503,7 +551,7 @@ async def get_instance_summary(datasource_id: int, db: AsyncSession = Depends(ge
         datasource=datasource,
         latest_metric=_json_safe(latest_metric.data if latest_metric else None),
         metric_collected_at=latest_metric.collected_at if latest_metric else None,
-        health=_json_safe(health),
+        health=_json_safe(health) or {},
         active_alert_event_count=active_event_count,
         active_alert_count=active_alert_count,
         inspection=InstanceInspectionSummary(
@@ -622,6 +670,7 @@ async def get_instance_traffic(datasource_id: int, db: AsyncSession = Depends(ge
         active_session_count=aggregate["active_session_count"],
         waiting_session_count=aggregate["waiting_session_count"],
         idle_session_count=aggregate["idle_session_count"],
+        max_session_count=_extract_max_session_count(latest_snapshot),
         total_rx_rate=aggregate["total_rx_rate"],
         total_tx_rate=aggregate["total_tx_rate"],
         total_rate=aggregate["total_rate"],

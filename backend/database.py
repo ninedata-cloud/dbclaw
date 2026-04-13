@@ -84,6 +84,9 @@ async def init_db():
     import backend.models.host_metric  # noqa: F401
     import backend.models.alert_message  # noqa: F401
     import backend.models.alert_event  # noqa: F401
+    import backend.models.alert_ai_policy  # noqa: F401
+    import backend.models.alert_ai_evaluation_log  # noqa: F401
+    import backend.models.alert_ai_runtime_state  # noqa: F401
     import backend.models.alert_subscription  # noqa: F401
     import backend.skills.models  # noqa: F401
     import backend.models.integration  # noqa: F401

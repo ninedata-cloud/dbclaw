@@ -20,6 +20,15 @@ from backend.services.metric_snapshot_merge import (
 )
 from backend.utils.encryption import decrypt_value
 from backend.services.threshold_checker import ThresholdChecker
+from backend.services.baseline_service import (
+    BaselineSignalDetector,
+    compute_upper_bound,
+    extract_metric_value,
+    get_profiles_for_slot,
+    normalize_baseline_config,
+    refresh_current_slot_profiles,
+)
+from backend.services.alert_template_service import resolve_effective_inspection_config
 from backend.utils.datetime_helper import now
 from backend.config import get_settings
 
@@ -36,6 +45,7 @@ _inspection_service = None
 
 # Threshold checker instance
 _threshold_checker = ThresholdChecker()
+_baseline_detector = BaselineSignalDetector()
 
 # Semaphore to limit concurrent database writes
 _db_write_semaphore = asyncio.Semaphore(3)  # 最多 3 个并发写入
@@ -192,8 +202,9 @@ async def collect_metrics_for_connection(datasource_id: int):
                 if connection_failed:
                     await _handle_connection_failure(db, datasource_id, datasource, status.get("error", "Unknown error"))
 
-                # Check thresholds and trigger inspection if needed
-                await _check_thresholds_and_trigger(db, datasource_id, snapshot_data)
+                # Route alert engine after metrics are persisted
+                if not connection_failed:
+                    await _route_alert_engine(db, datasource, snapshot_data)
 
                 # Push to WebSocket subscribers
                 await _push_to_subscribers(datasource_id, {
@@ -265,6 +276,17 @@ async def _auto_resolve_recovered_alerts(
         current_violations: List of current violations (to avoid resolving alerts that are still active)
     """
     try:
+        normalized_threshold_rules: Dict[str, Any] = {}
+        if isinstance(threshold_rules, dict):
+            normalized_threshold_rules = threshold_rules
+        elif isinstance(threshold_rules, list):
+            for rule in threshold_rules:
+                if not isinstance(rule, dict):
+                    continue
+                metric_name = rule.get("metric_name") or rule.get("name")
+                if metric_name:
+                    normalized_threshold_rules[metric_name] = rule
+
         # Get all active threshold_violation alerts for this datasource
         result = await db.execute(
             select(AlertMessage).where(
@@ -293,13 +315,13 @@ async def _auto_resolve_recovered_alerts(
                 continue
 
             # Get current metric value
-            current_value = metrics.get(alert.metric_name)
+            current_value = extract_metric_value(metrics, alert.metric_name)
             if current_value is None:
                 continue
 
             # Find the threshold rule for this metric
             # threshold_rules is a dict like {"cpu_usage": {"threshold": 80, "duration": 60}}
-            threshold_rule = threshold_rules.get(alert.metric_name)
+            threshold_rule = normalized_threshold_rules.get(alert.metric_name)
 
             if not threshold_rule:
                 continue
@@ -322,9 +344,79 @@ async def _auto_resolve_recovered_alerts(
         logger.error(f"Error auto-resolving recovered alerts for datasource {datasource_id}: {e}", exc_info=True)
 
 
+async def _auto_resolve_recovered_baseline_alerts(
+    db,
+    datasource_id: int,
+    metrics: Dict[str, Any],
+    collected_at: datetime,
+    baseline_config: Dict[str, Any],
+    current_violations: List[Dict[str, Any]],
+):
+    try:
+        if not baseline_config.get("enabled"):
+            return
+
+        metric_names = [
+            metric_name
+            for metric_name, metric_config in baseline_config["metrics"].items()
+            if metric_config.get("enabled")
+        ]
+        profiles = await get_profiles_for_slot(
+            db,
+            datasource_id=datasource_id,
+            collected_at=collected_at,
+            metric_names=metric_names,
+        )
+
+        result = await db.execute(
+            select(AlertMessage).where(
+                and_(
+                    AlertMessage.datasource_id == datasource_id,
+                    AlertMessage.alert_type == "baseline_deviation",
+                    AlertMessage.status.in_(["active", "acknowledged"]),
+                )
+            )
+        )
+        active_alerts = result.scalars().all()
+        if not active_alerts:
+            return
+
+        violating_metrics = {item["metric_name"] for item in current_violations}
+        from backend.services.alert_service import AlertService
+
+        for alert in active_alerts:
+            if not alert.metric_name or alert.metric_name in violating_metrics:
+                continue
+
+            current_value = _threshold_checker._extract_metric_value(metrics, alert.metric_name)
+            if current_value is None:
+                continue
+
+            profile = profiles.get(alert.metric_name)
+            if not profile:
+                continue
+
+            upper_bound = compute_upper_bound(profile, baseline_config)
+            if upper_bound is None:
+                continue
+
+            recovery_threshold = min(float(upper_bound), float(profile.p95_value or upper_bound))
+            if float(current_value) <= recovery_threshold:
+                await AlertService.resolve_alert(db, alert.id, resolved_value=float(current_value))
+                logger.info(
+                    "Auto-resolved baseline alert %s: %s recovered (current=%s <= %s)",
+                    alert.id,
+                    alert.metric_name,
+                    current_value,
+                    recovery_threshold,
+                )
+    except Exception as e:
+        logger.error(f"Error auto-resolving baseline alerts for datasource {datasource_id}: {e}", exc_info=True)
+
+
 async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[str, Any]):
     """Check if metrics violate thresholds and trigger inspection if needed"""
-    global _inspection_service, _threshold_checker
+    global _inspection_service, _threshold_checker, _baseline_detector
 
     if not _inspection_service:
         return
@@ -352,18 +444,48 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
         )
         config = result.scalar_one_or_none()
 
-        if not config or not config.threshold_rules:
+        if not config:
             return
+
+        effective_config = await resolve_effective_inspection_config(db, config)
+        threshold_rules = getattr(effective_config, "threshold_rules", None) or {}
+        baseline_config = normalize_baseline_config(getattr(effective_config, "baseline_config", None))
+        if not threshold_rules and not baseline_config.get("enabled"):
+            return
+
+        collected_at = now()
+        baseline_profiles = {}
+        if baseline_config.get("enabled"):
+            baseline_profiles = await refresh_current_slot_profiles(
+                db,
+                datasource_id=datasource_id,
+                collected_at=collected_at,
+                baseline_config=baseline_config,
+            )
 
         # Check thresholds
         violations = _threshold_checker.check_thresholds(
             datasource_id=datasource_id,
             metrics=metrics,
-            threshold_rules=config.threshold_rules
+            threshold_rules=threshold_rules
+        )
+        baseline_violations = _baseline_detector.check_baselines(
+            datasource_id=datasource_id,
+            metrics=metrics,
+            profiles_by_metric=baseline_profiles,
+            baseline_config=baseline_config,
         )
 
         # Auto-resolve alerts for metrics that have recovered
-        await _auto_resolve_recovered_alerts(db, datasource_id, metrics, config.threshold_rules, violations)
+        await _auto_resolve_recovered_alerts(db, datasource_id, metrics, threshold_rules, violations)
+        await _auto_resolve_recovered_baseline_alerts(
+            db,
+            datasource_id=datasource_id,
+            metrics=metrics,
+            collected_at=collected_at,
+            baseline_config=baseline_config,
+            current_violations=baseline_violations,
+        )
 
         # Trigger inspection and create alert for each violation
         for violation in violations:
@@ -430,8 +552,232 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
                 alert_id=alert.id
             )
 
+        for violation in baseline_violations:
+            metric_name = violation["metric_name"]
+            reason = (
+                f"{metric_name}={violation['current_value']:.2f} 高于该实例基线窗口上界 "
+                f"{violation['upper_bound']:.2f}（P95={violation['baseline_p95']}, "
+                f"样本={violation['sample_count']}，时间槽={violation['slot_label']}）"
+            )
+
+            active_alert_result = await db.execute(
+                select(AlertMessage).where(
+                    and_(
+                        AlertMessage.datasource_id == datasource_id,
+                        AlertMessage.alert_type == "baseline_deviation",
+                        AlertMessage.metric_name == metric_name,
+                        AlertMessage.status.in_(["active", "acknowledged"]),
+                    )
+                ).limit(1)
+            )
+            active_alert = active_alert_result.scalar_one_or_none()
+            if active_alert:
+                logger.debug(
+                    "Skipping duplicate baseline trigger for datasource %s metric %s - active alert %s exists",
+                    datasource_id,
+                    metric_name,
+                    active_alert.id,
+                )
+                continue
+
+            from backend.services.alert_service import AlertService
+
+            alert = await AlertService.create_alert(
+                db=db,
+                datasource_id=datasource_id,
+                alert_type="baseline_deviation",
+                severity=violation.get("severity") or "medium",
+                metric_name=metric_name,
+                metric_value=violation["current_value"],
+                threshold_value=violation["upper_bound"],
+                trigger_reason=reason,
+            )
+
+            metric_snapshot = {
+                "baseline_violation": violation,
+                "full_metrics": metrics,
+                "timestamp": collected_at.isoformat(),
+            }
+            await _inspection_service.trigger_inspection(
+                db=db,
+                datasource_id=datasource_id,
+                trigger_type="baseline",
+                reason=reason,
+                metric_snapshot=metric_snapshot,
+                alert_id=alert.id,
+            )
+
     except Exception as e:
         logger.error(f"Error checking thresholds for datasource {datasource_id}: {e}", exc_info=True)
+
+
+async def _get_enabled_inspection_config(db, datasource_id: int):
+    from backend.models.inspection_config import InspectionConfig
+
+    result = await db.execute(
+        select(InspectionConfig).where(
+            InspectionConfig.datasource_id == datasource_id,
+            InspectionConfig.enabled == True,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def _route_alert_engine(db, datasource, metrics: Dict[str, Any]):
+    try:
+        config = await _get_enabled_inspection_config(db, datasource.id)
+        if not config:
+            return
+
+        from backend.services.alert_ai_service import resolve_effective_alert_engine_mode
+
+        effective_config = await resolve_effective_inspection_config(db, config)
+        effective_mode = await resolve_effective_alert_engine_mode(db, effective_config)
+        if effective_mode == "ai":
+            await _check_ai_alerts_and_trigger(db, datasource, effective_config, metrics, mode="formal")
+            return
+
+        await _check_thresholds_and_trigger(db, datasource.id, metrics)
+
+        if getattr(effective_config, "ai_shadow_enabled", False):
+            await _check_ai_alerts_and_trigger(db, datasource, effective_config, metrics, mode="shadow")
+    except Exception as e:
+        logger.error(
+            "Error routing alert engine for datasource %s: %s",
+            getattr(datasource, "id", "unknown"),
+            e,
+            exc_info=True,
+        )
+
+
+async def _check_ai_alerts_and_trigger(db, datasource, config, metrics: Dict[str, Any], mode: str = "formal"):
+    try:
+        from backend.services.alert_ai_service import (
+            _merge_gate_skip_reason,
+            apply_alert_ai_result,
+            build_alert_ai_feature_summary,
+            decide_alert_ai_candidate,
+            evaluate_alert_ai_policy,
+            get_or_create_runtime_state,
+            normalize_analysis_config,
+            resolve_configured_alert_ai_policy_binding,
+            should_skip_candidate_due_to_interval,
+            _resolve_current_alert_severity,
+        )
+
+        binding = await resolve_configured_alert_ai_policy_binding(db, config)
+        if not binding:
+            return
+
+        runtime_state = await get_or_create_runtime_state(db, datasource.id, binding)
+        collected_at = now()
+        snapshots_result = await db.execute(
+            select(MetricSnapshot)
+            .where(
+                MetricSnapshot.datasource_id == datasource.id,
+                MetricSnapshot.metric_type == "db_status",
+                MetricSnapshot.collected_at >= collected_at - timedelta(hours=24),
+            )
+            .order_by(desc(MetricSnapshot.collected_at))
+            .limit(1440)
+        )
+        snapshots_desc = snapshots_result.scalars().all()
+        current_alert_severity = await _resolve_current_alert_severity(db, datasource.id, runtime_state, binding)
+        gate_decision, _metric_features = decide_alert_ai_candidate(
+            binding=binding,
+            state=runtime_state,
+            current_metrics=metrics,
+            collected_at=collected_at,
+            snapshots_desc=snapshots_desc,
+            threshold_rules=getattr(config, "threshold_rules", None),
+            current_alert_severity=current_alert_severity,
+            datasource=datasource,
+        )
+
+        if mode == "formal":
+            runtime_state.samples_seen = int(runtime_state.samples_seen or 0) + 1
+            runtime_state.last_gate_reason = gate_decision.gate_reason
+            runtime_state.last_gate_metrics = gate_decision.gate_metrics
+
+        if not gate_decision.should_evaluate:
+            if mode == "formal":
+                runtime_state.gate_skips_by_reason = _merge_gate_skip_reason(
+                    runtime_state.gate_skips_by_reason,
+                    gate_decision.gate_reason,
+                )
+            await db.commit()
+            return
+
+        if mode == "formal":
+            runtime_state.candidate_hits = int(runtime_state.candidate_hits or 0) + 1
+
+        analysis_config = normalize_analysis_config(binding.analysis_config)
+        should_skip, skip_reason = should_skip_candidate_due_to_interval(
+            runtime_state,
+            gate_decision,
+            analysis_config,
+            collected_at,
+        )
+        if should_skip:
+            if mode == "formal":
+                runtime_state.gate_skips_by_reason = _merge_gate_skip_reason(
+                    runtime_state.gate_skips_by_reason,
+                    skip_reason,
+                )
+            await db.commit()
+            return
+
+        feature_summary = await build_alert_ai_feature_summary(
+            db,
+            datasource,
+            binding.rule_text,
+            metrics,
+            collected_at,
+            compiled_trigger_profile=binding.compiled_trigger_profile,
+            runtime_state=runtime_state,
+            gate_decision=gate_decision,
+            snapshots_desc=snapshots_desc,
+        )
+        judge_result, evaluation_log = await evaluate_alert_ai_policy(
+            db,
+            datasource,
+            binding,
+            feature_summary,
+            runtime_state,
+            mode=mode,
+        )
+        if mode == "formal":
+            runtime_state.ai_evaluations = int(runtime_state.ai_evaluations or 0) + 1
+            runtime_state.last_ai_evaluated_at = collected_at
+            runtime_state.last_candidate_type = gate_decision.candidate_type
+            runtime_state.last_candidate_fingerprint = gate_decision.fingerprint
+            runtime_state.last_gate_reason = gate_decision.gate_reason
+            runtime_state.last_gate_metrics = gate_decision.gate_metrics
+        result = await apply_alert_ai_result(
+            db,
+            datasource,
+            binding,
+            runtime_state,
+            judge_result,
+            inspection_service=_inspection_service,
+            evaluation_log=evaluation_log,
+            mode=mode,
+        )
+        await db.commit()
+        logger.debug(
+            "AI alert evaluation finished for datasource %s mode=%s decision=%s action=%s",
+            datasource.id,
+            mode,
+            judge_result.decision,
+            result.get("action"),
+        )
+    except Exception as e:
+        logger.error(
+            "Error checking AI alerts for datasource %s: %s",
+            getattr(datasource, "id", "unknown"),
+            e,
+            exc_info=True,
+        )
 
 
 async def _handle_connection_failure(db, datasource_id: int, datasource, error_message: str):

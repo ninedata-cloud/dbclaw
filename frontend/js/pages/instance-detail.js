@@ -1,6 +1,7 @@
 /* Instance detail workspace */
 const InstanceDetailPage = {
     datasources: [],
+    instanceAlertSummaryMap: {},
     currentInstance: null,
     currentSummary: null,
     currentTab: 'monitor',
@@ -42,7 +43,12 @@ const InstanceDetailPage = {
         content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
         try {
-            this.datasources = await API.getDatasources();
+            const [datasources, instanceAlertSummary] = await Promise.all([
+                API.getDatasources(),
+                API.getInstanceAlertSummary().catch(() => ({ items: [] })),
+            ]);
+            this.datasources = datasources;
+            this.instanceAlertSummaryMap = this._buildInstanceAlertSummaryMap(instanceAlertSummary?.items);
             Store.set('datasources', this.datasources);
             this.sidebarCollapsed = this._loadSidebarState();
             this.collapsedInstanceGroups = this._loadInstanceGroupCollapseState();
@@ -161,6 +167,7 @@ const InstanceDetailPage = {
             datasourceId: Number.isFinite(datasourceId) ? datasourceId : null,
             tab,
             alert: params.get('alert') || null,
+            event: params.get('event') || null,
             report: params.get('report') || null,
             actionRun: params.get('action_run') || null,
             ask: params.get('ask') || null,
@@ -328,6 +335,7 @@ const InstanceDetailPage = {
     _syncUrlIfNeeded() {
         const extraParams = {
             alert: this.currentRoute.alert,
+            event: this.currentRoute.event,
             report: this.currentRoute.report,
             action_run: this.currentRoute.actionRun,
             ask: this.currentRoute.ask,
@@ -406,6 +414,7 @@ const InstanceDetailPage = {
 
             items.forEach(item => {
                 const active = this.currentInstance?.id === item.id;
+                const statusTone = this._instanceListStatusTone(item);
                 const button = DOM.el('button', {
                     className: `instance-list-item ${active ? 'active' : ''}`,
                     onClick: () => {
@@ -420,7 +429,7 @@ const InstanceDetailPage = {
                         <div class="instance-list-item-meta">${this._escapeHtml(item.host)}:${item.port}${item.database ? ` / ${this._escapeHtml(item.database)}` : ''}</div>
                     </div>
                     <div class="instance-list-item-side">
-                        <span class="instance-status-dot status-${this._escapeHtml(item.connection_status || 'unknown')}"></span>
+                        <span class="instance-status-dot status-${this._escapeHtml(statusTone)}"></span>
                     </div>
                 `;
                 if (active && !collapsed) {
@@ -440,8 +449,18 @@ const InstanceDetailPage = {
     async _refreshSummary() {
         this.currentSummary = await API.getInstanceSummary(this.currentInstance.id);
         if (this.currentSummary?.datasource) {
-            this.currentInstance = this.currentSummary.datasource;
-            this.datasources = this.datasources.map(item => item.id === this.currentInstance.id ? this.currentInstance : item);
+            const mergedDatasource = this._mergeDatasourceHealth(this.currentSummary.datasource, this.currentSummary.health);
+            this.currentSummary.datasource = mergedDatasource;
+            this.currentInstance = mergedDatasource;
+            this._setInstanceAlertSummary(
+                this.currentInstance.id,
+                this.currentSummary.active_alert_event_count,
+                this.currentSummary.active_alert_count
+            );
+            this.datasources = this.datasources.map(item => item.id === this.currentInstance.id ? this._mergeDatasourceHealth({
+                ...item,
+                ...mergedDatasource,
+            }, this.currentSummary.health) : item);
             this._syncCurrentInstance(this.currentInstance);
             const searchInput = DOM.$('#instance-search-input');
             this._renderInstanceList(searchInput?.value?.trim() || '');
@@ -568,9 +587,25 @@ const InstanceDetailPage = {
                 embedded: true,
                 fixedDatasourceId: datasourceId,
                 sessionFilterDatasourceId: datasourceId,
+                defaultSidebarCollapsed: true,
+                initialAlertId: this.currentRoute.alert ? parseInt(this.currentRoute.alert, 10) : null,
+                initialEventId: this.currentRoute.event ? parseInt(this.currentRoute.event, 10) : null,
+                initialReportId: this.currentRoute.report ? parseInt(this.currentRoute.report, 10) : null,
+                initialActionRunId: this.currentRoute.actionRun ? parseInt(this.currentRoute.actionRun, 10) : null,
                 initialAsk: ask,
+                preferFreshSession: Boolean(
+                    ask ||
+                    this.currentRoute.alert ||
+                    this.currentRoute.event ||
+                    this.currentRoute.report ||
+                    this.currentRoute.actionRun
+                ),
             });
             this.currentRoute.ask = null;
+            this.currentRoute.alert = null;
+            this.currentRoute.event = null;
+            this.currentRoute.report = null;
+            this.currentRoute.actionRun = null;
             return;
         }
 
@@ -694,7 +729,7 @@ const InstanceDetailPage = {
 
         container.querySelector('#instance-test-btn')?.addEventListener('click', () => this._handleTestConnection());
         container.querySelector('#instance-refresh-btn')?.addEventListener('click', () => this._handleRefreshMetrics());
-        container.querySelector('#instance-trigger-inspection-btn')?.addEventListener('click', () => this._handleTriggerInspection());
+        container.querySelector('#instance-trigger-inspection-btn')?.addEventListener('click', () => this._showTriggerInspectionModal());
         container.querySelector('#instance-silence-btn')?.addEventListener('click', () => {
             if (silenced) {
                 this._handleCancelSilence();
@@ -1306,15 +1341,61 @@ const InstanceDetailPage = {
         }
     },
 
+    _showTriggerInspectionModal() {
+        const datasource = this.currentSummary?.datasource || this.currentInstance || {};
+        Modal.show({
+            title: '确认触发巡检',
+            content: `
+                <div class="form-group" style="margin-bottom:0;">
+                    <div style="font-size:14px;line-height:1.8;color:var(--text-primary);">
+                        将为实例 <strong>${this._escapeHtml(datasource.name || '-')}</strong> 立即创建一个人工巡检任务。
+                    </div>
+                    <div style="margin-top:10px;font-size:12px;line-height:1.7;color:var(--text-secondary);">
+                        巡检会立刻执行，并生成一份新的巡检报告。完成后会自动跳转到“巡检管理”查看结果。
+                    </div>
+                </div>
+            `,
+            buttons: [
+                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
+                {
+                    text: '确认触发',
+                    variant: 'primary',
+                    onClick: async () => {
+                        await this._handleTriggerInspection();
+                    }
+                },
+            ],
+        });
+    },
+
     async _handleTriggerInspection() {
+        const datasourceId = this.currentInstance?.id;
+        if (!datasourceId) {
+            Toast.error('当前实例不存在，无法触发巡检');
+            return;
+        }
+
+        const confirmButton = Array.from(document.querySelectorAll('#modal-container .modal-footer .btn'))
+            .find((button) => button.textContent?.includes('确认触发'));
+        if (confirmButton) {
+            confirmButton.disabled = true;
+            confirmButton.textContent = '启动中...';
+        }
+
         try {
-            await API.post(`/api/inspections/trigger/${this.currentInstance.id}`);
-            Toast.success('巡检已触发');
+            const result = await API.post(`/api/inspections/trigger/${datasourceId}`);
+            Modal.hide();
+            Toast.success(`人工巡检任务已提交${result?.trigger_id ? ` #${result.trigger_id}` : ''}`);
             await this._refreshSummary();
-            if (this.currentTab === 'inspections' || this.currentTab === 'config') {
-                await this._renderCurrentTab();
-            }
+            const nextUrl = this._buildUrl(datasourceId, 'inspections', {
+                report: result?.report_id || null,
+            });
+            Router.navigate(nextUrl);
         } catch (error) {
+            if (confirmButton) {
+                confirmButton.disabled = false;
+                confirmButton.textContent = '确认触发';
+            }
             Toast.error(`触发巡检失败: ${error.message}`);
         }
     },
@@ -1417,6 +1498,84 @@ const InstanceDetailPage = {
             unknown: '未知'
         };
         return map[status] || status || '未知';
+    },
+
+    _mergeDatasourceHealth(datasource, health) {
+        if (!datasource) return datasource;
+        return {
+            ...datasource,
+            health_summary: health ? {
+                healthy: health.healthy,
+                status: health.status || 'unknown',
+                message: health.message || '',
+                violations: Array.isArray(health.violations) ? health.violations : [],
+            } : datasource.health_summary || null,
+        };
+    },
+
+    _healthStatusTone(status) {
+        if (status === 'healthy') return 'normal';
+        if (status === 'warning') return 'warning';
+        if (status === 'critical') return 'failed';
+        return 'unknown';
+    },
+
+    _instanceListStatusTone(datasource) {
+        const alertSummary = this._getInstanceAlertSummary(datasource?.id);
+        const hasActiveAlert = (alertSummary.active_alert_event_count || 0) > 0 || (alertSummary.active_alert_count || 0) > 0;
+        if (hasActiveAlert) {
+            return 'failed';
+        }
+        const health = datasource?.health_summary
+            || (datasource?.id === this.currentInstance?.id ? this.currentSummary?.health : null);
+        const healthTone = this._healthStatusTone(health?.status);
+        if (healthTone === 'normal') {
+            return 'normal';
+        }
+        if (healthTone === 'warning' || healthTone === 'failed') {
+            return 'failed';
+        }
+        if (datasource?.connection_status === 'normal') {
+            return 'normal';
+        }
+        return 'failed';
+    },
+
+    _buildInstanceAlertSummaryMap(items = []) {
+        return (Array.isArray(items) ? items : []).reduce((acc, item) => {
+            const datasourceId = Number.parseInt(item?.datasource_id, 10);
+            if (!Number.isFinite(datasourceId)) return acc;
+            acc[datasourceId] = {
+                active_alert_event_count: Number(item?.active_alert_event_count) || 0,
+                active_alert_count: Number(item?.active_alert_count) || 0,
+            };
+            return acc;
+        }, {});
+    },
+
+    _getInstanceAlertSummary(datasourceId) {
+        if (!Number.isFinite(Number(datasourceId))) {
+            return {
+                active_alert_event_count: 0,
+                active_alert_count: 0,
+            };
+        }
+        return this.instanceAlertSummaryMap?.[datasourceId] || {
+            active_alert_event_count: 0,
+            active_alert_count: 0,
+        };
+    },
+
+    _setInstanceAlertSummary(datasourceId, activeAlertEventCount, activeAlertCount) {
+        const normalizedId = Number.parseInt(datasourceId, 10);
+        if (!Number.isFinite(normalizedId)) return;
+        this.instanceAlertSummaryMap = {
+            ...(this.instanceAlertSummaryMap || {}),
+            [normalizedId]: {
+                active_alert_event_count: Number(activeAlertEventCount) || 0,
+                active_alert_count: Number(activeAlertCount) || 0,
+            },
+        };
     },
 
     _getDbTypeLabel(dbType) {

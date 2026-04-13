@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -8,8 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.services.alert_service import (
     _find_in_progress_diagnosis,
     _find_recent_diagnosis,
+    normalize_event_ai_config,
     run_sync_diagnosis,
+    should_refresh_event_diagnosis,
 )
+from backend.utils.datetime_helper import now
 
 
 @pytest.mark.asyncio
@@ -87,3 +90,20 @@ async def test_run_sync_diagnosis_skips_when_same_type_diagnosis_in_progress():
     assert current_event.diagnosis_status == "pending"
     assert current_event.diagnosis_source_event_id == 99
     db.commit.assert_awaited()
+
+
+def test_should_refresh_event_diagnosis_on_escalation_and_staleness():
+    event = SimpleNamespace(
+        ai_diagnosis_summary="CPU 持续高负载",
+        diagnosis_trigger_reason="severity_escalated",
+        diagnosis_refresh_needed=True,
+        diagnosis_completed_at=now() - timedelta(minutes=5),
+        status="active",
+    )
+
+    assert should_refresh_event_diagnosis(event, normalize_event_ai_config({})) is True
+
+    event.diagnosis_trigger_reason = None
+    event.diagnosis_refresh_needed = False
+    event.diagnosis_completed_at = now() - timedelta(minutes=40)
+    assert should_refresh_event_diagnosis(event, normalize_event_ai_config({"stale_recheck_minutes": 30})) is True

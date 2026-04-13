@@ -123,7 +123,8 @@
 }
 
 .inspection-table-container {
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
     border-radius: 14px;
 }
 
@@ -214,6 +215,7 @@
 
 .inspection-actions-col {
     width: 104px;
+    min-width: 104px;
 }
 
 .inspection-time-text {
@@ -258,6 +260,12 @@
 .inspection-action-btn-danger {
     color: rgba(248,81,73,0.9);
 }
+
+.inspection-table-instance .inspection-col-trigger { width: 13%; }
+.inspection-table-instance .inspection-col-status { width: 13%; }
+.inspection-table-instance .inspection-col-title { width: 24%; }
+.inspection-table-instance .inspection-col-time { width: 15%; }
+.inspection-table-instance .inspection-actions-col { width: 104px; min-width: 104px; }
 
 .inspection-action-btn-danger:hover {
     color: var(--accent-red);

@@ -1,21 +1,37 @@
 """API endpoints for database intelligent inspection"""
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from fastapi.responses import Response, HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, desc
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 import logging
 
 from backend.database import get_db
 from backend.utils.security import escape_html
 from backend.models.inspection_config import InspectionConfig
+from backend.models.alert_template import AlertTemplate
 from backend.models.inspection_trigger import InspectionTrigger
 from backend.models.report import Report
 from backend.models.datasource import Datasource
 from backend.models.soft_delete import alive_filter, get_alive_by_id
 from backend.services.inspection_service import InspectionService
 from backend.services.public_share_service import PublicShareService
+from backend.services.baseline_service import (
+    DEFAULT_BASELINE_CONFIG,
+    list_baseline_profiles_for_datasource,
+    normalize_baseline_config,
+    rebuild_baseline_profiles_for_datasource,
+)
+from backend.services.alert_service import DEFAULT_EVENT_AI_CONFIG, normalize_event_ai_config
+from backend.services.alert_template_service import (
+    ensure_default_alert_templates,
+    get_default_alert_template,
+    normalize_alert_template_config,
+    reset_inspection_config_to_template,
+    resolve_effective_inspection_config,
+    summarize_alert_template_config,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +41,41 @@ router = APIRouter(prefix="/api/inspections", tags=["inspections"])
 from datetime import datetime
 
 
+def _normalize_inspection_config_record(config: InspectionConfig) -> InspectionConfig:
+    config.baseline_config = normalize_baseline_config(getattr(config, "baseline_config", None))
+    config.event_ai_config = normalize_event_ai_config(getattr(config, "event_ai_config", None))
+    return config
+
+
 class InspectionConfigSchema(BaseModel):
     enabled: bool
     schedule_interval: int
     use_ai_analysis: bool
     ai_model_id: Optional[int] = None
     kb_ids: List[int] = []
-    threshold_rules: dict
+    alert_template_id: Optional[int] = None
+    threshold_rules: dict = Field(default_factory=dict)
+    alert_engine_mode: str = Field(default="inherit", pattern="^(inherit|threshold|ai)$")
+    ai_policy_source: str = Field(default="inline", pattern="^(inline|template)$")
+    ai_policy_text: Optional[str] = None
+    ai_policy_id: Optional[int] = None
+    alert_ai_model_id: Optional[int] = None
+    ai_shadow_enabled: bool = False
+    baseline_config: dict = Field(default_factory=dict)
+    event_ai_config: dict = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_ai_policy(self):
+        if self.alert_template_id:
+            self.ai_policy_text = (self.ai_policy_text or "").strip() or None
+            return self
+        if self.ai_policy_source == "template" and self.ai_policy_id is None and self.alert_engine_mode == "ai":
+            raise ValueError("旧版 AI 模板模式必须提供 ai_policy_id")
+        if self.ai_policy_source == "inline" and self.alert_engine_mode == "ai":
+            if not (self.ai_policy_text or "").strip():
+                raise ValueError("AI 告警模式下必须填写自然语言规则")
+        self.ai_policy_text = (self.ai_policy_text or "").strip() or None
+        return self
 
 
 class InspectionConfigResponse(BaseModel):
@@ -42,7 +86,19 @@ class InspectionConfigResponse(BaseModel):
     use_ai_analysis: bool
     ai_model_id: Optional[int] = None
     kb_ids: List[int] = []
+    alert_template_id: Optional[int] = None
+    alert_template_name: Optional[str] = None
+    uses_template: bool = False
+    template_summary: Optional[str] = None
     threshold_rules: dict
+    alert_engine_mode: str = "inherit"
+    ai_policy_source: str = "inline"
+    ai_policy_text: Optional[str] = None
+    ai_policy_id: Optional[int] = None
+    alert_ai_model_id: Optional[int] = None
+    ai_shadow_enabled: bool = False
+    baseline_config: dict = Field(default_factory=dict)
+    event_ai_config: dict = Field(default_factory=dict)
     last_scheduled_at: Optional[datetime] = None
     next_scheduled_at: Optional[datetime] = None
 
@@ -74,6 +130,90 @@ class ExpressionValidationResponse(BaseModel):
     error: Optional[str] = None
 
 
+class BaselineProfileResponse(BaseModel):
+    metric_name: str
+    weekday: int
+    hour: int
+    sample_count: int
+    avg_value: Optional[float] = None
+    p95_value: Optional[float] = None
+    max_value: Optional[float] = None
+    last_snapshot_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class BaselineSummaryResponse(BaseModel):
+    enabled: bool
+    baseline_config: dict
+    profile_count: int
+    last_profile_updated_at: Optional[datetime] = None
+    profiles: List[BaselineProfileResponse] = Field(default_factory=list)
+    diagnostics: dict = Field(default_factory=dict)
+
+
+class AlertTemplateSchema(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+    description: Optional[str] = None
+    enabled: bool = True
+    is_default: bool = False
+    template_config: dict = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_template_config(self):
+        normalized = normalize_alert_template_config(self.template_config)
+        if normalized.get("alert_engine_mode") == "ai" and not normalized.get("ai_policy_text"):
+            raise ValueError("AI 判警模板必须提供自然语言规则")
+        self.name = self.name.strip()
+        self.description = (self.description or "").strip() or None
+        self.template_config = normalized
+        return self
+
+
+class AlertTemplateResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    enabled: bool
+    is_default: bool
+    template_config: dict
+    summary: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+def _build_alert_template_response(template: AlertTemplate) -> AlertTemplateResponse:
+    normalized = normalize_alert_template_config(template.template_config)
+    return AlertTemplateResponse(
+        id=template.id,
+        name=template.name,
+        description=template.description,
+        enabled=template.enabled,
+        is_default=template.is_default,
+        template_config=normalized,
+        summary=summarize_alert_template_config(normalized),
+        created_at=template.created_at,
+        updated_at=template.updated_at,
+    )
+
+
+async def _get_bound_alert_template_or_raise(db: AsyncSession, template_id: Optional[int]) -> Optional[AlertTemplate]:
+    if not template_id:
+        return None
+    result = await db.execute(select(AlertTemplate).where(AlertTemplate.id == template_id))
+    template = result.scalar_one_or_none()
+    if not template:
+        raise HTTPException(status_code=404, detail="告警模板不存在")
+    if not template.enabled:
+        raise HTTPException(status_code=400, detail="告警模板已停用，请选择其他模板")
+    return template
+
+
 @router.post("/validate-expression", response_model=ExpressionValidationResponse)
 async def validate_threshold_expression(request: ExpressionValidationRequest):
     """Test if expression is valid Python syntax"""
@@ -88,9 +228,73 @@ async def validate_threshold_expression(request: ExpressionValidationRequest):
         return ExpressionValidationResponse(valid=False, error=f"Validation error: {str(e)}")
 
 
+@router.get("/templates", response_model=List[AlertTemplateResponse])
+async def list_alert_templates(db: AsyncSession = Depends(get_db)):
+    await ensure_default_alert_templates(db)
+    result = await db.execute(select(AlertTemplate).order_by(AlertTemplate.is_default.desc(), AlertTemplate.name.asc()))
+    return [_build_alert_template_response(item) for item in result.scalars().all()]
+
+
+@router.post("/templates", response_model=AlertTemplateResponse)
+async def create_alert_template(data: AlertTemplateSchema, db: AsyncSession = Depends(get_db)):
+    await ensure_default_alert_templates(db)
+    if data.is_default:
+        result = await db.execute(select(AlertTemplate))
+        for item in result.scalars().all():
+            item.is_default = False
+
+    template = AlertTemplate(
+        name=data.name,
+        description=data.description,
+        enabled=data.enabled,
+        is_default=data.is_default,
+        template_config=data.template_config,
+    )
+    db.add(template)
+    await db.commit()
+    await db.refresh(template)
+    return _build_alert_template_response(template)
+
+
+@router.put("/templates/{template_id}", response_model=AlertTemplateResponse)
+async def update_alert_template(template_id: int, data: AlertTemplateSchema, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(AlertTemplate).where(AlertTemplate.id == template_id))
+    template = result.scalar_one_or_none()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    if data.is_default:
+        all_result = await db.execute(select(AlertTemplate))
+        for item in all_result.scalars().all():
+            item.is_default = False
+
+    template.name = data.name
+    template.description = data.description
+    template.enabled = data.enabled
+    template.is_default = data.is_default
+    template.template_config = data.template_config
+    await db.commit()
+    await db.refresh(template)
+    return _build_alert_template_response(template)
+
+
+@router.post("/templates/{template_id}/toggle", response_model=AlertTemplateResponse)
+async def toggle_alert_template(template_id: int, enabled: bool = Body(..., embed=True), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(AlertTemplate).where(AlertTemplate.id == template_id))
+    template = result.scalar_one_or_none()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    template.enabled = bool(enabled)
+    await db.commit()
+    await db.refresh(template)
+    return _build_alert_template_response(template)
+
+
 @router.get("/config/{datasource_id}", response_model=InspectionConfigResponse)
 async def get_config(datasource_id: int, db: AsyncSession = Depends(get_db)):
     """Get inspection configuration for a datasource"""
+    await ensure_default_alert_templates(db)
+    default_template = await get_default_alert_template(db)
     result = await db.execute(
         select(InspectionConfig).where(InspectionConfig.datasource_id == datasource_id)
     )
@@ -102,12 +306,45 @@ async def get_config(datasource_id: int, db: AsyncSession = Depends(get_db)):
             enabled=False,
             schedule_interval=86400,
             use_ai_analysis=True,
-            threshold_rules={}
+            alert_template_id=default_template.id if default_template else None,
+            threshold_rules={},
+            alert_engine_mode="inherit",
+            ai_policy_source="inline",
+            ai_shadow_enabled=False,
+            baseline_config=normalize_baseline_config(DEFAULT_BASELINE_CONFIG),
+            event_ai_config=normalize_event_ai_config(DEFAULT_EVENT_AI_CONFIG),
         )
         db.add(config)
         await db.commit()
         await db.refresh(config)
-    return config
+    elif default_template and reset_inspection_config_to_template(config, default_template):
+        await db.commit()
+        await db.refresh(config)
+    effective = await resolve_effective_inspection_config(db, _normalize_inspection_config_record(config))
+    return InspectionConfigResponse(
+        id=config.id,
+        datasource_id=config.datasource_id,
+        enabled=config.enabled,
+        schedule_interval=config.schedule_interval,
+        use_ai_analysis=config.use_ai_analysis,
+        ai_model_id=config.ai_model_id,
+        kb_ids=config.kb_ids or [],
+        alert_template_id=effective.alert_template_id,
+        alert_template_name=effective.alert_template_name,
+        uses_template=effective.uses_template,
+        template_summary=effective.template_summary,
+        threshold_rules=effective.threshold_rules,
+        alert_engine_mode=effective.alert_engine_mode,
+        ai_policy_source=effective.ai_policy_source,
+        ai_policy_text=effective.ai_policy_text,
+        ai_policy_id=effective.ai_policy_id,
+        alert_ai_model_id=effective.alert_ai_model_id,
+        ai_shadow_enabled=effective.ai_shadow_enabled,
+        baseline_config=effective.baseline_config,
+        event_ai_config=effective.event_ai_config,
+        last_scheduled_at=config.last_scheduled_at,
+        next_scheduled_at=config.next_scheduled_at,
+    )
 
 
 @router.post("/config/{datasource_id}", response_model=InspectionConfigResponse)
@@ -117,6 +354,7 @@ async def create_or_update_config(
     db: AsyncSession = Depends(get_db)
 ):
     """Create or update inspection configuration"""
+    await _get_bound_alert_template_or_raise(db, config_data.alert_template_id)
     result = await db.execute(
         select(InspectionConfig).where(InspectionConfig.datasource_id == datasource_id)
     )
@@ -125,18 +363,24 @@ async def create_or_update_config(
     from datetime import timedelta
     from backend.utils.datetime_helper import now as get_now
     if config:
-        for key, value in config_data.dict().items():
+        payload = config_data.model_dump()
+        payload["baseline_config"] = normalize_baseline_config(payload.get("baseline_config"))
+        payload["event_ai_config"] = normalize_event_ai_config(payload.get("event_ai_config"))
+        for key, value in payload.items():
             setattr(config, key, value)
         # Recalculate next_scheduled_at based on new interval
         config.next_scheduled_at = get_now() + timedelta(seconds=config_data.schedule_interval)
     else:
-        config = InspectionConfig(datasource_id=datasource_id, **config_data.dict())
+        payload = config_data.model_dump()
+        payload["baseline_config"] = normalize_baseline_config(payload.get("baseline_config"))
+        payload["event_ai_config"] = normalize_event_ai_config(payload.get("event_ai_config"))
+        config = InspectionConfig(datasource_id=datasource_id, **payload)
         config.next_scheduled_at = get_now() + timedelta(seconds=config_data.schedule_interval)
         db.add(config)
 
     await db.commit()
     await db.refresh(config)
-    return config
+    return await get_config(datasource_id, db)
 
 
 @router.put("/config/{datasource_id}", response_model=InspectionConfigResponse)
@@ -146,6 +390,7 @@ async def update_config(
     db: AsyncSession = Depends(get_db)
 ):
     """Update inspection configuration"""
+    await _get_bound_alert_template_or_raise(db, config_data.alert_template_id)
     result = await db.execute(
         select(InspectionConfig).where(InspectionConfig.datasource_id == datasource_id)
     )
@@ -155,14 +400,69 @@ async def update_config(
 
     from datetime import timedelta
     from backend.utils.datetime_helper import now as get_now
-    for key, value in config_data.dict().items():
+    payload = config_data.model_dump()
+    payload["baseline_config"] = normalize_baseline_config(payload.get("baseline_config"))
+    payload["event_ai_config"] = normalize_event_ai_config(payload.get("event_ai_config"))
+    for key, value in payload.items():
         setattr(config, key, value)
     # Recalculate next_scheduled_at based on new interval
     config.next_scheduled_at = get_now() + timedelta(seconds=config_data.schedule_interval)
 
     await db.commit()
     await db.refresh(config)
-    return config
+    return await get_config(datasource_id, db)
+
+
+@router.get("/baseline/{datasource_id}", response_model=BaselineSummaryResponse)
+async def get_baseline_summary(
+    datasource_id: int,
+    limit: int = Query(default=24, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+):
+    config_result = await db.execute(
+        select(InspectionConfig).where(InspectionConfig.datasource_id == datasource_id)
+    )
+    config = config_result.scalar_one_or_none()
+    effective = await resolve_effective_inspection_config(db, config) if config else None
+    baseline_config = normalize_baseline_config(getattr(effective, "baseline_config", None) if effective else None)
+    profiles = await list_baseline_profiles_for_datasource(db, datasource_id, limit=limit)
+    last_profile_updated_at = max((profile.updated_at for profile in profiles if profile.updated_at), default=None)
+    return BaselineSummaryResponse(
+        enabled=bool(baseline_config.get("enabled")),
+        baseline_config=baseline_config,
+        profile_count=len(profiles),
+        last_profile_updated_at=last_profile_updated_at,
+        profiles=[BaselineProfileResponse.model_validate(profile) for profile in profiles[:limit]],
+        diagnostics={
+            "learning_days": baseline_config.get("learning_days"),
+            "min_samples": baseline_config.get("min_samples"),
+            "default_metrics": [name for name, item in baseline_config.get("metrics", {}).items() if item.get("enabled")],
+        },
+    )
+
+
+@router.post("/baseline/{datasource_id}/rebuild", response_model=dict)
+async def rebuild_baseline(datasource_id: int, db: AsyncSession = Depends(get_db)):
+    config_result = await db.execute(
+        select(InspectionConfig).where(InspectionConfig.datasource_id == datasource_id)
+    )
+    config = config_result.scalar_one_or_none()
+    if not config:
+        raise HTTPException(status_code=404, detail="Configuration not found")
+
+    effective = await resolve_effective_inspection_config(db, config)
+    baseline_config = normalize_baseline_config(getattr(effective, "baseline_config", None))
+    result = await rebuild_baseline_profiles_for_datasource(
+        db,
+        datasource_id=datasource_id,
+        baseline_config=baseline_config,
+    )
+    profiles = await list_baseline_profiles_for_datasource(db, datasource_id)
+    return {
+        "message": "baseline rebuilt",
+        "result": result,
+        "profile_count": len(profiles),
+    }
 
 
 @router.post("/trigger/{datasource_id}", response_model=TriggerResponse)
@@ -178,15 +478,9 @@ async def trigger_manual_inspection(
         raise HTTPException(status_code=503, detail="Inspection service not available")
 
     trigger_id = await inspection_service.trigger_inspection(
-        db, datasource_id, "manual", "Manual inspection"
+        db, datasource_id, "manual", "人工触发巡检"
     )
-
-    result = await db.execute(
-        select(InspectionTrigger).where(InspectionTrigger.id == trigger_id)
-    )
-    trigger = result.scalar_one()
-
-    return TriggerResponse(trigger_id=trigger_id, report_id=trigger.report_id)
+    return TriggerResponse(trigger_id=trigger_id, report_id=None)
 
 
 @router.get("/reports", response_model=dict)

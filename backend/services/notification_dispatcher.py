@@ -6,6 +6,7 @@ Processes pending alerts and sends notifications based on subscriptions
 import asyncio
 import logging
 from typing import List
+from sqlalchemy import select
 
 from backend.database import async_session
 from backend.services.alert_service import (
@@ -31,8 +32,10 @@ def _get_required_integration_params(integration) -> list[str]:
 def _alert_type_display(alert_type: str | None) -> str:
     return {
         "threshold_violation": "超过阈值",
+        "baseline_deviation": "偏离基线",
         "custom_expression": "自定义表达式",
         "system_error": "系统错误",
+        "ai_policy_violation": "AI 判警",
     }.get(alert_type or "", alert_type or "未知")
 
 
@@ -95,7 +98,7 @@ def _build_active_alert_payload(alert, datasource, diagnosis_payload: dict[str, 
     return payload
 
 
-def _build_recovery_alert_payload(alert, datasource) -> dict:
+def _build_recovery_alert_payload(alert, datasource, diagnosis_summary: str | None = None) -> dict:
     datasource_name = datasource.name if datasource else "未知数据源"
     created_at_str = alert.created_at.strftime('%Y-%m-%d %H:%M:%S') if alert.created_at else None
     resolved_at_str = alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else now().strftime('%Y-%m-%d %H:%M:%S')
@@ -115,6 +118,7 @@ def _build_recovery_alert_payload(alert, datasource) -> dict:
             f"告警类型：{_alert_type_display(alert.alert_type)}\n"
             f"严重程度：{_severity_display(alert.severity)}\n\n"
             f"{alert.content}{recovery_metric_line}\n\n"
+            f"{f'AI 总结：{diagnosis_summary}\\n' if diagnosis_summary else ''}"
             f"告警时间：{created_at_str or '未知'}\n"
             f"恢复时间：{resolved_at_str}"
         ),
@@ -212,8 +216,25 @@ async def _process_pending_alerts():
                     }
                     if alert.event_id and datasource:
                         try:
-                            from backend.services.alert_service import run_sync_diagnosis
-                            diagnosis_result = await run_sync_diagnosis(db, alert.event_id, timeout_seconds=600)
+                            from backend.models.alert_event import AlertEvent
+                            from backend.services.alert_service import (
+                                get_event_ai_config_for_datasource,
+                                run_sync_diagnosis,
+                                should_refresh_event_diagnosis,
+                            )
+
+                            event_result = await db.execute(select(AlertEvent).where(AlertEvent.id == alert.event_id))
+                            event_obj = event_result.scalar_one_or_none()
+                            event_ai_config = await get_event_ai_config_for_datasource(db, alert.datasource_id)
+                            if event_obj and should_refresh_event_diagnosis(event_obj, event_ai_config):
+                                diagnosis_result = await run_sync_diagnosis(db, alert.event_id, timeout_seconds=600)
+                            elif event_obj:
+                                diagnosis_result = {
+                                    "root_cause": event_obj.root_cause,
+                                    "recommended_actions": event_obj.recommended_actions,
+                                    "summary": event_obj.ai_diagnosis_summary,
+                                    "status": event_obj.diagnosis_status,
+                                }
                         except Exception as diag_err:
                             logger.warning(f"Pre-diagnosis failed for alert {alert.id}: {diag_err}")
                     elif alert.event_id and not datasource:
@@ -257,7 +278,17 @@ async def _process_pending_alerts():
                                 await _mark_alert_notified(db, alert)
                                 # Trigger async background diagnosis for deeper analysis (UI side)
                                 if alert.event_id:
-                                    asyncio.create_task(_trigger_alert_auto_diagnosis(alert.event_id))
+                                    from backend.models.alert_event import AlertEvent
+                                    from backend.services.alert_service import (
+                                        get_event_ai_config_for_datasource,
+                                        should_refresh_event_diagnosis,
+                                    )
+
+                                    event_result = await db.execute(select(AlertEvent).where(AlertEvent.id == alert.event_id))
+                                    event_obj = event_result.scalar_one_or_none()
+                                    event_ai_config = await get_event_ai_config_for_datasource(db, alert.datasource_id)
+                                    if event_obj and should_refresh_event_diagnosis(event_obj, event_ai_config):
+                                        asyncio.create_task(_trigger_alert_auto_diagnosis(alert.event_id))
 
                             logger.info(
                                 f"Sent {len(delivery_logs)} notifications for alert {alert.id} "
@@ -545,11 +576,18 @@ async def _send_recovery_via_integrations(db, alert, subscription):
     delivery_logs = []
 
     datasource = None
+    diagnosis_summary = None
     if alert.datasource_id:
         ds_result = await db.execute(
             select(Datasource).where(Datasource.id == alert.datasource_id, alive_filter(Datasource))
         )
         datasource = ds_result.scalar_one_or_none()
+    if alert.event_id:
+        from backend.models.alert_event import AlertEvent
+
+        event_result = await db.execute(select(AlertEvent).where(AlertEvent.id == alert.event_id))
+        event = event_result.scalar_one_or_none()
+        diagnosis_summary = getattr(event, "ai_diagnosis_summary", None) if event else None
 
     for target in (subscription.integration_targets or []):
         if not isinstance(target, dict):
@@ -568,7 +606,7 @@ async def _send_recovery_via_integrations(db, alert, subscription):
             logger.warning(f"Integration {integration_id} 不存在或已禁用")
             continue
 
-        payload = _build_recovery_alert_payload(alert, datasource)
+        payload = _build_recovery_alert_payload(alert, datasource, diagnosis_summary)
 
         params = target.get("params") or {}
         target_id = target.get("target_id")

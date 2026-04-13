@@ -20,11 +20,20 @@ from backend.config import get_settings
 from backend.models.report import Report
 from backend.models.datasource import Datasource
 from backend.models.inspection_trigger import InspectionTrigger
+from backend.models.metric_snapshot import MetricSnapshot
+from backend.models.alert_message import AlertMessage
 from backend.services.action_run_service import get_report_actions_with_runs
+from backend.services.alert_event_service import hydrate_event_strategy_fields
+from backend.services.baseline_service import (
+    compute_upper_bound,
+    extract_metric_value,
+    get_profiles_for_slot,
+)
 from sqlalchemy import select
 from backend.schemas.alert import (
     AlertMessageResponse,
     AlertDiagnosisContext,
+    AlertBaselineComparisonItem,
     AlertDatasourceInfo,
     AlertLinkedReport,
     AlertQueryParams,
@@ -52,6 +61,114 @@ def _extract_recommended_action(text: Optional[str]) -> Optional[str]:
         if any(keyword in normalized for keyword in ["建议", "处置", "操作", "下一步", "优化"]):
             return normalized[:220]
     return None
+
+
+def _build_datasource_info(datasource: Optional[Datasource]) -> Optional[AlertDatasourceInfo]:
+    if not datasource:
+        return None
+
+    return AlertDatasourceInfo(
+        id=datasource.id,
+        name=datasource.name,
+        db_type=datasource.db_type,
+        host=datasource.host,
+        port=datasource.port,
+        database=datasource.database,
+        importance_level=datasource.importance_level or 'production',
+        monitoring_interval=datasource.monitoring_interval or 60,
+        remark=datasource.remark,
+        connection_status=datasource.connection_status or 'unknown',
+        connection_error=datasource.connection_error,
+    )
+
+
+async def _build_event_baseline_comparisons(db: AsyncSession, event) -> list[AlertBaselineComparisonItem]:
+    snapshot_result = await db.execute(
+        select(MetricSnapshot)
+        .where(
+            MetricSnapshot.datasource_id == event.datasource_id,
+            MetricSnapshot.metric_type == "db_status",
+        )
+        .order_by(MetricSnapshot.collected_at.desc())
+        .limit(1)
+    )
+    latest_snapshot = snapshot_result.scalar_one_or_none()
+    if not latest_snapshot or not isinstance(latest_snapshot.data, dict):
+        return []
+
+    metric_names: list[str] = []
+    if event.metric_name:
+        metric_names.append(event.metric_name)
+
+    alerts_result = await db.execute(
+        select(AlertMessage.metric_name)
+        .where(AlertMessage.event_id == event.id, AlertMessage.metric_name.isnot(None))
+        .distinct()
+    )
+    for metric_name in alerts_result.scalars().all():
+        if metric_name and metric_name not in metric_names:
+            metric_names.append(metric_name)
+
+    if not metric_names and getattr(event, "fault_domain", None) == "performance":
+        metric_names = ["cpu_usage", "disk_usage", "connections"]
+    if not metric_names:
+        return []
+
+    profiles = await get_profiles_for_slot(
+        db,
+        datasource_id=event.datasource_id,
+        collected_at=latest_snapshot.collected_at,
+        metric_names=metric_names,
+    )
+    comparisons: list[AlertBaselineComparisonItem] = []
+    for metric_name in metric_names[:6]:
+        profile = profiles.get(metric_name)
+        current_value = extract_metric_value(latest_snapshot.data, metric_name)
+        if current_value is None:
+            continue
+
+        upper_bound = compute_upper_bound(profile, {}) if profile else None
+        status = "no_profile"
+        deviation_ratio = None
+        if profile and upper_bound:
+            status = "above_baseline" if current_value > upper_bound else "within_baseline"
+            base = float(profile.p95_value or profile.avg_value or 0)
+            if base > 0:
+                deviation_ratio = round(float(current_value) / base, 4)
+
+        comparisons.append(
+            AlertBaselineComparisonItem(
+                metric_name=metric_name,
+                current_value=round(float(current_value), 4),
+                baseline_avg=getattr(profile, "avg_value", None),
+                baseline_p95=getattr(profile, "p95_value", None),
+                upper_bound=upper_bound,
+                deviation_ratio=deviation_ratio,
+                sample_count=int(getattr(profile, "sample_count", 0) or 0),
+                status=status,
+                slot_label=f"周{latest_snapshot.collected_at.weekday() + 1} {latest_snapshot.collected_at.hour:02d}:00",
+            )
+        )
+    return comparisons
+
+
+def _resolve_subscription_user_id(requested_user_id: Optional[int], current_user: User) -> int:
+    if requested_user_id is None or requested_user_id == current_user.id:
+        return current_user.id
+    if current_user.is_admin:
+        return requested_user_id
+    raise HTTPException(status_code=403, detail="不能访问其他用户的订阅")
+
+
+async def _get_subscription_for_user(db: AsyncSession, subscription_id: int, current_user: User):
+    from backend.models.alert_subscription import AlertSubscription
+
+    subscription = await get_alive_by_id(db, AlertSubscription, subscription_id)
+    if not subscription:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    if not current_user.is_admin and subscription.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="不能操作其他用户的订阅")
+    return subscription
 
 
 async def _build_alert_response(db: AsyncSession, alert) -> AlertMessageResponse:
@@ -138,22 +255,7 @@ async def _build_alert_response(db: AsyncSession, alert) -> AlertMessageResponse
             recommended_actions_preview = []
             latest_action_run = None
 
-    # Build datasource info if datasource exists
-    datasource_info = None
-    if datasource:
-        datasource_info = AlertDatasourceInfo(
-            id=datasource.id,
-            name=datasource.name,
-            db_type=datasource.db_type,
-            host=datasource.host,
-            port=datasource.port,
-            database=datasource.database,
-            importance_level=datasource.importance_level or 'production',
-            monitoring_interval=datasource.monitoring_interval or 60,
-            remark=datasource.remark,
-            connection_status=datasource.connection_status or 'unknown',
-            connection_error=datasource.connection_error,
-        )
+    datasource_info = _build_datasource_info(datasource)
 
     payload = AlertMessageResponse.model_validate(alert)
     payload.diagnosis_context = AlertDiagnosisContext(
@@ -173,6 +275,30 @@ async def _build_alert_response(db: AsyncSession, alert) -> AlertMessageResponse
     return payload
 
 
+async def _build_event_context(db: AsyncSession, event) -> AlertDiagnosisContext:
+    hydrate_event_strategy_fields(event)
+    datasource = await get_alive_by_id(db, Datasource, event.datasource_id)
+    datasource_info = _build_datasource_info(datasource)
+    recommended_action = _extract_recommended_action(event.recommended_actions or event.ai_diagnosis_summary)
+    baseline_comparisons = await _build_event_baseline_comparisons(db, event)
+    return AlertDiagnosisContext(
+        datasource_name=datasource.name if datasource else None,
+        datasource_type=datasource.db_type if datasource else None,
+        datasource_info=datasource_info,
+        case_summary=event.title,
+        diagnosis_summary=event.ai_diagnosis_summary,
+        root_cause=event.root_cause,
+        recommended_action=recommended_action or event.recommended_actions,
+        latest_trigger_type=event.alert_type or event.metric_name,
+        event_category=event.event_category,
+        fault_domain=event.fault_domain,
+        lifecycle_stage=event.lifecycle_stage,
+        diagnosis_refresh_needed=event.diagnosis_refresh_needed,
+        diagnosis_trigger_reason=event.diagnosis_trigger_reason,
+        baseline_comparisons=baseline_comparisons,
+    )
+
+
 @router.get("", response_model=dict)
 async def list_alerts(
     datasource_ids: Optional[str] = Query(None, description="Comma-separated datasource IDs"),
@@ -183,7 +309,8 @@ async def list_alerts(
     search: Optional[str] = None,
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
 ):
     """List alerts with filters"""
     # Parse datasource_ids
@@ -226,7 +353,8 @@ async def list_alert_events(
     search: Optional[str] = None,
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
 ):
     """List aggregated alert events with filters"""
     # Parse datasource_ids
@@ -262,7 +390,8 @@ async def get_event_alerts(
     event_id: int,
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
 ):
     """Get all alerts in an event"""
     alerts, total = await AlertEventService.get_alerts_in_event(
@@ -284,11 +413,13 @@ async def get_event_alerts(
 async def acknowledge_event(
     event_id: int,
     request: AlertEventAcknowledgeRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Acknowledge event and all its alerts"""
     try:
-        event = await AlertEventService.acknowledge_event(db, event_id, request.user_id)
+        del request
+        event = await AlertEventService.acknowledge_event(db, event_id, current_user.id)
         await db.commit()
         return AlertEventResponse.model_validate(event)
     except ValueError as e:
@@ -298,7 +429,8 @@ async def acknowledge_event(
 @router.post("/events/{event_id}/resolve", response_model=AlertEventResponse)
 async def resolve_event(
     event_id: int,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
 ):
     """Resolve event and all its alerts"""
     try:
@@ -309,10 +441,27 @@ async def resolve_event(
         raise HTTPException(status_code=404, detail=str(e))
 
 
+@router.get("/events/{event_id}/context", response_model=AlertDiagnosisContext)
+async def get_event_context(
+    event_id: int,
+    db: AsyncSession = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
+):
+    from backend.models.alert_event import AlertEvent
+
+    result = await db.execute(select(AlertEvent).where(AlertEvent.id == event_id))
+    event = result.scalar_one_or_none()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    return await _build_event_context(db, event)
+
+
 @router.get("/{alert_id}", response_model=AlertMessageResponse)
 async def get_alert(
     alert_id: int,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
 ):
     """Get alert details"""
     alert = await AlertService.get_alert_by_id(db, alert_id)
@@ -355,7 +504,8 @@ async def get_public_alert(
 @router.get("/{alert_id}/context", response_model=AlertDiagnosisContext)
 async def get_alert_context(
     alert_id: int,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
 ):
     """Get compact diagnosis context for P0 alert->report->chat loop"""
     alert = await AlertService.get_alert_by_id(db, alert_id)
@@ -410,7 +560,7 @@ async def public_alert_page(
     status_color = {'active': '#dc2626', 'acknowledged': '#ea580c', 'resolved': '#16a34a'}.get(alert.status or '', '#6b7280')
 
     # Alert type label
-    alert_type_label = {'threshold_violation': '超过阈值', 'custom_expression': '自定义表达式', 'system_error': '系统错误'}.get(alert.alert_type or '', alert.alert_type or '-')
+    alert_type_label = {'threshold_violation': '超过阈值', 'baseline_deviation': '偏离基线', 'custom_expression': '自定义表达式', 'system_error': '系统错误', 'ai_policy_violation': 'AI 判警'}.get(alert.alert_type or '', alert.alert_type or '-')
 
     # Datasource info
     ds_name = escape_html(datasource.name if datasource else '-')
@@ -673,10 +823,12 @@ async def public_alert_page(
 async def acknowledge_alert(
     alert_id: int,
     request: AlertAcknowledgeRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Acknowledge an alert"""
-    alert = await AlertService.acknowledge_alert(db, alert_id, request.user_id)
+    del request
+    alert = await AlertService.acknowledge_alert(db, alert_id, current_user.id)
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
 
@@ -686,7 +838,8 @@ async def acknowledge_alert(
 @router.post("/{alert_id}/resolve", response_model=AlertMessageResponse)
 async def resolve_alert(
     alert_id: int,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
 ):
     """Resolve an alert"""
     alert = await AlertService.resolve_alert(db, alert_id)
@@ -698,21 +851,28 @@ async def resolve_alert(
 
 @router.get("/subscriptions/list", response_model=List[AlertSubscriptionResponse])
 async def list_subscriptions(
-    user_id: int = Query(..., description="User ID"),
-    db: AsyncSession = Depends(get_db)
+    user_id: Optional[int] = Query(None, description="User ID"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """List user subscriptions"""
-    subscriptions = await AlertService.get_user_subscriptions(db, user_id)
+    target_user_id = _resolve_subscription_user_id(user_id, current_user)
+    subscriptions = await AlertService.get_user_subscriptions(db, target_user_id)
     return [AlertSubscriptionResponse.model_validate(sub) for sub in subscriptions]
 
 
 @router.post("/subscriptions", response_model=AlertSubscriptionResponse)
 async def create_subscription(
     subscription: AlertSubscriptionCreate,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Create a new alert subscription"""
-    created = await AlertService.create_subscription(db, subscription)
+    owner_user_id = _resolve_subscription_user_id(subscription.user_id, current_user)
+    created = await AlertService.create_subscription(
+        db,
+        subscription.model_copy(update={"user_id": owner_user_id}),
+    )
     return AlertSubscriptionResponse.model_validate(created)
 
 
@@ -720,9 +880,11 @@ async def create_subscription(
 async def update_subscription(
     subscription_id: int,
     update_data: AlertSubscriptionUpdate,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Update an alert subscription"""
+    await _get_subscription_for_user(db, subscription_id, current_user)
     updated = await AlertService.update_subscription(
         db,
         subscription_id,
@@ -751,20 +913,11 @@ async def delete_subscription(
 @router.post("/subscriptions/{subscription_id}/test")
 async def test_notification(
     subscription_id: int,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Test notification delivery for a subscription"""
-    # Get subscription (including disabled ones for testing)
-    from sqlalchemy import select as sa_select
-    from backend.models.alert_subscription import AlertSubscription
-    from backend.models.soft_delete import alive_filter
-    sub_result = await db.execute(
-        sa_select(AlertSubscription).where(AlertSubscription.id == subscription_id, alive_filter(AlertSubscription))
-    )
-    subscription = sub_result.scalar_one_or_none()
-
-    if not subscription:
-        raise HTTPException(status_code=404, detail="Subscription not found")
+    subscription = await _get_subscription_for_user(db, subscription_id, current_user)
 
     # Create a test alert
     test_alert = await AlertService.create_alert(

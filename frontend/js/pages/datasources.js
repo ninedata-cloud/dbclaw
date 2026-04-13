@@ -610,123 +610,76 @@ const DatasourcesPage = {
         }
     },
 
-    async _showInspectionConfig(datasourceId) {
+    async _showInspectionConfig(datasourceId, draft = null) {
         try {
-            const config = await API.get(`/api/inspections/config/${datasourceId}`);
-            const thresholdRules = config?.threshold_rules || {};
-
-            // Check if custom expression is used
-            const hasCustomExpression = !!thresholdRules.custom_expression;
-            const customExpression = thresholdRules.custom_expression?.expression || '';
-            const customDuration = thresholdRules.custom_expression?.duration || 60;
-
-            // Preset threshold values
-            const cpuEnabled = !hasCustomExpression && !!thresholdRules.cpu_usage;
-            const cpuThreshold = thresholdRules.cpu_usage?.threshold || 50;
-            const cpuDuration = thresholdRules.cpu_usage?.duration || 60;
-
-            const diskEnabled = !hasCustomExpression && !!thresholdRules.disk_usage;
-            const diskThreshold = thresholdRules.disk_usage?.threshold || 80;
-            const diskDuration = thresholdRules.disk_usage?.duration || 60;
-
-            const connectionsEnabled = !hasCustomExpression && !!thresholdRules.connections;
-            const connectionsThreshold = thresholdRules.connections?.threshold || 20;
-            const connectionsDuration = thresholdRules.connections?.duration || 60;
+            const [config, templates, baselineSummary] = await Promise.all([
+                API.get(`/api/inspections/config/${datasourceId}`),
+                API.getAlertTemplates(),
+                API.get(`/api/inspections/baseline/${datasourceId}`),
+            ]);
+            this._inspectionConfigSnapshot = config;
+            this._inspectionTemplates = Array.isArray(templates) ? templates : [];
+            this._inspectionBaselineSummary = baselineSummary || null;
+            const effectiveConfig = {
+                ...config,
+                ...(draft && typeof draft === 'object' ? draft : {}),
+            };
+            const selectedTemplateId = effectiveConfig?.alert_template_id || this._inspectionTemplates.find((item) => item.is_default)?.id || '';
 
             Modal.show({
-                title: '巡检配置',
+                title: '巡检与告警配置',
                 content: `
                     <div style="padding:10px;">
                         <label style="display:block;margin-bottom:15px;">
-                            <input type="checkbox" id="enableAuto" ${config?.enabled ? 'checked' : ''}>
+                            <input type="checkbox" id="enableAuto" ${effectiveConfig?.enabled ? 'checked' : ''}>
                             启用自动巡检
                         </label>
                         <label style="display:block;margin-bottom:10px;">
-                            定时间隔（秒）:
-                            <input type="number" id="scheduleInterval" value="${config?.schedule_interval || 86400}"
-                                   style="width:100%;padding:8px;margin-top:5px;"
-                                   placeholder="86400 (daily)">
+                            巡检频率:
+                            <select id="scheduleInterval" style="width:100%;padding:8px;margin-top:5px;">
+                                ${this._buildScheduleIntervalOptions(effectiveConfig?.schedule_interval || 86400)}
+                            </select>
                         </label>
                         <p style="font-size:12px;color:#666;margin-top:5px;">
-                            示例: 86400（每天）, 21600（每 6 小时）, 3600（每小时）
+                            推荐先使用模板默认策略，实例侧只保留少量运行开关，降低配置门槛。
                         </p>
                         <label style="display:block;margin-bottom:15px;margin-top:15px;">
-                            <input type="checkbox" id="useAI" ${config?.use_ai_analysis !== false ? 'checked' : ''}>
+                            <input type="checkbox" id="useAI" ${effectiveConfig?.use_ai_analysis !== false ? 'checked' : ''}>
                             使用 AI 分析
                         </label>
 
                         <div style="border-top:1px solid #ddd;margin-top:20px;padding-top:20px;">
-                            <h4 style="margin-bottom:15px;font-size:14px;font-weight:600;">异常阈值配置</h4>
-
-                            <div id="presetThresholds" style="margin-bottom:20px;">
-                                <p style="font-size:13px;color:#666;margin-bottom:10px;">预设阈值:</p>
-
-                                <label style="display:flex;align-items:center;margin-bottom:10px;">
-                                    <input type="checkbox" id="cpuEnabled" ${cpuEnabled ? 'checked' : ''} style="margin-right:8px;">
-                                    <span style="flex:1;">CPU 使用率 大于</span>
-                                    <input type="number" id="cpuThreshold" value="${cpuThreshold}"
-                                           style="width:60px;padding:4px;margin:0 5px;" min="0" max="100">
-                                    <span>% 持续</span>
-                                    <input type="number" id="cpuDuration" value="${cpuDuration}"
-                                           style="width:60px;padding:4px;margin:0 5px;" min="1">
-                                    <span>秒</span>
-                                </label>
-
-                                <label style="display:flex;align-items:center;margin-bottom:10px;">
-                                    <input type="checkbox" id="diskEnabled" ${diskEnabled ? 'checked' : ''} style="margin-right:8px;">
-                                    <span style="flex:1;">磁盘使用率 大于</span>
-                                    <input type="number" id="diskThreshold" value="${diskThreshold}"
-                                           style="width:60px;padding:4px;margin:0 5px;" min="0" max="100">
-                                    <span>% 持续</span>
-                                    <input type="number" id="diskDuration" value="${diskDuration}"
-                                           style="width:60px;padding:4px;margin:0 5px;" min="1">
-                                    <span>秒</span>
-                                </label>
-
-                                <label style="display:flex;align-items:center;margin-bottom:10px;">
-                                    <input type="checkbox" id="connectionsEnabled" ${connectionsEnabled ? 'checked' : ''} style="margin-right:8px;">
-                                    <span style="flex:1;">活跃连接数 大于</span>
-                                    <input type="number" id="connectionsThreshold" value="${connectionsThreshold}"
-                                           style="width:60px;padding:4px;margin:0 5px;" min="0">
-                                    <span>持续</span>
-                                    <input type="number" id="connectionsDuration" value="${connectionsDuration}"
-                                           style="width:60px;padding:4px;margin:0 5px;" min="1">
-                                    <span>秒</span>
-                                </label>
+                            <h4 style="margin-bottom:15px;font-size:14px;font-weight:600;">告警模板</h4>
+                            <label style="display:block;margin-bottom:10px;">
+                                <select id="alertTemplateId" style="width:100%;padding:8px;margin-top:5px;">
+                                    <option value="">请选择告警模板</option>
+                                    ${this._inspectionTemplates.filter((item) => item.enabled || item.id === selectedTemplateId).map((item) => `
+                                        <option value="${item.id}" ${String(selectedTemplateId) === String(item.id) ? 'selected' : ''}>
+                                            ${this._escapeHtml(item.name)}${item.is_default ? '（默认）' : ''}
+                                        </option>
+                                    `).join('')}
+                                </select>
+                            </label>
+                            <div id="alertTemplatePreview" style="font-size:12px;color:#666;border:1px solid #eee;border-radius:8px;padding:12px;min-height:96px;">
+                                ${this._renderAlertTemplatePreview(selectedTemplateId, baselineSummary)}
                             </div>
+                            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
+                                <button id="openAlertTemplatesBtn" class="btn btn-secondary" type="button">管理告警模板</button>
+                                <button id="viewBaselineDetailBtn" class="btn btn-secondary" type="button">查看基线详情</button>
+                                <button id="rebuildBaselineBtn" class="btn btn-secondary" type="button">重建当前实例基线</button>
+                            </div>
+                            <p style="font-size:12px;color:#666;margin-top:8px;">
+                                阈值、基线和事件级 AI 诊断都统一维护在模板里，实例配置只负责“选哪套策略”。
+                            </p>
+                        </div>
 
-                            <div style="text-align:center;margin:15px 0;color:#999;">OR</div>
-
-                            <div id="customExpression">
-                                <label style="display:block;margin-bottom:10px;">
-                                    <input type="checkbox" id="useCustomExpression" ${hasCustomExpression ? 'checked' : ''}>
-                                    使用自定义表达式
-                                </label>
-
-                                <div id="customExpressionFields" style="display:${hasCustomExpression ? 'block' : 'none'};">
-                                    <label style="display:block;margin-bottom:5px;font-size:12px;">
-                                        表达式:
-                                    </label>
-                                    <textarea id="customExpressionText"
-                                              style="width:100%;padding:8px;font-family:monospace;font-size:12px;min-height:60px;margin-bottom:10px;"
-                                              placeholder="cpu_usage > 50 and connections > 20">${customExpression}</textarea>
-
-                                    <label style="display:flex;align-items:center;margin-bottom:10px;">
-                                        <span style="margin-right:10px;">持续时间:</span>
-                                        <input type="number" id="customExpressionDuration" value="${customDuration}"
-                                               style="width:80px;padding:4px;" min="1">
-                                        <span style="margin-left:5px;">秒</span>
-                                    </label>
-
-                                    <button id="testExpressionBtn" class="btn btn-secondary" style="margin-bottom:10px;">
-                                        Test Expression
-                                    </button>
-                                    <div id="expressionValidation" style="font-size:12px;margin-top:5px;"></div>
-
-                                    <p style="font-size:11px;color:#666;margin-top:10px;">
-                                        可用指标: cpu_usage, memory_usage, disk_usage, connections, qps, tps
-                                    </p>
-                                </div>
+                        <div style="border-top:1px solid #ddd;margin-top:20px;padding-top:20px;">
+                            <h4 style="margin-bottom:15px;font-size:14px;font-weight:600;">当前运行状态</h4>
+                            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;font-size:12px;color:#666;">
+                                <div>当前模板：${this._escapeHtml(config?.alert_template_name || '未绑定模板')}</div>
+                                <div>下次计划时间：${this._escapeHtml(config?.next_scheduled_at ? Format.datetime(config.next_scheduled_at) : '-')}</div>
+                                <div>上次执行时间：${this._escapeHtml(config?.last_scheduled_at ? Format.datetime(config.last_scheduled_at) : '-')}</div>
+                                <div>基线画像：${baselineSummary?.profile_count || 0} 个时间槽</div>
                             </div>
                         </div>
                     </div>
@@ -737,109 +690,411 @@ const DatasourcesPage = {
                 ]
             });
 
-            // Setup event listeners for threshold UI
-            this._setupThresholdListeners();
-
+            this._setupInspectionConfigListeners(datasourceId);
         } catch (error) {
-            Toast.error('加载失败 configuration');
+            Toast.error('加载巡检配置失败: ' + error.message);
         }
     },
 
-    _setupThresholdListeners() {
-        // Toggle custom expression fields
-        const useCustomCheckbox = DOM.$('#useCustomExpression');
-        const customFields = DOM.$('#customExpressionFields');
-        const presetThresholds = DOM.$('#presetThresholds');
+    _buildScheduleIntervalOptions(currentValue) {
+        const presets = [
+            { value: 300, label: '每 5 分钟' },
+            { value: 900, label: '每 15 分钟' },
+            { value: 3600, label: '每小时' },
+            { value: 21600, label: '每 6 小时' },
+            { value: 86400, label: '每天' },
+        ];
+        const numericCurrent = parseInt(currentValue, 10) || 86400;
+        const hasCurrent = presets.some((item) => item.value === numericCurrent);
+        const items = hasCurrent ? presets : presets.concat([{ value: numericCurrent, label: `自定义（${numericCurrent} 秒）` }]);
+        return items.map((item) => `<option value="${item.value}" ${item.value === numericCurrent ? 'selected' : ''}>${item.label}</option>`).join('');
+    },
 
-        useCustomCheckbox?.addEventListener('change', (e) => {
-            const isCustom = e.target.checked;
-            customFields.style.display = isCustom ? 'block' : 'none';
+    _normalizeAlertTemplateConfig(config) {
+        const payload = config && typeof config === 'object' ? config : {};
+        const thresholdRules = payload.threshold_rules && typeof payload.threshold_rules === 'object' ? payload.threshold_rules : {};
+        return {
+            alert_engine_mode: payload.alert_engine_mode === 'ai' ? 'ai' : 'threshold',
+            threshold_rules: thresholdRules,
+            baseline_config: payload.baseline_config || {},
+            event_ai_config: payload.event_ai_config || {},
+            ai_policy_text: payload.ai_policy_text || null,
+        };
+    },
 
-            // Disable preset checkboxes when custom is enabled
-            ['cpuEnabled', 'diskEnabled', 'connectionsEnabled'].forEach(id => {
-                const checkbox = DOM.$(`#${id}`);
-                if (checkbox) {
-                    checkbox.disabled = isCustom;
-                    if (isCustom) checkbox.checked = false;
+    _renderAlertTemplatePreview(templateId, baselineSummary = null) {
+        const template = (this._inspectionTemplates || []).find((item) => String(item.id) === String(templateId));
+        if (!template) {
+            return '选择模板后，这里会展示该模板的阈值、基线和事件诊断摘要。';
+        }
+
+        const config = this._normalizeAlertTemplateConfig(template.template_config);
+        const customExpression = config.threshold_rules?.custom_expression;
+        const thresholdSummary = customExpression?.expression
+            ? `自定义表达式：${customExpression.expression}`
+            : [
+                ['cpu_usage', 'CPU'],
+                ['disk_usage', '磁盘'],
+                ['connections', '连接'],
+            ].map(([key, label]) => {
+                const rule = config.threshold_rules?.[key];
+                return rule?.threshold != null ? `${label}>${rule.threshold}（${rule.duration || '-'}秒）` : null;
+            }).filter(Boolean).join(' / ');
+        const baselineText = config.baseline_config?.enabled
+            ? `已启用${baselineSummary ? `，当前实例已有 ${baselineSummary.profile_count || 0} 个时间槽画像` : ''}`
+            : '未启用';
+        const eventAIText = config.event_ai_config?.enabled !== false ? '开启' : '关闭';
+        return `
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                <strong>${this._escapeHtml(template.name)}</strong>
+                ${template.is_default ? '<span class="badge badge-info">默认模板</span>' : ''}
+                <span class="badge ${template.enabled ? 'badge-success' : 'badge-secondary'}">${template.enabled ? '启用中' : '已停用'}</span>
+            </div>
+            <div style="line-height:1.7;">
+                <div>判警方式：${this._escapeHtml(config.alert_engine_mode === 'ai' ? 'AI 判警' : '阈值判警')}</div>
+                <div>基础阈值：${this._escapeHtml(thresholdSummary || '未配置')}</div>
+                <div>实例基线：${this._escapeHtml(baselineText)}</div>
+                <div>事件级 AI 诊断：${this._escapeHtml(eventAIText)}</div>
+                ${config.alert_engine_mode === 'ai' && config.ai_policy_text ? `<div>AI 规则：${this._escapeHtml(config.ai_policy_text)}</div>` : ''}
+                ${template.summary ? `<div>摘要：${this._escapeHtml(template.summary)}</div>` : ''}
+            </div>
+        `;
+    },
+
+    _syncInspectionTemplatePreview(selectedTemplateId = null) {
+        const templateId = selectedTemplateId ?? DOM.$('#alertTemplateId')?.value;
+        const preview = DOM.$('#alertTemplatePreview');
+        if (preview) {
+            preview.innerHTML = this._renderAlertTemplatePreview(templateId, this._inspectionBaselineSummary);
+        }
+        const template = (this._inspectionTemplates || []).find((item) => String(item.id) === String(templateId));
+        const config = this._normalizeAlertTemplateConfig(template?.template_config);
+        const rebuildBtn = DOM.$('#rebuildBaselineBtn');
+        const detailBtn = DOM.$('#viewBaselineDetailBtn');
+        if (rebuildBtn) {
+            rebuildBtn.style.display = config.baseline_config?.enabled ? 'inline-flex' : 'none';
+        }
+        if (detailBtn) {
+            detailBtn.style.display = config.baseline_config?.enabled ? 'inline-flex' : 'none';
+        }
+    },
+
+    _setupInspectionConfigListeners(datasourceId) {
+        DOM.$('#alertTemplateId')?.addEventListener('change', (event) => {
+            this._syncInspectionTemplatePreview(event.target.value);
+        });
+
+        DOM.$('#openAlertTemplatesBtn')?.addEventListener('click', () => {
+            Modal.hide();
+            Router.navigate('alerts?tab=templates');
+        });
+
+        DOM.$('#viewBaselineDetailBtn')?.addEventListener('click', async () => {
+            await this._showBaselineDetail(datasourceId, this._captureInspectionConfigDraft());
+        });
+
+        DOM.$('#rebuildBaselineBtn')?.addEventListener('click', async () => {
+            const btn = DOM.$('#rebuildBaselineBtn');
+            btn.disabled = true;
+            btn.textContent = '重建中...';
+            try {
+                const result = await API.post(`/api/inspections/baseline/${datasourceId}/rebuild`);
+                this._inspectionBaselineSummary = result;
+                this._syncInspectionTemplatePreview();
+                Toast.success('历史基线重建完成');
+            } catch (err) {
+                Toast.error('重建基线失败: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '重建当前实例基线';
+            }
+        });
+
+        this._syncInspectionTemplatePreview();
+    },
+
+    _captureInspectionConfigDraft() {
+        return {
+            enabled: Boolean(DOM.$('#enableAuto')?.checked),
+            schedule_interval: parseInt(DOM.$('#scheduleInterval')?.value, 10) || 86400,
+            use_ai_analysis: Boolean(DOM.$('#useAI')?.checked),
+            alert_template_id: DOM.$('#alertTemplateId')?.value ? parseInt(DOM.$('#alertTemplateId')?.value, 10) : null,
+        };
+    },
+
+    async _showBaselineDetail(datasourceId, draft = null) {
+        try {
+            const summary = await API.get(`/api/inspections/baseline/${datasourceId}?limit=500`);
+            const content = this._renderBaselineDetailContent(summary || {});
+            Modal.show({
+                title: '实例基线详情',
+                content,
+                size: 'xlarge',
+                width: '1080px',
+                bodyClassName: 'baseline-detail-modal-body',
+                onHide: () => this._showInspectionConfig(datasourceId, draft),
+                buttons: [
+                    { text: '关闭', variant: 'secondary', onClick: () => Modal.hide() },
+                ],
+            });
+        } catch (error) {
+            Toast.error('加载基线详情失败: ' + error.message);
+        }
+    },
+
+    _renderBaselineDetailContent(summary) {
+        const wrapper = DOM.el('div', { className: 'baseline-detail-modal' });
+        const enabled = Boolean(summary?.enabled);
+        const profiles = Array.isArray(summary?.profiles) ? summary.profiles : [];
+        const groupedProfiles = this._groupBaselineProfiles(profiles);
+
+        const summaryCard = DOM.el('div', { className: 'baseline-detail-summary' });
+        summaryCard.innerHTML = `
+            <div class="baseline-detail-summary-item">
+                <div class="baseline-detail-summary-label">基线状态</div>
+                <div class="baseline-detail-summary-value">${enabled ? '已启用' : '未启用'}</div>
+            </div>
+            <div class="baseline-detail-summary-item">
+                <div class="baseline-detail-summary-label">画像数量</div>
+                <div class="baseline-detail-summary-value">${summary?.profile_count || 0}</div>
+            </div>
+            <div class="baseline-detail-summary-item">
+                <div class="baseline-detail-summary-label">学习天数</div>
+                <div class="baseline-detail-summary-value">${summary?.diagnostics?.learning_days || '-'}</div>
+            </div>
+            <div class="baseline-detail-summary-item">
+                <div class="baseline-detail-summary-label">最少样本数</div>
+                <div class="baseline-detail-summary-value">${summary?.diagnostics?.min_samples || '-'}</div>
+            </div>
+            <div class="baseline-detail-summary-item">
+                <div class="baseline-detail-summary-label">默认指标</div>
+                <div class="baseline-detail-summary-value baseline-detail-summary-metrics">${Array.isArray(summary?.diagnostics?.default_metrics) && summary.diagnostics.default_metrics.length
+                    ? summary.diagnostics.default_metrics.map((metric) => this._escapeHtml(this._getBaselineMetricLabel(metric))).join(' / ')
+                    : '-'}</div>
+            </div>
+            <div class="baseline-detail-summary-item baseline-detail-summary-item-wide">
+                <div class="baseline-detail-summary-label">最近更新时间</div>
+                <div class="baseline-detail-summary-value">${summary?.last_profile_updated_at ? this._escapeHtml(Format.datetime(summary.last_profile_updated_at)) : '-'}</div>
+            </div>
+        `;
+        wrapper.appendChild(summaryCard);
+
+        if (!enabled) {
+            wrapper.appendChild(DOM.el('div', {
+                className: 'empty-state',
+                innerHTML: '<h3>当前模板未启用实例基线</h3><p>请选择启用基线的告警模板后，再查看画像明细。</p>',
+            }));
+            return wrapper;
+        }
+
+        if (!profiles.length) {
+            wrapper.appendChild(DOM.el('div', {
+                className: 'empty-state',
+                innerHTML: '<h3>暂无基线画像</h3><p>可以先等待系统自然积累样本，或回到上一层点击“重建当前实例基线”。</p>',
+            }));
+            return wrapper;
+        }
+
+        const metricsBoard = DOM.el('div', { className: 'baseline-detail-metrics-board' });
+        const metricConfigs = summary?.baseline_config?.metrics || {};
+        this._getOrderedBaselineMetricGroups(groupedProfiles).forEach(([metricName, items]) => {
+            metricsBoard.appendChild(this._renderBaselineMetricCard(metricName, items, metricConfigs[metricName] || {}));
+        });
+        wrapper.appendChild(metricsBoard);
+
+        return wrapper;
+    },
+
+    _getOrderedBaselineMetricGroups(groupedProfiles) {
+        const preferredOrder = ['cpu_usage', 'disk_usage', 'connections', 'connections_active', 'qps', 'tps'];
+        const keys = Object.keys(groupedProfiles || {});
+        return keys
+            .sort((left, right) => {
+                const leftIndex = preferredOrder.indexOf(left);
+                const rightIndex = preferredOrder.indexOf(right);
+                if (leftIndex === -1 && rightIndex === -1) return left.localeCompare(right);
+                if (leftIndex === -1) return 1;
+                if (rightIndex === -1) return -1;
+                return leftIndex - rightIndex;
+            })
+            .map((key) => [key, groupedProfiles[key]]);
+    },
+
+    _renderBaselineMetricCard(metricName, items, metricConfig = {}) {
+        const card = DOM.el('div', {
+            className: `baseline-metric-card baseline-metric-card-${this._escapeHtml(metricName)}`,
+        });
+        const slotMap = this._buildBaselineSlotMap(items);
+        const latestItem = [...items].sort((left, right) => {
+            const leftTime = left?.updated_at ? new Date(left.updated_at).getTime() : 0;
+            const rightTime = right?.updated_at ? new Date(right.updated_at).getTime() : 0;
+            return rightTime - leftTime;
+        })[0];
+
+        const hoursHeader = [0, 6, 12, 18, 23].map((hour) => `
+            <span style="grid-column:${hour + 1};">${String(hour).padStart(2, '0')}</span>
+        `).join('');
+
+        const rows = Array.from({ length: 7 }, (_, weekday) => {
+            const cells = Array.from({ length: 24 }, (_, hour) => {
+                const item = slotMap[`${weekday}-${hour}`];
+                if (!item) {
+                    return '<span class="baseline-heatmap-cell is-empty"></span>';
                 }
+                const levelClass = this._getBaselineCellLevel(metricName, item, metricConfig);
+                const sampleCount = item.sample_count ?? '-';
+                const label = `${this._getWeekdayLabel(weekday)} ${String(hour).padStart(2, '0')}:00 | 均值 ${this._formatBaselineNumber(item.avg_value)}${this._getBaselineMetricUnit(metricName)} | P95 ${this._formatBaselineNumber(item.p95_value)}${this._getBaselineMetricUnit(metricName)} | 样本 ${sampleCount}`;
+                return `<span class="baseline-heatmap-cell ${levelClass}" title="${this._escapeAttr(label)}"></span>`;
+            }).join('');
+            return `
+                <div class="baseline-heatmap-row">
+                    <div class="baseline-heatmap-row-label">${this._escapeHtml(this._getWeekdayLabel(weekday).replace('周', ''))}</div>
+                    <div class="baseline-heatmap-row-cells">${cells}</div>
+                </div>
+            `;
+        }).join('');
+
+        const avgRange = this._buildBaselineRangeText(items, 'avg_value', metricName);
+        const p95Range = this._buildBaselineRangeText(items, 'p95_value', metricName);
+
+        card.innerHTML = `
+            <div class="baseline-metric-card-header">
+                <div>
+                    <div class="baseline-metric-card-title">${this._escapeHtml(this._getBaselineMetricLabel(metricName))}</div>
+                    <div class="baseline-metric-card-subtitle">
+                        ${items.length} 个时间槽
+                        ${latestItem?.updated_at ? ` · 更新于 ${this._escapeHtml(Format.datetime(latestItem.updated_at))}` : ''}
+                    </div>
+                </div>
+                <div class="baseline-metric-card-stats">
+                    <span>均值区间 ${this._escapeHtml(avgRange)}</span>
+                    <span>P95 区间 ${this._escapeHtml(p95Range)}</span>
+                </div>
+            </div>
+            <div class="baseline-heatmap">
+                <div class="baseline-heatmap-hours">
+                    ${hoursHeader}
+                </div>
+                <div class="baseline-heatmap-body">
+                    ${rows}
+                </div>
+            </div>
+            <div class="baseline-metric-card-legend">
+                <span class="baseline-legend-dot baseline-legend-dot-low"></span> 低负载
+                <span class="baseline-legend-dot baseline-legend-dot-medium"></span> 中等负载
+                <span class="baseline-legend-dot baseline-legend-dot-high"></span> 高负载
+            </div>
+        `;
+        return card;
+    },
+
+    _groupBaselineProfiles(profiles) {
+        const groups = {};
+        (profiles || []).forEach((item) => {
+            const metricName = item.metric_name || 'unknown';
+            if (!groups[metricName]) {
+                groups[metricName] = [];
+            }
+            groups[metricName].push(item);
+        });
+        Object.values(groups).forEach((items) => {
+            items.sort((a, b) => {
+                const weekdayDiff = Number(a.weekday || 0) - Number(b.weekday || 0);
+                if (weekdayDiff !== 0) return weekdayDiff;
+                return Number(a.hour || 0) - Number(b.hour || 0);
             });
         });
+        return groups;
+    },
 
-        // Test expression button
-        const testBtn = DOM.$('#testExpressionBtn');
-        testBtn?.addEventListener('click', async () => {
-            const expression = DOM.$('#customExpressionText')?.value.trim();
-            const validationDiv = DOM.$('#expressionValidation');
+    _buildBaselineSlotMap(items) {
+        return (items || []).reduce((acc, item) => {
+            acc[`${Number(item.weekday || 0)}-${Number(item.hour || 0)}`] = item;
+            return acc;
+        }, {});
+    },
 
-            if (!expression) {
-                validationDiv.innerHTML = '<span style="color:#f44336;">Please enter an expression</span>';
-                return;
-            }
+    _getBaselineCellLevel(metricName, item, metricConfig = {}) {
+        const representativeValue = Number(item?.p95_value ?? item?.avg_value ?? item?.max_value ?? 0);
+        if (!Number.isFinite(representativeValue)) {
+            return 'baseline-level-low';
+        }
 
-            testBtn.disabled = true;
-            testBtn.textContent = 'Testing...';
+        if (metricName === 'cpu_usage' || metricName === 'disk_usage') {
+            if (representativeValue < 20) return 'baseline-level-low';
+            if (representativeValue <= 80) return 'baseline-level-medium';
+            return 'baseline-level-high';
+        }
 
-            try {
-                const result = await API.post('/api/inspections/validate-expression', { expression });
+        if (metricName === 'connections' || metricName === 'connections_active') {
+            if (representativeValue < 5) return 'baseline-level-low';
+            if (representativeValue <= 20) return 'baseline-level-medium';
+            return 'baseline-level-high';
+        }
 
-                if (result.valid) {
-                    validationDiv.innerHTML = '<span style="color:#4caf50;">✓ Valid expression</span>';
-                } else {
-                    validationDiv.innerHTML = `<span style="color:#f44336;">✗ Invalid: ${result.error}</span>`;
-                }
-            } catch (err) {
-                validationDiv.innerHTML = `<span style="color:#f44336;">✗ Validation failed: ${err.message}</span>`;
-            } finally {
-                testBtn.disabled = false;
-                testBtn.textContent = 'Test Expression';
-            }
-        });
+        const minimum = Number(metricConfig?.minimum);
+        if (Number.isFinite(minimum) && minimum > 0) {
+            if (representativeValue < minimum) return 'baseline-level-low';
+            if (representativeValue <= minimum * 2) return 'baseline-level-medium';
+            return 'baseline-level-high';
+        }
+
+        if (representativeValue < 20) return 'baseline-level-low';
+        if (representativeValue <= 80) return 'baseline-level-medium';
+        return 'baseline-level-high';
+    },
+
+    _buildBaselineRangeText(items, fieldName, metricName) {
+        const values = (items || [])
+            .map((item) => Number(item?.[fieldName]))
+            .filter((value) => Number.isFinite(value));
+        if (!values.length) {
+            return '-';
+        }
+        const minValue = Math.min(...values);
+        const maxValue = Math.max(...values);
+        const unit = this._getBaselineMetricUnit(metricName);
+        return `${this._formatBaselineNumber(minValue)}${unit} - ${this._formatBaselineNumber(maxValue)}${unit}`;
+    },
+
+    _getWeekdayLabel(weekday) {
+        return ['周一', '周二', '周三', '周四', '周五', '周六', '周日'][Number(weekday) || 0] || `星期${weekday}`;
+    },
+
+    _getBaselineMetricLabel(metricName) {
+        return {
+            cpu_usage: 'CPU 使用率',
+            disk_usage: '磁盘使用率',
+            connections: '活跃连接数',
+            connections_active: '活跃连接数',
+            qps: 'QPS',
+            tps: 'TPS',
+        }[metricName] || metricName || '-';
+    },
+
+    _getBaselineMetricUnit(metricName) {
+        if (metricName === 'cpu_usage' || metricName === 'disk_usage') return '%';
+        return '';
+    },
+
+    _formatBaselineNumber(value) {
+        if (value === null || value === undefined || Number.isNaN(Number(value))) return '-';
+        const numericValue = Number(value);
+        if (Math.abs(numericValue) >= 100) return numericValue.toFixed(0);
+        if (Math.abs(numericValue) >= 10) return numericValue.toFixed(1);
+        return numericValue.toFixed(2);
     },
 
     async _saveInspectionConfig(datasourceId) {
+        const baseConfig = this._inspectionConfigSnapshot || await API.get(`/api/inspections/config/${datasourceId}`);
         const enabled = DOM.$('#enableAuto')?.checked;
         const schedule_interval = parseInt(DOM.$('#scheduleInterval')?.value) || 86400;
         const use_ai_analysis = DOM.$('#useAI')?.checked;
+        const alert_template_id = DOM.$('#alertTemplateId')?.value ? parseInt(DOM.$('#alertTemplateId')?.value, 10) : null;
 
-        // Build threshold_rules
-        const threshold_rules = {};
-        const useCustomExpression = DOM.$('#useCustomExpression')?.checked;
-
-        if (useCustomExpression) {
-            const expression = DOM.$('#customExpressionText')?.value.trim();
-            const duration = parseInt(DOM.$('#customExpressionDuration')?.value) || 60;
-
-            if (!expression) {
-                Toast.error('Please enter a custom expression');
-                return;
-            }
-
-            threshold_rules.custom_expression = {
-                expression,
-                duration
-            };
-        } else {
-            // Preset thresholds
-            if (DOM.$('#cpuEnabled')?.checked) {
-                threshold_rules.cpu_usage = {
-                    threshold: parseInt(DOM.$('#cpuThreshold')?.value) || 50,
-                    duration: parseInt(DOM.$('#cpuDuration')?.value) || 60
-                };
-            }
-
-            if (DOM.$('#diskEnabled')?.checked) {
-                threshold_rules.disk_usage = {
-                    threshold: parseInt(DOM.$('#diskThreshold')?.value) || 80,
-                    duration: parseInt(DOM.$('#diskDuration')?.value) || 300
-                };
-            }
-
-            if (DOM.$('#connectionsEnabled')?.checked) {
-                threshold_rules.connections = {
-                    threshold: parseInt(DOM.$('#connectionsThreshold')?.value) || 20,
-                    duration: parseInt(DOM.$('#connectionsDuration')?.value) || 120
-                };
-            }
+        if (!alert_template_id) {
+            Toast.error('请先选择告警模板');
+            return;
         }
 
         try {
@@ -847,12 +1102,23 @@ const DatasourcesPage = {
                 enabled,
                 schedule_interval,
                 use_ai_analysis,
-                threshold_rules
+                ai_model_id: baseConfig?.ai_model_id || null,
+                kb_ids: Array.isArray(baseConfig?.kb_ids) ? baseConfig.kb_ids : [],
+                alert_template_id,
+                threshold_rules: baseConfig?.threshold_rules || {},
+                alert_engine_mode: baseConfig?.alert_engine_mode || 'inherit',
+                ai_policy_source: baseConfig?.ai_policy_source || 'inline',
+                ai_policy_text: baseConfig?.ai_policy_text || null,
+                ai_policy_id: baseConfig?.ai_policy_id || null,
+                alert_ai_model_id: baseConfig?.alert_ai_model_id || null,
+                ai_shadow_enabled: Boolean(baseConfig?.ai_shadow_enabled),
+                baseline_config: baseConfig?.baseline_config || {},
+                event_ai_config: baseConfig?.event_ai_config || {},
             });
             Modal.hide();
-            Toast.success('Configuration saved');
+            Toast.success('巡检与告警配置已保存');
         } catch (error) {
-            Toast.error('Failed to save configuration');
+            Toast.error('保存巡检配置失败: ' + error.message);
         }
     }
 };

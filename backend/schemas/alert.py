@@ -6,7 +6,7 @@ from datetime import datetime
 # Alert Message Schemas
 class AlertMessageBase(BaseModel):
     datasource_id: int
-    alert_type: str = Field(..., pattern="^(threshold_violation|custom_expression|system_error)$")
+    alert_type: str = Field(..., pattern="^(threshold_violation|baseline_deviation|custom_expression|system_error|ai_policy_violation)$")
     severity: str = Field(..., pattern="^(critical|high|medium|low)$")
     title: str = Field(..., max_length=255)
     content: str
@@ -58,6 +58,18 @@ class AlertDatasourceInfo(BaseModel):
     connection_error: Optional[str] = None
 
 
+class AlertBaselineComparisonItem(BaseModel):
+    metric_name: str
+    current_value: Optional[float] = None
+    baseline_avg: Optional[float] = None
+    baseline_p95: Optional[float] = None
+    upper_bound: Optional[float] = None
+    deviation_ratio: Optional[float] = None
+    sample_count: int = 0
+    status: str = "unknown"
+    slot_label: Optional[str] = None
+
+
 class AlertDiagnosisContext(BaseModel):
     datasource_name: Optional[str] = None
     datasource_type: Optional[str] = None
@@ -71,6 +83,12 @@ class AlertDiagnosisContext(BaseModel):
     latest_trigger_type: Optional[str] = None
     linked_report: Optional[AlertLinkedReport] = None
     diagnosis_entry_hash: Optional[str] = None
+    event_category: Optional[str] = None
+    fault_domain: Optional[str] = None
+    lifecycle_stage: Optional[str] = None
+    diagnosis_refresh_needed: Optional[bool] = None
+    diagnosis_trigger_reason: Optional[str] = None
+    baseline_comparisons: List[AlertBaselineComparisonItem] = Field(default_factory=list)
 
 
 class AlertMessageResponse(AlertMessageBase):
@@ -128,7 +146,7 @@ class AlertSubscriptionBase(BaseModel):
 
 
 class AlertSubscriptionCreate(AlertSubscriptionBase):
-    user_id: int
+    user_id: Optional[int] = None
 
 
 class AlertSubscriptionUpdate(BaseModel):
@@ -195,7 +213,7 @@ class AlertQueryParams(BaseModel):
 
 
 class AlertAcknowledgeRequest(BaseModel):
-    user_id: int
+    user_id: Optional[int] = None
 
 
 class AlertResolveRequest(BaseModel):
@@ -219,6 +237,11 @@ class AlertEventBase(BaseModel):
     title: str
     alert_type: Optional[str] = None
     metric_name: Optional[str] = None
+    event_category: Optional[str] = None
+    fault_domain: Optional[str] = None
+    lifecycle_stage: Optional[str] = None
+    diagnosis_refresh_needed: Optional[bool] = None
+    diagnosis_trigger_reason: Optional[str] = None
     ai_diagnosis_summary: Optional[str] = None
     root_cause: Optional[str] = None
     recommended_actions: Optional[str] = None
@@ -250,5 +273,4 @@ class AlertEventQueryParams(BaseModel):
 
 
 class AlertEventAcknowledgeRequest(BaseModel):
-    user_id: int
-
+    user_id: Optional[int] = None

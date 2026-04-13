@@ -547,8 +547,72 @@
     color: var(--text-muted);
 }
 
+.diagnosis-welcome.compact-embedded {
+    padding: 8px 0 0;
+}
+
+.diagnosis-welcome-card.compact-embedded {
+    padding: 18px 20px 16px;
+    border-radius: 18px;
+}
+
+.diagnosis-welcome-card.compact-embedded .diagnosis-welcome-hero {
+    grid-template-columns: 56px minmax(0, 1fr);
+    gap: 14px;
+    margin-bottom: 14px;
+}
+
+.diagnosis-welcome-card.compact-embedded .diagnosis-welcome-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 18px;
+}
+
+.diagnosis-welcome-card.compact-embedded .diagnosis-welcome-icon svg {
+    width: 26px;
+    height: 26px;
+}
+
+.diagnosis-welcome-card.compact-embedded .diagnosis-welcome-copy h3 {
+    font-size: 22px;
+    margin-bottom: 6px;
+}
+
+.diagnosis-welcome-card.compact-embedded .diagnosis-welcome-copy p {
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.diagnosis-welcome-card.compact-embedded .diagnosis-welcome-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.diagnosis-welcome-card.compact-embedded .diagnosis-welcome-action {
+    min-height: 76px;
+    padding: 14px 14px;
+}
+
+.diagnosis-welcome-card.compact-embedded .diagnosis-welcome-action-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+}
+
+.diagnosis-welcome-card.compact-embedded .diagnosis-welcome-action-label {
+    font-size: 13px;
+}
+
+.diagnosis-welcome-card.compact-embedded .diagnosis-welcome-footnote {
+    margin-top: 12px;
+}
+
 @media (max-width: 1100px) {
     .diagnosis-welcome-actions {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .diagnosis-welcome-card.compact-embedded .diagnosis-welcome-actions {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
@@ -573,6 +637,20 @@
     }
 
     .diagnosis-welcome-actions {
+        grid-template-columns: 1fr;
+    }
+
+    .diagnosis-welcome-card.compact-embedded {
+        padding: 16px 16px 14px;
+    }
+
+    .diagnosis-welcome-card.compact-embedded .diagnosis-welcome-hero {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+
+    .diagnosis-welcome-card.compact-embedded .diagnosis-welcome-actions {
         grid-template-columns: 1fr;
     }
 }

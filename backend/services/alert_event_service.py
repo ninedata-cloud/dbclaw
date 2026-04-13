@@ -15,6 +15,64 @@ from backend.config import ALERT_AGGREGATION_TIME_WINDOW_MINUTES
 from backend.utils.datetime_helper import now
 
 
+SEVERITY_ORDER = {"critical": 4, "high": 3, "medium": 2, "low": 1}
+
+
+def infer_event_strategy(alert_type: str | None, metric_name: str | None) -> tuple[str, str]:
+    metric = (metric_name or "").lower()
+    alert_kind = (alert_type or "").lower()
+
+    if alert_kind == "system_error" or metric == "connection_status":
+        return "availability", "availability"
+    if "disk" in metric or "storage" in metric:
+        return "storage", "storage"
+    if "replication" in metric or "lag" in metric:
+        return "replication", "replication"
+    if metric in {"cpu_usage", "memory_usage", "connections", "connections_active", "qps", "tps"}:
+        return "performance", "performance"
+    if alert_kind == "baseline_deviation":
+        return "baseline", "performance"
+    if alert_kind == "ai_policy_violation":
+        return "ai_policy", "performance"
+    return "general", "general"
+
+
+def apply_event_diagnosis_lifecycle(
+    event,
+    *,
+    stage: str,
+    trigger_reason: str,
+    refresh_needed: bool = True,
+) -> None:
+    event.lifecycle_stage = stage
+    event.diagnosis_trigger_reason = trigger_reason
+    event.diagnosis_refresh_needed = refresh_needed
+    event.last_updated = now()
+
+
+def hydrate_event_strategy_fields(event):
+    if not event:
+        return event
+    if not getattr(event, "event_category", None) or not getattr(event, "fault_domain", None):
+        event_category, fault_domain = infer_event_strategy(
+            getattr(event, "alert_type", None),
+            getattr(event, "metric_name", None),
+        )
+        if not getattr(event, "event_category", None):
+            event.event_category = event_category
+        if not getattr(event, "fault_domain", None):
+            event.fault_domain = fault_domain
+    if not getattr(event, "lifecycle_stage", None):
+        status = getattr(event, "status", None)
+        if status == "resolved":
+            event.lifecycle_stage = "recovered"
+        elif status == "acknowledged":
+            event.lifecycle_stage = "acknowledged"
+        else:
+            event.lifecycle_stage = "active"
+    return event
+
+
 class AlertEventService:
     """Service for managing alert events"""
 
@@ -102,6 +160,8 @@ class AlertEventService:
         else:
             aggregation_key = f"{alert.datasource_id}:{alert.alert_type}"
 
+        event_category, fault_domain = infer_event_strategy(alert.alert_type, alert.metric_name)
+
         # Create event
         event = AlertEvent(
             datasource_id=alert.datasource_id,
@@ -117,7 +177,12 @@ class AlertEventService:
             severity=alert.severity,
             title=alert.title,
             alert_type=alert.alert_type,
-            metric_name=alert.metric_name
+            metric_name=alert.metric_name,
+            event_category=event_category,
+            fault_domain=fault_domain,
+            lifecycle_stage="created",
+            diagnosis_refresh_needed=True,
+            diagnosis_trigger_reason="event_created",
         )
 
         db.add(event)
@@ -134,16 +199,27 @@ class AlertEventService:
     ) -> AlertEvent:
         """Add alert to existing event and update metadata"""
         # Update event metadata
+        old_severity = event.severity
         event.latest_alert_id = alert.id
         event.alert_count += 1
         event.event_end_time = alert.created_at
         event.last_updated = now()
         event.status = alert.status  # Inherit status from latest alert
+        event.title = alert.title
 
         # Update severity (keep highest)
-        severity_order = {'critical': 4, 'high': 3, 'medium': 2, 'low': 1}
-        if severity_order.get(alert.severity, 0) > severity_order.get(event.severity, 0):
+        if SEVERITY_ORDER.get(alert.severity, 0) > SEVERITY_ORDER.get(event.severity, 0):
             event.severity = alert.severity
+            apply_event_diagnosis_lifecycle(
+                event,
+                stage="escalated",
+                trigger_reason="severity_escalated",
+            )
+        else:
+            event.lifecycle_stage = "active"
+
+        if event.severity == old_severity and event.alert_type != alert.alert_type and not event.diagnosis_refresh_needed:
+            event.diagnosis_trigger_reason = "event_updated"
 
         await db.flush()
         await db.refresh(event)
@@ -213,7 +289,7 @@ class AlertEventService:
 
         # Execute query
         result = await db.execute(query)
-        events = result.scalars().all()
+        events = [hydrate_event_strategy_fields(event) for event in result.scalars().all()]
 
         return events, total
 
@@ -307,6 +383,11 @@ class AlertEventService:
         event.status = "resolved"
         event.event_end_time = now_time  # 更新恢复时间
         event.last_updated = now_time
+        apply_event_diagnosis_lifecycle(
+            event,
+            stage="recovered",
+            trigger_reason="event_recovered",
+        )
 
         # Update all alerts in event
         result = await db.execute(
@@ -366,6 +447,11 @@ class AlertEventService:
             event.status = "resolved"
             event.event_end_time = now_time  # 更新恢复时间
             event.last_updated = now_time
+            apply_event_diagnosis_lifecycle(
+                event,
+                stage="recovered",
+                trigger_reason="event_recovered",
+            )
             await db.flush()
             await db.refresh(event)
             return event

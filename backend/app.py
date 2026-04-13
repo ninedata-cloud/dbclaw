@@ -1,12 +1,13 @@
 import logging
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.responses import JSONResponse
 
 from backend.config import get_settings
+from backend.dependencies import get_current_admin
 from backend.database import init_db
 from backend.services.startup_self_check import (
     get_last_startup_report,
@@ -185,6 +186,36 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Alert event diagnosis timestamps migration: {e}")
 
+    try:
+        from backend.migrations.add_alert_ai_engine import migrate as migrate_alert_ai_engine
+        await migrate_alert_ai_engine()
+    except Exception as e:
+        logger.warning(f"Alert AI engine migration: {e}")
+
+    try:
+        from backend.migrations.add_alert_templates import migrate as migrate_alert_templates
+        await migrate_alert_templates()
+    except Exception as e:
+        logger.warning(f"Alert template migration: {e}")
+
+    try:
+        from backend.migrations.rebind_inspection_configs_to_default_template import migrate as migrate_rebind_inspection_configs
+        await migrate_rebind_inspection_configs()
+    except Exception as e:
+        logger.warning(f"Rebind inspection configs to default template migration: {e}")
+
+    try:
+        from backend.migrations.add_alert_ai_candidate_gating import migrate as migrate_alert_ai_candidate_gating
+        await migrate_alert_ai_candidate_gating()
+    except Exception as e:
+        logger.warning(f"Alert AI candidate gating migration: {e}")
+
+    try:
+        from backend.migrations.add_baseline_and_event_strategy import migrate as migrate_baseline_and_event_strategy
+        await migrate_baseline_and_event_strategy()
+    except Exception as e:
+        logger.warning(f"Baseline and event strategy migration: {e}")
+
 
     try:
         from backend.migrations.migrate_alert_channels_to_subscription_targets import migrate as migrate_alert_channels_to_subscription_targets
@@ -229,6 +260,13 @@ async def lifespan(app: FastAPI):
             description="巡检触发去重窗口（分钟），同一数据源在此时间内不重复触发巡检",
             category="inspection"
         ) if not await _config_service.get_config(_db, "inspection_dedup_window_minutes") else None
+
+        ai_alert_defaults = [
+            ("default_alert_engine_mode", "threshold", "string", "默认告警引擎模式：threshold 或 ai", "alerting"),
+            ("ai_alert_timeout_seconds", "3", "integer", "AI 判警请求超时时间（秒）", "alerting"),
+            ("ai_alert_confidence_threshold", "0.7", "float", "AI 判警最低置信度阈值（0-1）", "alerting"),
+            ("notification_cooldown_minutes", "60", "integer", "通知冷却窗口（分钟），同一类告警在窗口内默认不重复发送；若严重等级提升则立即发送", "alerting"),
+        ]
 
         # Seed default SMTP notification configs
         smtp_defaults = [
@@ -328,6 +366,17 @@ async def lifespan(app: FastAPI):
                 description="外部访问基础地址，用于生成飞书等通知中的免登录详情链接，例如 https://dbguard.example.com",
                 category="notification"
             )
+
+        for key, value, value_type, description, category in ai_alert_defaults:
+            if not await _config_service.get_config(_db, key):
+                await _config_service.set_config(
+                    _db,
+                    key=key,
+                    value=value,
+                    value_type=value_type,
+                    description=description,
+                    category=category,
+                )
     logger.info("Default system configs seeded")
 
     # Start SSH connection pool
@@ -426,8 +475,7 @@ def create_app() -> FastAPI:
         return JSONResponse(
             status_code=500,
             content={
-                "detail": f"Internal server error: {str(exc)}",
-                "type": type(exc).__name__
+                "detail": "Internal server error",
             }
         )
 
@@ -447,7 +495,7 @@ def create_app() -> FastAPI:
         return JSONResponse(status_code=status_code, content=readiness_report.to_dict())
 
     @app.get("/health/checks")
-    async def health_checks():
+    async def health_checks(_current_user=Depends(get_current_admin)):
         current_report = await run_startup_self_check(settings, phase="health_checks", include_app_port_check=False)
         return {
             "startup": app.state.startup_self_check_report or get_last_startup_report(),

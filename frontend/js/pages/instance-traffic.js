@@ -260,37 +260,36 @@ const InstanceTrafficPage = {
     _renderStats() {
         if (!this.refs.stats || !this.data) return;
 
-        const cards = [
-            {
-                label: '观测客户端',
-                value: String(this.data.total_client_count || 0),
-                hint: '当前已聚合的客户端节点数量',
-            },
-            {
-                label: '活跃会话',
-                value: String(this.data.active_session_count || 0),
-                hint: `等待态 ${this.data.waiting_session_count || 0} / 空闲态 ${this.data.idle_session_count || 0}`,
-            },
-            {
-                label: this.data.rate_mode === 'measured' ? '总带宽' : '总链路热度',
-                value: this.data.total_rate != null ? Format.networkRate(this.data.total_rate) : '--',
-                hint: this.data.rate_mode === 'measured' ? '数据库实时收发总量' : '会话活跃度估算出的链路强度',
-                valueClass: 'compact',
-            },
-            {
-                label: '总会话数',
-                value: String(this.data.total_session_count || 0),
-                hint: '实例当前所有可见连接会话',
-            },
-        ];
+        const maxSessionCount = Number.isFinite(Number(this.data.max_session_count))
+            ? String(this.data.max_session_count)
+            : '--';
+        const activeSessionCount = String(this.data.active_session_count || 0);
+        const totalSessionCount = String(this.data.total_session_count || 0);
+        const totalClientCount = String(this.data.total_client_count || 0);
+        const txRate = this.data.total_tx_rate != null ? Format.networkRate(this.data.total_tx_rate) : '--';
+        const rxRate = this.data.total_rx_rate != null ? Format.networkRate(this.data.total_rx_rate) : '--';
 
-        this.refs.stats.innerHTML = cards.map(card => `
-            <div class="instance-traffic-stat-card" title="${this._escapeAttr(card.hint)}">
-                <div class="instance-traffic-stat-label">${this._escapeHtml(card.label)}</div>
-                <div class="instance-traffic-stat-value ${this._escapeHtml(card.valueClass || '')}">${this._escapeHtml(card.value)}</div>
-                <div class="instance-traffic-stat-hint">${this._escapeHtml(card.hint)}</div>
+        this.refs.stats.innerHTML = `
+            <div class="instance-traffic-stat-card compact">
+                <div class="instance-traffic-stat-label">客户端数量</div>
+                <div class="instance-traffic-stat-value">${this._escapeHtml(totalClientCount)}</div>
             </div>
-        `).join('');
+            <div class="instance-traffic-stat-card compact">
+                <div class="instance-traffic-stat-label">会话数量</div>
+                <div class="instance-traffic-stat-triple">
+                    <span><strong>${this._escapeHtml(activeSessionCount)}</strong><em>活跃</em></span>
+                    <span><strong>${this._escapeHtml(totalSessionCount)}</strong><em>总数</em></span>
+                    <span><strong>${this._escapeHtml(maxSessionCount)}</strong><em>最大</em></span>
+                </div>
+            </div>
+            <div class="instance-traffic-stat-card compact">
+                <div class="instance-traffic-stat-label">网络流量</div>
+                <div class="instance-traffic-stat-pairs">
+                    <span>发送 <strong>${this._escapeHtml(txRate)}</strong></span>
+                    <span>接收 <strong>${this._escapeHtml(rxRate)}</strong></span>
+                </div>
+            </div>
+        `;
 
         if (this.refs.modePill) {
             this.refs.modePill.className = `instance-traffic-mode-pill mode-${this._escapeHtml(this.data.rate_mode || 'unavailable')}`;
@@ -535,7 +534,7 @@ const InstanceTrafficPage = {
                     layout: {
                         padding: {
                             top: 4,
-                            bottom: 28,
+                            bottom: 12,
                             left: 6,
                             right: 6,
                         },
@@ -551,7 +550,7 @@ const InstanceTrafficPage = {
                                 boxWidth: 10,
                                 usePointStyle: true,
                                 pointStyle: 'circle',
-                                padding: 16,
+                                padding: 10,
                             },
                         },
                         tooltip: {

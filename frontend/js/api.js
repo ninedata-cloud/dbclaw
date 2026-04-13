@@ -147,6 +147,7 @@ const API = {
     refreshMetrics(connId) { return this.post(`/api/metrics/${connId}/refresh`); },
 
     // Instance detail endpoints
+    getInstanceAlertSummary() { return this.get('/api/instances/alert-summary'); },
     getInstanceSummary(datasourceId) { return this.get(`/api/instances/${datasourceId}/summary`); },
     getInstanceTraffic(datasourceId) { return this.get(`/api/instances/${datasourceId}/traffic`); },
     getInstanceVariables(datasourceId) { return this.get(`/api/instances/${datasourceId}/variables`); },
@@ -237,6 +238,11 @@ const API = {
     setDefaultAIModel(id) { return this.post(`/api/ai-models/${id}/set-default`); },
     testAIModelChat(id, data) { return this.post(`/api/ai-models/${id}/test-chat`, data); },
 
+    getAlertTemplates() { return this.get('/api/inspections/templates'); },
+    createAlertTemplate(data) { return this.post('/api/inspections/templates', data); },
+    updateAlertTemplate(id, data) { return this.put(`/api/inspections/templates/${id}`, data); },
+    toggleAlertTemplate(id, enabled) { return this.post(`/api/inspections/templates/${id}/toggle`, { enabled }); },
+
     // Document API
     getDocCategories(dbType = null) {
         const qs = dbType ? `?db_type=${dbType}` : '';
@@ -306,13 +312,15 @@ const API = {
     },
     getAlert(id) { return this.get(`/api/alerts/${id}`); },
     getAlertContext(id) { return this.get(`/api/alerts/${id}/context`); },
-    acknowledgeAlert(id, userId) { return this.post(`/api/alerts/${id}/acknowledge`, { user_id: userId }); },
+    getAlertEventContext(id) { return this.get(`/api/alerts/events/${id}/context`); },
+    acknowledgeAlert(id) { return this.post(`/api/alerts/${id}/acknowledge`, {}); },
     resolveAlert(id) { return this.post(`/api/alerts/${id}/resolve`, {}); },
-    getSubscriptions(userId) { return this.get(`/api/alerts/subscriptions/list?user_id=${userId}`); },
+    getSubscriptions() { return this.get('/api/alerts/subscriptions/list'); },
     createSubscription(data) { return this.post('/api/alerts/subscriptions', data); },
     updateSubscription(id, data) { return this.put(`/api/alerts/subscriptions/${id}`, data); },
     deleteSubscription(id) { return this.delete(`/api/alerts/subscriptions/${id}`); },
     testNotification(subscriptionId) { return this.post(`/api/alerts/subscriptions/${subscriptionId}/test`, {}); },
+    getInspectionReportDetail(id) { return this.get(`/api/inspections/reports/detail/${id}`); },
 
     // P1 Action Runs (under inspections router for now)
     getReportActions(reportId) { return this.get(`/api/inspections/reports/${reportId}/actions`); },

@@ -279,6 +279,44 @@ async def request_text_response(
     return (response.choices[0].message.content if response.choices else "") or ""
 
 
+async def request_text_response_with_usage(
+    ai_client: AIClient,
+    messages: List[Dict[str, Any]],
+    temperature: float = 0.3,
+    max_tokens: int = 512,
+) -> Tuple[str, Dict[str, int]]:
+    if ai_client.protocol == ANTHROPIC_PROTOCOL:
+        system, anthropic_messages = convert_messages_for_anthropic(messages)
+        response = await ai_client.client.messages.create(
+            model=ai_client.model_name or DEFAULT_MODEL,
+            system=system,
+            messages=anthropic_messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        texts = [block.text for block in response.content if getattr(block, "type", None) == "text"]
+        usage = _normalize_usage(
+            getattr(getattr(response, "usage", None), "input_tokens", None),
+            getattr(getattr(response, "usage", None), "output_tokens", None),
+        )
+        return "".join(texts).strip(), usage
+
+    request_kwargs: Dict[str, Any] = {
+        "model": ai_client.model_name,
+        "messages": messages,
+        "max_tokens": max_tokens,
+    }
+    if temperature is not None:
+        request_kwargs["temperature"] = float(temperature)
+
+    response = await ai_client.client.chat.completions.create(**request_kwargs)
+    usage = _normalize_usage(
+        getattr(getattr(response, "usage", None), "prompt_tokens", None),
+        getattr(getattr(response, "usage", None), "completion_tokens", None),
+    )
+    return (response.choices[0].message.content if response.choices else "") or "", usage
+
+
 async def stream_assistant_turn(
     ai_client: AIClient,
     messages: List[Dict[str, Any]],
