@@ -143,7 +143,7 @@ class OpenGaussConnector(DBConnector):
                 "SELECT pid, usename, client_addr, datname, state, "
                 "query_start, waiting, query "
                 "FROM pg_stat_activity "
-                "ORDER BY query_start DESC NULLS LAST LIMIT 50"
+                "ORDER BY query_start DESC NULLS LAST"
             )
             return [dict(r) for r in rows]
         finally:

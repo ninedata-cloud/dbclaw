@@ -133,7 +133,7 @@ class OceanBaseMySQLConnector(DBConnector):
             async with conn.cursor(aiomysql.DictCursor) as cur:
                 await cur.execute(
                     "SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO "
-                    "FROM information_schema.PROCESSLIST ORDER BY TIME DESC LIMIT 50"
+                    "FROM information_schema.PROCESSLIST ORDER BY TIME DESC"
                 )
                 rows = await cur.fetchall()
                 return [dict(r) for r in rows]

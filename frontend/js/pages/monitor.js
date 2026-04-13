@@ -453,21 +453,8 @@ const MonitorPage = {
         const dbMetricsRow = DOM.el('div', { className: 'grid-4 mb-24', id: 'monitor-metrics' });
         const connectionCard = DOM.el('div', { className: 'metric-card metric-card-connection-overview' });
         connectionCard.innerHTML = `
-            <div class="metric-card-label">活跃连接</div>
-            <div class="connection-overview-grid">
-                <div class="connection-overview-item">
-                    <span class="connection-overview-name">活跃</span>
-                    <span class="connection-overview-value" data-connection-metric="active">--</span>
-                </div>
-                <div class="connection-overview-item">
-                    <span class="connection-overview-name">总数</span>
-                    <span class="connection-overview-value" data-connection-metric="total">--</span>
-                </div>
-                <div class="connection-overview-item">
-                    <span class="connection-overview-name">最大</span>
-                    <span class="connection-overview-value" data-connection-metric="max">--</span>
-                </div>
-            </div>
+            <div class="metric-card-label">连接数（活跃/总数/最大）</div>
+            <div class="connection-overview-value" data-connection-metric="summary">--/--/--</div>
         `;
         dbMetricsRow.appendChild(connectionCard);
         dbMetricsRow.appendChild(MetricCard.create('QPS', '--'));
@@ -524,8 +511,8 @@ const MonitorPage = {
                 } else if (id === 'connections') {
                     config.data = {
                         datasets: [
-                            this._buildMultiLineDataset('总连接数', '#2f81f7', 'rgba(47,129,247,0.1)'),
-                            this._buildMultiLineDataset('活跃连接数', '#10b981', 'rgba(16,185,129,0.1)')
+                            this._buildMultiLineDataset('活跃连接数', '#10b981', 'rgba(16,185,129,0.1)'),
+                            this._buildMultiLineDataset('总连接数', '#2f81f7', 'rgba(47,129,247,0.1)')
                         ]
                     };
                     config.options = {
@@ -940,12 +927,11 @@ const MonitorPage = {
             uptime = Math.floor((now - bootTime) / 1000); // Convert to seconds
         }
 
-        const activeEl = cards[0].querySelector('[data-connection-metric="active"]');
-        const totalEl = cards[0].querySelector('[data-connection-metric="total"]');
-        const maxEl = cards[0].querySelector('[data-connection-metric="max"]');
-        if (activeEl) activeEl.textContent = active?.toLocaleString?.() ?? active;
-        if (totalEl) totalEl.textContent = total !== undefined && total !== null ? total.toLocaleString() : '--';
-        if (maxEl) maxEl.textContent = maxConnections !== undefined && maxConnections !== null && maxConnections !== 0 ? maxConnections.toLocaleString() : '--';
+        const summaryEl = cards[0].querySelector('[data-connection-metric="summary"]');
+        const activeText = active !== undefined && active !== null ? Number(active).toLocaleString() : '--';
+        const totalText = total !== undefined && total !== null ? Number(total).toLocaleString() : '--';
+        const maxText = maxConnections !== undefined && maxConnections !== null && maxConnections !== 0 ? Number(maxConnections).toLocaleString() : '--';
+        if (summaryEl) summaryEl.textContent = `${activeText}/${totalText}/${maxText}`;
 
         MetricCard.update(cards[1], typeof qps === 'number' ? qps.toFixed(1) : qps);
         MetricCard.update(cards[2], hitRate !== undefined && hitRate !== null ? Format.percent(hitRate) : '--');
@@ -977,7 +963,7 @@ const MonitorPage = {
         const hostNetworkRates = this._extractHostNetworkRates(data, timestamp);
         const maxPoints = this._getChartMaxPoints();
 
-        ChartPanel.update('connections', time, [parseFloat(total) || 0, parseFloat(active) || 0], maxPoints);
+        ChartPanel.update('connections', time, [parseFloat(active) || 0, parseFloat(total) || 0], maxPoints);
         ChartPanel.update('qps', time, parseFloat(qps) || 0, maxPoints);
         ChartPanel.update('cache_hit', time, hitRate !== undefined && hitRate !== null ? (parseFloat(hitRate) || 0) : null, maxPoints);
         ChartPanel.update('tps', time, parseFloat(tps) || 0, maxPoints);
@@ -1075,7 +1061,7 @@ const MonitorPage = {
         }
 
         // Batch update all charts
-        ChartPanel.batchUpdateMulti('connections', batchData.labels, [batchData.connections_total, batchData.connections_active], maxPoints);
+        ChartPanel.batchUpdateMulti('connections', batchData.labels, [batchData.connections_active, batchData.connections_total], maxPoints);
         ChartPanel.batchUpdate('qps', batchData.labels, batchData.qps, maxPoints);
         ChartPanel.batchUpdate('cache_hit', batchData.labels, batchData.cache_hit, maxPoints);
         ChartPanel.batchUpdate('tps', batchData.labels, batchData.tps, maxPoints);

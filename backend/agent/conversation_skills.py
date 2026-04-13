@@ -29,6 +29,8 @@ MAX_TOOL_ROUNDS = 1000
 # 单轮 AI API 调用超时（秒），防止 LLM 提供商 API 挂起导致会话卡死
 STREAM_ROUND_TIMEOUT = 600
 KB_TOOL_NAMES = {"list_documents", "read_document"}
+ALERT_SETTINGS_READ_ACTIONS = {"list", "get"}
+ALERT_SETTINGS_WRITE_ACTIONS = {"create", "update", "delete", "test", "toggle", "set_default", "set", "cancel"}
 
 READ_ONLY_SQL_KEYWORDS = {'SELECT', 'SHOW', 'EXPLAIN', 'EXEC', 'EXECUTE', 'DESCRIBE', 'DESC', 'WITH'}
 DANGEROUS_SQL_KEYWORDS = {'INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'TRUNCATE', 'CREATE', 'GRANT', 'REVOKE', 'CALL'}
@@ -133,6 +135,12 @@ async def _llm_assess_risk(client, sql: str = "", command: str = "") -> Optional
 def build_confirmation_reason(tool_name: str, arguments: Dict[str, Any], risk_level: str) -> str:
     command = _get_command_arg(arguments)
     sql = str(arguments.get('sql') or '').strip()
+    if tool_name == "manage_alert_settings":
+        target = str(arguments.get("target") or "").strip() or "settings"
+        action = str(arguments.get("action") or "").strip() or "update"
+        if risk_level == "safe":
+            return f"这是只读告警设置查询：`{target}.{action}`"
+        return f"该操作会修改告警配置，需要确认后再执行：`{target}.{action}`"
 
     if command:
         if risk_level == 'destructive':
@@ -151,6 +159,25 @@ def _keyword_assess_risk(tool_name: str, arguments: Dict[str, Any], permissions:
     command = _get_command_arg(arguments)
     sql = str(arguments.get('sql') or '').strip()
     keyword = _normalize_sql_keyword(sql)
+
+    if tool_name == "manage_alert_settings":
+        action = str(arguments.get("action") or "").strip().lower()
+        if action in ALERT_SETTINGS_READ_ACTIONS:
+            return {
+                'level': 'safe',
+                'requires_confirmation': False,
+                'risk_reason': build_confirmation_reason(tool_name, arguments, 'safe'),
+                'suppressible': False,
+                'confirmation_key': 'generic_readonly',
+            }
+        if action in ALERT_SETTINGS_WRITE_ACTIONS:
+            return {
+                'level': 'high',
+                'requires_confirmation': False,
+                'risk_reason': build_confirmation_reason(tool_name, arguments, 'high'),
+                'suppressible': True,
+                'confirmation_key': 'generic_write',
+            }
 
     if command:
         pattern = first_matching_command_pattern(command, DANGEROUS_COMMAND_PATTERNS)

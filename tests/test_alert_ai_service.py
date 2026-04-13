@@ -8,6 +8,7 @@ from backend.services.alert_ai_service import (
     AI_DECISION_NO_ALERT,
     AI_DECISION_RECOVER,
     DEFAULT_ANALYSIS_CONFIG,
+    INLINE_AI_POLICY_DISPLAY_NAME,
     AlertAIJudgeResult,
     AlertAIPolicyBinding,
     _compress_alert_ai_evidence,
@@ -23,6 +24,7 @@ from backend.services.alert_ai_service import (
     extract_policy_severity_instruction,
     normalize_alert_engine_mode,
     normalize_ai_policy_source,
+    resolve_alert_ai_policy_binding,
     should_skip_candidate_due_to_interval,
 )
 from backend.routers.inspections import InspectionConfigSchema
@@ -36,6 +38,20 @@ def test_normalize_alert_engine_mode_and_policy_source():
     assert normalize_ai_policy_source("template") == "template"
     assert normalize_ai_policy_source("inline") == "inline"
     assert normalize_ai_policy_source("unknown") == "inline"
+
+
+@pytest.mark.asyncio
+async def test_inline_ai_policy_binding_uses_fixed_friendly_display_name():
+    binding = await resolve_alert_ai_policy_binding(
+        db=None,
+        ai_policy_source="inline",
+        ai_policy_text="请结合 CPU、磁盘使用率、活跃连接数及最近 15 分钟趋势判断是否异常",
+        ai_policy_id=None,
+        alert_ai_model_id=None,
+    )
+
+    assert binding is not None
+    assert binding.display_name == INLINE_AI_POLICY_DISPLAY_NAME
 
 
 def test_compute_ai_transition_requires_two_confident_alerts_before_trigger():

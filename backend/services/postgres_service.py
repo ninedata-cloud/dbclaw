@@ -143,7 +143,7 @@ class PostgreSQLConnector(DBConnector):
                 "SELECT pid, usename, client_addr, datname, state, "
                 "query_start, wait_event_type, wait_event, query "
                 "FROM pg_stat_activity "
-                "ORDER BY query_start DESC NULLS LAST LIMIT 100"
+                "ORDER BY query_start DESC NULLS LAST"
             )
             return [dict(r) for r in rows]
         finally:

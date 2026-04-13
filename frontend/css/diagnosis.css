@@ -269,40 +269,17 @@
     background: linear-gradient(135deg, var(--accent-purple) 0%, #b891f7 100%);
 }
 
-/* Tool Call Panel Enhancements */
-#tool-execution-panel {
-    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.2);
-}
-
-#tool-panel-content {
-    padding: 8px;
-}
-
-#tool-panel-content::-webkit-scrollbar {
-    width: 6px;
-}
-
-#tool-panel-content::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-#tool-panel-content::-webkit-scrollbar-thumb {
-    background: var(--border-color);
-    border-radius: 3px;
-}
-
 /* Tool Call Card Improvements */
-.chat-tool-call {
+.chat-tool-details {
     transition: all 0.2s ease;
-    border-left: 3px solid var(--accent-cyan);
 }
 
-.chat-tool-call:hover {
+.chat-tool-message:hover .chat-tool-details {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     transform: translateX(2px);
 }
 
-.chat-tool-header {
+.chat-tool-summary {
     background: linear-gradient(90deg, transparent 0%, rgba(57, 210, 192, 0.05) 100%);
 }
 
@@ -743,10 +720,6 @@
     height: auto !important;
 }
 
-.instance-session-ai-shell #tool-execution-panel {
-    min-height: 0;
-}
-
 .instance-session-ai-shell #chat-token-usage {
     padding: 8px 12px !important;
 }
@@ -871,29 +844,11 @@
     display: none;
 }
 
-/* Tool panel collapsed state */
-#tool-execution-panel[style*="width: 40px"] #tool-panel-header {
-    flex-direction: column;
-    gap: 8px;
-    padding: 8px;
-    justify-content: center;
-}
-
-#tool-execution-panel[style*="width: 40px"] #tool-panel-title {
-    display: none !important;
-}
-
-#tool-execution-panel[style*="width: 40px"] #tool-panel-header .btn-icon-only:not(#toggle-tool-panel-btn) {
-    display: none !important;
-}
-
-/* Tool Panel Toggle Button */
-#toggle-tool-panel-btn,
+/* Secondary Button */
 .btn-secondary.btn-sm {
     transition: all 0.2s ease;
 }
 
-#toggle-tool-panel-btn:hover,
 .btn-secondary.btn-sm:hover {
     background: var(--bg-hover);
     transform: scale(1.05);
@@ -956,10 +911,6 @@
 
 /* Responsive Adjustments */
 @media (max-width: 1200px) {
-    #tool-execution-panel {
-        width: 320px !important;
-    }
-
     .page-header .flex.gap-8 {
         gap: 6px;
     }
@@ -980,14 +931,6 @@
         max-width: 95%;
     }
 
-    #tool-execution-panel {
-        position: absolute;
-        right: 0;
-        top: 0;
-        height: 100%;
-        z-index: 10;
-    }
-
     .page-header .flex.gap-8 {
         flex-wrap: wrap;
         gap: 4px;
@@ -1000,16 +943,6 @@
 .btn:focus-visible {
     outline: 2px solid var(--accent-blue);
     outline-offset: 2px;
-}
-
-/* Smooth Transitions for Panel Toggle */
-#tool-execution-panel {
-    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    overflow: hidden;
-}
-
-#tool-execution-panel[style*="width: 0"] {
-    border-left: none;
 }
 
 /* Session List Scrollbar */

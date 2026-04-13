@@ -46,6 +46,7 @@ MAX_HISTORY_SNAPSHOTS = 1440
 MAX_FEATURE_METRICS = 8
 MAX_RECENT_SAMPLES_PER_METRIC = 8
 DEFAULT_ANALYSIS_STRATEGY = "candidate_only"
+INLINE_AI_POLICY_DISPLAY_NAME = "AI 智能判警"
 DEFAULT_ANALYSIS_CONFIG = {
     "inactive_min_eval_interval_seconds": 300,
     "active_recovery_min_eval_interval_seconds": 180,
@@ -418,13 +419,6 @@ def _to_float(value: Any) -> Optional[float]:
         except ValueError:
             return None
     return None
-
-
-def _stable_excerpt(text: str, *, max_chars: int = 48) -> str:
-    cleaned = " ".join((text or "").split())
-    if len(cleaned) <= max_chars:
-        return cleaned
-    return cleaned[:max_chars].rstrip() + "..."
 
 
 def _truncate_text(text: str, *, max_chars: int) -> str:
@@ -1335,7 +1329,7 @@ async def resolve_alert_ai_policy_binding(
         rule_text = (ai_policy_text or "").strip()
         if not rule_text:
             return None
-        display_name = _stable_excerpt(rule_text)
+        display_name = INLINE_AI_POLICY_DISPLAY_NAME
         policy_id = None
         analysis_strategy = DEFAULT_ANALYSIS_STRATEGY
         analysis_config = normalize_analysis_config(None)

@@ -24,6 +24,8 @@ GLOBAL_SKILL_IDS: Set[str] = {
     # Confirmed: keep datasource listing available even when scoped.
     "list_datasources",
     "query_monitoring_history",
+    "query_alert_statistics",
+    "manage_alert_settings",
 }
 
 # OS diagnostics are only useful when a datasource has an associated host.

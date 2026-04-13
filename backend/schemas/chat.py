@@ -34,6 +34,9 @@ class ChatMessageResponse(BaseModel):
     session_id: int
     role: str
     content: str
+    run_id: Optional[str] = None
+    render_segments: Optional[Any] = None
+    status: Optional[str] = None
     tool_calls: Optional[Any] = None
     attachments: Optional[List[Any]] = None
     input_tokens: int = 0

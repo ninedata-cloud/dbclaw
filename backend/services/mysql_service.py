@@ -135,7 +135,7 @@ class MySQLConnector(DBConnector):
                 await cur.execute(
                     "SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO "
                     "FROM information_schema.PROCESSLIST "
-                    "ORDER BY TIME DESC LIMIT 100",
+                    "ORDER BY TIME DESC",
                 )
                 rows = await cur.fetchall()
                 return [dict(r) for r in rows]

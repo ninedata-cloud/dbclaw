@@ -18,6 +18,8 @@ from backend.agent.tools import HIGH_RISK_TOOLS
 
 from backend.dependencies import get_current_user
 from backend.services.chat_orchestration_service import (
+    apply_render_segments_event,
+    clone_render_segments,
     continue_conversation_after_tool,
     get_session_insights,
     prepare_user_turn,
@@ -34,7 +36,7 @@ ACTIVE_CHAT_SOCKETS: dict[int, list[WebSocket]] = {}
 PENDING_APPROVALS: dict[int, dict[str, dict]] = {}
 # session_id -> running asyncio.Task for AI stream
 ACTIVE_STREAM_TASKS: dict[int, asyncio.Task] = {}
-ACTIVE_STREAM_STATES: dict[int, dict[str, str | None]] = {}
+ACTIVE_STREAM_STATES: dict[int, dict[str, object | None]] = {}
 
 
 def _register_socket(session_id: int, websocket: WebSocket) -> None:
@@ -67,6 +69,9 @@ def _start_stream_state(session_id: int) -> None:
         "content": "",
         "thinking_phase": None,
         "thinking_message": "",
+        "render_segments": [],
+        "run_id": None,
+        "status": "partial",
     }
 
 
@@ -80,6 +85,8 @@ def _update_stream_state(session_id: int, payload: dict) -> None:
         return
 
     payload_type = payload.get("type")
+    if payload.get("run_id"):
+        state["run_id"] = payload.get("run_id")
     if payload_type in {"thinking_start", "thinking_phase", "thinking_complete"}:
         state["thinking_phase"] = payload.get("phase")
         state["thinking_message"] = payload.get("message") or ""
@@ -99,13 +106,33 @@ def _update_stream_state(session_id: int, payload: dict) -> None:
         chunk = payload.get("content") or ""
         if chunk:
             state["content"] = f"{state.get('content', '')}{chunk}"
+        state["render_segments"] = apply_render_segments_event(state.get("render_segments"), payload)
+        state["status"] = "partial"
         state["thinking_phase"] = None
         state["thinking_message"] = ""
         return
 
-    if payload_type in {"approval_request", "done", "error"}:
+    if payload_type in {"tool_call", "tool_result", "approval_request"}:
+        state["render_segments"] = apply_render_segments_event(state.get("render_segments"), payload)
+        if payload_type == "approval_request":
+            state["status"] = "awaiting_approval"
+            state["thinking_phase"] = None
+            state["thinking_message"] = ""
+        else:
+            state["status"] = "partial"
+        return
+
+    if payload_type == "done":
+        state["status"] = "complete"
         state["thinking_phase"] = None
         state["thinking_message"] = ""
+        return
+
+    if payload_type == "error":
+        state["status"] = "error"
+        state["thinking_phase"] = None
+        state["thinking_message"] = ""
+        return
 
 
 async def _emit_session_event(session_id: int, payload: dict) -> None:
@@ -125,6 +152,7 @@ async def _continue_conversation_after_tool(
     kb_ids,
     knowledge_context,
     disabled_tools,
+    run_id: str | None = None,
 ):
     async with async_session() as db:
         await continue_conversation_after_tool(
@@ -138,6 +166,7 @@ async def _continue_conversation_after_tool(
             disabled_tools=disabled_tools,
             pending_approvals=PENDING_APPROVALS,
             on_event=lambda payload: _emit_session_event(session_id, payload),
+            run_id=run_id,
         )
 
 
@@ -267,7 +296,7 @@ async def get_messages(session_id: int, db: AsyncSession = Depends(get_db), user
     result = await db.execute(
         alive_select(ChatMessage)
         .where(ChatMessage.session_id == session_id)
-        .order_by(ChatMessage.created_at)
+        .order_by(ChatMessage.id)
     )
     return result.scalars().all()
 
@@ -321,6 +350,10 @@ async def resolve_chat_approval(
     user=Depends(get_current_user),
 ):
     await _get_owned_session(db, session_id, user)
+    current_task = asyncio.current_task()
+    if current_task is not None:
+        ACTIVE_STREAM_TASKS[session_id] = current_task
+    _start_stream_state(session_id)
     try:
         result = await resolve_pending_approval(
             db,
@@ -334,6 +367,9 @@ async def resolve_chat_approval(
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    finally:
+        ACTIVE_STREAM_TASKS.pop(session_id, None)
+        _clear_stream_state(session_id)
 
     return {"approval_id": approval_id, "status": result["status"]}
 
@@ -364,6 +400,9 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
                 "content": stream_state.get("content") or "",
                 "thinking_phase": stream_state.get("thinking_phase"),
                 "thinking_message": stream_state.get("thinking_message") or "",
+                "render_segments": clone_render_segments(stream_state.get("render_segments")),
+                "run_id": stream_state.get("run_id"),
+                "status": stream_state.get("status"),
             })
         except Exception:
             pass

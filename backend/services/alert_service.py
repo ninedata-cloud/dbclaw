@@ -271,7 +271,7 @@ def build_alert_title_and_content(
     elif alert_type == "baseline_deviation" and metric_name:
         title = f"{metric_name} 基线偏移告警"
     elif alert_type == "ai_policy_violation":
-        title = f"{metric_name or 'AI 告警策略'} 告警"
+        title = f"{metric_name or 'AI 智能判警'}告警"
     else:
         title = f"{alert_type.replace('_', ' ').title()}"
 
@@ -1437,7 +1437,7 @@ async def _run_diagnosis_coro(
         result = await db.execute(
             alive_select(ChatMessage)
             .where(ChatMessage.session_id == session_id)
-            .order_by(ChatMessage.created_at)
+            .order_by(ChatMessage.id)
         )
         all_msgs = result.scalars().all()
 

@@ -45,3 +45,29 @@ async def test_non_read_only_os_command_still_uses_llm_assessment():
     assert risk["level"] == "high"
     assert risk["confirmation_key"] == "os_write"
     mocked_llm.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_manage_alert_settings_read_action_is_safe():
+    risk = await assess_tool_risk(
+        "manage_alert_settings",
+        {"target": "subscription", "action": "list"},
+        permissions=[],
+        client=None,
+    )
+
+    assert risk["level"] == "safe"
+    assert risk["confirmation_key"] == "generic_readonly"
+
+
+@pytest.mark.asyncio
+async def test_manage_alert_settings_write_action_requires_confirmation():
+    risk = await assess_tool_risk(
+        "manage_alert_settings",
+        {"target": "template", "action": "update"},
+        permissions=[],
+        client=None,
+    )
+
+    assert risk["level"] == "high"
+    assert risk["confirmation_key"] == "generic_write"

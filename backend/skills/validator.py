@@ -117,6 +117,9 @@ class SkillValidator:
             "object": dict,
         }
 
+        if expected_type == "number":
+            return isinstance(value, (int, float)) and not isinstance(value, bool)
+
         if expected_type not in type_map:
             return True  # Unknown type, skip validation
 
@@ -131,7 +134,7 @@ class SkillValidator:
         errors = []
 
         # Range validation for integers and floats
-        if param_def["type"] in ["integer", "float"] and isinstance(param_value, (int, float)):
+        if param_def["type"] in ["integer", "float", "number"] and isinstance(param_value, (int, float)):
             if "min" in param_def and param_def["min"] is not None:
                 if param_value < param_def["min"]:
                     errors.append(

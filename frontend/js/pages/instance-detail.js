@@ -508,7 +508,7 @@ const InstanceDetailPage = {
             { id: 'config', label: '实例基本信息' },
             { id: 'monitor', label: '性能监控' },
             { id: 'traffic', label: '流量拓扑' },
-            { id: 'sessions', label: '实时会话查看' },
+            { id: 'sessions', label: '实时会话' },
             { id: 'ai', label: 'AI 对话诊断' },
             { id: 'query', label: 'SQL 查询' },
             { id: 'alerts', label: '告警管理' },
@@ -1328,16 +1328,31 @@ const InstanceDetailPage = {
     },
 
     async _handleRefreshMetrics() {
+        const refreshBtn = DOM.$('#instance-refresh-btn');
+        const originalHtml = refreshBtn ? refreshBtn.innerHTML : '';
+
+        if (refreshBtn) {
+            refreshBtn.disabled = true;
+            refreshBtn.innerHTML = '<span class="spinner" style="display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;"></span>采集中...';
+        }
+        Toast.info('已开始刷新指标，正在采集最新数据...');
+
         try {
             await API.refreshMetrics(this.currentInstance.id);
             await new Promise(resolve => setTimeout(resolve, 1000));
-            Toast.success('已触发指标刷新');
             await this._refreshSummary();
             if (this.currentTab === 'monitor' || this.currentTab === 'config') {
                 await this._renderCurrentTab();
             }
+            Toast.success('指标刷新完成');
         } catch (error) {
             Toast.error(`刷新指标失败: ${error.message}`);
+        } finally {
+            if (refreshBtn) {
+                refreshBtn.disabled = false;
+                refreshBtn.innerHTML = originalHtml || '<i data-lucide="refresh-cw"></i> 刷新指标';
+                DOM.createIcons();
+            }
         }
     },
 

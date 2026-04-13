@@ -110,7 +110,7 @@ class DMConnector(DBConnector):
                 cursor = conn.cursor()
                 cursor.execute(
                     "SELECT SID, SERIAL#, USERNAME, STATUS, OSUSER, MACHINE, PROGRAM, SQL_ID "
-                    "FROM V$SESSION WHERE USERNAME IS NOT NULL AND ROWNUM <= 50 "
+                    "FROM V$SESSION WHERE USERNAME IS NOT NULL "
                     "ORDER BY LOGON_TIME DESC"
                 )
                 columns = [col[0] for col in cursor.description]

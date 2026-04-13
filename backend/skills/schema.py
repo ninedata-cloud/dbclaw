@@ -5,7 +5,7 @@ from datetime import datetime
 
 class SkillParameter(BaseModel):
     name: str
-    type: str  # string, integer, boolean, array, object
+    type: str  # string, integer, number, boolean, array, object
     required: bool = True
     default: Optional[Any] = None
     description: str

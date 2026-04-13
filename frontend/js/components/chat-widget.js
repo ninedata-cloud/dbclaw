@@ -2,6 +2,7 @@
 const ChatWidget = {
     ws: null,
     currentContent: '',
+    currentRenderSegments: [],
     isStreaming: false,
     isThinking: false,
     thinkingPhase: null,
@@ -16,6 +17,7 @@ const ChatWidget = {
     _scrollResumeRaf: null,
     _suppressMessageAutoScroll: false,
     diagnosticInsights: null,
+    toolCardStates: null,
 
     createMessagesContainer() {
         const shell = DOM.el('div', { className: 'chat-messages-shell' });
@@ -38,63 +40,6 @@ const ChatWidget = {
         shell.appendChild(scrollBtn);
         this.resetScrollState();
         return shell;
-    },
-
-    createToolPanel() {
-        const panel = DOM.el('div', {
-            id: 'tool-execution-panel',
-            style: {
-                width: '360px',
-                minWidth: '360px',
-                flexShrink: '0',
-                height: '100%',
-                borderLeft: '1px solid var(--border-color)',
-                display: 'flex',
-                flexDirection: 'column',
-                background: 'var(--bg-secondary)',
-                transition: 'width 0.3s ease',
-                overflow: 'hidden',
-                boxSizing: 'border-box'
-            }
-        });
-
-        const header = DOM.el('div', {
-            id: 'tool-panel-header',
-            style: {
-                padding: '8px',
-                borderBottom: '1px solid var(--border-color)',
-                display: 'flex',
-                gap: '8px',
-                alignItems: 'center',
-                justifyContent: 'space-between'
-            }
-        });
-
-        const title = DOM.el('div', {
-            id: 'tool-panel-title',
-            style: { fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)', display: '' },
-            textContent: 'Skill 调用记录'
-        });
-
-        const toggleBtn = DOM.el('button', {
-            className: 'btn-icon-only',
-            id: 'toggle-tool-panel-btn',
-            innerHTML: '<i data-lucide="panel-right-close"></i>',
-            title: '隐藏 skill 调用记录',
-            onClick: () => this.toggleToolPanel()
-        });
-
-        const content = DOM.el('div', {
-            id: 'tool-panel-content',
-            style: { flex: '1', overflowY: 'auto', padding: '8px', display: 'block' }
-        });
-
-        header.appendChild(title);
-        header.appendChild(toggleBtn);
-        panel.appendChild(header);
-        panel.appendChild(content);
-        this.resetToolPanel();
-        return panel;
     },
 
     createInputBar(onSend, getSessionId, options = {}) {
@@ -333,6 +278,7 @@ const ChatWidget = {
         const messages = DOM.$('#chat-messages');
         if (!messages) return;
         this.currentContent = '';
+        this.currentRenderSegments = [];
         this.isStreaming = true;
         this.isThinking = false;
         this.thinkingPhase = null;
@@ -343,13 +289,14 @@ const ChatWidget = {
             <div class="chat-bubble"><div class="spinner"></div></div>
         `;
         msg.setAttribute('data-raw-content', '');
+        msg.setAttribute('data-render-segments', '[]');
         messages.appendChild(msg);
         this._updateSendButton(true);
         this._resetStreamTimeout();
         this._maybeAutoScroll();
     },
 
-    resumeAssistantMessage(content = '') {
+    resumeAssistantMessage(content = '', renderSegments = null) {
         const messages = DOM.$('#chat-messages');
         if (!messages) return;
 
@@ -378,7 +325,8 @@ const ChatWidget = {
 
         if (!streamingMsg) return;
 
-        this.currentContent = content || '';
+        this.currentRenderSegments = this._normalizeAssistantRenderSegments(renderSegments, content || '');
+        this.currentContent = (content || '') || this._extractTextFromRenderSegments(this.currentRenderSegments);
         this.isStreaming = true;
         this.isThinking = false;
         this._updateSendButton(true);
@@ -386,14 +334,15 @@ const ChatWidget = {
 
         const bubble = streamingMsg.querySelector('.chat-bubble');
         if (bubble) {
-            if (this.currentContent) {
-                this._renderAssistantBubble(bubble, this.currentContent);
+            if (this.currentRenderSegments.length > 0 || this.currentContent) {
+                this._renderAssistantSegments(bubble, this.currentRenderSegments, this.currentContent);
             } else {
                 bubble.innerHTML = '<div class="spinner"></div>';
             }
         }
 
         streamingMsg.setAttribute('data-raw-content', this.currentContent);
+        streamingMsg.setAttribute('data-render-segments', JSON.stringify(this.currentRenderSegments || []));
         this._maybeAutoScroll();
     },
 
@@ -462,6 +411,104 @@ const ChatWidget = {
         return (content || '').replace(/\n/g, '<br>');
     },
 
+    _cloneRenderSegments(segments) {
+        if (!Array.isArray(segments)) return [];
+        try {
+            return JSON.parse(JSON.stringify(segments));
+        } catch (error) {
+            console.warn('Failed to clone render segments:', error);
+            return [];
+        }
+    },
+
+    _extractTextFromRenderSegments(segments = []) {
+        if (!Array.isArray(segments)) return '';
+        return segments
+            .filter((segment) => segment?.type === 'markdown')
+            .map((segment) => String(segment?.content || ''))
+            .join('');
+    },
+
+    _normalizeAssistantRenderSegments(segments = null, fallbackContent = '') {
+        if (Array.isArray(segments) && segments.length > 0) {
+            return this._cloneRenderSegments(segments);
+        }
+        if (fallbackContent) {
+            return [{
+                id: 'legacy_markdown',
+                type: 'markdown',
+                content: fallbackContent,
+            }];
+        }
+        return [];
+    },
+
+    _appendMarkdownRenderSegment(segments = [], text = '') {
+        const normalized = this._cloneRenderSegments(segments);
+        const content = String(text || '');
+        if (!content) return normalized;
+
+        const last = normalized[normalized.length - 1];
+        if (last && last.type === 'markdown') {
+            last.content = `${last.content || ''}${content}`;
+        } else {
+            normalized.push({
+                id: `seg_${Date.now()}_${normalized.length + 1}`,
+                type: 'markdown',
+                content,
+            });
+        }
+        return normalized;
+    },
+
+    _getToolSegmentMetadata(metadata = {}, overrides = {}) {
+        return {
+            ...(metadata || {}),
+            ...Object.fromEntries(
+                Object.entries(overrides || {}).filter(([, value]) => value !== undefined)
+            ),
+        };
+    },
+
+    _upsertToolRenderSegment(segments = [], toolName, toolCallId = null, patch = {}) {
+        const normalized = this._cloneRenderSegments(segments);
+        const lookupId = toolCallId || patch.tool_call_id || patch.id || toolName;
+        let segment = normalized.find((item) => item?.type === 'tool' && (item.tool_call_id || item.id) === lookupId);
+
+        if (!segment) {
+            segment = {
+                id: lookupId || `tool_${Date.now()}_${normalized.length + 1}`,
+                type: 'tool',
+                tool_call_id: toolCallId || patch.tool_call_id || null,
+                tool_name: toolName || patch.tool_name || '工具',
+                status: patch.status || 'running',
+            };
+            normalized.push(segment);
+        }
+
+        segment.tool_name = toolName || patch.tool_name || segment.tool_name || '工具';
+        if (toolCallId || patch.tool_call_id) {
+            segment.tool_call_id = toolCallId || patch.tool_call_id;
+        }
+        Object.entries(patch || {}).forEach(([key, value]) => {
+            if (value === undefined) return;
+            if (value === null) {
+                delete segment[key];
+                return;
+            }
+            if (key === 'metadata') {
+                segment.metadata = {
+                    ...(segment.metadata || {}),
+                    ...(value || {}),
+                };
+                return;
+            }
+            segment[key] = value;
+        });
+
+        return normalized;
+    },
+
     _parseAssistantSegments(content) {
         const source = content || '';
         const segments = [];
@@ -507,6 +554,17 @@ const ChatWidget = {
         return Array.from(container.querySelectorAll('.assistant-think-block')).map((block) => block.open);
     },
 
+    _getToolBlockOpenStates(container) {
+        if (!container) return {};
+        return Array.from(container.querySelectorAll('.chat-tool-details[data-tool-segment-id]')).reduce((states, block) => {
+            const segmentId = block.getAttribute('data-tool-segment-id');
+            if (segmentId) {
+                states[segmentId] = Boolean(block.open);
+            }
+            return states;
+        }, {});
+    },
+
     _restoreThinkBlockOpenStates(container, openStates = []) {
         if (!container || !Array.isArray(openStates) || openStates.length === 0) return;
         Array.from(container.querySelectorAll('.assistant-think-block')).forEach((block, index) => {
@@ -516,30 +574,101 @@ const ChatWidget = {
         });
     },
 
-    _renderAssistantBubble(bubble, content) {
-        if (!bubble) return;
-        const thinkBlockOpenStates = this._getThinkBlockOpenStates(bubble);
+    _restoreToolBlockOpenStates(container, openStates = {}) {
+        if (!container || !openStates || typeof openStates !== 'object') return;
+        Array.from(container.querySelectorAll('.chat-tool-details[data-tool-segment-id]')).forEach((block) => {
+            const segmentId = block.getAttribute('data-tool-segment-id');
+            if (segmentId && openStates[segmentId]) {
+                block.open = true;
+            }
+        });
+    },
 
-        const segments = this._parseAssistantSegments(content);
-        bubble.innerHTML = segments.map((segment) => {
+    _buildToolStateFromSegment(segment = {}) {
+        const parsed = this._parseToolResultPayload(segment.result);
+        const status = segment.status || (parsed.isError ? 'failed' : (segment.result ? 'completed' : 'running'));
+        const statusMap = {
+            running: { label: '执行中', className: 'running' },
+            completed: { label: '完成', className: 'success' },
+            failed: { label: '失败', className: 'error' },
+            waiting_approval: { label: '待确认', className: 'pending' },
+        };
+        const meta = statusMap[status] || statusMap.running;
+        const metadata = segment.metadata || {};
+        const visualization = segment.visualization || null;
+
+        return {
+            toolId: segment.tool_call_id || segment.id || `inline-tool-${segment.tool_name || 'tool'}`,
+            toolName: segment.tool_name || '工具',
+            toolCallId: segment.tool_call_id || segment.id || null,
+            args: segment.args || {},
+            argsStr: segment.args ? this._stringifyData(segment.args) : '',
+            statusLabel: meta.label,
+            statusClass: meta.className,
+            summary: segment.summary || parsed.summary || (status === 'failed' ? '执行失败' : '已发起调用，等待返回结果'),
+            executionTimeMs: segment.execution_time_ms ?? null,
+            metadata,
+            displayResultStr: parsed.displayResultStr,
+            resultStr: parsed.resultStr,
+            isError: status === 'failed' || parsed.isError,
+            isTruncated: parsed.isTruncated,
+            visualization,
+        };
+    },
+
+    _renderAssistantTextSegmentHtml(content) {
+        return this._parseAssistantSegments(content).map((segment) => {
             if (segment.type === 'think') {
                 return this._buildThinkBlockHtml(segment.content);
             }
             return this._renderMarkdown(segment.content);
         }).join('');
+    },
+
+    _renderAssistantSegments(bubble, renderSegments = [], fallbackContent = '') {
+        if (!bubble) return;
+        this._ensureMaps();
+        const thinkBlockOpenStates = this._getThinkBlockOpenStates(bubble);
+        const toolBlockOpenStates = this._getToolBlockOpenStates(bubble);
+        const normalizedSegments = this._normalizeAssistantRenderSegments(renderSegments, fallbackContent);
+
+        bubble.innerHTML = normalizedSegments.map((segment) => {
+            if (segment?.type === 'tool') {
+                const toolState = this._buildToolStateFromSegment(segment);
+                if (toolState.visualization) {
+                    this.toolVisualizations.set(toolState.toolCallId || toolState.toolName, {
+                        toolName: toolState.toolName,
+                        visualization: toolState.visualization,
+                    });
+                }
+                return this._buildToolCardHtml(toolState, {
+                    inline: true,
+                    segmentId: segment.tool_call_id || segment.id || toolState.toolId,
+                });
+            }
+            return this._renderAssistantTextSegmentHtml(segment?.content || '');
+        }).join('');
 
         this._restoreThinkBlockOpenStates(bubble, thinkBlockOpenStates);
+        this._restoreToolBlockOpenStates(bubble, toolBlockOpenStates);
         this._highlightCode(bubble);
+        DOM.createIcons();
+    },
+
+    _renderAssistantBubble(bubble, content) {
+        this._renderAssistantSegments(bubble, null, content);
     },
 
     appendContent(text) {
         this.currentContent += text;
+        this.currentRenderSegments = this._appendMarkdownRenderSegment(this.currentRenderSegments, text);
         this._resetStreamTimeout();
         const streamingMsg = DOM.$('#streaming-message');
         if (streamingMsg) {
             const bubble = streamingMsg.querySelector('.chat-bubble');
-            this._renderAssistantBubble(bubble, this.currentContent);
+            this._renderAssistantSegments(bubble, this.currentRenderSegments, this.currentContent);
             streamingMsg.setAttribute('data-raw-content', this.currentContent);
+            streamingMsg.setAttribute('data-render-segments', JSON.stringify(this.currentRenderSegments || []));
             this._maybeAutoScroll();
         }
     },
@@ -553,6 +682,7 @@ const ChatWidget = {
         if (streamingMsg) {
             streamingMsg.removeAttribute('id');
             streamingMsg.setAttribute('data-raw-content', this.currentContent || '');
+            streamingMsg.setAttribute('data-render-segments', JSON.stringify(this.currentRenderSegments || []));
             // Add copy button to finished message
             const copyBtn = DOM.el('button', {
                 className: 'message-copy-btn',
@@ -610,18 +740,194 @@ const ChatWidget = {
 
     _ensureMaps() {
         if (!this.pendingTools) this.pendingTools = new Map();
+        if (!this.toolCardStates) this.toolCardStates = new Map();
         if (!this.toolVisualizations) this.toolVisualizations = new Map();
         if (!this.toolVisualizationModes) this.toolVisualizationModes = new Map();
     },
 
-    _appendSystemCard(cardElement) {
-        const content = DOM.$('#tool-log-section');
-        if (!content) return;
-        const placeholder = content.querySelector('.tool-panel-empty');
-        if (placeholder) placeholder.remove();
-        content.appendChild(cardElement);
+    _getToolLookupKey(toolName, toolCallId = null) {
+        return toolCallId || toolName;
+    },
+
+    _generateToolCardId() {
+        this._toolCardSeq = (this._toolCardSeq || 0) + 1;
+        return `tool-card-${Date.now()}-${this._toolCardSeq}`;
+    },
+
+    _appendToolMessage(cardElement) {
+        const messages = DOM.$('#chat-messages');
+        if (!messages || !cardElement) return;
+        messages.appendChild(cardElement);
+        this._moveStreamingMessageToTailIfEmpty();
         DOM.createIcons();
-        this._scrollToolPanelToBottom();
+        this._maybeAutoScroll();
+    },
+
+    _moveStreamingMessageToTailIfEmpty() {
+        const messages = DOM.$('#chat-messages');
+        const streamingMsg = DOM.$('#streaming-message');
+        if (!messages || !streamingMsg) return;
+
+        const rawContent = String(streamingMsg.getAttribute('data-raw-content') || this.currentContent || '').trim();
+        if (!rawContent) {
+            messages.appendChild(streamingMsg);
+        }
+    },
+
+    _parseToolResultPayload(result) {
+        let resultStr = result;
+        let parsedResult = result;
+
+        if (typeof result === 'string') {
+            try {
+                parsedResult = JSON.parse(result);
+                resultStr = JSON.stringify(parsedResult, null, 2);
+            } catch (error) {
+                resultStr = result;
+            }
+        } else {
+            resultStr = JSON.stringify(result, null, 2);
+        }
+
+        resultStr = resultStr == null ? '' : String(resultStr);
+
+        const isError = Boolean(
+            parsedResult &&
+            typeof parsedResult === 'object' &&
+            (parsedResult.success === false || parsedResult.error)
+        );
+
+        const maxPreviewLength = 2000;
+        const isTruncated = resultStr.length > maxPreviewLength;
+        const displayResultStr = isTruncated
+            ? `${resultStr.slice(0, maxPreviewLength).trimEnd()}\n...（已截断）`
+            : resultStr;
+
+        return {
+            parsedResult,
+            resultStr,
+            displayResultStr,
+            isError,
+            isTruncated,
+            summary: this._buildSummary(parsedResult, isError ? '执行失败' : '已返回结果'),
+        };
+    },
+
+    _buildToolMetadataItems(metadata = {}) {
+        const items = [
+            metadata.action_title ? { label: '动作', value: metadata.action_title } : null,
+            metadata.phase ? { label: '阶段', value: metadata.phase } : null,
+            metadata.skill_execution_id ? { label: 'skill_execution_id', value: metadata.skill_execution_id, code: true } : null,
+            metadata.action_run_id ? { label: 'action_run_id', value: metadata.action_run_id, code: true } : null,
+        ].filter(Boolean);
+        return items;
+    },
+
+    _buildToolTextSectionHtml(title, elementId, content) {
+        if (!content) return '';
+        return `
+            <div class="chat-tool-section">
+                <div class="chat-tool-section-title">
+                    <span>${this._escapeHtml(title)}</span>
+                    <button class="chat-tool-copy-btn" onclick="ChatWidget.copyToClipboard('${elementId}', event)">
+                        <i data-lucide="copy"></i> 复制
+                    </button>
+                </div>
+                <div class="chat-tool-content" id="${elementId}">${this._escapeHtml(content)}</div>
+            </div>
+        `;
+    },
+
+    _buildToolMetadataHtml(metadata = {}) {
+        const items = this._buildToolMetadataItems(metadata);
+        if (items.length === 0) return '';
+
+        return `
+            <div class="chat-tool-section">
+                <div class="chat-tool-section-title">
+                    <span>元信息</span>
+                </div>
+                <div class="chat-tool-meta-list">
+                    ${items.map((item) => `
+                        <div class="chat-tool-meta-item">
+                            <span class="chat-tool-meta-label">${this._escapeHtml(item.label)}</span>
+                            <span class="chat-tool-meta-value${item.code ? ' is-code' : ''}">${this._escapeHtml(item.value)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    },
+
+    _buildToolVisualizationSectionHtml(toolState) {
+        if (!toolState?.visualization || toolState.visualization.type !== 'monitoring_history') return '';
+
+        const visualizationId = toolState.toolCallId || toolState.toolName;
+        return `
+            <div class="chat-tool-section">
+                <div class="chat-tool-section-title">
+                    <span>监控图表</span>
+                </div>
+                <div class="chat-tool-visualization-host" data-tool-visualization-host="${this._escapeHtml(visualizationId)}">
+                    ${this._buildToolVisualizationCard(toolState.toolName, toolState.visualization, visualizationId)}
+                </div>
+            </div>
+        `;
+    },
+
+    _buildToolCardHtml(toolState, options = {}) {
+        const executionTime = toolState.executionTimeMs !== null && toolState.executionTimeMs !== undefined
+            ? `${toolState.executionTimeMs} ms`
+            : '';
+        const summaryText = toolState.summary || '已发起调用，等待返回结果';
+        const detailClass = `chat-tool-details tool-tone-${toolState.statusClass || 'running'}`;
+        const wrapperClass = options.inline ? 'assistant-tool-block' : 'chat-system-body';
+        const detailAttrs = [
+            options.segmentId ? `data-tool-segment-id="${this._escapeHtml(options.segmentId)}"` : '',
+            options.inline ? 'data-inline-tool="true"' : '',
+        ].filter(Boolean).join(' ');
+
+        return `
+            <div class="${wrapperClass}">
+                <details class="${detailClass}" ${detailAttrs}>
+                    <summary class="chat-tool-summary">
+                        <div class="chat-tool-summary-main">
+                            <div class="chat-tool-icon"><i data-lucide="wrench"></i></div>
+                            <div class="chat-tool-main">
+                                <div class="chat-tool-title-row">
+                                    <span class="chat-tool-name">${this._escapeHtml(toolState.toolName)}</span>
+                                    <span class="chat-tool-status ${toolState.statusClass || 'running'}">${this._escapeHtml(toolState.statusLabel || '执行中')}</span>
+                                    ${executionTime ? `<span class="chat-tool-time">${this._escapeHtml(executionTime)}</span>` : ''}
+                                </div>
+                                <div class="chat-tool-summary-text">${this._escapeHtml(summaryText)}</div>
+                            </div>
+                        </div>
+                    </summary>
+                    <div class="chat-tool-body">
+                        ${this._buildToolTextSectionHtml('入参', `${toolState.toolId}-args`, toolState.argsStr)}
+                        ${this._buildToolTextSectionHtml('结果', `${toolState.toolId}-result-content`, toolState.displayResultStr)}
+                        ${this._buildToolVisualizationSectionHtml(toolState)}
+                        ${this._buildToolMetadataHtml(toolState.metadata)}
+                        ${toolState.isTruncated ? '<div class="chat-tool-truncate">结果过长，当前仅展示前 2000 个字符</div>' : ''}
+                    </div>
+                </details>
+            </div>
+        `;
+    },
+
+    _renderToolCard(toolId) {
+        const toolMsg = DOM.$(`#${toolId}`);
+        const toolState = this.toolCardStates?.get(toolId);
+        if (!toolMsg || !toolState) return;
+
+        const wasOpen = Boolean(toolMsg.querySelector('.chat-tool-details')?.open);
+        toolMsg.innerHTML = this._buildToolCardHtml(toolState);
+
+        const details = toolMsg.querySelector('.chat-tool-details');
+        if (details && wasOpen) {
+            details.open = true;
+        }
+        DOM.createIcons();
     },
 
     _ensureInsightState() {
@@ -634,16 +940,6 @@ const ChatWidget = {
                 knowledgeRefs: [],
             };
         }
-    },
-
-    _setToolPanelScaffold() {
-        const content = DOM.$('#tool-panel-content');
-        if (!content) return;
-        content.innerHTML = `
-            <div id="tool-log-section">
-                <div class="tool-panel-empty" style="color: var(--text-muted); font-size: 13px;">当前会话的 skill 调用记录会显示在这里</div>
-            </div>
-        `;
     },
 
     _renderInfoCard(title, bodyHtml) {
@@ -736,115 +1032,166 @@ const ChatWidget = {
         return String(data);
     },
 
-    _buildToolCard(toolId, toolName, args, statusLabel, statusClass) {
-        const toolMsg = DOM.el('div', {
-            className: 'chat-message assistant chat-system-message',
-            id: toolId,
-            'data-tool-name': toolName
-        });
-        const argsStr = this._stringifyData(args);
-        toolMsg.innerHTML = `
-            <div class="chat-system-body">
-                <div class="chat-tool-call">
-                    <div class="chat-tool-header" onclick="ChatWidget.toggleToolBody('${toolId}')" aria-expanded="false">
-                        <div class="chat-tool-icon"><i data-lucide="wrench"></i></div>
-                        <div class="chat-tool-main">
-                            <span class="chat-tool-name">${this._escapeHtml(toolName)}</span>
-                        </div>
-                        <span class="chat-tool-status ${statusClass}">${statusLabel}</span>
-                        <i data-lucide="chevron-right" class="chat-tool-expand"></i>
-                    </div>
-                    <div class="chat-tool-body" style="display:none;">
-                        <div class="chat-tool-section">
-                            <div class="chat-tool-section-title">
-                                <span>Arguments</span>
-                                <button class="chat-tool-copy-btn" onclick="ChatWidget.copyToClipboard('${toolId}-args', event)">
-                                    <i data-lucide="copy"></i> Copy
-                                </button>
-                            </div>
-                            <div class="chat-tool-content" id="${toolId}-args">${this._escapeHtml(argsStr)}</div>
-                        </div>
-                        <div class="chat-tool-section" id="${toolId}-result" style="display:none;">
-                            <div class="chat-tool-section-title">
-                                <span>Result</span>
-                                <button class="chat-tool-copy-btn" onclick="ChatWidget.copyToClipboard('${toolId}-result-content', event)">
-                                    <i data-lucide="copy"></i> Copy
-                                </button>
-                            </div>
-                            <div class="chat-tool-content" id="${toolId}-result-content"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-        return toolMsg;
+    _renderStreamingAssistantSegments() {
+        const streamingMsg = DOM.$('#streaming-message');
+        if (!streamingMsg) return false;
+        const bubble = streamingMsg.querySelector('.chat-bubble');
+        this._renderAssistantSegments(bubble, this.currentRenderSegments, this.currentContent);
+        streamingMsg.setAttribute('data-raw-content', this.currentContent || '');
+        streamingMsg.setAttribute('data-render-segments', JSON.stringify(this.currentRenderSegments || []));
+        this._maybeAutoScroll();
+        return true;
     },
 
-    addToolCall(toolName, args, toolCallId = null) {
+    _applyInlineToolCall(toolName, args, toolCallId = null, metadata = {}) {
+        const streamingMsg = DOM.$('#streaming-message');
+        if (!streamingMsg) return false;
+        this._ensureMaps();
+        this.currentRenderSegments = this._upsertToolRenderSegment(this.currentRenderSegments, toolName, toolCallId, {
+            status: 'running',
+            args: args || {},
+            metadata: this._getToolSegmentMetadata({}, metadata),
+        });
+        return this._renderStreamingAssistantSegments();
+    },
+
+    _applyInlineToolResult(toolName, result, executionTimeMs = null, toolCallId = null, metadata = {}) {
+        const streamingMsg = DOM.$('#streaming-message');
+        if (!streamingMsg) return false;
+        this._ensureMaps();
+        const parsed = this._parseToolResultPayload(result);
+        const visualization = metadata.visualization || null;
+        this.currentRenderSegments = this._upsertToolRenderSegment(this.currentRenderSegments, toolName, toolCallId, {
+            status: parsed.isError ? 'failed' : 'completed',
+            result,
+            execution_time_ms: executionTimeMs,
+            summary: parsed.summary || (parsed.isError ? '执行失败' : '执行完成'),
+            metadata: this._getToolSegmentMetadata({}, metadata),
+            visualization,
+        });
+        if (visualization) {
+            this.toolVisualizations.set(toolCallId || toolName, { toolName, visualization });
+        }
+        return this._renderStreamingAssistantSegments();
+    },
+
+    _addLegacyToolCall(toolName, args, toolCallId = null) {
         this._ensureMaps();
         this._resetStreamTimeout();
-        const toolId = `tool-${toolCallId || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`}`;
-        const toolMsg = this._buildToolCard(toolId, toolName, args, '执行中', 'running');
-        if (toolCallId) toolMsg.setAttribute('data-tool-call-id', toolCallId);
-        this._appendSystemCard(toolMsg);
-        this.pendingTools.set(toolCallId || toolName, toolId);
+        const lookupKey = this._getToolLookupKey(toolName, toolCallId);
+        let toolId = this.pendingTools.get(lookupKey);
+        let toolMsg = toolId ? DOM.$(`#${toolId}`) : null;
+
+        if (!toolId || !toolMsg) {
+            toolId = this._generateToolCardId();
+            toolMsg = DOM.el('div', {
+                className: 'chat-message assistant chat-system-message chat-tool-message',
+                id: toolId,
+                'data-tool-name': toolName
+            });
+            if (toolCallId) toolMsg.setAttribute('data-tool-call-id', toolCallId);
+            this._appendToolMessage(toolMsg);
+            this.pendingTools.set(lookupKey, toolId);
+        }
+
+        const previousState = this.toolCardStates.get(toolId) || {};
+        this.toolCardStates.set(toolId, {
+            ...previousState,
+            toolId,
+            toolName,
+            toolCallId,
+            args,
+            argsStr: this._stringifyData(args),
+            statusLabel: previousState.statusLabel || '执行中',
+            statusClass: previousState.statusClass || 'running',
+            summary: previousState.summary || '已发起调用，等待返回结果',
+            executionTimeMs: previousState.executionTimeMs ?? null,
+            metadata: previousState.metadata || {},
+            displayResultStr: previousState.displayResultStr || '',
+            resultStr: previousState.resultStr || '',
+            isError: previousState.isError || false,
+            isTruncated: previousState.isTruncated || false,
+            visualization: previousState.visualization || null,
+        });
+        this._renderToolCard(toolId);
+        this._moveStreamingMessageToTailIfEmpty();
+        this._maybeAutoScroll();
+    },
+
+    _addLegacyToolResult(toolName, result, executionTimeMs = null, toolCallId = null, metadata = {}) {
+        this._ensureMaps();
+        this._resetStreamTimeout();
+        const lookupKey = this._getToolLookupKey(toolName, toolCallId);
+        let toolId = this.pendingTools.get(lookupKey);
+
+        if (!toolId || !DOM.$(`#${toolId}`)) {
+            this.addToolCall(toolName, {}, toolCallId);
+            toolId = this.pendingTools.get(lookupKey);
+        }
+
+        if (!toolId) return;
+
+        const previousState = this.toolCardStates.get(toolId) || {};
+        const parsed = this._parseToolResultPayload(result);
+        const visualization = metadata.visualization || previousState.visualization || null;
+
+        this.toolCardStates.set(toolId, {
+            ...previousState,
+            toolId,
+            toolName,
+            toolCallId,
+            statusLabel: parsed.isError ? '失败' : '完成',
+            statusClass: parsed.isError ? 'error' : 'success',
+            summary: parsed.summary || (parsed.isError ? '执行失败' : '执行完成'),
+            executionTimeMs,
+            metadata: {
+                ...(previousState.metadata || {}),
+                ...metadata,
+            },
+            displayResultStr: parsed.displayResultStr,
+            resultStr: parsed.resultStr,
+            isError: parsed.isError,
+            isTruncated: parsed.isTruncated,
+            visualization,
+        });
+
+        if (visualization) {
+            this.toolVisualizations.set(toolCallId || toolName, { toolName, visualization, toolId });
+        }
+
+        this._renderToolCard(toolId);
+        this.pendingTools.delete(lookupKey);
+        this._maybeAutoScroll();
+    },
+
+    addToolCall(toolName, args, toolCallId = null, metadata = {}) {
+        this._resetStreamTimeout();
+        if (this._applyInlineToolCall(toolName, args, toolCallId, metadata)) {
+            return;
+        }
+        this._addLegacyToolCall(toolName, args, toolCallId);
     },
 
     addToolResult(toolName, result, executionTimeMs = null, toolCallId = null, metadata = {}) {
-        this._ensureMaps();
         this._resetStreamTimeout();
-        const toolId = this.pendingTools.get(toolCallId || toolName);
-        if (!toolId) return;
-
-        const toolMsg = DOM.$(`#${toolId}`);
-        if (!toolMsg) return;
-
-        let resultStr = result;
-        let isTruncated = false;
-        let parsedResult = result;
-        if (typeof result === 'string') {
-            if (result.length >= 1999) isTruncated = true;
-            try {
-                parsedResult = JSON.parse(result);
-                resultStr = JSON.stringify(parsedResult, null, 2);
-            } catch (e) {
-                resultStr = result;
-            }
-        } else {
-            resultStr = JSON.stringify(result, null, 2);
+        if (this._applyInlineToolResult(toolName, result, executionTimeMs, toolCallId, metadata)) {
+            return;
         }
+        this._addLegacyToolResult(toolName, result, executionTimeMs, toolCallId, metadata);
+    },
 
-        const isError = parsedResult && typeof parsedResult === 'object' && parsedResult.success === false;
-        const status = toolMsg.querySelector('.chat-tool-status');
-        if (status) {
-            status.className = `chat-tool-status ${isError ? 'error' : 'success'}`;
-            const phaseLabel = metadata.phase ? ` · ${metadata.phase}` : '';
-            status.textContent = `${isError ? '失败' : '完成'}${phaseLabel}${executionTimeMs !== null ? ` · ${executionTimeMs}ms` : ''}`;
-        }
-
-        const resultSection = toolMsg.querySelector(`#${toolId}-result`);
-        if (resultSection) {
-            resultSection.style.display = 'block';
-            const resultContent = resultSection.querySelector('.chat-tool-content');
-            const headerLines = [];
-            if (metadata.action_title) headerLines.push(`动作: ${metadata.action_title}`);
-            if (metadata.action_run_id) headerLines.push(`action_run_id: ${metadata.action_run_id}`);
-            if (metadata.skill_execution_id) headerLines.push(`skill_execution_id: ${metadata.skill_execution_id}`);
-            const decorated = headerLines.length ? `${headerLines.join('\n')}\n\n${resultStr}` : resultStr;
-            if (resultContent) resultContent.textContent = decorated;
-            if (isTruncated && !resultSection.querySelector('.chat-tool-truncate')) {
-                const notice = DOM.el('div', { className: 'chat-tool-truncate', textContent: '结果过长，当前仅展示前 2000 个字符' });
-                resultSection.appendChild(notice);
-            }
-        }
-
-        if (metadata.visualization) {
-            this._renderToolVisualization(toolName, metadata.visualization, toolCallId);
-        }
-
-        this.pendingTools.delete(toolCallId || toolName);
-        DOM.createIcons();
-        this._scrollToolPanelToBottom();
+    addToolApprovalRequest(toolName, args, toolCallId = null, summary = '', metadata = {}) {
+        const streamingMsg = DOM.$('#streaming-message');
+        if (!streamingMsg) return false;
+        this._resetStreamTimeout();
+        this._ensureMaps();
+        this.currentRenderSegments = this._upsertToolRenderSegment(this.currentRenderSegments, toolName, toolCallId, {
+            status: 'waiting_approval',
+            args: args || {},
+            summary: summary || `技能 ${toolName} 需要确认后再执行`,
+            metadata: this._getToolSegmentMetadata({}, metadata),
+        });
+        return this._renderStreamingAssistantSegments();
     },
 
     _getVisualizationPalette(index = 0) {
@@ -1207,30 +1554,14 @@ const ChatWidget = {
     _renderToolVisualization(toolName, visualization, toolCallId = null) {
         if (!visualization || visualization.type !== 'monitoring_history') return;
 
-        const messages = DOM.$('#chat-messages');
-        if (!messages) return;
-
         const visualizationId = toolCallId || toolName;
-        const existing = DOM.$(`[data-tool-visualization-id="${visualizationId}"]`);
-        if (existing) existing.remove();
         this._ensureMaps();
         this.toolVisualizations.set(visualizationId, { toolName, visualization });
-
-        const card = DOM.el('div', {
-            className: 'chat-message assistant chat-tool-visualization',
-            'data-tool-visualization-id': visualizationId,
-        });
-
-        card.innerHTML = `
-            <div class="chat-avatar">AI</div>
-            <div class="chat-bubble" style="background:transparent;box-shadow:none;padding:0;max-width:min(920px, calc(100vw - 120px));">
-                ${this._buildToolVisualizationCard(toolName, visualization, visualizationId)}
-            </div>
-        `;
-
-        messages.appendChild(card);
-        DOM.createIcons();
-        this._maybeAutoScroll();
+        const host = DOM.$(`[data-tool-visualization-host="${visualizationId}"]`);
+        if (host) {
+            host.innerHTML = this._buildToolVisualizationCard(toolName, visualization, visualizationId);
+            DOM.createIcons();
+        }
     },
 
     setVisualizationMetricMode(visualizationId, panelKey, metricName, mode) {
@@ -1240,10 +1571,9 @@ const ChatWidget = {
 
         this._setVisualizationMetricMode(visualizationId, panelKey, metricName, mode);
 
-        const card = DOM.$(`[data-tool-visualization-id="${visualizationId}"]`);
-        const bubble = card?.querySelector('.chat-bubble');
-        if (!bubble) return;
-        bubble.innerHTML = this._buildToolVisualizationCard(
+        const host = DOM.$(`[data-tool-visualization-host="${visualizationId}"]`);
+        if (!host) return;
+        host.innerHTML = this._buildToolVisualizationCard(
             visualizationState.toolName,
             visualizationState.visualization,
             visualizationId,
@@ -1384,20 +1714,6 @@ const ChatWidget = {
         }, 3000);
     },
 
-    toggleToolBody(toolId) {
-        const toolMsg = DOM.$(`#${toolId}`);
-        if (!toolMsg) return;
-        const header = toolMsg.querySelector('.chat-tool-header');
-        const body = toolMsg.querySelector('.chat-tool-body');
-        const expand = toolMsg.querySelector('.chat-tool-expand');
-        if (!body || !expand) return;
-        const isExpanded = body.classList.contains('expanded');
-        body.classList.toggle('expanded', !isExpanded);
-        body.style.display = isExpanded ? 'none' : 'block';
-        expand.classList.toggle('expanded', !isExpanded);
-        if (header) header.setAttribute('aria-expanded', String(!isExpanded));
-    },
-
     copyToClipboard(elementId, event) {
         if (event) event.stopPropagation();
         const element = DOM.$(`#${elementId}`);
@@ -1440,6 +1756,19 @@ const ChatWidget = {
         this._updateSendButton(false);
     },
 
+    _collectEmbeddedToolCallIds(messages = []) {
+        const toolCallIds = new Set();
+        (messages || []).forEach((msg) => {
+            if (msg?.role !== 'assistant' || !Array.isArray(msg?.render_segments)) return;
+            msg.render_segments.forEach((segment) => {
+                if (segment?.type === 'tool' && segment?.tool_call_id) {
+                    toolCallIds.add(segment.tool_call_id);
+                }
+            });
+        });
+        return toolCallIds;
+    },
+
     loadMessages(messages) {
         const container = DOM.$('#chat-messages');
         if (!container) return;
@@ -1447,9 +1776,12 @@ const ChatWidget = {
         this.resetScrollState();
         this.resetToolPanel();
         this.pendingTools = new Map();
+        this.toolCardStates = new Map();
         this.toolVisualizations = new Map();
         this.toolVisualizationModes = new Map();
+        this.currentRenderSegments = [];
         this._suppressMessageAutoScroll = true;
+        const embeddedToolCallIds = this._collectEmbeddedToolCallIds(messages);
         try {
             for (const msg of messages) {
                 if (msg.role === 'user') {
@@ -1457,11 +1789,16 @@ const ChatWidget = {
                 } else if (msg.role === 'assistant') {
                     const msgEl = DOM.el('div', { className: 'chat-message assistant' });
                     msgEl.setAttribute('data-raw-content', msg.content || '');
+                    msgEl.setAttribute('data-render-segments', JSON.stringify(msg.render_segments || []));
                     msgEl.innerHTML = `
                         <div class="chat-avatar">AI</div>
                         <div class="chat-bubble"></div>
                     `;
-                    this._renderAssistantBubble(msgEl.querySelector('.chat-bubble'), msg.content);
+                    if (Array.isArray(msg.render_segments) && msg.render_segments.length > 0) {
+                        this._renderAssistantSegments(msgEl.querySelector('.chat-bubble'), msg.render_segments, msg.content);
+                    } else {
+                        this._renderAssistantBubble(msgEl.querySelector('.chat-bubble'), msg.content);
+                    }
                     const copyBtn = DOM.el('button', { className: 'message-copy-btn', title: '复制', innerHTML: '<i data-lucide="copy"></i>' });
                     msgEl.appendChild(copyBtn);
                     copyBtn.addEventListener('click', () => this._copyMessageContent(msgEl));
@@ -1469,18 +1806,26 @@ const ChatWidget = {
                 } else if (msg.role === 'tool_call') {
                     try {
                         const data = JSON.parse(msg.content);
-                        this.addToolCall(data.tool_name, data.tool_args, data.tool_call_id || msg.tool_call_id || null);
+                        const toolCallId = data.tool_call_id || msg.tool_call_id || null;
+                        if (toolCallId && embeddedToolCallIds.has(toolCallId)) {
+                            continue;
+                        }
+                        this._addLegacyToolCall(data.tool_name, data.tool_args, toolCallId);
                     } catch (e) {
                         console.error('Failed to parse tool_call message:', e);
                     }
                 } else if (msg.role === 'tool_result') {
                     try {
                         const data = JSON.parse(msg.content);
-                        this.addToolResult(
+                        const toolCallId = data.tool_call_id || msg.tool_call_id || null;
+                        if (toolCallId && embeddedToolCallIds.has(toolCallId)) {
+                            continue;
+                        }
+                        this._addLegacyToolResult(
                             data.tool_name,
                             data.result,
                             data.execution_time_ms,
-                            data.tool_call_id || msg.tool_call_id || null,
+                            toolCallId,
                             {
                                 skill_execution_id: data.skill_execution_id,
                                 action_run_id: data.action_run_id,
@@ -1512,21 +1857,6 @@ const ChatWidget = {
         }
 
         this.scrollToBottomAndResume({ smooth: false });
-        this._scrollToolPanelToBottom();
-    },
-
-    showToolPanelLoading() {
-        this._setToolPanelScaffold();
-        const toolLog = DOM.$('#tool-log-section');
-        if (toolLog) {
-            toolLog.innerHTML = `
-                <div class="tool-panel-empty" style="color: var(--text-muted); font-size: 13px; display:flex; align-items:center; gap:8px;">
-                    <div class="spinner" style="width:14px;height:14px;"></div>
-                    <span>正在加载当前会话的 skill 调用记录...</span>
-                </div>
-            `;
-        }
-        this._renderDiagnosticInsights();
     },
 
     resetToolPanel() {
@@ -1537,42 +1867,15 @@ const ChatWidget = {
             evidence: [],
             knowledgeRefs: [],
         };
+        this.currentRenderSegments = [];
+        this.pendingTools = new Map();
+        this.toolCardStates = new Map();
         this.toolVisualizations = new Map();
         this.toolVisualizationModes = new Map();
-        this._setToolPanelScaffold();
-        this._renderDiagnosticInsights();
     },
 
-    toggleToolPanel() {
-        const panel = DOM.$('#tool-execution-panel');
-        const btn = DOM.$('#toggle-tool-panel-btn');
-        const header = DOM.$('#tool-panel-header');
-        const title = DOM.$('#tool-panel-title');
-        const content = DOM.$('#tool-panel-content');
-
-        if (!panel || !btn) return;
-
-        const isCollapsed = panel.style.width === '40px';
-
-        if (isCollapsed) {
-            panel.style.width = '360px';
-            panel.style.minWidth = '360px';
-            btn.innerHTML = '<i data-lucide="panel-right-close"></i>';
-            btn.title = '隐藏 skill 调用记录';
-            if (header) header.style.justifyContent = 'space-between';
-            if (title) title.style.display = '';
-            if (content) content.style.display = 'block';
-        } else {
-            panel.style.width = '40px';
-            panel.style.minWidth = '40px';
-            btn.innerHTML = '<i data-lucide="panel-right-open"></i>';
-            btn.title = '显示 skill 调用记录';
-            if (header) header.style.justifyContent = 'center';
-            if (title) title.style.display = 'none';
-            if (content) content.style.display = 'none';
-        }
-
-        requestAnimationFrame(() => DOM.createIcons());
+    getCurrentRenderSegments() {
+        return this._cloneRenderSegments(this.currentRenderSegments);
     },
 
     _resetStreamTimeout() {
@@ -1721,11 +2024,6 @@ const ChatWidget = {
         button.setAttribute('aria-hidden', shouldShow ? 'false' : 'true');
         button.title = text;
         if (label) label.textContent = text;
-    },
-
-    _scrollToolPanelToBottom() {
-        const content = DOM.$('#tool-panel-content');
-        if (content) content.scrollTop = content.scrollHeight;
     },
 
     _updateSendButton(isStreaming) {

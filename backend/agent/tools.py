@@ -6,6 +6,7 @@ HIGH_RISK_TOOLS = {
     "explain_query": "分析 SQL 执行计划（只读）",
     "execute_any_sql": "⚠️ 允许执行任意 SQL，可能修改数据库数据或结构",
     "execute_any_os_command": "⚠️ 允许执行任意 OS 命令，可能修改主机状态",
+    "manage_alert_settings": "⚠️ 管理告警模板、订阅、实例告警配置和静默设置，可能修改平台配置",
 }
 
 

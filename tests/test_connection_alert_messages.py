@@ -40,6 +40,19 @@ def test_connection_alert_title_and_content_are_human_friendly():
     assert content == "状态：数据库连接失败\n错误详情：timeout after 5s"
 
 
+def test_ai_policy_alert_title_uses_friendly_display_name():
+    title, content = build_alert_title_and_content(
+        alert_type="ai_policy_violation",
+        metric_name="AI 智能判警",
+        metric_value=None,
+        threshold_value=None,
+        trigger_reason="CPU、连接数持续升高，AI 判定风险较高",
+    )
+
+    assert title == "AI 智能判警告警"
+    assert content == "原因：CPU、连接数持续升高，AI 判定风险较高"
+
+
 def test_extract_connection_failure_detail_strips_generic_prefix():
     assert extract_connection_failure_detail("Connection failed: socket closed") == "socket closed"
     assert extract_connection_failure_detail("数据库连接失败：timeout") == "timeout"
@@ -79,4 +92,3 @@ def test_connection_recovery_notification_payload_uses_recovery_language():
     assert payload["trigger_reason"] == "timeout after 5s"
     assert payload["content"].startswith("状态：数据库连接已恢复")
     assert "恢复时间：2026-04-06 15:25:19" in payload["content"]
-

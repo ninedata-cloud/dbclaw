@@ -602,7 +602,7 @@ const DiagnosisPage = {
         // Main chat area
         const chatContainer = DOM.el('div', {
             className: 'chat-container',
-            style: { flex: '1', minWidth: '0', minHeight: '0', overflow: 'hidden', display: 'flex', flexDirection: 'row', height: '100%' }
+            style: { flex: '1', minWidth: '0', minHeight: '0', overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '100%' }
         });
 
         const chatMain = DOM.el('div', {
@@ -645,7 +645,6 @@ const DiagnosisPage = {
         chatMain.appendChild(disclaimer);
 
         chatContainer.appendChild(chatMain);
-        chatContainer.appendChild(ChatWidget.createToolPanel());
 
         ChatWidget.onStop = () => this._stopGeneration();
         ChatWidget.onClear = () => this._clearSession();
@@ -968,7 +967,6 @@ const DiagnosisPage = {
         this._connectWebSocket(sessionId);
         ChatWidget.resetScrollState();
         ChatWidget.loadMessages([]);
-        ChatWidget.showToolPanelLoading();
 
         // Update sidebar highlight
         const list = DOM.$('#session-list');
@@ -1113,6 +1111,9 @@ const DiagnosisPage = {
             content: '',
             thinking_phase: null,
             thinking_message: '',
+            render_segments: [],
+            run_id: null,
+            status: 'partial',
         };
 
         this.ws.send({
@@ -1215,6 +1216,9 @@ const DiagnosisPage = {
             content: '',
             thinking_phase: null,
             thinking_message: '',
+            render_segments: [],
+            run_id: null,
+            status: 'partial',
         };
         this._pendingResumeState = { ...current, ...patch };
     },
@@ -1227,14 +1231,18 @@ const DiagnosisPage = {
         if (!this._pendingResumeState) return;
 
         const state = this._pendingResumeState;
-        ChatWidget.resumeAssistantMessage(state.content || '');
+        ChatWidget.resumeAssistantMessage(state.content || '', state.render_segments || []);
+        const hasRenderedContent = Boolean(
+            (state.content || '').trim() ||
+            (Array.isArray(state.render_segments) && state.render_segments.length > 0)
+        );
 
         if (state.thinking_phase || state.thinking_message) {
             ChatWidget.showThinkingIndicator(
                 state.thinking_phase || 'llm_thinking',
                 state.thinking_message || 'AI 正在生成中...'
             );
-        } else if (!(state.content || '').trim()) {
+        } else if (!hasRenderedContent && state.status !== 'awaiting_approval') {
             ChatWidget.showThinkingIndicator('llm_thinking', 'AI 正在生成中...');
         } else {
             ChatWidget.hideThinkingIndicator();
@@ -1249,6 +1257,7 @@ const DiagnosisPage = {
                 this._rememberResumeState({
                     thinking_phase: data.phase || 'llm_thinking',
                     thinking_message: data.message || '正在思考分析...',
+                    run_id: data.run_id || this._pendingResumeState?.run_id || null,
                 });
                 ChatWidget.showThinkingIndicator(data.phase, data.message);
                 break;
@@ -1257,6 +1266,7 @@ const DiagnosisPage = {
                 this._rememberResumeState({
                     thinking_phase: data.phase || 'llm_thinking',
                     thinking_message: data.message || '正在思考分析...',
+                    run_id: data.run_id || this._pendingResumeState?.run_id || null,
                 });
                 // If indicator doesn't exist yet (no thinking_start was sent), create it first
                 if (!document.getElementById('thinking-indicator')) {
@@ -1269,6 +1279,7 @@ const DiagnosisPage = {
                 this._rememberResumeState({
                     thinking_phase: 'llm_thinking',
                     thinking_message: '正在思考分析...',
+                    run_id: data.run_id || this._pendingResumeState?.run_id || null,
                 });
                 // Model is about to be called — show "thinking" status instead of hiding
                 if (!document.getElementById('thinking-indicator')) {
@@ -1284,6 +1295,7 @@ const DiagnosisPage = {
                     this._rememberResumeState({
                         thinking_phase: 'tool_execution',
                         thinking_message: msg,
+                        run_id: data.run_id || this._pendingResumeState?.run_id || null,
                     });
                     if (!document.getElementById('thinking-indicator')) {
                         ChatWidget.showThinkingIndicator('tool_execution', msg);
@@ -1294,30 +1306,63 @@ const DiagnosisPage = {
                     this._rememberResumeState({
                         thinking_phase: null,
                         thinking_message: '',
+                        run_id: data.run_id || this._pendingResumeState?.run_id || null,
                     });
                     // Tool finished — hide indicator, next running/content event will take over
                     ChatWidget.hideThinkingIndicator();
                 }
                 break;
             case 'content':
-                this._rememberResumeState({
-                    content: `${this._pendingResumeState?.content || ''}${data.content || ''}`,
-                    thinking_phase: null,
-                    thinking_message: '',
-                });
                 ChatWidget.hideThinkingIndicator();
                 ChatWidget.appendContent(data.content);
+                this._rememberResumeState({
+                    content: ChatWidget.currentContent || `${this._pendingResumeState?.content || ''}${data.content || ''}`,
+                    render_segments: ChatWidget.getCurrentRenderSegments(),
+                    thinking_phase: null,
+                    thinking_message: '',
+                    run_id: data.run_id || this._pendingResumeState?.run_id || null,
+                    status: data.status || 'partial',
+                });
                 break;
             case 'tool_call':
+                if (!ChatWidget.isStreaming) {
+                    ChatWidget.resumeAssistantMessage(
+                        this._pendingResumeState?.content || ChatWidget.currentContent || '',
+                        this._pendingResumeState?.render_segments || ChatWidget.getCurrentRenderSegments()
+                    );
+                }
+                ChatWidget.hideThinkingIndicator();
                 ChatWidget.addToolCall(data.tool_name, data.tool_args, data.tool_call_id);
+                this._rememberResumeState({
+                    content: ChatWidget.currentContent || this._pendingResumeState?.content || '',
+                    render_segments: ChatWidget.getCurrentRenderSegments(),
+                    thinking_phase: null,
+                    thinking_message: '',
+                    run_id: data.run_id || this._pendingResumeState?.run_id || null,
+                    status: 'partial',
+                });
                 break;
             case 'tool_result':
+                if (!ChatWidget.isStreaming) {
+                    ChatWidget.resumeAssistantMessage(
+                        this._pendingResumeState?.content || ChatWidget.currentContent || '',
+                        this._pendingResumeState?.render_segments || ChatWidget.getCurrentRenderSegments()
+                    );
+                }
                 ChatWidget.addToolResult(data.tool_name, data.result, data.execution_time_ms, data.tool_call_id, {
                     skill_execution_id: data.skill_execution_id,
                     action_run_id: data.action_run_id,
                     action_title: data.action_title,
                     phase: data.phase,
                     visualization: data.visualization,
+                });
+                this._rememberResumeState({
+                    content: ChatWidget.currentContent || this._pendingResumeState?.content || '',
+                    render_segments: ChatWidget.getCurrentRenderSegments(),
+                    thinking_phase: null,
+                    thinking_message: '',
+                    run_id: data.run_id || this._pendingResumeState?.run_id || null,
+                    status: 'partial',
                 });
                 break;
             case 'diagnosis_state':
@@ -1334,11 +1379,26 @@ const DiagnosisPage = {
                 ChatWidget.updateDiagnosisConclusion(data);
                 break;
             case 'approval_request':
+                if (!ChatWidget.isStreaming) {
+                    ChatWidget.resumeAssistantMessage(
+                        this._pendingResumeState?.content || ChatWidget.currentContent || '',
+                        this._pendingResumeState?.render_segments || ChatWidget.getCurrentRenderSegments()
+                    );
+                }
+                ChatWidget.hideThinkingIndicator();
+                ChatWidget.addToolApprovalRequest(data.tool_name, data.tool_args, data.tool_call_id, data.summary, {
+                    action_run_id: data.action_run_id,
+                    action_title: data.action_title,
+                    phase: data.phase,
+                });
                 this._rememberResumeState({
+                    content: ChatWidget.currentContent || this._pendingResumeState?.content || '',
+                    render_segments: ChatWidget.getCurrentRenderSegments(),
                     thinking_phase: null,
                     thinking_message: '',
+                    run_id: data.run_id || this._pendingResumeState?.run_id || null,
+                    status: 'awaiting_approval',
                 });
-                ChatWidget.hideThinkingIndicator();
                 this._showApprovalRequest(data);
                 break;
             case 'confirmation_resolved':
@@ -1364,6 +1424,9 @@ const DiagnosisPage = {
                     content: data.content || '',
                     thinking_phase: data.thinking_phase || null,
                     thinking_message: data.thinking_message || data.message || 'AI 正在生成中...',
+                    render_segments: data.render_segments || [],
+                    run_id: data.run_id || null,
+                    status: data.status || 'partial',
                 };
                 this._applyPendingStreamResume();
                 break;

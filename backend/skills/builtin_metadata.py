@@ -47,6 +47,7 @@ SYSTEM_MANAGEMENT_SKILL_IDS = {
     "manage_datasource",
     "manage_host",
     "manage_skill",
+    "manage_alert_settings",
 }
 
 SYSTEM_QUERY_SKILL_IDS = {
@@ -56,6 +57,7 @@ SYSTEM_QUERY_SKILL_IDS = {
     "query_monitoring_history",
     "get_metric_history",
     "query_inspection_reports",
+    "query_alert_statistics",
 }
 
 HOST_DIAGNOSTIC_SKILL_IDS = {
@@ -103,6 +105,7 @@ BUILTIN_PERMISSION_OVERRIDES: dict[str, list[str]] = {
     "query_monitoring_history": ["read_datasource"],
     "get_metric_history": ["read_datasource"],
     "query_inspection_reports": ["read_datasource"],
+    "query_alert_statistics": ["read_datasource"],
     "manage_datasource": ["admin"],
     "manage_host": ["admin"],
     "manage_skill": ["admin"],

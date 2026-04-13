@@ -84,6 +84,12 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Chat message token usage migration: {e}")
 
     try:
+        from backend.migrations.add_chat_message_render_segments import migrate as migrate_chat_message_render_segments
+        await migrate_chat_message_render_segments()
+    except Exception as e:
+        logger.warning(f"Chat message render segment migration: {e}")
+
+    try:
         from backend.migrations.add_report_alert_link import migrate as migrate_report_alert_link
         await migrate_report_alert_link()
     except Exception as e:

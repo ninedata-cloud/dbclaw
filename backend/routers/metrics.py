@@ -49,6 +49,43 @@ def _unhealthy_payload(message: str, violations: list[dict[str, Any]], *, status
     }
 
 
+def _merge_health_payloads(primary: Dict[str, Any], secondary: Dict[str, Any], *, alert_engine: str) -> Dict[str, Any]:
+    primary_healthy = bool(primary.get("healthy", False))
+    secondary_healthy = bool(secondary.get("healthy", False))
+
+    if primary_healthy and secondary_healthy:
+        return {
+            **primary,
+            "alert_engine": alert_engine,
+        }
+
+    if not primary_healthy and secondary_healthy:
+        return {
+            **primary,
+            "alert_engine": alert_engine,
+        }
+
+    if primary_healthy and not secondary_healthy:
+        return {
+            **secondary,
+            "alert_engine": alert_engine,
+        }
+
+    primary_violations = list(primary.get("violations") or [])
+    secondary_violations = list(secondary.get("violations") or [])
+    primary_message = str(primary.get("message") or "").strip()
+    secondary_message = str(secondary.get("message") or "").strip()
+
+    merged_messages = [message for message in [primary_message, secondary_message] if message]
+    return {
+        "healthy": False,
+        "status": "critical",
+        "violations": primary_violations + secondary_violations,
+        "message": "；".join(dict.fromkeys(merged_messages)) if merged_messages else "检测到指标异常",
+        "alert_engine": alert_engine,
+    }
+
+
 def _build_threshold_health(config, metrics: Dict[str, Any]) -> Dict[str, Any]:
     violations = []
 
@@ -112,15 +149,28 @@ async def _build_ai_health(db: AsyncSession, datasource_id: int, config) -> Dict
         ],
         alert_engine="ai",
     )
-    if error_message:
-        violation["detail"] = error_message
 
-    return {
-        "healthy": False,
-        "status": "critical",
-        "violations": [violation],
-        "message": message,
-    }
+
+async def _build_effective_health(
+    db: AsyncSession,
+    *,
+    datasource_id: int,
+    config,
+    metrics: Dict[str, Any],
+) -> Dict[str, Any]:
+    threshold_health = _build_threshold_health(config, metrics)
+
+    from backend.services.alert_ai_service import resolve_effective_alert_engine_mode
+    effective_mode = await resolve_effective_alert_engine_mode(db, config) if config else "threshold"
+    if effective_mode != "ai":
+        return threshold_health
+
+    ai_health = await _build_ai_health(db, datasource_id, config)
+    return _merge_health_payloads(
+        threshold_health,
+        ai_health,
+        alert_engine="ai",
+    )
 
 
 async def _get_db_status_snapshots(
@@ -300,12 +350,12 @@ async def get_batch_dashboard(
             else:
                 config = configs.get(cid)
                 effective_config = await resolve_effective_inspection_config(db, config) if config else None
-                from backend.services.alert_ai_service import resolve_effective_alert_engine_mode
-                effective_mode = await resolve_effective_alert_engine_mode(db, effective_config) if effective_config else "threshold"
-                if effective_mode == "ai":
-                    health = await _build_ai_health(db, cid, effective_config)
-                else:
-                    health = _build_threshold_health(effective_config, snap.data or {})
+                health = await _build_effective_health(
+                    db,
+                    datasource_id=cid,
+                    config=effective_config,
+                    metrics=snap.data or {},
+                )
 
         result[str(cid)] = {"health": health, "metric": metric_data}
 
@@ -366,13 +416,12 @@ async def get_datasource_health(
     config = config_result.scalar_one_or_none()
     effective_config = await resolve_effective_inspection_config(db, config) if config else None
 
-    from backend.services.alert_ai_service import resolve_effective_alert_engine_mode
-    effective_mode = await resolve_effective_alert_engine_mode(db, effective_config) if effective_config else "threshold"
-
-    if effective_mode == "ai":
-        return await _build_ai_health(db, conn_id, effective_config)
-
-    return _build_threshold_health(effective_config, latest_metric.data or {})
+    return await _build_effective_health(
+        db,
+        datasource_id=conn_id,
+        config=effective_config,
+        metrics=latest_metric.data or {},
+    )
 
 
 def _prepare_eval_context(metrics: Dict[str, Any]) -> Dict[str, float]:

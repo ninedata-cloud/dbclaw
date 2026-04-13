@@ -3,154 +3,140 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 本文件为 Claude Code 在此代码库中工作时提供指导。
-你是一位资深的软件开发工程师，精通AI、数据库、前后端全栈技术，负责本项目的代码研发。
+你是一位资深的软件开发工程师，精通 AI、数据库、前后端全栈技术，负责本项目的代码研发。
 过程中使用中文对话交流。
 
 ## 项目概述
 
-DbGuard 是一个 AI 驱动的数据库运维平台，为多种数据库类型（MySQL、PostgreSQL、Oracle、SQL Server、DM、MongoDB、Redis、TiDB、OceanBase、openGauss）提供智能诊断、主动监控、自动巡检和告警通知。
+DbGuard 是一个 AI 驱动的数据库运维平台，提供数据库诊断、监控、巡检和告警能力。
 
-**架构**：FastAPI 后端 + 原生 JavaScript 前端（无构建步骤） + PostgreSQL 元数据存储
+**架构**：FastAPI 后端 + 原生 JavaScript SPA（无构建步骤） + PostgreSQL 元数据库。
 
-## 开发命令
+**关键约束**：
+- 元数据库只支持 PostgreSQL。
+- 前端没有 npm / Vite / Webpack 构建链。
+- AI 模型优先读取数据库中的 AI Model 配置，`OPENAI_*` 只作兜底。
+- 更完整的部署/环境变量说明优先看 `README.md`。
+
+## 常用命令
 
 ```bash
-# 安装依赖
+python -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
 pip install -r requirements.txt
-
-# 启动后端服务（调试模式下自动重载，端口 9939）
+cp .env.example .env
 python run.py
-
-# 前端从 /frontend 目录静态提供，无需构建
-
-# 运行测试（各功能独立测试文件，无统一测试框架）
-python tests/test_skills.py
-python tests/test_threshold_checker.py
-python tests/test_auto_resolve_alerts.py
-python tests/test_deduplication.py
-
-# 数据库迁移（启动时通过 SQLAlchemy create_all 自动执行）
-# 手动迁移脚本：python backend/migrations/<migration_name>.py
 
 # 生成加密密钥
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# 单个 pytest 测试
+python -m pytest tests/test_alert_ai_service.py
+python -m pytest tests/test_alert_ai_service.py -k compute_ai_transition
+
+# 旧脚本式测试（部分测试仍可直接运行）
+python tests/test_threshold_checker.py
+python tests/test_skills.py
+
+# 手动迁移
+python backend/migrations/<migration_name>.py
+
+# Docker 镜像
+# docker build -t dbguard:latest .
 ```
 
-**默认管理员账号**：`admin` / `admin1234`（首次启动自动创建）
+说明：
+- 测试是 **pytest + 脚本式测试混合**。
+- 当前仓库未看到统一的 lint / format / build 配置；不要假设存在 `npm run build`、`make lint`、`ruff` 或 `eslint`。
 
-**环境变量**（`.env` 文件，参考 `.env.example`）：
-- `ENCRYPTION_KEY`：Fernet 加密密钥（必需）
-- `DATABASE_URL`：PostgreSQL 连接串（默认 `postgresql+asyncpg://dbguard:dbguard@localhost:5432/dbguard`）
-- `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`：AI 配置
-- `BOCHA_API_KEY`：博查 AI 网络搜索（可选）
+## 启动与运行时结构
 
-## 架构概述
+- `run.py`：读取配置，先执行 `backend/services/startup_self_check.py`，再启动 Uvicorn。
+- `backend/app.py`：FastAPI 入口，lifespan 中启动全部后台组件。
+- `backend/database.py`：创建 async engine/session，`create_all`，创建默认管理员，加载内置技能和内置文档。
 
-### 后端结构
+启动自检会阻断：
+- `ENCRYPTION_KEY` 非法或未配置
+- `PUBLIC_SHARE_SECRET_KEY` 未配置
+- 运行时目录不可写
+- PostgreSQL 元数据库不可连接
+- 启动端口被占用（仅 `run.py` 启动路径）
 
-**核心应用流程**：`run.py` → `backend/app.py` → 创建带 lifespan 管理的 FastAPI 应用
+健康接口：
+- `GET /health`
+- `GET /health/live`
+- `GET /health/ready`
+- `GET /health/checks`（管理员）
 
-**Lifespan 启动顺序**：
-1. 初始化数据库（PostgreSQL via SQLAlchemy async） + 运行迁移
-2. 写入默认系统配置（巡检去重、SMTP、阿里云）
-3. 启动 SSH 连接池
-4. 启动指标收集器（metric_collector）
-5. 初始化文档知识与内置文档种子
-6. 启动巡检服务（InspectionService）
-7. 启动主机指标收集器（host_collector）
-8. 启动通知分发器（notification_dispatcher）
-9. 加载集成模板 + 启动集成调度器（integration_scheduler）
+`backend/app.py` 启动的关键后台组件：
+- SSH 连接池
+- `metric_collector`
+- `InspectionService`
+- `host_collector`
+- `notification_dispatcher`
+- `integration_scheduler`
+- 飞书长连接、钉钉 Stream、企业微信轮询器
 
-**已注册的 Router**：
-- `backend/routers/`：auth、users、datasources、hosts、metrics、monitor_ws、chat、query、ai_models、documents、inspections、system_configs、alerts、integrations
-- `backend/api/skills.py`：技能管理 API
+## 核心业务链路
 
-**核心架构模式**：
+### 指标 → 告警 → 巡检
 
-- **技能系统** (`backend/skills/`)：动态可扩展的诊断技能执行框架
-  - 技能在 YAML 中定义（`backend/skills/builtin/*.yaml`）
-  - Registry → Validator → Executor → Context 管道
-  - 带权限控制的沙箱执行，技能自动成为 AI Agent 工具
+系统有两条指标入口，但都会汇总到 `MetricSnapshot(metric_type="db_status")`：
 
-- **意图感知 AI** (`backend/agent/`)：系统提示根据用户查询意图自适应
-  - `intent_detector.py`：检测诊断/信息查询/管理操作意图
-  - `prompts.py`：三种提示变体（DIAGNOSTIC / INFORMATIONAL / ADMINISTRATIVE）
-  - `conversation_skills.py`：编排带技能选择的 AI 对话
-  - `context_builder.py`：为 AI 构建上下文
-  - `skill_selector.py`：动态技能到工具的转换
+1. `backend/services/metric_collector.py`
+   - 直连采集数据库状态
+   - 有 `host_id` 时附加 SSH 主机指标
+   - 写入快照后再进入阈值、基线、AI 判警
+   - 连接失败走单独 `system_error` 告警分支
 
-- **巡检服务** (`backend/services/inspection_service.py`)：定时自动巡检，支持按数据源配置计划和阈值规则，触发去重窗口（默认 60 分钟）
+2. `backend/services/integration_scheduler.py`
+   - 执行 `inbound_metric` 集成
+   - 将外部指标与最近一次 `db_status` 快照合并后写回
 
-- **告警系统**：`threshold_checker.py` → `alert_service.py` / `alert_event_service.py` → `notification_dispatcher.py` → `notification_service.py`（Webhook、钉钉等），告警在指标恢复正常后自动解除
+巡检在 `backend/services/inspection_service.py`：
+- 同时处理定时巡检和事件触发巡检
+- 先写 `InspectionTrigger`，报告异步生成
+- 会补默认 `InspectionConfig` 和默认告警模板
+- 存在触发去重窗口
 
-- **主机监控**：`host_collector.py` 通过 SSH 连接池（`ssh_connection_pool.py`）收集 OS 级指标
+告警不只有阈值模式：
+- `backend/services/alert_ai_service.py` 中实现了 AI 判警、置信度阈值、冷却期、连续确认次数等逻辑
+- 当前存在 `threshold` / `ai` / `inherit` 等模式，改告警逻辑时不要只看阈值检查器
 
-- **适配器系统** (`backend/adapters/`)：可编程适配器对接第三方监控系统，用户在前端编写 Python 代码，以完整权限执行（无沙箱）。详见 `docs/PROGRAMMABLE_ADAPTER_GUIDE.md`
+## AI / 技能 / 聊天
 
-### AI Agent 对话流程
+聊天主链路：
+- `backend/routers/chat.py`：REST / WebSocket 入口、附件、审批、会话管理
+- `backend/services/chat_orchestration_service.py`：拼装消息历史、知识库上下文、审批状态、诊断事件落库
+- `backend/agent/conversation.py`：执行模型流式对话和工具调用循环
 
-用户消息 → `chat.py` → 意图检测 → 上下文构建 → 技能选择 → 技能执行 → AI 综合响应
+重要行为：
+- 模型选择顺序：当前会话指定模型 → 数据库中首个启用模型 → 环境变量 `OPENAI_*`
+- tool call / tool result / diagnosis event 会持久化
+- 高风险工具带审批流
 
-### 前端结构
+技能系统：
+- 内置技能源码在 `backend/skills/builtin/*.yaml`
+- 启动时会加载进数据库；运行态主要读取数据库中的 skill 记录
+- 核心文件：`backend/skills/registry.py`、`backend/skills/executor.py`、`backend/skills/context.py`
+- `/api/skills/{id}/test` 当前只允许 builtin skill，自定义 skill 测试被禁用
 
-原生 JavaScript SPA（`frontend/`），无构建步骤：
-- `index.html`：主入口
-- `js/pages/`：页面逻辑，`js/components/`：可复用组件
-- `js/api.js`：集中式 API 客户端
-- `lib/`：第三方库（CodeMirror、marked、highlight.js）
+## 前端结构
 
-## 技能系统
+- `frontend/index.html` 直接按顺序加载所有脚本，**script 顺序就是依赖顺序**
+- `frontend/js/router.js` 是 hash 路由
+- `frontend/js/app.js` 注册页面入口
+- `frontend/js/api.js` 是集中式 API 客户端
 
-添加数据库诊断能力时，在 `backend/skills/builtin/` 中创建技能 YAML，包含唯一 ID、参数定义、所需权限、Python 异步代码。
+`frontend/js/pages/instance-detail.js` 是当前单实例工作台主入口：
+- 串联监控、流量、会话、AI 对话、SQL 查询、告警、巡检、参数等视图
+- `Router.navigate('query')` 会重定向到 `instance-detail?datasource=<id>&tab=query`
 
-**技能中可用的 Context API**：
-```python
-await context.get_connection(connection_id)
-await context.execute_query(query, connection_id)
-await context.execute_command(command, connection_id)  # 需要主机配置
-await context.get_metrics(connection_id, minutes=60)
-await context.call_skill(skill_id, params)
-```
+## 关键约定
 
-**注意**：需要 OS 级访问的技能必须先检查数据源是否配置了 `host_id`，未配置时返回 `{"success": false, "error": "no_host_configured"}` 而非崩溃。
-
-## 常见模式
-
-### 添加新 API 端点
-
-1. `backend/schemas/` 定义 Pydantic Schema
-2. `backend/models/` 创建/更新 Model
-3. `backend/services/` 实现业务逻辑
-4. `backend/routers/` 创建 Router
-5. `backend/app.py` 的 `create_app()` 中注册 Router
-
-### 添加新后台任务
-
-在 `backend/app.py` lifespan 中：`asyncio.create_task(your_function())`
-
-### 加密凭据
-
-```python
-from backend.utils.encryption import encrypt_password, decrypt_password
-```
-
-### 数据库连接
-
-多数据库支持 via `backend/services/db_connector.py`，各数据库专属 Service 在 `backend/services/` 下（mysql_service、postgres_service 等）。通过 `backend/utils/ssh_executor.py` + SSH 连接池支持 SSH 隧道。
-
-## 重要约定
-
-- **全异步**：所有数据库操作使用 async/await
-- **Session 管理**：使用 `get_db()` 依赖注入获取 AsyncSession
-- **错误处理**：Service 抛出带适当状态码的 HTTPException
-- **安全性**：数据库密码用 Fernet 加密
-- **元数据库**：PostgreSQL，通过 `DATABASE_URL` 配置
-- **WebSocket**：`/ws/monitor` 端点提供实时指标
-
-## 配置
-
-所有设置在 `backend/config.py` 中从 `.env` 加载。关键配置项：
-- `METRIC_INTERVAL`：指标收集间隔（默认 60s）
-- `JWT_SECRET_KEY` / `JWT_EXPIRE_MINUTES`（默认 1440）
-- `INSPECTION_DEDUP_WINDOW_MINUTES`（默认 60）
-- `ALERT_AGGREGATION_TIME_WINDOW_MINUTES`（默认 5）
+- 全部数据库访问使用 async/await。
+- 通过 `backend.database.get_db()` 注入 `AsyncSession`。
+- 默认管理员用户名固定为 `admin`；密码优先取 `INITIAL_ADMIN_PASSWORD`，未配置时才回落到 `admin1234`。
+- Schema 变更通常要同时考虑 `create_all` 和增量迁移脚本。
+- 前端静态资源由 FastAPI 直接挂载 `/css`、`/js`、`/assets`、`/lib`，根路径 `/` 返回 `frontend/index.html`。

@@ -5,6 +5,7 @@ Processes pending alerts and sends notifications based on subscriptions
 
 import asyncio
 import logging
+import re
 from typing import List
 from sqlalchemy import select
 
@@ -20,6 +21,41 @@ from backend.models.soft_delete import alive_filter, get_alive_by_id
 from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
+
+AI_ALERT_METRIC_LABELS = {
+    "cpu_usage": "CPU 使用率",
+    "memory_usage": "内存使用率",
+    "disk_usage": "磁盘使用率",
+    "connections_active": "活跃连接数",
+    "connections_total": "总连接数",
+    "connections_waiting": "等待连接数",
+    "qps": "QPS",
+    "tps": "TPS",
+    "iops": "IOPS",
+    "throughput": "吞吐量",
+    "cache_hit_rate": "缓存命中率",
+    "lock_waiting": "锁等待数",
+    "longest_transaction_sec": "最长事务时长",
+}
+
+AI_ALERT_METRIC_ALIASES = {
+    "cpu_usage": ["cpu_usage", "cpu_usage_percent", "cpu_percent"],
+    "memory_usage": ["memory_usage", "memory_usage_percent", "mem_percent"],
+    "disk_usage": ["disk_usage", "disk_usage_percent", "disk_percent"],
+    "connections_active": ["connections_active", "threads_running", "active_connections", "connection_count"],
+    "connections_total": ["connections_total", "threads_connected", "total_connections"],
+    "connections_waiting": ["connections_waiting", "lock_waiting_connections", "waiting_connections"],
+    "qps": ["qps", "questions_per_second"],
+    "tps": ["tps", "transactions_per_second"],
+    "iops": ["iops"],
+    "throughput": ["throughput"],
+    "cache_hit_rate": ["cache_hit_rate", "buffer_pool_hit_rate"],
+    "lock_waiting": ["lock_waiting", "lock_waits"],
+    "longest_transaction_sec": ["longest_transaction_sec"],
+}
+
+AI_ALERT_PERCENT_METRICS = {"cpu_usage", "memory_usage", "disk_usage", "cache_hit_rate"}
+AI_ALERT_INTEGER_METRICS = {"connections_active", "connections_total", "connections_waiting", "lock_waiting"}
 
 
 def _get_required_integration_params(integration) -> list[str]:
@@ -48,11 +84,164 @@ def _severity_display(severity: str | None) -> str:
     }.get(severity or "", severity or "未知")
 
 
+def _coerce_float(value) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        if stripped.endswith("%"):
+            stripped = stripped[:-1]
+        try:
+            return float(stripped)
+        except ValueError:
+            return None
+    return None
+
+
+def _lookup_metric_value(raw_metrics: dict[str, object] | None, metric_name: str) -> float | None:
+    if not isinstance(raw_metrics, dict):
+        return None
+    for alias in AI_ALERT_METRIC_ALIASES.get(metric_name, [metric_name]):
+        value = _coerce_float(raw_metrics.get(alias))
+        if value is not None:
+            return value
+    return None
+
+
+def _format_native_metric_value(metric_name: str, value: float) -> str:
+    if metric_name in AI_ALERT_PERCENT_METRICS:
+        return f"{value:.1f}%"
+    if metric_name in AI_ALERT_INTEGER_METRICS:
+        return str(int(round(value)))
+    if metric_name == "longest_transaction_sec":
+        return f"{value:.0f} 秒"
+    if abs(value - round(value)) < 0.001:
+        return str(int(round(value)))
+    return f"{value:.2f}"
+
+
+def _render_notification_metric_summary(raw_metrics: dict[str, object] | None, focus_metrics: list[str] | None) -> str | None:
+    metric_keys = [metric for metric in (focus_metrics or []) if metric]
+    if not metric_keys and isinstance(raw_metrics, dict):
+        metric_keys = [key for key in AI_ALERT_METRIC_LABELS if _lookup_metric_value(raw_metrics, key) is not None]
+
+    lines: list[str] = []
+    seen: set[str] = set()
+    for metric_name in metric_keys:
+        if metric_name in seen:
+            continue
+        seen.add(metric_name)
+        value = _lookup_metric_value(raw_metrics, metric_name)
+        if value is None:
+            continue
+        label = AI_ALERT_METRIC_LABELS.get(metric_name, metric_name)
+        lines.append(f"- {label}：{_format_native_metric_value(metric_name, value)}")
+        if len(lines) >= 6:
+            break
+    return "\n".join(lines) if lines else None
+
+
+def _format_diagnosis_markdown(text: str | None, *, max_items: int = 5) -> str | None:
+    content = str(text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not content:
+        return None
+
+    raw_items: list[str] = []
+    if "\n" in content:
+        raw_items = [line.strip() for line in content.split("\n")]
+    else:
+        raw_items = re.split(r"[；;]\s*", content)
+
+    items: list[str] = []
+    seen: set[str] = set()
+    for raw in raw_items:
+        normalized = re.sub(r"^[\-\*\u2022]+\s*", "", raw).strip()
+        normalized = re.sub(r"^\d+[\.\)、]\s*", "", normalized).strip()
+        normalized = normalized.strip("：:；; ")
+        if not normalized:
+            continue
+        dedup_key = normalized.lower()
+        if dedup_key in seen:
+            continue
+        seen.add(dedup_key)
+        items.append(normalized)
+        if len(items) >= max_items:
+            break
+
+    if not items:
+        return None
+    if len(items) == 1:
+        return items[0][:500]
+    return "\n".join(f"- {item[:220]}" for item in items)
+
+
+async def _build_ai_native_metric_summary(db, alert) -> str | None:
+    if getattr(alert, "alert_type", None) != "ai_policy_violation" or not getattr(alert, "datasource_id", None):
+        return None
+
+    from backend.models.alert_ai_evaluation_log import AlertAIEvaluationLog
+    from backend.models.metric_snapshot import MetricSnapshot
+
+    evaluation_result = await db.execute(
+        select(AlertAIEvaluationLog)
+        .where(
+            AlertAIEvaluationLog.datasource_id == alert.datasource_id,
+            AlertAIEvaluationLog.accepted == True,
+            AlertAIEvaluationLog.decision == "alert",
+        )
+        .order_by(AlertAIEvaluationLog.created_at.desc(), AlertAIEvaluationLog.id.desc())
+        .limit(1)
+    )
+    evaluation_log = evaluation_result.scalar_one_or_none()
+
+    focus_metrics: list[str] = []
+    metric_features = {}
+    if evaluation_log and isinstance(evaluation_log.feature_summary, dict):
+        focus_metrics = [metric for metric in (evaluation_log.feature_summary.get("focus_metrics") or []) if isinstance(metric, str)]
+        metric_features = evaluation_log.feature_summary.get("metric_features") or {}
+        if isinstance(metric_features, dict):
+            feature_lines = _render_notification_metric_summary(
+                {metric: feature.get("current") for metric, feature in metric_features.items() if isinstance(feature, dict)},
+                focus_metrics or list(metric_features.keys()),
+            )
+            if feature_lines:
+                return feature_lines
+
+    snapshot_result = await db.execute(
+        select(MetricSnapshot)
+        .where(
+            MetricSnapshot.datasource_id == alert.datasource_id,
+            MetricSnapshot.metric_type == "db_status",
+        )
+        .order_by(MetricSnapshot.collected_at.desc(), MetricSnapshot.id.desc())
+        .limit(1)
+    )
+    latest_snapshot = snapshot_result.scalar_one_or_none()
+    if latest_snapshot and isinstance(latest_snapshot.data, dict):
+        return _render_notification_metric_summary(
+            latest_snapshot.data,
+            focus_metrics,
+        )
+
+    return None
+
+
 def _is_connection_failure_alert(alert) -> bool:
     return is_connection_status_alert(getattr(alert, "alert_type", None), getattr(alert, "metric_name", None))
 
 
-def _build_active_alert_payload(alert, datasource, diagnosis_payload: dict[str, str | None], alert_url: str | None, report_url: str | None) -> dict:
+def _build_active_alert_payload(
+    alert,
+    datasource,
+    diagnosis_payload: dict[str, str | None],
+    alert_url: str | None,
+    report_url: str | None,
+    native_metric_summary: str | None = None,
+) -> dict:
     datasource_name = datasource.name if datasource else "未知数据源"
     timestamp = alert.created_at.strftime('%Y-%m-%d %H:%M:%S') if alert.created_at else now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -78,6 +267,10 @@ def _build_active_alert_payload(alert, datasource, diagnosis_payload: dict[str, 
         "resolved_value": None,
         "threshold_value": alert.threshold_value,
         "trigger_reason": alert.trigger_reason,
+        "native_metric_summary": native_metric_summary,
+        "root_cause_markdown": _format_diagnosis_markdown(diagnosis_payload.get("root_cause")),
+        "recommended_actions_markdown": _format_diagnosis_markdown(diagnosis_payload.get("recommended_actions")),
+        "ai_diagnosis_summary_markdown": _format_diagnosis_markdown(diagnosis_payload.get("summary"), max_items=3),
     }
 
     if _is_connection_failure_alert(alert):
@@ -102,6 +295,7 @@ def _build_recovery_alert_payload(alert, datasource, diagnosis_summary: str | No
     datasource_name = datasource.name if datasource else "未知数据源"
     created_at_str = alert.created_at.strftime('%Y-%m-%d %H:%M:%S') if alert.created_at else None
     resolved_at_str = alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else now().strftime('%Y-%m-%d %H:%M:%S')
+    diagnosis_summary_line = f"AI 总结：{diagnosis_summary}\n" if diagnosis_summary else ""
 
     recovery_metric_line = ""
     recovery_value = None
@@ -118,7 +312,7 @@ def _build_recovery_alert_payload(alert, datasource, diagnosis_summary: str | No
             f"告警类型：{_alert_type_display(alert.alert_type)}\n"
             f"严重程度：{_severity_display(alert.severity)}\n\n"
             f"{alert.content}{recovery_metric_line}\n\n"
-            f"{f'AI 总结：{diagnosis_summary}\\n' if diagnosis_summary else ''}"
+            f"{diagnosis_summary_line}"
             f"告警时间：{created_at_str or '未知'}\n"
             f"恢复时间：{resolved_at_str}"
         ),
@@ -423,6 +617,7 @@ async def _send_via_integrations(db, alert, subscription, diagnosis_result=None)
         ai_diagnosis_summary = normalized_diagnosis["summary"]
         root_cause = normalized_diagnosis["root_cause"]
         recommended_actions = normalized_diagnosis["recommended_actions"]
+        native_metric_summary = await _build_ai_native_metric_summary(db, alert)
 
         payload = _build_active_alert_payload(
             alert,
@@ -435,6 +630,7 @@ async def _send_via_integrations(db, alert, subscription, diagnosis_result=None)
             },
             alert_url,
             report_url,
+            native_metric_summary=native_metric_summary,
         )
 
         params = target.get("params") or {}

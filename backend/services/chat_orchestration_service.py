@@ -1,7 +1,9 @@
 import asyncio
+from copy import deepcopy
 import json
 import logging
 import re
+import uuid
 from datetime import datetime, timedelta
 from typing import Any, AsyncGenerator, Awaitable, Callable, Optional
 
@@ -34,6 +36,222 @@ TRACKED_DIAGNOSIS_EVENTS = {
     "approval_request",
     "diagnosis_conclusion",
 }
+
+ASSISTANT_STATUS_COMPLETE = "complete"
+ASSISTANT_STATUS_AWAITING_APPROVAL = "awaiting_approval"
+ASSISTANT_STATUS_CANCELLED = "cancelled"
+ASSISTANT_STATUS_ERROR = "error"
+ASSISTANT_STATUS_PARTIAL = "partial"
+
+RENDER_SEGMENT_MARKDOWN = "markdown"
+RENDER_SEGMENT_TOOL = "tool"
+RENDER_SEGMENT_UNSET = object()
+
+
+def clone_render_segments(segments: Any) -> list[dict[str, Any]]:
+    if not isinstance(segments, list):
+        return []
+    return deepcopy(segments)
+
+
+def _new_markdown_segment(content: str = "") -> dict[str, Any]:
+    return {
+        "id": f"seg_{uuid.uuid4().hex}",
+        "type": RENDER_SEGMENT_MARKDOWN,
+        "content": content,
+    }
+
+
+def _build_tool_segment_metadata(
+    metadata: dict[str, Any] | None = None,
+    *,
+    skill_execution_id: Any = None,
+    action_run_id: Any = None,
+    action_title: Any = None,
+    phase: Any = None,
+) -> dict[str, Any] | None:
+    merged = dict(metadata or {})
+    if skill_execution_id is not None:
+        merged["skill_execution_id"] = skill_execution_id
+    if action_run_id is not None:
+        merged["action_run_id"] = action_run_id
+    if action_title is not None:
+        merged["action_title"] = action_title
+    if phase is not None:
+        merged["phase"] = phase
+    return merged or None
+
+
+def _find_tool_segment(
+    render_segments: list[dict[str, Any]],
+    tool_call_id: str | None,
+) -> dict[str, Any] | None:
+    if not tool_call_id:
+        return None
+    for segment in render_segments:
+        if (
+            isinstance(segment, dict)
+            and segment.get("type") == RENDER_SEGMENT_TOOL
+            and segment.get("tool_call_id") == tool_call_id
+        ):
+            return segment
+    return None
+
+
+def append_markdown_render_segment(
+    render_segments: list[dict[str, Any]] | None,
+    content: str | None,
+) -> list[dict[str, Any]]:
+    segments = render_segments if isinstance(render_segments, list) else []
+    text = str(content or "")
+    if not text:
+        return segments
+
+    last_segment = segments[-1] if segments else None
+    if isinstance(last_segment, dict) and last_segment.get("type") == RENDER_SEGMENT_MARKDOWN:
+        last_segment["content"] = f"{last_segment.get('content') or ''}{text}"
+    else:
+        segments.append(_new_markdown_segment(text))
+    return segments
+
+
+def _parse_tool_result_summary(result: Any) -> tuple[str, str]:
+    parsed = result
+    if isinstance(result, str):
+        try:
+            parsed = json.loads(result)
+        except Exception:
+            parsed = result
+
+    is_error = isinstance(parsed, dict) and (parsed.get("success") is False or parsed.get("error"))
+    status = "failed" if is_error else "completed"
+    fallback = "执行失败" if is_error else "执行完成"
+    summary = _summarize_value(parsed) or fallback
+    return status, summary
+
+
+def upsert_tool_render_segment(
+    render_segments: list[dict[str, Any]] | None,
+    *,
+    tool_call_id: str | None,
+    tool_name: str | None = None,
+    status: str | None = None,
+    args: Any = RENDER_SEGMENT_UNSET,
+    result: Any = RENDER_SEGMENT_UNSET,
+    execution_time_ms: Any = RENDER_SEGMENT_UNSET,
+    summary: Any = RENDER_SEGMENT_UNSET,
+    metadata: dict[str, Any] | None = None,
+    visualization: Any = RENDER_SEGMENT_UNSET,
+) -> list[dict[str, Any]]:
+    segments = render_segments if isinstance(render_segments, list) else []
+    segment = _find_tool_segment(segments, tool_call_id)
+    if segment is None:
+        segment = {
+            "id": tool_call_id or f"tool_{uuid.uuid4().hex}",
+            "type": RENDER_SEGMENT_TOOL,
+            "tool_call_id": tool_call_id,
+            "tool_name": tool_name or "工具",
+            "status": status or "running",
+        }
+        segments.append(segment)
+
+    if tool_name:
+        segment["tool_name"] = tool_name
+    if status:
+        segment["status"] = status
+    if args is not RENDER_SEGMENT_UNSET:
+        if args is None:
+            segment.pop("args", None)
+        else:
+            segment["args"] = args
+    if result is not RENDER_SEGMENT_UNSET:
+        if result is None:
+            segment.pop("result", None)
+        else:
+            segment["result"] = result
+    if execution_time_ms is not RENDER_SEGMENT_UNSET:
+        if execution_time_ms is None:
+            segment.pop("execution_time_ms", None)
+        else:
+            segment["execution_time_ms"] = execution_time_ms
+    if summary is not RENDER_SEGMENT_UNSET:
+        if summary:
+            segment["summary"] = summary
+        else:
+            segment.pop("summary", None)
+    if metadata:
+        segment["metadata"] = {
+            **(segment.get("metadata") or {}),
+            **metadata,
+        }
+    if visualization is not RENDER_SEGMENT_UNSET:
+        if visualization is None:
+            segment.pop("visualization", None)
+        else:
+            segment["visualization"] = visualization
+
+    return segments
+
+
+def apply_render_segments_event(
+    render_segments: list[dict[str, Any]] | None,
+    event: dict[str, Any],
+) -> list[dict[str, Any]]:
+    segments = clone_render_segments(render_segments)
+    event_type = event.get("type")
+
+    if event_type == "content":
+        return append_markdown_render_segment(segments, event.get("content"))
+
+    if event_type == "tool_call":
+        return upsert_tool_render_segment(
+            segments,
+            tool_call_id=event.get("tool_call_id"),
+            tool_name=event.get("tool_name"),
+            status="running",
+            args=event.get("tool_args"),
+            metadata=_build_tool_segment_metadata(
+                action_run_id=event.get("action_run_id"),
+                action_title=event.get("action_title"),
+                phase=event.get("phase"),
+            ),
+        )
+
+    if event_type == "tool_result":
+        inferred_status, inferred_summary = _parse_tool_result_summary(event.get("result"))
+        return upsert_tool_render_segment(
+            segments,
+            tool_call_id=event.get("tool_call_id"),
+            tool_name=event.get("tool_name"),
+            status=inferred_status,
+            result=event.get("result"),
+            execution_time_ms=event.get("execution_time_ms"),
+            summary=inferred_summary,
+            metadata=_build_tool_segment_metadata(
+                skill_execution_id=event.get("skill_execution_id"),
+                action_run_id=event.get("action_run_id"),
+                action_title=event.get("action_title"),
+                phase=event.get("phase"),
+            ),
+            visualization=event.get("visualization"),
+        )
+
+    if event_type == "approval_request":
+        return upsert_tool_render_segment(
+            segments,
+            tool_call_id=event.get("tool_call_id"),
+            tool_name=event.get("tool_name"),
+            status="waiting_approval",
+            args=event.get("tool_args"),
+            summary=event.get("summary"),
+            metadata=_build_tool_segment_metadata(
+                action_run_id=event.get("action_run_id"),
+                action_title=event.get("action_title"),
+                phase=event.get("phase"),
+            ),
+        )
+
+    return segments
 
 
 async def rebuild_llm_messages(all_msgs):
@@ -113,7 +331,7 @@ async def load_session_messages_for_llm(
     query = (
         alive_select(ChatMessage)
         .where(ChatMessage.session_id == session_id)
-        .order_by(ChatMessage.created_at)
+        .order_by(ChatMessage.id)
     )
     if history_window_hours is not None:
         cutoff = local_now() - timedelta(hours=history_window_hours)
@@ -207,6 +425,68 @@ def _build_diagnosis_event_payload(event_type: str, event: dict[str, Any]) -> di
     }
 
 
+async def _load_assistant_message_by_run_id(
+    db: AsyncSession,
+    *,
+    session_id: int,
+    run_id: str,
+) -> ChatMessage | None:
+    result = await db.execute(
+        alive_select(ChatMessage)
+        .where(
+            ChatMessage.session_id == session_id,
+            ChatMessage.role == "assistant",
+            ChatMessage.run_id == run_id,
+        )
+        .order_by(ChatMessage.id.desc())
+    )
+    return result.scalars().first()
+
+
+async def _persist_assistant_message(
+    db: AsyncSession,
+    *,
+    session_id: int,
+    run_id: str,
+    content: str,
+    render_segments: list[dict[str, Any]] | None,
+    status: str,
+    usage_totals: dict[str, int] | None = None,
+) -> ChatMessage:
+    assistant_msg = await _load_assistant_message_by_run_id(
+        db,
+        session_id=session_id,
+        run_id=run_id,
+    )
+    if assistant_msg is None:
+        assistant_msg = ChatMessage(
+            session_id=session_id,
+            role="assistant",
+            content=content,
+            run_id=run_id,
+            render_segments=clone_render_segments(render_segments),
+            status=status,
+        )
+        if usage_totals:
+            assistant_msg.input_tokens = int(usage_totals.get("input_tokens") or 0)
+            assistant_msg.output_tokens = int(usage_totals.get("output_tokens") or 0)
+            assistant_msg.total_tokens = int(usage_totals.get("total_tokens") or 0)
+        db.add(assistant_msg)
+        await db.commit()
+        await db.refresh(assistant_msg)
+        return assistant_msg
+
+    assistant_msg.content = content
+    assistant_msg.render_segments = clone_render_segments(render_segments)
+    assistant_msg.status = status
+    if usage_totals:
+        assistant_msg.input_tokens = int(usage_totals.get("input_tokens") or 0)
+        assistant_msg.output_tokens = int(usage_totals.get("output_tokens") or 0)
+        assistant_msg.total_tokens = int(usage_totals.get("total_tokens") or 0)
+    await db.commit()
+    return assistant_msg
+
+
 async def _store_diagnosis_event(
     db: AsyncSession,
     *,
@@ -233,6 +513,7 @@ async def _store_tool_call(db: AsyncSession, session_id: int, event: dict[str, A
     tool_msg = ChatMessage(
         session_id=session_id,
         role="tool_call",
+        run_id=event.get("run_id"),
         content=json.dumps({
             "tool_name": event["tool_name"],
             "tool_args": event["tool_args"],
@@ -252,12 +533,16 @@ async def _store_tool_result(db: AsyncSession, session_id: int, event: dict[str,
     result_msg = ChatMessage(
         session_id=session_id,
         role="tool_result",
+        run_id=event.get("run_id"),
         content=json.dumps({
             "tool_name": event["tool_name"],
             "result": event["result"],
             "execution_time_ms": event.get("execution_time_ms"),
             "tool_call_id": event.get("tool_call_id"),
             "skill_execution_id": event.get("skill_execution_id"),
+            "action_run_id": event.get("action_run_id"),
+            "action_title": event.get("action_title"),
+            "phase": event.get("phase"),
             "visualization": event.get("visualization"),
         }),
         tool_call_id=event.get("tool_call_id"),
@@ -282,6 +567,7 @@ async def _store_approval_request(
     approval_id = event["approval_id"]
     pending_approvals.setdefault(session_id, {})[approval_id] = {
         "approval_id": approval_id,
+        "run_id": event.get("run_id"),
         "tool_name": event["tool_name"],
         "tool_args": event["tool_args"],
         "tool_call_id": event.get("tool_call_id"),
@@ -304,6 +590,7 @@ async def _store_approval_request(
     approval_msg = ChatMessage(
         session_id=session_id,
         role="approval_request",
+        run_id=event.get("run_id"),
         content=json.dumps({
             "approval_id": approval_id,
             "tool_name": event["tool_name"],
@@ -321,6 +608,7 @@ async def _store_approval_request(
             "recommendation_id": event.get("recommendation_id"),
             "action_title": event.get("action_title"),
             "phase": event.get("phase"),
+            "run_id": event.get("run_id"),
         }),
     )
     db.add(approval_msg)
@@ -363,6 +651,7 @@ async def _load_pending_approval_from_db(
 
     return {
         "approval_id": approval_id,
+        "run_id": data.get("run_id"),
         "tool_name": data.get("tool_name"),
         "tool_args": data.get("tool_args") or {},
         "tool_call_id": data.get("tool_call_id"),
@@ -659,11 +948,38 @@ async def process_stream_events(
     skip_approval: bool = False,
     history_window_hours: int | None = None,
 ) -> tuple[str, dict[str, int], bool]:
-    full_response = ""
     usage_totals = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
     paused_for_approval = False
     run_id = run_id or f"chat_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{session_id}"
     sequence_no = 0
+    terminal_status: str | None = None
+
+    existing_assistant_msg = await _load_assistant_message_by_run_id(
+        db,
+        session_id=session_id,
+        run_id=run_id,
+    )
+    full_response = existing_assistant_msg.content if existing_assistant_msg else ""
+    render_segments = clone_render_segments(
+        existing_assistant_msg.render_segments if existing_assistant_msg else None
+    )
+    if full_response and not render_segments:
+        render_segments = append_markdown_render_segment([], full_response)
+
+    async def _persist_current_assistant(
+        status: str,
+    ) -> ChatMessage | None:
+        if not full_response and not render_segments:
+            return None
+        return await _persist_assistant_message(
+            db,
+            session_id=session_id,
+            run_id=run_id,
+            content=full_response,
+            render_segments=render_segments,
+            status=status,
+            usage_totals=usage_totals,
+        )
 
     try:
         async with asyncio.timeout(600):
@@ -695,17 +1011,27 @@ async def process_stream_events(
 
                 if event_type == "content":
                     full_response += event["content"]
-                    await _emit({"type": "content", "content": event["content"]}, on_event)
+                    render_segments = apply_render_segments_event(render_segments, event)
+                    await _emit({
+                        "type": "content",
+                        "content": event["content"],
+                        "run_id": run_id,
+                    }, on_event)
                 elif event_type == "tool_call":
-                    await _store_tool_call(db, session_id, event)
+                    event_with_run = {**event, "run_id": run_id}
+                    render_segments = apply_render_segments_event(render_segments, event_with_run)
+                    await _store_tool_call(db, session_id, event_with_run)
                     await _emit({
                         "type": "tool_call",
                         "tool_name": event["tool_name"],
                         "tool_args": event["tool_args"],
                         "tool_call_id": event.get("tool_call_id"),
+                        "run_id": run_id,
                     }, on_event)
                 elif event_type == "tool_result":
-                    await _store_tool_result(db, session_id, event)
+                    event_with_run = {**event, "run_id": run_id}
+                    render_segments = apply_render_segments_event(render_segments, event_with_run)
+                    await _store_tool_result(db, session_id, event_with_run)
                     await _emit({
                         "type": "tool_result",
                         "tool_name": event["tool_name"],
@@ -717,13 +1043,17 @@ async def process_stream_events(
                         "action_title": event.get("action_title"),
                         "phase": event.get("phase"),
                         "visualization": event.get("visualization"),
+                        "run_id": run_id,
                     }, on_event)
                 elif event_type == "approval_request":
                     paused_for_approval = True
+                    event_with_run = {**event, "run_id": run_id}
+                    render_segments = apply_render_segments_event(render_segments, event_with_run)
+                    await _persist_current_assistant(ASSISTANT_STATUS_AWAITING_APPROVAL)
                     await _store_approval_request(
                         db,
                         session_id,
-                        event,
+                        event_with_run,
                         pending_approvals,
                         datasource_id,
                         model_id,
@@ -733,7 +1063,7 @@ async def process_stream_events(
                         user_id,
                         history_window_hours,
                     )
-                    await _emit(event, on_event)
+                    await _emit(event_with_run, on_event)
                 elif event_type == "usage":
                     usage = event.get("usage", {}) or {}
                     usage_totals["input_tokens"] += int(usage.get("input_tokens") or 0)
@@ -749,69 +1079,74 @@ async def process_stream_events(
                 elif event_type == "plan_step_status":
                     await _emit(event, on_event)
                 elif event_type == "done":
-                    await _emit({"type": "done"}, on_event)
+                    await _emit({"type": "done", "run_id": run_id}, on_event)
                 elif event_type == "error":
+                    terminal_status = ASSISTANT_STATUS_ERROR
+                    await _persist_current_assistant(ASSISTANT_STATUS_ERROR)
                     await _emit({
                         "type": "error",
                         "content": event.get("content") or event.get("message", "Unknown error"),
+                        "run_id": run_id,
                     }, on_event)
     except TimeoutError:
         logger.error(f"Conversation stream timed out for session {session_id}")
         if full_response:
-            await _emit({"type": "content", "content": "\n\n[会话超时，以上为部分结果]"}, on_event)
-            full_response += "\n\n[会话超时，以上为部分结果]"
-        await _emit({"type": "error", "content": "AI 会话超时（600秒），请稍后重试或简化问题。"}, on_event)
-        await _emit({"type": "done"}, on_event)
+            timeout_note = "\n\n[会话超时，以上为部分结果]"
+            full_response += timeout_note
+            render_segments = apply_render_segments_event(
+                render_segments,
+                {"type": "content", "content": timeout_note},
+            )
+            await _emit({"type": "content", "content": timeout_note, "run_id": run_id}, on_event)
+        terminal_status = ASSISTANT_STATUS_PARTIAL
+        await _persist_current_assistant(ASSISTANT_STATUS_PARTIAL)
+        await _emit({"type": "error", "content": "AI 会话超时（600秒），请稍后重试或简化问题。", "run_id": run_id}, on_event)
+        await _emit({"type": "done", "run_id": run_id}, on_event)
     except asyncio.CancelledError:
         logger.info(f"Conversation stream cancelled for session {session_id}")
         if full_response:
-            full_response += "\n\n[用户已停止生成]"
-        # Save partial result before re-raising
-        if full_response and not paused_for_approval:
+            cancel_note = "\n\n[用户已停止生成]"
+            full_response += cancel_note
+            render_segments = apply_render_segments_event(
+                render_segments,
+                {"type": "content", "content": cancel_note},
+            )
+        if (full_response or render_segments) and not paused_for_approval:
             try:
-                assistant_msg = ChatMessage(
+                await _persist_assistant_message(
+                    db,
                     session_id=session_id,
-                    role="assistant",
+                    run_id=run_id,
                     content=full_response,
-                    input_tokens=usage_totals["input_tokens"],
-                    output_tokens=usage_totals["output_tokens"],
-                    total_tokens=usage_totals["total_tokens"],
+                    render_segments=render_segments,
+                    status=ASSISTANT_STATUS_CANCELLED,
+                    usage_totals=usage_totals,
                 )
-                db.add(assistant_msg)
-                await db.commit()
             except Exception as save_err:
                 logger.error(f"Failed to save partial response on cancel: {save_err}")
         raise
 
-    if full_response and not paused_for_approval:
-        assistant_msg = ChatMessage(
-            session_id=session_id,
-            role="assistant",
-            content=full_response,
-            input_tokens=usage_totals["input_tokens"],
-            output_tokens=usage_totals["output_tokens"],
-            total_tokens=usage_totals["total_tokens"],
-        )
-        db.add(assistant_msg)
-        await db.commit()
-        conclusion_payload = await _upsert_diagnosis_conclusion(
-            db,
-            session_id=session_id,
-            user_id=user_id,
-            run_id=run_id,
-            content=full_response,
-        )
-        if conclusion_payload:
-            sequence_no += 1
-            await _store_diagnosis_event(
+    if (full_response or render_segments) and not paused_for_approval and terminal_status is None:
+        await _persist_current_assistant(ASSISTANT_STATUS_COMPLETE)
+        if full_response:
+            conclusion_payload = await _upsert_diagnosis_conclusion(
                 db,
                 session_id=session_id,
+                user_id=user_id,
                 run_id=run_id,
-                sequence_no=sequence_no,
-                event_type="diagnosis_conclusion",
-                payload=_build_diagnosis_event_payload("diagnosis_conclusion", conclusion_payload),
+                content=full_response,
             )
-            await _emit({"type": "diagnosis_conclusion", **conclusion_payload}, on_event)
+            if conclusion_payload:
+                sequence_no += 1
+                await _store_diagnosis_event(
+                    db,
+                    session_id=session_id,
+                    run_id=run_id,
+                    sequence_no=sequence_no,
+                    event_type="diagnosis_conclusion",
+                    payload=_build_diagnosis_event_payload("diagnosis_conclusion", conclusion_payload),
+                )
+                await _emit({"type": "diagnosis_conclusion", **conclusion_payload}, on_event)
 
     return full_response, usage_totals, paused_for_approval
 
@@ -901,6 +1236,7 @@ async def continue_conversation_after_tool(
     disabled_tools,
     pending_approvals: PendingApprovalsStore,
     on_event: EventCallback = None,
+    run_id: str | None = None,
     history_window_hours: int | None = None,
 ) -> tuple[str, dict[str, int], bool]:
     all_msgs = await load_session_messages_for_llm(
@@ -921,7 +1257,7 @@ async def continue_conversation_after_tool(
         disabled_tools=disabled_tools,
         pending_approvals=pending_approvals,
         on_event=on_event,
-        run_id=f"resume_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{session_id}",
+        run_id=run_id or f"resume_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{session_id}",
         history_window_hours=history_window_hours,
     )
 
@@ -956,6 +1292,7 @@ async def resolve_pending_approval(
     response_msg = ChatMessage(
         session_id=session_id,
         role="approval_response",
+        run_id=pending.get("run_id"),
         content=json.dumps({
             "approval_id": approval_id,
             "action": action,
@@ -973,6 +1310,7 @@ async def resolve_pending_approval(
         "approval_id": approval_id,
         "action": action,
         "comment": comment,
+        "run_id": pending.get("run_id"),
         "action_run_id": pending.get("action_run_id"),
         "recommendation_id": pending.get("recommendation_id"),
         "action_title": pending.get("action_title"),
@@ -985,10 +1323,36 @@ async def resolve_pending_approval(
         pending_approvals.pop(session_id, None)
 
     if action == "rejected":
+        existing_assistant_msg = None
+        if pending.get("run_id"):
+            existing_assistant_msg = await _load_assistant_message_by_run_id(
+                db,
+                session_id=session_id,
+                run_id=pending["run_id"],
+            )
+        if existing_assistant_msg:
+            render_segments = clone_render_segments(existing_assistant_msg.render_segments)
+            render_segments = upsert_tool_render_segment(
+                render_segments,
+                tool_call_id=pending.get("tool_call_id"),
+                tool_name=pending.get("tool_name"),
+                status="failed",
+                args=pending.get("tool_args"),
+                summary="用户已拒绝执行",
+            )
+            await _persist_assistant_message(
+                db,
+                session_id=session_id,
+                run_id=pending["run_id"],
+                content=existing_assistant_msg.content or "",
+                render_segments=render_segments,
+                status=ASSISTANT_STATUS_PARTIAL,
+            )
         return {"approval_id": approval_id, "status": "rejected", "pending": pending}
 
     tool_call_event = {
         "type": "tool_call",
+        "run_id": pending.get("run_id"),
         "tool_name": pending["tool_name"],
         "tool_args": pending["tool_args"],
         "tool_call_id": pending.get("tool_call_id"),
@@ -1009,6 +1373,7 @@ async def resolve_pending_approval(
     )
     tool_result_event = {
         "type": "tool_result",
+        "run_id": pending.get("run_id"),
         "tool_name": pending["tool_name"],
         "result": tool_result,
         "execution_time_ms": execution_time_ms,
@@ -1034,6 +1399,7 @@ async def resolve_pending_approval(
         disabled_tools=pending.get("disabled_tools"),
         pending_approvals=pending_approvals,
         on_event=on_event,
+        run_id=pending.get("run_id"),
         history_window_hours=pending.get("history_window_hours"),
     )
     return {"approval_id": approval_id, "status": "approved", "pending": pending}

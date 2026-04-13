@@ -167,17 +167,12 @@ class OracleConnector(DBConnector):
         conn = await self._connect()
         try:
             cursor = conn.cursor()
-            # Oracle 11g兼容：使用ROWNUM代替FETCH FIRST N ROWS ONLY
             await cursor.execute(
                 "SELECT sid, serial#, username, status, osuser, "
                 "machine, program, sql_id, logon_time "
-                "FROM ("
-                "  SELECT s.sid, s.serial#, s.username, s.status, s.osuser, "
-                "  s.machine, s.program, s.sql_id, s.logon_time "
-                "  FROM v$session s "
-                "  WHERE s.type = 'USER' "
-                "  ORDER BY s.logon_time DESC"
-                ") WHERE ROWNUM <= 50"
+                "FROM v$session s "
+                "WHERE s.type = 'USER' "
+                "ORDER BY s.logon_time DESC"
             )
             rows = await cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]

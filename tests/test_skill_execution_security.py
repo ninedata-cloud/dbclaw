@@ -91,3 +91,50 @@ async def test_get_available_skills_as_tools_keeps_query_monitoring_history_when
         "query_monitoring_history",
         "mysql_get_db_status",
     ]
+
+
+@pytest.mark.asyncio
+async def test_get_available_skills_as_tools_keeps_alert_skills_when_datasource_scoped():
+    statistics_skill = SimpleNamespace(
+        id="query_alert_statistics",
+        name="Query Alert Statistics",
+        description="alert statistics",
+        parameters=[],
+        category="平台运维",
+        tags=["alert"],
+        is_builtin=True,
+    )
+    management_skill = SimpleNamespace(
+        id="manage_alert_settings",
+        name="Manage Alert Settings",
+        description="alert management",
+        parameters=[],
+        category="平台运维",
+        tags=["alert"],
+        is_builtin=True,
+    )
+    mysql_skill = SimpleNamespace(
+        id="mysql_get_db_status",
+        name="MySQL Status",
+        description="mysql",
+        parameters=[],
+        category="MySQL",
+        tags=["mysql"],
+        is_builtin=True,
+    )
+
+    with patch(
+        "backend.skills.registry.SkillRegistry.list_skills",
+        new=AsyncMock(return_value=[statistics_skill, management_skill, mysql_skill]),
+    ):
+        tools = await get_available_skills_as_tools(
+            db=object(),
+            datasource_db_type="mysql",
+            host_configured=False,
+        )
+
+    assert [tool["function"]["name"] for tool in tools] == [
+        "query_alert_statistics",
+        "manage_alert_settings",
+        "mysql_get_db_status",
+    ]

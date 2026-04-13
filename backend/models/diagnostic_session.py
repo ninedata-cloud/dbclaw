@@ -30,6 +30,9 @@ class ChatMessage(SoftDeleteMixin, Base):
     session_id = Column(Integer, nullable=False, index=True)
     role = Column(String(20), nullable=False)  # user, assistant, tool_call, tool_result, approval_request, approval_response
     content = Column(Text, nullable=False)
+    run_id = Column(String(64), nullable=True, index=True)
+    render_segments = Column(JSON, nullable=True)
+    status = Column(String(32), nullable=True)
     tool_calls = Column(JSON, nullable=True)
     tool_call_id = Column(String(100), nullable=True)
     attachments = Column(JSON, nullable=True)  # List of attachment metadata

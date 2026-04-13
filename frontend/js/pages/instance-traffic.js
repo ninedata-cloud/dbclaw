@@ -78,9 +78,6 @@ const InstanceTrafficPage = {
                             <button class="btn btn-secondary" id="instance-traffic-refresh" type="button">
                                 <i data-lucide="refresh-cw"></i> 立即刷新
                             </button>
-                            <button class="btn btn-primary" id="instance-traffic-ai" type="button">
-                                <i data-lucide="sparkles"></i> AI 分析热点
-                            </button>
                         </div>
                     </div>
                     <div id="instance-traffic-stats" class="instance-traffic-stats"></div>
@@ -155,7 +152,6 @@ const InstanceTrafficPage = {
             chartCanvas: DOM.$('#instance-traffic-history-chart', this.container),
             chartEmpty: DOM.$('#instance-traffic-chart-empty', this.container),
             refreshButton: DOM.$('#instance-traffic-refresh', this.container),
-            aiButton: DOM.$('#instance-traffic-ai', this.container),
         };
 
         if (this.refs.canvas) {
@@ -165,7 +161,6 @@ const InstanceTrafficPage = {
 
     _bindStaticEvents() {
         this.refs.refreshButton?.addEventListener('click', () => this._refresh({ silent: false }));
-        this.refs.aiButton?.addEventListener('click', () => this._analyzeHottestClient());
     },
 
     _observeResize() {
@@ -804,43 +799,8 @@ const InstanceTrafficPage = {
             `,
             buttons: [
                 { text: '关闭', variant: 'secondary', onClick: () => Modal.hide() },
-                {
-                    text: 'AI 分析',
-                    variant: 'primary',
-                    onClick: () => {
-                        Modal.hide();
-                        Router.navigate(this._buildAiRoute(client));
-                    },
-                },
             ],
         });
-    },
-
-    _analyzeHottestClient() {
-        const hottest = (this.data?.clients || [])[0];
-        if (!hottest) {
-            Toast.error('当前没有可分析的客户端热点');
-            return;
-        }
-        Router.navigate(this._buildAiRoute(hottest));
-    },
-
-    _buildAiRoute(client) {
-        const prompt = [
-            '请分析这个数据库客户端链路的实时流量风险、可能原因和处置建议。',
-            '',
-            `客户端: ${client.client_label}`,
-            `会话数: ${client.session_count || 0}`,
-            `活跃会话: ${client.active_session_count || 0}`,
-            `等待会话: ${client.waiting_session_count || 0}`,
-            `空闲会话: ${client.idle_session_count || 0}`,
-            `链路强度: ${this._clientRateLabel(client)}`,
-            `最长会话持续时间: ${client.max_duration_seconds != null ? client.max_duration_seconds : '-'} 秒`,
-            `用户: ${(client.users || []).join(', ') || '-'}`,
-            `数据库: ${(client.databases || []).join(', ') || '-'}`,
-            `采样 SQL: ${(client.sql_samples || []).join('\n---\n') || '-'}`,
-        ].join('\n');
-        return `instance-detail?datasource=${encodeURIComponent(this.datasourceId)}&tab=ai&ask=${encodeURIComponent(prompt)}`;
     },
 
     _clientNodeMeta(client) {

@@ -3,6 +3,7 @@ from sqlalchemy import select
 from typing import List, Dict, Any, Optional
 from datetime import datetime, time as dt_time
 import logging
+import re
 import smtplib
 import aiohttp
 import json
@@ -27,6 +28,35 @@ logger = logging.getLogger(__name__)
 
 class NotificationService:
     """Notification dispatch service"""
+
+    @staticmethod
+    def _format_diagnosis_markdown(text: Optional[str], *, max_items: int = 5) -> Optional[str]:
+        content = str(text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+        if not content:
+            return None
+
+        raw_items = content.splitlines() if "\n" in content else re.split(r"[；;]\s*", content)
+        items: list[str] = []
+        seen: set[str] = set()
+        for raw in raw_items:
+            line = re.sub(r"^[\-\*\u2022]+\s*", "", str(raw or "").strip())
+            line = re.sub(r"^\d+[\.\)、]\s*", "", line).strip()
+            line = line.strip("：:；; ")
+            if not line:
+                continue
+            key = line.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            items.append(line)
+            if len(items) >= max_items:
+                break
+
+        if not items:
+            return None
+        if len(items) == 1:
+            return items[0]
+        return "\n".join(f"- {item}" for item in items)
 
     @staticmethod
     def _get_recovery_metric_value(alert: AlertMessage) -> Optional[float]:
@@ -879,14 +909,34 @@ class NotificationService:
             f"**严重程度：** {severity_label}",
             f"**告警类型：** {alert_type_label}",
         ]
+        is_ai_policy = (alert.alert_type or "") == "ai_policy_violation"
         if alert.metric_name and alert.metric_value is not None:
             alert_info.append(f"**指标：** {alert.metric_name} = {alert.metric_value:.2f}")
+        elif alert.metric_name and not is_ai_policy:
+            alert_info.append(f"**指标：** {alert.metric_name}")
         if alert.threshold_value is not None:
             alert_info.append(f"**阈值：** {alert.threshold_value:.2f}")
         if alert.trigger_reason:
             alert_info.append(f"**触发原因：** {alert.trigger_reason}")
         alert_info.append(f"**触发时间：** {alert.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
         elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(alert_info)}})
+
+        root_cause_markdown = NotificationService._format_diagnosis_markdown(getattr(alert, "root_cause", None))
+        recommended_actions_markdown = NotificationService._format_diagnosis_markdown(getattr(alert, "recommended_actions", None))
+        summary_markdown = NotificationService._format_diagnosis_markdown(getattr(alert, "ai_diagnosis_summary", None), max_items=3)
+
+        if root_cause_markdown or recommended_actions_markdown or summary_markdown:
+            elements.append({"tag": "hr"})
+            elements.append({
+                "tag": "div",
+                "text": {"tag": "lark_md", "content": "**AI 诊断**"}
+            })
+            if root_cause_markdown:
+                elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**🔍 根本原因**\n" + root_cause_markdown[:800]}})
+            elif summary_markdown:
+                elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**💬 诊断摘要**\n" + summary_markdown[:500]}})
+            if recommended_actions_markdown:
+                elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**🛠 处置建议**\n" + recommended_actions_markdown[:800]}})
 
         return {
             "msg_type": "interactive",

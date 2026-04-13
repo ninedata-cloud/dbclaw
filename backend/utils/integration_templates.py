@@ -38,6 +38,7 @@ async def send_notification(context, params, payload):
     secret = params.get("secret")
 
     is_recovery = payload.get("status") == "resolved"
+    is_ai_policy = payload.get("alert_type") == "ai_policy_violation"
     severity_colors = {
         "critical": "red",
         "high": "red",
@@ -57,19 +58,25 @@ async def send_notification(context, params, payload):
     color = "green" if is_recovery else severity_colors.get(payload.get("severity", ""), "blue")
     severity_label = severity_labels.get(payload.get("severity", ""), payload.get("severity", ""))
 
+    def _safe_md(text):
+        return str(text or "").replace("\\r\\n", "\\n").replace("\\r", "\\n").strip()
+
     elements = []
 
     alert_lines = [
         f"**告警类型：** {payload.get('alert_type', '未知')}",
         f"**严重程度：** {severity_label}",
     ]
+    native_metric_summary = _safe_md(payload.get("native_metric_summary"))
     metric_name = payload.get("metric_name")
     metric_value = payload.get("metric_value")
     recovery_value = payload.get("resolved_value")
     if recovery_value is None:
         recovery_value = payload.get("recovery_value")
     threshold_value = payload.get("threshold_value")
-    if metric_name:
+    if native_metric_summary:
+        alert_lines.append(f"**指标：**\\n{native_metric_summary}")
+    elif metric_name and not (is_ai_policy and metric_value is None):
         if is_recovery and recovery_value is not None:
             alert_lines.append(f"**恢复后值：** {metric_name} = {recovery_value:.2f}")
         elif metric_value is not None:
@@ -93,6 +100,9 @@ async def send_notification(context, params, payload):
     ai_summary = payload.get("ai_diagnosis_summary")
     root_cause = payload.get("root_cause")
     recommended_actions = payload.get("recommended_actions")
+    ai_summary_markdown = _safe_md(payload.get("ai_diagnosis_summary_markdown") or ai_summary)
+    root_cause_markdown = _safe_md(payload.get("root_cause_markdown") or root_cause)
+    recommended_actions_markdown = _safe_md(payload.get("recommended_actions_markdown") or recommended_actions)
     diagnosis_status = payload.get("diagnosis_status") or ""
 
     if ai_summary or root_cause or recommended_actions:
@@ -102,12 +112,12 @@ async def send_notification(context, params, payload):
             "tag": "div",
             "text": {"tag": "lark_md", "content": "**AI 诊断**" + (f"（{diag_status_label}）" if diag_status_label else "")}
         })
-        if root_cause:
-            elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**&#x1F50D; 根本原因**\\n" + root_cause[:500]}})
-        elif ai_summary:
-            elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**&#x1F4AC; 诊断摘要**\\n" + ai_summary[:300]}})
-        if recommended_actions:
-            elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**&#x1F6E0; 处置建议**\\n" + recommended_actions[:500]}})
+        if root_cause_markdown:
+            elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**&#x1F50D; 根本原因**\\n" + root_cause_markdown[:800]}})
+        elif ai_summary_markdown:
+            elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**&#x1F4AC; 诊断摘要**\\n" + ai_summary_markdown[:500]}})
+        if recommended_actions_markdown:
+            elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**&#x1F6E0; 处置建议**\\n" + recommended_actions_markdown[:800]}})
 
     actions = []
     if payload.get("alert_url"):

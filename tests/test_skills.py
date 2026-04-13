@@ -189,6 +189,7 @@ async def test_parameter_validation():
     param_defs = [
         {"name": "query", "type": "string", "required": True, "description": "SQL query"},
         {"name": "limit", "type": "integer", "required": False, "default": 10, "description": "Result limit"},
+        {"name": "ratio", "type": "number", "required": False, "default": 1.5, "description": "Threshold ratio"},
         {"name": "enabled", "type": "boolean", "required": False, "default": True, "description": "Enable flag"},
         {"name": "tags", "type": "array", "required": False, "description": "Tags list"},
         {"name": "config", "type": "object", "required": False, "description": "Config object"},
@@ -198,6 +199,7 @@ async def test_parameter_validation():
     valid_params = {
         "query": "SELECT * FROM users",
         "limit": 20,
+        "ratio": 1.25,
         "enabled": False,
         "tags": ["test", "demo"],
         "config": {"key": "value"}
@@ -246,6 +248,8 @@ async def test_parameter_validation():
         ({"query": 123}, "string", False),
         ({"query": "test", "limit": 10}, "integer", True),
         ({"query": "test", "limit": "10"}, "integer", False),
+        ({"query": "test", "ratio": 1.5}, "number", True),
+        ({"query": "test", "ratio": "1.5"}, "number", False),
         ({"query": "test", "enabled": True}, "boolean", True),
         ({"query": "test", "enabled": "true"}, "boolean", False),
         ({"query": "test", "tags": ["a", "b"]}, "array", True),
