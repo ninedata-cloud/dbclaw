@@ -36,7 +36,7 @@ def mask_api_key(api_key: str) -> str:
 
 @router.get("", response_model=List[AIModelResponse])
 async def list_models(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(AIModel).filter(AIModel.is_active == True))
+    result = await db.execute(select(AIModel).order_by(AIModel.name).filter(AIModel.is_active == True))
     models = result.scalars().all()
     response = []
     for model in models:

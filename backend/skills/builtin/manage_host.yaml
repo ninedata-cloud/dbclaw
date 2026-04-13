@@ -1,7 +1,7 @@
 id: manage_host
 name: Manage SSH Host
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: system
 description: Manage SSH hosts for database tunneling - create, update, delete, list, get details, and test connections
 tags: [host, ssh, management, crud, system]

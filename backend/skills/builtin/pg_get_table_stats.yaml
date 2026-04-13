@@ -1,7 +1,7 @@
 id: pg_get_table_stats
 name: PostgreSQL Table Statistics
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: postgresql
 description: Get table-level statistics including sizes, row counts, and I/O patterns
 tags: [postgresql, tables, statistics, storage]

@@ -3,8 +3,8 @@ set -euo pipefail
 
 PG_BIN=/usr/lib/postgresql/18/bin
 PG_DATA=/var/lib/postgresql/data
-POSTGRES_DB=${POSTGRES_DB:-dbguard}
-POSTGRES_USER=${POSTGRES_USER:-dbguard}
+POSTGRES_DB=${POSTGRES_DB:-dbclaw}
+POSTGRES_USER=${POSTGRES_USER:-dbclaw}
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-}
 
 if [ -z "$POSTGRES_PASSWORD" ]; then

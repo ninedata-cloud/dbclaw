@@ -1,7 +1,7 @@
 id: send_sms
 name: Send SMS
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: notification
 description: Send an SMS message to specified phone numbers via configured SMS provider (webhook or Aliyun)
 tags: [sms, notification, alert, phone]

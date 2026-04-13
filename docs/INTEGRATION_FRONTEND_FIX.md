@@ -232,7 +232,7 @@ escapeHtml(text) {
 
 ## 最佳实践
 
-在 SmartDBA 项目中开发前端功能时，应遵循以下规范：
+在 DBClaw 项目中开发前端功能时，应遵循以下规范：
 
 1. **使用项目提供的工具类**：
    - Toast：`Toast.success()`, `Toast.error()`, `Toast.warning()`, `Toast.info()`

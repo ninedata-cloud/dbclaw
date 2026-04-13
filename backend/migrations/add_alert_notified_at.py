@@ -19,7 +19,7 @@ async def migrate():
         # Check if column already exists
         result = await conn.execute(text(
             "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = 'alert_messages' AND column_name = 'notified_at'"
+            "WHERE table_schema = current_schema() AND table_name = 'alert_messages' AND column_name = 'notified_at'"
         ))
         if result.scalar_one_or_none():
             logger.info("Column notified_at already exists in alert_messages")
@@ -40,7 +40,7 @@ async def migrate():
         await conn.execute(text(
             "UPDATE alert_messages SET notified_at = updated_at "
             "WHERE id IN ("
-            "  SELECT DISTINCT alert_id FROM alert_delivery_log WHERE status = 'sent'"
+            "  SELECT DISTINCT alert_id FROM alert_delivery_logs WHERE status = 'sent'"
             ")"
         ))
 

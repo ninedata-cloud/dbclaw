@@ -1,7 +1,7 @@
 id: pg_get_vacuum_stats
 name: PostgreSQL Vacuum Statistics
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: postgresql
 description: Get vacuum and analyze statistics to identify tables needing maintenance
 tags: [postgresql, vacuum, maintenance, bloat]

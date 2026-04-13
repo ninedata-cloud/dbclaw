@@ -41,8 +41,8 @@ if [ -f "$RUNTIME_ENV_FILE" ]; then
     set +a
 fi
 
-POSTGRES_DB="${POSTGRES_DB:-dbguard}"
-POSTGRES_USER="${POSTGRES_USER:-dbguard}"
+POSTGRES_DB="${POSTGRES_DB:-dbclaw}"
+POSTGRES_USER="${POSTGRES_USER:-dbclaw}"
 
 if [ -z "${ENCRYPTION_KEY:-}" ]; then
     ENCRYPTION_KEY="$(generate_fernet_key)"

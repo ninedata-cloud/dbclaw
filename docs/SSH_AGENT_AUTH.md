@@ -2,7 +2,7 @@
 
 ## 功能说明
 
-SmartDBA 现在支持使用 SSH Agent 进行主机认证，无需在界面上配置私钥或密码。这对于已经通过 SSH 打通服务器通道的场景特别有用。
+DBClaw 现在支持使用 SSH Agent 进行主机认证，无需在界面上配置私钥或密码。这对于已经通过 SSH 打通服务器通道的场景特别有用。
 
 ## 认证方式对比
 
@@ -43,7 +43,7 @@ SmartDBA 现在支持使用 SSH Agent 进行主机认证，无需在界面上配
    ssh username@target-host
    ```
 
-### 在 SmartDBA 中配置
+### 在 DBClaw 中配置
 
 1. 进入"主机管理"页面
 2. 点击"New Host"按钮
@@ -63,10 +63,10 @@ SmartDBA 现在支持使用 SSH Agent 进行主机认证，无需在界面上配
 
 当选择 SSH Agent 认证时：
 
-1. SmartDBA 不会要求输入密码或私钥
+1. DBClaw 不会要求输入密码或私钥
 2. 连接时，paramiko 会自动查找系统的 SSH Agent
 3. SSH Agent 使用已加载的私钥进行认证
-4. 私钥始终保留在本地，不会上传到 SmartDBA
+4. 私钥始终保留在本地，不会上传到 DBClaw
 
 ## 故障排查
 

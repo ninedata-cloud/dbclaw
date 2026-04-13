@@ -7,7 +7,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.chat_channel_binding import ChatChannelBinding
-from backend.models.chat_event_dedup import ChatEventDedup
+from backend.models.chat_event_dedups import ChatEventDedup
 from backend.models.diagnostic_session import ChatMessage, DiagnosticSession
 from backend.models.integration import Integration
 from backend.models.integration_bot_binding import IntegrationBotBinding
@@ -490,7 +490,7 @@ class FeishuBotService:
         else:
             logger.warning("飞书机器人未配置 APP_ID/APP_SECRET，session_id=%s 无法发送回复", binding.session_id)
 
-        messages, effective_datasource_id, model_id, kb_ids, knowledge_context, disabled_tools = await prepare_user_turn(
+        messages, effective_datasource_id, model_id, kb_ids, knowledge_context, skill_authorizations = await prepare_user_turn(
             db,
             session_id=binding.session_id,
             user_id=None,
@@ -519,7 +519,7 @@ class FeishuBotService:
             model_id=model_id,
             kb_ids=kb_ids,
             knowledge_context=knowledge_context,
-            disabled_tools=disabled_tools,
+            skill_authorizations=skill_authorizations,
             pending_approvals=PENDING_APPROVALS,
             on_event=on_event,
             history_window_hours=BOT_HISTORY_WINDOW_HOURS,

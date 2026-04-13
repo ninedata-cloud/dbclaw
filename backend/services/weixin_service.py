@@ -120,7 +120,7 @@ class WeixinService:
             "msg": {
                 "from_user_id": "",
                 "to_user_id": to_user_id,
-                "client_id": f"dbguard-{uuid.uuid4()}",
+                "client_id": f"dbclaw-{uuid.uuid4()}",
                 "message_type": 2,   # BOT outbound
                 "message_state": 2,  # FINISH
                 "context_token": context_token,

@@ -7,12 +7,12 @@ const DiagnosisPage = {
     _container: null,
     currentSessionId: null,
     selectedModelId: null,
-    disabledTools: [],
-    highRiskTools: [],
+    skillAuthorizations: null,
+    skillAuthorizationCatalog: null,
     availableModels: [],
     sessionTokenUsage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
     _pendingResumeState: null,
-    _toolCheckboxes: null,
+    _skillAuthorizationCheckboxes: null,
     _modelSelectEl: null,
     _pendingAutoAsk: null,
     _initialAskSent: false,
@@ -20,6 +20,48 @@ const DiagnosisPage = {
 
     _getSelectedDatasource() {
         return this.datasourceSelector?.getValue() || Store.get('currentDatasource') || null;
+    },
+
+    _normalizeSkillAuthorizations(authorizations = null, legacyDisabledTools = []) {
+        const defaults = {
+            platform_operations: true,
+            high_privilege_operations: true,
+            knowledge_retrieval: true,
+        };
+        const catalogGroups = this.skillAuthorizationCatalog?.groups || [];
+        catalogGroups.forEach(group => {
+            defaults[group.id] = group.enabled_by_default !== false;
+        });
+
+        const normalized = { ...defaults };
+        if (authorizations && typeof authorizations === 'object') {
+            Object.keys(defaults).forEach(key => {
+                if (authorizations[key] !== undefined) {
+                    normalized[key] = Boolean(authorizations[key]);
+                }
+            });
+        }
+
+        const legacyGroupByTool = {
+            manage_alert_settings: 'platform_operations',
+            list_datasources: 'platform_operations',
+            query_monitoring_history: 'platform_operations',
+            query_alert_statistics: 'platform_operations',
+            execute_any_sql: 'high_privilege_operations',
+            execute_any_os_command: 'high_privilege_operations',
+            fetch_webpage: 'knowledge_retrieval',
+            web_search_bocha: 'knowledge_retrieval',
+            list_documents: 'knowledge_retrieval',
+            read_document: 'knowledge_retrieval',
+        };
+        (legacyDisabledTools || []).forEach(toolName => {
+            const groupId = legacyGroupByTool[toolName];
+            if (groupId) {
+                normalized[groupId] = false;
+            }
+        });
+
+        return normalized;
     },
 
     _hasPinnedInitialContext(options = this._renderOptions || {}) {
@@ -315,7 +357,7 @@ const DiagnosisPage = {
                         </div>
                         <div class="diagnosis-welcome-copy">
                             ${isCompactEmbedded ? '' : '<div class="diagnosis-welcome-eyebrow">AI Diagnosis Workspace</div>'}
-                            <h3>${isCompactEmbedded ? '开始 AI 诊断' : '数据库智能卫士'}</h3>
+                            <h3>${isCompactEmbedded ? '开始 AI 诊断' : 'DBClaw AI'}</h3>
                             <p>${isCompactEmbedded ? '可直接提问，或先使用下面的快捷入口。' : '围绕实例状态、连接、慢 SQL、锁等待与关键参数，快速给出可落地的诊断建议。'}</p>
                         </div>
                     </div>
@@ -385,10 +427,11 @@ const DiagnosisPage = {
         this._pendingAutoAsk = null;
         this._initialAskSent = false;
 
-        // Load high-risk tools list
+        // Load skill authorization catalog
         try {
-            this.highRiskTools = await API.getHighRiskTools();
+            this.skillAuthorizationCatalog = await API.getChatSkillAuthorizations();
         } catch (e) { /* ignore */ }
+        this.skillAuthorizations = this._normalizeSkillAuthorizations(this.skillAuthorizations);
 
         // Header with connection, model and tool safety toggle
         const isCompactEmbedded = Boolean(options.embedded && options.compactEmbeddedToolbar);
@@ -486,14 +529,14 @@ const DiagnosisPage = {
         this.datasourceClickOutsideHandler = () => {};
         document.addEventListener('click', this.datasourceClickOutsideHandler);
 
-        // Tool safety settings button
+        // Skill authorization settings button
         headerActions.appendChild(modelSelect);
         if (!options.hideToolSafetyButton) {
             const toolSafetyBtn = DOM.el('button', {
                 className: 'btn btn-sm btn-secondary',
-                innerHTML: '<i data-lucide="shield"></i> 工具安全',
-                title: 'Configure high-risk tool permissions',
-                onClick: () => this._showToolSafetyModal()
+                innerHTML: '<i data-lucide="shield"></i> Skill 授权',
+                title: '配置 AI 可调用的 skill 分组',
+                onClick: () => this._showSkillAuthorizationModal()
             });
             headerActions.appendChild(toolSafetyBtn);
         }
@@ -675,96 +718,88 @@ const DiagnosisPage = {
         return () => this._cleanup();
     },
 
-    _showToolSafetyModal() {
-        if (this.highRiskTools.length === 0) {
-            Toast.info('No high-risk tools available to configure');
+    _showSkillAuthorizationModal() {
+        const groups = this.skillAuthorizationCatalog?.groups || [];
+        if (groups.length === 0) {
+            Toast.info('暂无可配置的 Skill 授权分组');
             return;
         }
 
-        // Categorize tools by danger level
-        const dangerousTools = this.highRiskTools.filter(t => t.description.includes('⚠️ DANGEROUS'));
-        const normalTools = this.highRiskTools.filter(t => !t.description.includes('⚠️ DANGEROUS'));
+        const currentAuthorizations = this._normalizeSkillAuthorizations(this.skillAuthorizations);
+        const borderColorByLevel = {
+            low: 'var(--accent-blue)',
+            medium: 'var(--accent-blue)',
+            high: 'var(--accent-red)',
+        };
 
-        const renderToolSection = (tools, title, warningText = null) => {
-            if (tools.length === 0) return '';
-
-            const toolItems = tools.map(tool => {
-                const is已禁用 = this.disabledTools.includes(tool.name);
-                const isDangerous = tool.description.includes('⚠️ DANGEROUS');
-                const cleanDesc = tool.description.replace('⚠️ DANGEROUS: ', '');
-
-                return `
-                    <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:6px;cursor:pointer;background:var(--bg-secondary);margin-bottom:6px;border-left:3px solid ${isDangerous ? 'var(--accent-red)' : 'var(--accent-blue)'};">
-                        <input type="checkbox" class="tool-toggle" data-tool="${tool.name}" ${is已禁用 ? '' : 'checked'}>
-                        <div style="flex:1;">
-                            <div style="font-weight:500;font-size:14px;display:flex;align-items:center;gap:6px;">
-                                ${isDangerous ? '<span style="color:var(--accent-red);">⚠️</span>' : ''}
-                                ${tool.name}
-                            </div>
-                            <div style="font-size:12px;opacity:0.7;">${cleanDesc}</div>
-                        </div>
-                        <span class="badge ${is已禁用 ? 'badge-danger' : 'badge-success'}" id="badge-${tool.name}">
-                            ${is已禁用 ? '已禁用' : '已启用'}
-                        </span>
-                    </label>
-                `;
-            }).join('');
+        const renderGroup = (group) => {
+            const isEnabled = currentAuthorizations[group.id] !== false;
+            const itemBadges = (group.items || []).map(item => `
+                <span
+                    title="${Utils.escapeHtml(String(item.description || item.id || '')).replace(/"/g, '&quot;')}"
+                    style="display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;background:rgba(255,255,255,0.06);border:1px solid var(--border-color);font-size:12px;color:var(--text-secondary);"
+                >
+                    ${item.kind === 'tool' ? '内置 ' : ''}${Utils.escapeHtml(String(item.id || ''))}
+                </span>
+            `).join('');
 
             return `
-                <div style="margin-bottom:20px;">
-                    <h4 style="font-size:14px;font-weight:600;margin-bottom:8px;color:var(--text-primary);">${title}</h4>
-                    ${warningText ? `<div style="background:rgba(248,81,73,0.1);border-left:3px solid var(--accent-red);padding:8px 12px;margin-bottom:10px;font-size:12px;border-radius:4px;">${warningText}</div>` : ''}
-                    ${toolItems}
-                </div>
+                <label style="display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-radius:10px;cursor:pointer;background:var(--bg-secondary);margin-bottom:12px;border-left:3px solid ${borderColorByLevel[group.warning_level] || 'var(--accent-blue)'};">
+                    <input type="checkbox" class="skill-auth-toggle" data-group-id="${group.id}" ${isEnabled ? 'checked' : ''} style="margin-top:4px;">
+                    <div style="flex:1;min-width:0;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;">
+                            <div style="font-weight:600;font-size:15px;color:var(--text-primary);">${Utils.escapeHtml(String(group.label || ''))}</div>
+                            <span class="badge ${isEnabled ? 'badge-success' : 'badge-danger'}" id="skill-auth-badge-${group.id}">
+                                ${isEnabled ? '已允许' : '已禁止'}
+                            </span>
+                        </div>
+                        <div style="font-size:13px;line-height:1.6;color:var(--text-secondary);">${Utils.escapeHtml(String(group.description || ''))}</div>
+                        <div style="margin-top:8px;font-size:12px;color:var(--text-muted);">包含 ${group.item_count || 0} 个可调用项</div>
+                        <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;max-height:132px;overflow:auto;">
+                            ${itemBadges || '<span style="font-size:12px;color:var(--text-muted);">当前暂无可展示项</span>'}
+                        </div>
+                    </div>
+                </label>
             `;
         };
 
         Modal.show({
-            title: '🛡️ 工具安全 Settings',
+            title: 'Skill 授权',
             content: `
-                <p style="margin-bottom:16px;font-size:13px;opacity:0.8;">
-                    Control which tools the AI is allowed to use during diagnosis.
-                    已禁用 tools will be blocked for new sessions. Changes apply when creating a new session.
+                <p style="margin-bottom:16px;font-size:13px;color:var(--text-secondary);line-height:1.7;">
+                    控制 AI 在诊断过程中是否允许调用特定分类下的 skill。修改后的授权仅对新建会话生效，已存在会话会继续使用它创建时保存的授权配置。
                 </p>
-                <div id="tool-safety-list">
-                    ${renderToolSection(normalTools, '📊 Standard Diagnostic Tools', null)}
-                    ${renderToolSection(dangerousTools, '⚠️ Dangerous Administrative Tools',
-                        '<strong>WARNING:</strong> These tools can modify database data, structure, and system configuration. Only enable if you fully understand the risks and trust the AI to make changes.')}
+                <div id="skill-authorization-list">
+                    ${groups.map(group => renderGroup(group)).join('')}
                 </div>
             `,
             buttons: [
-                { text: 'Cancel', variant: 'secondary', onClick: () => Modal.hide() },
-                { text: 'Apply Settings', variant: 'primary', onClick: () => this._applyToolSafety() }
+                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
+                { text: '应用授权', variant: 'primary', onClick: () => this._applySkillAuthorizations() }
             ]
         });
 
-        // Add live badge toggle on checkbox change
-        this._toolCheckboxes = document.querySelectorAll('.tool-toggle');
-        this._toolCheckboxes.forEach(cb => {
+        this._skillAuthorizationCheckboxes = document.querySelectorAll('.skill-auth-toggle');
+        this._skillAuthorizationCheckboxes.forEach(cb => {
             cb.addEventListener('change', () => {
-                const badge = document.getElementById(`badge-${cb.dataset.tool}`);
+                const badge = document.getElementById(`skill-auth-badge-${cb.dataset.groupId}`);
                 if (badge) {
                     badge.className = `badge ${cb.checked ? 'badge-success' : 'badge-danger'}`;
-                    badge.textContent = cb.checked ? '已启用' : '已禁用';
+                    badge.textContent = cb.checked ? '已允许' : '已禁止';
                 }
             });
         });
     },
 
-    _applyToolSafety() {
-        this.disabledTools = [];
-        const checkboxes = this._toolCheckboxes || document.querySelectorAll('.tool-toggle');
+    _applySkillAuthorizations() {
+        const nextAuthorizations = this._normalizeSkillAuthorizations();
+        const checkboxes = this._skillAuthorizationCheckboxes || document.querySelectorAll('.skill-auth-toggle');
         checkboxes.forEach(cb => {
-            if (!cb.checked) {
-                this.disabledTools.push(cb.dataset.tool);
-            }
+            nextAuthorizations[cb.dataset.groupId] = cb.checked;
         });
+        this.skillAuthorizations = nextAuthorizations;
         Modal.hide();
-        if (this.disabledTools.length > 0) {
-            Toast.info(`${this.disabledTools.length} tool(s) disabled. Takes effect on next new session.`);
-        } else {
-            Toast.success('All high-risk tools enabled.');
-        }
+        Toast.success('Skill 授权已更新，新建会话将使用当前授权配置。');
     },
 
     async _loadSessions() {
@@ -902,7 +937,7 @@ const DiagnosisPage = {
                 datasource_id: conn?.id || null,
                 title: this._renderOptions?.initialSessionTitle || '新建会话',
                 ai_model_id: this.selectedModelId,
-                disabled_tools: this.disabledTools.length > 0 ? this.disabledTools : null
+                skill_authorizations: this._normalizeSkillAuthorizations(this.skillAuthorizations)
             });
             this.currentSessionId = session.id;
             if (reloadList && !this._renderOptions?.hideSessionSidebar) {
@@ -956,8 +991,11 @@ const DiagnosisPage = {
             this._modelSelectEl.value = this.selectedModelId != null ? String(this.selectedModelId) : '';
         }
 
-        // 恢复禁用工具
-        this.disabledTools = session.disabled_tools || [];
+        // 恢复 Skill 授权
+        this.skillAuthorizations = this._normalizeSkillAuthorizations(
+            session.skill_authorizations,
+            session.disabled_tools || []
+        );
     },
 
     async _switchSession(sessionId) {
@@ -1387,6 +1425,10 @@ const DiagnosisPage = {
                 }
                 ChatWidget.hideThinkingIndicator();
                 ChatWidget.addToolApprovalRequest(data.tool_name, data.tool_args, data.tool_call_id, data.summary, {
+                    approval_id: data.approval_id,
+                    approval_status: 'pending',
+                    risk_level: data.risk_level,
+                    risk_reason: data.risk_reason,
                     action_run_id: data.action_run_id,
                     action_title: data.action_title,
                     phase: data.phase,
@@ -1399,10 +1441,16 @@ const DiagnosisPage = {
                     run_id: data.run_id || this._pendingResumeState?.run_id || null,
                     status: 'awaiting_approval',
                 });
-                this._showApprovalRequest(data);
+                ChatWidget.finishAssistantMessage();
                 break;
             case 'confirmation_resolved':
-                // Approval was resolved (approved/rejected), remove the approval UI
+                ChatWidget.updateApprovalState(data.approval_id, {
+                    status: data.action === 'approved' ? 'running' : 'failed',
+                    summary: data.action === 'approved' ? '已批准，正在执行...' : '用户已拒绝执行',
+                    metadata: {
+                        approval_status: data.action === 'approved' ? 'approving' : 'rejected',
+                    },
+                });
                 this._removeApprovalUI(data.approval_id);
                 break;
             case 'usage':
@@ -1483,10 +1531,7 @@ const DiagnosisPage = {
     _removeApprovalUI(approvalId) {
         const card = DOM.$(`#approval-${approvalId}`);
         if (card) {
-            const buttons = card.querySelector('div[style*="display:flex"]');
-            if (buttons) {
-                buttons.innerHTML = '<span style="color:var(--text-muted);">已处理</span>';
-            }
+            card.remove();
         }
     },
 
@@ -1497,6 +1542,19 @@ const DiagnosisPage = {
         if (card) {
             const buttons = card.querySelectorAll('button');
             buttons.forEach(btn => { btn.disabled = true; btn.style.opacity = '0.5'; });
+        }
+        ChatWidget.updateApprovalState(approvalId, {
+            status: action === 'approved' ? 'running' : 'failed',
+            summary: action === 'approved' ? '已批准，正在执行...' : '用户已拒绝执行',
+            metadata: {
+                approval_status: action === 'approved' ? 'approving' : 'rejected',
+            },
+        });
+        if (action === 'approved') {
+            ChatWidget.resumeAssistantMessage(
+                this._pendingResumeState?.content || ChatWidget.currentContent || '',
+                ChatWidget.getCurrentRenderSegments()
+            );
         }
         try {
             await API.resolveChatApproval(this.currentSessionId, approvalId, {
@@ -1512,8 +1570,7 @@ const DiagnosisPage = {
                 }
             }
             if (action === 'approved') {
-                // The backend will continue the conversation and send events via WebSocket
-                ChatWidget.startAssistantMessage();
+                // 后端会通过 WebSocket 继续把 tool/result/content 续写到当前 assistant 消息中
             }
         } catch (e) {
             Toast.error('操作失败: ' + e.message);
@@ -1522,6 +1579,13 @@ const DiagnosisPage = {
                 const buttons = card.querySelectorAll('button');
                 buttons.forEach(btn => { btn.disabled = false; btn.style.opacity = '1'; });
             }
+            ChatWidget.updateApprovalState(approvalId, {
+                status: 'waiting_approval',
+                summary: '技能仍在等待确认',
+                metadata: {
+                    approval_status: 'pending',
+                },
+            });
         }
     },
 

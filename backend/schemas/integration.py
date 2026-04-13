@@ -1,13 +1,20 @@
 """
 统一外部集成管理 Pydantic Schema
 """
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 
 class IntegrationCreate(BaseModel):
-    integration_id: str = Field(..., description="唯一标识符")
+    model_config = ConfigDict(populate_by_name=True)
+
+    integration_code: str = Field(
+        ...,
+        validation_alias=AliasChoices("integration_code", "integration_id"),
+        serialization_alias="integration_id",
+        description="唯一标识符",
+    )
     name: str = Field(..., description="集成名称")
     description: Optional[str] = Field(None, description="描述")
     integration_type: str = Field(..., description="集成类型: outbound_notification / inbound_metric / bot")
@@ -27,8 +34,10 @@ class IntegrationUpdate(BaseModel):
 
 
 class IntegrationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
     id: int
-    integration_id: str
+    integration_code: str = Field(serialization_alias="integration_id")
     name: str
     description: Optional[str]
     integration_type: str
@@ -41,10 +50,6 @@ class IntegrationResponse(BaseModel):
     last_error: Optional[str]
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
-
 
 class IntegrationTestResult(BaseModel):
     success: bool
@@ -60,6 +65,8 @@ class IntegrationBotBindingUpdate(BaseModel):
 
 
 class IntegrationBotBindingResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     integration_id: int
     code: str
@@ -69,11 +76,9 @@ class IntegrationBotBindingResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
-
 class IntegrationExecutionLogResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     integration_id: int
     target_type: Optional[str]
@@ -90,10 +95,6 @@ class IntegrationExecutionLogResponse(BaseModel):
     result: Optional[Dict[str, Any]]
     error_message: Optional[str]
     created_at: datetime
-
-    class Config:
-        from_attributes = True
-
 
 class IntegrationTemplate(BaseModel):
     """内置集成模板信息"""

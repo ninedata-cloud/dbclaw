@@ -214,7 +214,7 @@ if (ds.silence_until) {
 运行测试脚本：
 
 ```bash
-PYTHONPATH=/Users/william/prog2/temp/smartdba python test_datasource_silence.py
+PYTHONPATH=/Users/william/prog2/temp/dbclaw python test_datasource_silence.py
 ```
 
 测试内容：

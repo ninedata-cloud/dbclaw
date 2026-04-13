@@ -60,6 +60,12 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Alert notified_at migration: {e}")
 
     try:
+        from backend.migrations.rename_legacy_log_tables_to_plural import migrate as rename_legacy_log_tables_to_plural
+        await rename_legacy_log_tables_to_plural()
+    except Exception as e:
+        logger.warning(f"Rename legacy log tables migration: {e}")
+
+    try:
         from backend.migrations.replace_knowledge_base_with_documents import migrate as migrate_docs
         await migrate_docs()
     except Exception as e:
@@ -70,6 +76,12 @@ async def lifespan(app: FastAPI):
         await migrate_ai_model_context_window()
     except Exception as e:
         logger.warning(f"AI model context_window migration: {e}")
+
+    try:
+        from backend.migrations.normalize_ai_model_timestamps import migrate as normalize_ai_model_timestamps
+        await normalize_ai_model_timestamps()
+    except Exception as e:
+        logger.warning(f"AI model timestamp normalization migration: {e}")
 
     try:
         from backend.migrations.add_diagnostic_session_token_usage import migrate as migrate_diagnostic_session_token_usage
@@ -114,8 +126,8 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Feishu chat tables migration: {e}")
 
     try:
-        from backend.migrations.fix_feishu_chat_event_dedup_duplicates import migrate as fix_feishu_chat_event_dedup_duplicates
-        await fix_feishu_chat_event_dedup_duplicates()
+        from backend.migrations.fix_feishu_chat_event_dedups_duplicates import migrate as fix_feishu_chat_event_dedups_duplicates
+        await fix_feishu_chat_event_dedups_duplicates()
     except Exception as e:
         logger.warning(f"Feishu chat event dedup fix migration: {e}")
 
@@ -131,6 +143,18 @@ async def lifespan(app: FastAPI):
         await migrate_action_runs()
     except Exception as e:
         logger.warning(f"Action runs migration: {e}")
+
+    try:
+        from backend.migrations.create_diagnosis_events import migrate as create_diagnosis_events
+        await create_diagnosis_events()
+    except Exception as e:
+        logger.warning(f"Diagnosis events migration: {e}")
+
+    try:
+        from backend.migrations.create_diagnosis_conclusions import migrate as create_diagnosis_conclusions
+        await create_diagnosis_conclusions()
+    except Exception as e:
+        logger.warning(f"Diagnosis conclusions migration: {e}")
 
     try:
         from backend.migrations.add_subscription_integration_targets import migrate as migrate_subscription_integration_targets
@@ -151,6 +175,12 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Diagnostic session hidden + alert diagnosis migration: {e}")
 
     try:
+        from backend.migrations.add_diagnostic_session_skill_authorizations import migrate as migrate_diagnostic_session_skill_authorizations
+        await migrate_diagnostic_session_skill_authorizations()
+    except Exception as e:
+        logger.warning(f"Diagnostic session skill_authorizations migration: {e}")
+
+    try:
         from backend.migrations.add_bot_bindings import migrate as migrate_bot_bindings
         await migrate_bot_bindings()
     except Exception as e:
@@ -163,8 +193,8 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Integration execution log targets migration: {e}")
 
     try:
-        from backend.migrations.extend_alert_delivery_log_targets import migrate as migrate_alert_delivery_log_targets
-        await migrate_alert_delivery_log_targets()
+        from backend.migrations.extend_alert_delivery_logs_targets import migrate as migrate_alert_delivery_logs_targets
+        await migrate_alert_delivery_logs_targets()
     except Exception as e:
         logger.warning(f"Alert delivery log targets migration: {e}")
 
@@ -222,6 +252,36 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Baseline and event strategy migration: {e}")
 
+    try:
+        from backend.migrations.add_metric_composite_index import add_composite_index as add_metric_composite_index
+        await add_metric_composite_index()
+    except Exception as e:
+        logger.warning(f"Metric snapshot composite index migration: {e}")
+
+    try:
+        from backend.migrations.add_reports_indexes import migrate as add_reports_indexes
+        await add_reports_indexes()
+    except Exception as e:
+        logger.warning(f"Reports indexes migration: {e}")
+
+    try:
+        from backend.migrations.archive_and_drop_deprecated_report_columns import migrate as archive_and_drop_deprecated_report_columns
+        await archive_and_drop_deprecated_report_columns()
+    except Exception as e:
+        logger.warning(f"Archive/drop deprecated report columns migration: {e}")
+
+    try:
+        from backend.migrations.add_schema_hardening_indexes import migrate as add_schema_hardening_indexes
+        await add_schema_hardening_indexes()
+    except Exception as e:
+        logger.warning(f"Schema hardening indexes migration: {e}")
+
+    try:
+        from backend.migrations.normalize_core_foreign_keys import migrate as normalize_core_foreign_keys
+        await normalize_core_foreign_keys()
+    except Exception as e:
+        logger.warning(f"Core foreign key normalization migration: {e}")
+
 
     try:
         from backend.migrations.migrate_alert_channels_to_subscription_targets import migrate as migrate_alert_channels_to_subscription_targets
@@ -234,6 +294,12 @@ async def lifespan(app: FastAPI):
         await migrate_inbound_integrations_to_datasource_sources()
     except Exception as e:
         logger.warning(f"Inbound integration to datasource source migration: {e}")
+
+    try:
+        from backend.migrations.migrate_datasource_extra_params_to_jsonb import migrate as migrate_datasource_extra_params_to_jsonb
+        await migrate_datasource_extra_params_to_jsonb()
+    except Exception as e:
+        logger.warning(f"Datasource extra_params to jsonb migration: {e}")
 
     try:
         from backend.migrations.migrate_feishu_bot_channel_to_bot_binding import migrate as migrate_feishu_bot_channel_to_bot_binding
@@ -252,6 +318,12 @@ async def lifespan(app: FastAPI):
         await drop_legacy_alert_channel_schema()
     except Exception as e:
         logger.warning(f"Drop legacy alert channel schema migration: {e}")
+
+    try:
+        from backend.migrations.archive_legacy_adapter_schema import migrate as archive_legacy_adapter_schema
+        await archive_legacy_adapter_schema()
+    except Exception as e:
+        logger.warning(f"Archive legacy adapter schema migration: {e}")
 
 
     # Seed default system configs
@@ -369,7 +441,7 @@ async def lifespan(app: FastAPI):
                 key="app_external_base_url",
                 value="",
                 value_type="string",
-                description="外部访问基础地址，用于生成飞书等通知中的免登录详情链接，例如 https://dbguard.example.com",
+                description="外部访问基础地址，用于生成飞书等通知中的免登录详情链接，例如 https://dbclaw.example.com",
                 category="notification"
             )
 

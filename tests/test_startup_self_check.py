@@ -5,7 +5,7 @@ import os
 import sys
 from pathlib import Path
 
-os.environ["DATABASE_URL"] = "postgresql+asyncpg://dbguard:test-pass@127.0.0.1:5432/dbguard"
+os.environ["DATABASE_URL"] = "postgresql+asyncpg://dbclaw:test-pass@127.0.0.1:5432/dbclaw"
 os.environ["ENCRYPTION_KEY"] = "4WEqnK34-IxW8xugCJ8SrLw6VHgxHpM5LOAQWAxPd1c="
 os.environ["PUBLIC_SHARE_SECRET_KEY"] = "test-public-share-secret-1234567890"
 os.environ["INITIAL_ADMIN_PASSWORD"] = "admin1234"
@@ -71,7 +71,7 @@ async def main():
         readiness_report = await startup_self_check.run_readiness_self_check(settings)
         assert_true(readiness_report.ok, readiness_report.to_console_text(include_passes=True))
 
-        unsupported_settings = settings.model_copy(update={"database_url": "mysql+aiomysql://user:pass@127.0.0.1:3306/dbguard"})
+        unsupported_settings = settings.model_copy(update={"database_url": "mysql+aiomysql://user:pass@127.0.0.1:3306/dbclaw"})
         unsupported_report = await startup_self_check.run_readiness_self_check(unsupported_settings)
         assert_true(not unsupported_report.ok, "non-PostgreSQL URL should be rejected")
         assert_true(

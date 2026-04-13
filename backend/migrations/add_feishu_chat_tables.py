@@ -39,12 +39,12 @@ async def migrate():
             await conn.execute(text("CREATE INDEX ix_chat_channel_bindings_session_id ON chat_channel_bindings(session_id)"))
 
         dedup_exists_result = await conn.execute(text(
-            "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'chat_event_dedup')"
+            "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'chat_event_dedups')"
         ))
         dedup_exists = bool(dedup_exists_result.scalar())
         if not dedup_exists:
             await conn.execute(text("""
-                CREATE TABLE chat_event_dedup (
+                CREATE TABLE chat_event_dedups (
                     id SERIAL PRIMARY KEY,
                     channel_type VARCHAR(50) NOT NULL,
                     external_event_id VARCHAR(255) NULL,
@@ -53,10 +53,10 @@ async def migrate():
                     processed_at TIMESTAMP NOT NULL DEFAULT NOW()
                 )
             """))
-            await conn.execute(text("CREATE INDEX ix_chat_event_dedup_channel_type ON chat_event_dedup(channel_type)"))
-            await conn.execute(text("CREATE INDEX ix_chat_event_dedup_external_event_id ON chat_event_dedup(external_event_id)"))
-            await conn.execute(text("CREATE INDEX ix_chat_event_dedup_external_message_id ON chat_event_dedup(external_message_id)"))
-            await conn.execute(text("CREATE INDEX ix_chat_event_dedup_event_type ON chat_event_dedup(event_type)"))
+            await conn.execute(text("CREATE INDEX ix_chat_event_dedups_channel_type ON chat_event_dedups(channel_type)"))
+            await conn.execute(text("CREATE INDEX ix_chat_event_dedups_external_event_id ON chat_event_dedups(external_event_id)"))
+            await conn.execute(text("CREATE INDEX ix_chat_event_dedups_external_message_id ON chat_event_dedups(external_message_id)"))
+            await conn.execute(text("CREATE INDEX ix_chat_event_dedups_event_type ON chat_event_dedups(event_type)"))
 
         logger.info("Migration complete: added feishu chat binding and dedup tables")
 

@@ -3,7 +3,7 @@ from functools import lru_cache
 
 
 class Settings(BaseSettings):
-    app_name: str = "NineData DBGuard"
+    app_name: str = "DBClaw"
     app_host: str = "0.0.0.0"
     app_port: int = 9939
     debug: bool = True
@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     openai_base_url: str = "https://api.openai.com/v1"
     openai_model: str = ""
 
-    database_url: str = "postgresql+asyncpg://dbguard:dbguard@localhost:5432/dbguard"
+    database_url: str = "postgresql+asyncpg://dbclaw:dbclaw@localhost:5432/dbclaw"
 
     metric_interval: int = 60
 
@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     public_share_expire_minutes: int = 1440
 
     # Session settings
-    session_cookie_name: str = "dbguard_session"
+    session_cookie_name: str = "dbclaw_session"
     session_idle_timeout_minutes: int = 1440
     session_cookie_secure: bool = False
     session_cookie_samesite: str = "lax"

@@ -12,7 +12,7 @@ from backend.utils.datetime_helper import now
 from backend.models.alert_message import AlertMessage
 from backend.models.alert_subscription import AlertSubscription
 from backend.models.soft_delete import alive_filter, alive_select, get_alive_by_id
-from backend.models.alert_delivery_log import AlertDeliveryLog
+from backend.models.alert_delivery_logs import AlertDeliveryLog
 from backend.schemas.alert import (
     AlertMessageCreate,
     AlertMessageResponse,
@@ -1479,7 +1479,7 @@ async def _run_diagnosis_coro(
             db=db,
             user_id=None,
             session_id=session_id,
-            disabled_tools=[],
+            skill_authorizations=None,
         ):
             event_type = event.get("type")
             if event_type == "content":

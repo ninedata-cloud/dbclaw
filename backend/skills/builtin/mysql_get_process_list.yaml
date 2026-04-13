@@ -1,7 +1,7 @@
 id: mysql_get_process_list
 name: MySQL Process List
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: mysql
 description: Get list of active MySQL database processes/sessions to identify blocking or long-running queries
 tags: [mysql, processes, sessions, blocking]

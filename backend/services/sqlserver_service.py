@@ -105,7 +105,18 @@ class SQLServerConnector(DBConnector):
                     "SELECT CAST(value_in_use AS BIGINT) FROM sys.configurations WHERE name = 'user connections'"
                 )
                 max_conn_row = cursor.fetchone()
-                max_connections = max_conn_row[0] if max_conn_row and max_conn_row[0] is not None else 0
+                configured_connections = max_conn_row[0] if max_conn_row and max_conn_row[0] is not None else 0
+
+                # SQL Server 中 user connections = 0 表示使用实例允许的最大连接数，
+                # 不是“未知”或“无配置”，此时回退到 @@MAX_CONNECTIONS 以便前端展示。
+                cursor.execute("SELECT CAST(@@MAX_CONNECTIONS AS BIGINT)")
+                server_max_row = cursor.fetchone()
+                server_max_connections = server_max_row[0] if server_max_row and server_max_row[0] is not None else 0
+                max_connections = (
+                    configured_connections
+                    if configured_connections and configured_connections > 0
+                    else server_max_connections
+                )
 
                 # Calculate uptime
                 uptime = 0

@@ -28,7 +28,7 @@ def test_json_safe_serializes_ipaddress_objects():
 def test_normalize_session_converts_opengauss_client_addr_to_string_in_raw():
     raw = {
         "pid": 12345,
-        "usename": "dbguard",
+        "usename": "dbclaw",
         "client_addr": ipaddress.IPv4Address("192.168.2.10"),
         "datname": "postgres",
         "state": "active",

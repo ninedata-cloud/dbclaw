@@ -4,7 +4,7 @@
 """
 import asyncio
 import sys
-sys.path.insert(0, '/Users/william/prog2/temp/smartdba')
+sys.path.insert(0, '/Users/william/prog2/temp/dbclaw')
 
 from backend.database import async_session
 from backend.services.alert_service import AlertService
@@ -13,7 +13,7 @@ from backend.services.aggregation_engine import AggregationEngine
 from sqlalchemy import select
 from backend.models.alert_message import AlertMessage
 from backend.models.alert_event import AlertEvent
-from backend.models.alert_delivery_log import AlertDeliveryLog
+from backend.models.alert_delivery_logs import AlertDeliveryLog
 from backend.models.alert_subscription import AlertSubscription
 
 

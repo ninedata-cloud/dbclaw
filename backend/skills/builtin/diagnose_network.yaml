@@ -1,7 +1,7 @@
 id: diagnose_network
 name: Diagnose Network Status
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: diagnosis
 description: Diagnose network status by checking interface traffic, TCP connection states, network errors/drops, bandwidth usage, and top network connections
 tags: [linux, network, diagnosis, performance, system, tcp, bandwidth]

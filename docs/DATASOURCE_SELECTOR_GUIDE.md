@@ -2,7 +2,7 @@
 
 ## 概述
 
-`DatasourceSelector` 是一个功能强大、高度可定制的数据源下拉选择组件，适用于 SmartDBA 项目的各个模块。
+`DatasourceSelector` 是一个功能强大、高度可定制的数据源下拉选择组件，适用于 DBClaw 项目的各个模块。
 
 ## 功能特性
 

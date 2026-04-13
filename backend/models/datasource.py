@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, JSON
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from backend.database import Base
 from backend.models.soft_delete import SoftDeleteMixin
@@ -16,7 +17,7 @@ class Datasource(SoftDeleteMixin, Base):
     password_encrypted = Column(Text, nullable=True)
     database = Column(String(100), nullable=True)
     host_id = Column(Integer, nullable=True)
-    extra_params = Column(Text, nullable=True)  # JSON string for additional params
+    extra_params = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)  # Structured connection-specific params
     tags = Column(JSON, nullable=False, default=list)
     is_active = Column(Boolean, default=True)
 

@@ -1,7 +1,7 @@
 id: mysql_get_slow_queries
 name: MySQL Slow Queries
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: mysql
 description: Get recent MySQL slow queries for performance analysis
 tags: [mysql, slow-queries, performance]

@@ -263,7 +263,7 @@ const DatasourceForm = {
             if (data.db_type === 'oracle' && data.oracle_conn_mode && data.oracle_conn_mode !== 'default') {
                 extraParams.oracle_conn_mode = data.oracle_conn_mode;
             }
-            data.extra_params = Object.keys(extraParams).length > 0 ? JSON.stringify(extraParams) : null;
+            data.extra_params = Object.keys(extraParams).length > 0 ? extraParams : null;
             delete data.oracle_conn_mode;
 
             if (data.metric_source === 'system') {
@@ -348,7 +348,7 @@ const DatasourceForm = {
                     if (data.db_type === 'oracle') {
                         const connMode = formData.get('oracle_conn_mode');
                         if (connMode && connMode !== 'default') {
-                            data.extra_params = JSON.stringify({ oracle_conn_mode: connMode });
+                            data.extra_params = { oracle_conn_mode: connMode };
                         }
                     }
 
@@ -456,7 +456,9 @@ const DatasourceForm = {
     _getExtraParam(datasource, key, defaultValue) {
         if (!datasource?.extra_params) return defaultValue;
         try {
-            const params = JSON.parse(datasource.extra_params);
+            const params = typeof datasource.extra_params === 'string'
+                ? JSON.parse(datasource.extra_params)
+                : datasource.extra_params;
             return params[key] !== undefined ? params[key] : defaultValue;
         } catch {
             return defaultValue;

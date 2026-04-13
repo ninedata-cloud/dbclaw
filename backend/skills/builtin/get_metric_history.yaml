@@ -1,7 +1,7 @@
 id: get_metric_history
 name: Metric History
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: monitoring
 description: Get historical metric data for trend analysis
 tags: [monitoring, history, trends, metrics]

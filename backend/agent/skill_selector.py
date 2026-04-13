@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional, Set
 
+from backend.agent.skill_authorization import filter_skills_by_authorization
 from backend.skills.models import Skill
 
 logger = logging.getLogger(__name__)
@@ -202,13 +203,15 @@ def skill_to_openai_function(skill: Skill) -> Dict[str, Any]:
 
 async def get_available_skills_as_tools(
     db,
+    skill_authorizations: Optional[Dict[str, Any]] = None,
     disabled_tools: Optional[List[str]] = None,
     datasource_db_type: Optional[str] = None,
     host_configured: Optional[bool] = None,
 ) -> List[Dict[str, Any]]:
     """Get enabled skills and convert them to OpenAI tool format.
 
-    - If datasource_db_type is None: return all enabled skills (minus disabled_tools).
+    - If datasource_db_type is None: return all enabled skills (minus disabled_tools),
+      then apply session-level skill authorization filtering.
     - If datasource_db_type is provided: keep only global skills, db-matching skills,
       and OS skills (only when host_configured is True).
     """
@@ -217,6 +220,7 @@ async def get_available_skills_as_tools(
 
     registry = SkillRegistry(db)
     skills = await registry.list_skills(is_enabled=True, is_builtin=True)
+    skills = filter_skills_by_authorization(skills, skill_authorizations, disabled_tools)
 
     disabled_set = set(disabled_tools) if disabled_tools else set()
 

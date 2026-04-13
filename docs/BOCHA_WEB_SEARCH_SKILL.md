@@ -2,7 +2,7 @@
 
 ## 概述
 
-`web_search_bocha` 是一个集成博查AI web搜索API的skill，允许DbGuard系统通过AI对话获取实时网络信息。
+`web_search_bocha` 是一个集成博查AI web搜索API的skill，允许DBClaw系统通过AI对话获取实时网络信息。
 
 ## 功能特性
 
@@ -33,7 +33,7 @@ BOCHA_API_URL=https://api.bochaai.com/v1/web-search
 
 ### 通过AI对话使用
 
-直接在DbGuard的AI对话界面询问：
+直接在DBClaw的AI对话界面询问：
 
 ```
 搜索一下最新的MySQL 8.0性能优化技巧

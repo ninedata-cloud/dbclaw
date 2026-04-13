@@ -1,5 +1,6 @@
 """统一外部集成管理数据模型"""
 from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, JSON
+from sqlalchemy.orm import synonym
 from sqlalchemy.sql import func
 from backend.database import Base
 from backend.models.soft_delete import SoftDeleteMixin
@@ -10,7 +11,8 @@ class Integration(SoftDeleteMixin, Base):
     __tablename__ = "integrations"
 
     id = Column(Integer, primary_key=True, index=True)
-    integration_id = Column(String(100), unique=True, nullable=True, index=True)  # 唯一标识符
+    integration_code = Column("integration_id", String(100), unique=True, nullable=True, index=True)  # 唯一业务标识符
+    integration_id = synonym("integration_code")  # Backward-compatible alias for legacy code paths.
     name = Column(String(200), nullable=False)
     description = Column(String(500))
     # 集成类型: outbound_notification, inbound_metric

@@ -1,7 +1,7 @@
 id: send_email
 name: Send Email
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: notification
 description: Send an email to specified recipients using the configured SMTP server
 tags: [email, notification, alert, smtp]

@@ -17,7 +17,7 @@ from email.mime.multipart import MIMEMultipart
 
 from backend.models.alert_message import AlertMessage
 from backend.models.alert_subscription import AlertSubscription
-from backend.models.alert_delivery_log import AlertDeliveryLog
+from backend.models.alert_delivery_logs import AlertDeliveryLog
 from backend.models.user import User
 from backend.models.system_config import SystemConfig
 from backend.models.datasource import Datasource
@@ -611,7 +611,7 @@ class NotificationService:
             "card": {
                 "config": {"wide_screen_mode": True},
                 "header": {
-                    "title": {"tag": "plain_text", "content": f"[数据库智能卫士，告警已恢复] {datasource.name if datasource else '系统告警'}"},
+                    "title": {"tag": "plain_text", "content": f"[DBClaw 告警已恢复] {datasource.name if datasource else '系统告警'}"},
                     "template": "green"
                 },
                 "elements": [{"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(content_lines)}}]
@@ -943,7 +943,7 @@ class NotificationService:
             "card": {
                 "config": {"wide_screen_mode": True},
                 "header": {
-                    "title": {"tag": "plain_text", "content": f"[数据库智能卫士告警] {datasource.name if datasource else '未知'}"},
+                    "title": {"tag": "plain_text", "content": f"[DBClaw 告警] {datasource.name if datasource else '未知'}"},
                     "template": color
                 },
                 "elements": elements

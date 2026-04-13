@@ -99,10 +99,10 @@ async def run_migration():
             ON alert_subscriptions(enabled)
         """))
 
-        # Create alert_delivery_log table
-        print("Creating alert_delivery_log table...")
+        # Create alert_delivery_logs table
+        print("Creating alert_delivery_logs table...")
         await conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS alert_delivery_log (
+            CREATE TABLE IF NOT EXISTS alert_delivery_logs (
                 id SERIAL PRIMARY KEY,
                 alert_id INTEGER NOT NULL,
                 subscription_id INTEGER NOT NULL,
@@ -117,23 +117,23 @@ async def run_migration():
             )
         """))
 
-        # Create indexes for alert_delivery_log
-        print("Creating indexes for alert_delivery_log...")
+        # Create indexes for alert_delivery_logs
+        print("Creating indexes for alert_delivery_logs...")
         await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_alert_delivery_log_alert_id
-            ON alert_delivery_log(alert_id)
+            CREATE INDEX IF NOT EXISTS idx_alert_delivery_logs_alert_id
+            ON alert_delivery_logs(alert_id)
         """))
         await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_alert_delivery_log_subscription_id
-            ON alert_delivery_log(subscription_id)
+            CREATE INDEX IF NOT EXISTS idx_alert_delivery_logs_subscription_id
+            ON alert_delivery_logs(subscription_id)
         """))
         await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_alert_delivery_log_status
-            ON alert_delivery_log(status)
+            CREATE INDEX IF NOT EXISTS idx_alert_delivery_logs_status
+            ON alert_delivery_logs(status)
         """))
         await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_alert_delivery_log_created_at
-            ON alert_delivery_log(created_at)
+            CREATE INDEX IF NOT EXISTS idx_alert_delivery_logs_created_at
+            ON alert_delivery_logs(created_at)
         """))
 
         # Check if email and phone columns exist in users table

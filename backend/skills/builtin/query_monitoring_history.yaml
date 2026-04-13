@@ -1,7 +1,7 @@
 id: query_monitoring_history
 name: Query Monitoring History
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: monitoring
 description: Query aggregated datasource and host monitoring history by datasource and time range
 tags: [monitoring, history, trends, aggregation, datasource, host]

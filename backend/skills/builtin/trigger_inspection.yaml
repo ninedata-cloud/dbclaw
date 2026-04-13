@@ -1,7 +1,7 @@
 id: trigger_inspection
 name: Trigger Inspection
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: inspection
 description: Manually trigger database inspection for a datasource
 tags: [inspection, trigger, diagnosis, manual]

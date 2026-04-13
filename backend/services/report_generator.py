@@ -245,7 +245,7 @@ class ReportGenerator:
     <div class="container">
         {content_html_body}
         <div class="footer">
-            <p>报告由 <strong>DbGuard 智能诊断引擎</strong> 生成</p>
+            <p>报告由 <strong>DBClaw 智能诊断引擎</strong> 生成</p>
             <p>数据源: {datasource.name} ({datasource.db_type.upper()}) | 生成时间: {now().strftime('%Y-%m-%d %H:%M')}</p>
         </div>
     </div>

@@ -1,4 +1,4 @@
-# DbGuard - 单容器部署（内置 PostgreSQL + FastAPI + 静态前端）
+# DBClaw - 单容器部署（内置 PostgreSQL + FastAPI + 静态前端）
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -52,8 +52,8 @@ RUN mkdir -p \
     /var/log/supervisor \
     /etc/supervisor/conf.d \
     && chmod +x /app/docker/entrypoint.sh /app/docker/init-db.sh \
-    && useradd -m -u 1000 dbguard \
-    && chown -R dbguard:dbguard /app \
+    && useradd -m -u 1000 dbclaw \
+    && chown -R dbclaw:dbclaw /app \
     && chown -R postgres:postgres /var/lib/postgresql
 
 # supervisor 配置

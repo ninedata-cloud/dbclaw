@@ -100,7 +100,7 @@ class DBConnector(ABC):
 
 def get_connector(db_type: str, host: str, port: int, username: str = None,
                   password: str = None, database: str = None,
-                  extra_params: str = None, **kwargs) -> DBConnector:
+                  extra_params: Any = None, **kwargs) -> DBConnector:
     """Factory function to create appropriate connector."""
     connectors = {
         "mysql": "backend.services.mysql_service.MySQLConnector",
@@ -123,12 +123,16 @@ def get_connector(db_type: str, host: str, port: int, username: str = None,
     # 解析 extra_params JSON，将其中的参数传递给 connector
     if extra_params:
         import json
-        try:
-            parsed = json.loads(extra_params)
-            if isinstance(parsed, dict):
-                kwargs.update(parsed)
-        except (json.JSONDecodeError, TypeError):
-            pass
+
+        if isinstance(extra_params, dict):
+            kwargs.update(extra_params)
+        else:
+            try:
+                parsed = json.loads(extra_params)
+                if isinstance(parsed, dict):
+                    kwargs.update(parsed)
+            except (json.JSONDecodeError, TypeError):
+                pass
 
     module_path, class_name = connectors[db_type].rsplit(".", 1)
     import importlib

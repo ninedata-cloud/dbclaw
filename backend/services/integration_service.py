@@ -39,13 +39,15 @@ class IntegrationService:
     @staticmethod
     async def create_integration(db: AsyncSession, data: IntegrationCreate) -> Integration:
         """创建 Integration"""
-        result = await db.execute(select(Integration).where(Integration.integration_id == data.integration_id, alive_filter(Integration)))
+        result = await db.execute(
+            select(Integration).where(Integration.integration_code == data.integration_code, alive_filter(Integration))
+        )
         existing = result.scalar_one_or_none()
         if existing:
-            raise ValueError(f"Integration ID '{data.integration_id}' 已存在")
+            raise ValueError(f"Integration ID '{data.integration_code}' 已存在")
 
         integration = Integration(
-            integration_id=data.integration_id,
+            integration_code=data.integration_code,
             name=data.name,
             description=data.description,
             integration_type=data.integration_type,
@@ -59,7 +61,7 @@ class IntegrationService:
         db.add(integration)
         await db.commit()
         await db.refresh(integration)
-        logger.info("创建 Integration: %s (ID: %s)", integration.name, integration.integration_id)
+        logger.info("创建 Integration: %s (ID: %s)", integration.name, integration.integration_code)
         return integration
 
     @staticmethod

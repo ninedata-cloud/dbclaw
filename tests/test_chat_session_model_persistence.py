@@ -102,3 +102,43 @@ async def test_prepare_user_turn_reuses_session_model_when_request_omits_model(m
 
     assert session.ai_model_id == 6
     assert effective_model_id == 6
+
+
+@pytest.mark.asyncio
+async def test_prepare_user_turn_normalizes_legacy_disabled_tools(monkeypatch):
+    db = MagicMock()
+    db.execute = AsyncMock()
+    db.commit = AsyncMock()
+    db.add = MagicMock()
+    session = DiagnosticSession(
+        id=303,
+        user_id=11,
+        datasource_id=None,
+        ai_model_id=7,
+        title="旧会话",
+        disabled_tools=["manage_alert_settings", "execute_any_sql"],
+    )
+
+    db.execute.side_effect = [
+        _mock_scalar_result(session),
+        _mock_messages_result([]),
+    ]
+    monkeypatch.setattr(
+        chat_orchestration_service,
+        "build_knowledge_context",
+        AsyncMock(return_value={"documents": []}),
+    )
+
+    _, _, _, _, _, skill_authorizations = await chat_orchestration_service.prepare_user_turn(
+        db,
+        session_id=303,
+        user_id=11,
+        user_message="继续分析",
+        attachments=[],
+        payload_datasource_id=None,
+        model_id=None,
+    )
+
+    assert skill_authorizations["platform_operations"] is False
+    assert skill_authorizations["high_privilege_operations"] is False
+    assert skill_authorizations["knowledge_retrieval"] is True

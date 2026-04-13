@@ -11,11 +11,11 @@ from sqlalchemy.sql.dml import Update
 from sqlalchemy.sql.selectable import Select
 
 # 先配置环境变量，确保后续 import 使用测试配置
-os.environ["DATABASE_URL"] = "postgresql+asyncpg://dbguard:test-pass@127.0.0.1:5432/dbguard"
+os.environ["DATABASE_URL"] = "postgresql+asyncpg://dbclaw:test-pass@127.0.0.1:5432/dbclaw"
 os.environ["ENCRYPTION_KEY"] = "4WEqnK34-IxW8xugCJ8SrLw6VHgxHpM5LOAQWAxPd1c="
 os.environ["PUBLIC_SHARE_SECRET_KEY"] = "test-public-share-secret-1234567890"
 os.environ["INITIAL_ADMIN_PASSWORD"] = "admin123456"
-os.environ["SESSION_COOKIE_NAME"] = "dbguard_session"
+os.environ["SESSION_COOKIE_NAME"] = "dbclaw_session"
 os.environ["SESSION_COOKIE_SECURE"] = "false"
 os.environ["SESSION_COOKIE_SAMESITE"] = "lax"
 os.environ["DEBUG"] = "false"

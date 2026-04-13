@@ -1,7 +1,7 @@
 id: mysql_get_replication_status
 name: MySQL Replication Status
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: mysql
 description: Get MySQL database replication/cluster status
 tags: [mysql, replication, cluster, high-availability]

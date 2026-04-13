@@ -1,7 +1,7 @@
 id: query_inspection_reports
 name: Query Inspection Reports
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: inspection
 description: Query AI inspection reports - list with filters or get detailed report content
 tags: [inspection, report, query, diagnosis]

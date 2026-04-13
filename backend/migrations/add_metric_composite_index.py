@@ -17,7 +17,8 @@ async def add_composite_index():
             # Check if index already exists using pg_indexes
             result = await db.execute(text("""
                 SELECT indexname FROM pg_indexes
-                WHERE tablename = 'metric_snapshots'
+                WHERE schemaname = current_schema()
+                AND tablename = 'metric_snapshots'
                 AND indexname = 'idx_metric_snapshots_composite'
             """))
             if result.scalar_one_or_none():

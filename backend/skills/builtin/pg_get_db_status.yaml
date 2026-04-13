@@ -1,7 +1,7 @@
 id: pg_get_db_status
 name: PostgreSQL Database Status
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: postgresql
 description: Get current PostgreSQL database status including connections, activity, and key performance metrics
 tags: [postgresql, status, performance, monitoring]

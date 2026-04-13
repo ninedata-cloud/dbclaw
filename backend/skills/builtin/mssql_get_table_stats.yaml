@@ -1,7 +1,7 @@
 id: mssql_get_table_stats
 name: SQL Server Table Statistics
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: sqlserver
 description: Get table-level statistics including sizes, row counts, and index information
 tags: [sqlserver, tables, statistics, storage]

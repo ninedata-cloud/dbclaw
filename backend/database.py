@@ -68,37 +68,13 @@ async def get_db() -> AsyncSession:
 
 
 async def init_db():
-    # Import all models so Base.metadata knows about them
-    import backend.models.datasource  # noqa: F401
-    import backend.models.host  # noqa: F401
-    import backend.models.metric_snapshot  # noqa: F401
-    import backend.models.diagnostic_session  # noqa: F401
-    import backend.models.ai_model  # noqa: F401
-    import backend.models.document  # noqa: F401
-    import backend.models.user  # noqa: F401
-    import backend.models.user_session  # noqa: F401
-    import backend.models.login_log  # noqa: F401
-    import backend.models.report  # noqa: F401
-    import backend.models.action_run  # noqa: F401
-    import backend.models.system_config  # noqa: F401
-    import backend.models.host_metric  # noqa: F401
-    import backend.models.alert_message  # noqa: F401
-    import backend.models.alert_event  # noqa: F401
-    import backend.models.alert_ai_policy  # noqa: F401
-    import backend.models.alert_ai_evaluation_log  # noqa: F401
-    import backend.models.alert_ai_runtime_state  # noqa: F401
-    import backend.models.alert_subscription  # noqa: F401
+    # Import the model package once so Base.metadata picks up every table definition.
+    import backend.models  # noqa: F401
     import backend.skills.models  # noqa: F401
-    import backend.models.integration  # noqa: F401
-    import backend.models.integration_bot_binding  # noqa: F401
-    import backend.models.chat_channel_binding  # noqa: F401
-    import backend.models.chat_event_dedup  # noqa: F401
-    # Inspection models
-    try:
-        import backend.models.inspection_config  # noqa: F401
-        import backend.models.inspection_trigger  # noqa: F401
-    except ImportError:
-        pass
+
+    from backend.migrations.rename_legacy_log_tables_to_plural import migrate as rename_legacy_log_tables_to_plural
+
+    await rename_legacy_log_tables_to_plural()
 
     async with get_engine().begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -120,6 +96,12 @@ async def init_db():
             await migrate_knowledge_routing_fields()
         except Exception as exc:
             logger.warning("Knowledge routing migration failed during init_db: %s", exc)
+
+        try:
+            from backend.migrations.add_diagnostic_session_skill_authorizations import migrate as migrate_diagnostic_session_skill_authorizations
+            await migrate_diagnostic_session_skill_authorizations()
+        except Exception as exc:
+            logger.warning("Diagnostic session skill_authorizations migration failed during init_db: %s", exc)
 
     # Seed default admin user if no users exist
     from backend.models.user import User

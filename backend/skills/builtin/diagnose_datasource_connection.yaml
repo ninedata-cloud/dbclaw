@@ -1,7 +1,7 @@
 id: diagnose_datasource_connection
 name: Diagnose Datasource Connection
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: system
 description: Test and diagnose datasource connection failures with layered network, host, protocol, and authentication analysis
 tags: [datasource, connection, diagnostic, network, authentication, protocol]

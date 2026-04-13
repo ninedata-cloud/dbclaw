@@ -15,6 +15,7 @@ class DiagnosticSession(SoftDeleteMixin, Base):
     kb_ids = Column(JSON, nullable=True)
     knowledge_snapshot = Column(JSON, nullable=True)
     disabled_tools = Column(JSON, nullable=True)
+    skill_authorizations = Column(JSON, nullable=True)
     is_hidden = Column(Boolean, default=False)  # System-created hidden sessions (e.g., auto-diagnosis)
     input_tokens = Column(Integer, nullable=False, default=0)
     output_tokens = Column(Integer, nullable=False, default=0)

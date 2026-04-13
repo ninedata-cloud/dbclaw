@@ -1,7 +1,7 @@
 id: query_alert_statistics
 name: Query Alert Statistics
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: monitoring
 description: Query alert and alert event statistics with overview, trend, and top dimensions
 tags: [alert, statistics, trend, topn, analysis]

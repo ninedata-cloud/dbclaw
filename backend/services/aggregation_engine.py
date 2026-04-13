@@ -9,7 +9,7 @@ from io import StringIO
 
 from backend.models.alert_message import AlertMessage
 from backend.models.alert_subscription import AlertSubscription
-from backend.models.alert_delivery_log import AlertDeliveryLog
+from backend.models.alert_delivery_logs import AlertDeliveryLog
 from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)

@@ -28,7 +28,7 @@ def _make_datasource() -> Datasource:
         port=5432,
         username="tester",
         password_encrypted="encrypted",
-        database="dbguard",
+        database="dbclaw",
     )
 
 
@@ -537,7 +537,7 @@ class FakeSyncCursor:
 
 @pytest.mark.asyncio
 async def test_mysql_update_returns_no_result_set_contract_with_message_and_truncated_false_and_commits():
-    connector = MySQLConnector(host="localhost", port=3306, username="tester", password="secret", database="dbguard")
+    connector = MySQLConnector(host="localhost", port=3306, username="tester", password="secret", database="dbclaw")
     cursor = FakeAioMysqlCursor(description=None, rowcount=3)
     conn = MagicMock()
     conn.cursor.return_value = SyncCursorContext(cursor)
@@ -561,7 +561,7 @@ async def test_mysql_update_returns_no_result_set_contract_with_message_and_trun
 
 @pytest.mark.asyncio
 async def test_mysql_select_exact_max_rows_is_not_truncated_without_extra_row():
-    connector = MySQLConnector(host="localhost", port=3306, username="tester", password="secret", database="dbguard")
+    connector = MySQLConnector(host="localhost", port=3306, username="tester", password="secret", database="dbclaw")
     cursor = FakeAioMysqlCursor(
         description=[("ID",), ("NAME",)],
         fetch_rows=[(1, "alice"), (2, "bob")],
@@ -586,7 +586,7 @@ async def test_mysql_select_exact_max_rows_is_not_truncated_without_extra_row():
 
 @pytest.mark.asyncio
 async def test_mysql_select_more_than_max_rows_is_truncated_to_visible_rows():
-    connector = MySQLConnector(host="localhost", port=3306, username="tester", password="secret", database="dbguard")
+    connector = MySQLConnector(host="localhost", port=3306, username="tester", password="secret", database="dbclaw")
     cursor = FakeAioMysqlCursor(
         description=[("ID",)],
         fetch_rows=[(1,), (2,), (3,)],
@@ -611,7 +611,7 @@ async def test_mysql_select_more_than_max_rows_is_truncated_to_visible_rows():
 
 @pytest.mark.asyncio
 async def test_tidb_update_returns_no_result_set_contract_with_message_and_truncated_false_and_commits():
-    connector = TiDBConnector(host="localhost", port=4000, username="tester", password="secret", database="dbguard")
+    connector = TiDBConnector(host="localhost", port=4000, username="tester", password="secret", database="dbclaw")
     cursor = FakeAioMysqlCursor(description=None, rowcount=2)
     conn = MagicMock()
     conn.cursor.return_value = SyncCursorContext(cursor)
@@ -635,7 +635,7 @@ async def test_tidb_update_returns_no_result_set_contract_with_message_and_trunc
 
 @pytest.mark.asyncio
 async def test_tidb_select_exact_max_rows_is_not_truncated_without_extra_row():
-    connector = TiDBConnector(host="localhost", port=4000, username="tester", password="secret", database="dbguard")
+    connector = TiDBConnector(host="localhost", port=4000, username="tester", password="secret", database="dbclaw")
     cursor = FakeAioMysqlCursor(
         description=[("ID",), ("NAME",)],
         fetch_rows=[(1, "alice"), (2, "bob")],
@@ -660,7 +660,7 @@ async def test_tidb_select_exact_max_rows_is_not_truncated_without_extra_row():
 
 @pytest.mark.asyncio
 async def test_tidb_select_more_than_max_rows_is_truncated_to_visible_rows():
-    connector = TiDBConnector(host="localhost", port=4000, username="tester", password="secret", database="dbguard")
+    connector = TiDBConnector(host="localhost", port=4000, username="tester", password="secret", database="dbclaw")
     cursor = FakeAioMysqlCursor(
         description=[("ID",)],
         fetch_rows=[(1,), (2,), (3,)],
@@ -685,7 +685,7 @@ async def test_tidb_select_more_than_max_rows_is_truncated_to_visible_rows():
 
 @pytest.mark.asyncio
 async def test_oceanbase_update_returns_no_result_set_contract_with_message_and_truncated_false_and_commits():
-    connector = OceanBaseConnector(host="localhost", port=2881, username="tester", password="secret", database="dbguard")
+    connector = OceanBaseConnector(host="localhost", port=2881, username="tester", password="secret", database="dbclaw")
     cursor = FakeAioMysqlCursor(description=None, rowcount=4)
     conn = MagicMock()
     conn.cursor.return_value = SyncCursorContext(cursor)
@@ -709,7 +709,7 @@ async def test_oceanbase_update_returns_no_result_set_contract_with_message_and_
 
 @pytest.mark.asyncio
 async def test_oceanbase_select_exact_max_rows_is_not_truncated_without_extra_row():
-    connector = OceanBaseConnector(host="localhost", port=2881, username="tester", password="secret", database="dbguard")
+    connector = OceanBaseConnector(host="localhost", port=2881, username="tester", password="secret", database="dbclaw")
     cursor = FakeAioMysqlCursor(
         description=[("ID",), ("NAME",)],
         fetch_rows=[(1, "alice"), (2, "bob")],
@@ -734,7 +734,7 @@ async def test_oceanbase_select_exact_max_rows_is_not_truncated_without_extra_ro
 
 @pytest.mark.asyncio
 async def test_oceanbase_select_more_than_max_rows_is_truncated_to_visible_rows():
-    connector = OceanBaseConnector(host="localhost", port=2881, username="tester", password="secret", database="dbguard")
+    connector = OceanBaseConnector(host="localhost", port=2881, username="tester", password="secret", database="dbclaw")
     cursor = FakeAioMysqlCursor(
         description=[("ID",)],
         fetch_rows=[(1,), (2,), (3,)],
@@ -759,7 +759,7 @@ async def test_oceanbase_select_more_than_max_rows_is_truncated_to_visible_rows(
 
 @pytest.mark.asyncio
 async def test_sqlserver_update_returns_unified_no_result_set_contract():
-    connector = SQLServerConnector(host="localhost", port=1433, username="tester", password="secret", database="dbguard")
+    connector = SQLServerConnector(host="localhost", port=1433, username="tester", password="secret", database="dbclaw")
     cursor = FakeSyncCursor(description=None, rowcount=5)
     conn = MagicMock()
     conn.cursor.return_value = cursor
@@ -785,7 +785,7 @@ async def test_sqlserver_update_returns_unified_no_result_set_contract():
 
 @pytest.mark.asyncio
 async def test_sqlserver_select_exact_max_rows_is_not_truncated_without_extra_row():
-    connector = SQLServerConnector(host="localhost", port=1433, username="tester", password="secret", database="dbguard")
+    connector = SQLServerConnector(host="localhost", port=1433, username="tester", password="secret", database="dbclaw")
     cursor = FakeSyncCursor(
         description=[("ID",), ("NAME",)],
         fetch_rows=[(1, "alice"), (2, "bob")],
@@ -812,7 +812,7 @@ async def test_sqlserver_select_exact_max_rows_is_not_truncated_without_extra_ro
 
 @pytest.mark.asyncio
 async def test_sqlserver_select_more_than_max_rows_is_truncated_to_visible_rows():
-    connector = SQLServerConnector(host="localhost", port=1433, username="tester", password="secret", database="dbguard")
+    connector = SQLServerConnector(host="localhost", port=1433, username="tester", password="secret", database="dbclaw")
     cursor = FakeSyncCursor(
         description=[("ID",)],
         fetch_rows=[(1,), (2,), (3,)],
@@ -839,7 +839,7 @@ async def test_sqlserver_select_more_than_max_rows_is_truncated_to_visible_rows(
 
 @pytest.mark.asyncio
 async def test_dm_plsql_returns_unified_no_result_set_contract_when_rowcount_unreliable_and_commits():
-    connector = DMConnector(host="localhost", port=5236, username="tester", password="secret", database="dbguard")
+    connector = DMConnector(host="localhost", port=5236, username="tester", password="secret", database="dbclaw")
     cursor = FakeSyncCursor(description=None, rowcount=-1)
     conn = MagicMock()
     conn.cursor.return_value = cursor
@@ -864,7 +864,7 @@ async def test_dm_plsql_returns_unified_no_result_set_contract_when_rowcount_unr
 
 @pytest.mark.asyncio
 async def test_dm_select_exact_max_rows_is_not_truncated_without_extra_row():
-    connector = DMConnector(host="localhost", port=5236, username="tester", password="secret", database="dbguard")
+    connector = DMConnector(host="localhost", port=5236, username="tester", password="secret", database="dbclaw")
     cursor = FakeSyncCursor(
         description=[("ID",), ("NAME",)],
         fetch_rows=[(1, "alice"), (2, "bob")],
@@ -889,7 +889,7 @@ async def test_dm_select_exact_max_rows_is_not_truncated_without_extra_row():
 
 @pytest.mark.asyncio
 async def test_dm_select_more_than_max_rows_is_truncated_to_visible_rows():
-    connector = DMConnector(host="localhost", port=5236, username="tester", password="secret", database="dbguard")
+    connector = DMConnector(host="localhost", port=5236, username="tester", password="secret", database="dbclaw")
     cursor = FakeSyncCursor(
         description=[("ID",)],
         fetch_rows=[(1,), (2,), (3,)],
@@ -940,7 +940,7 @@ def _prepared_statement(column_names=None, rows=None):
 
 @pytest.mark.asyncio
 async def test_postgres_select_returns_result_set_contract():
-    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbguard")
+    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbclaw")
     conn = AsyncMock()
     rows = [FakeRecord({"id": 1, "name": "alice"})]
     prepared = _prepared_statement(["id", "name"], rows)
@@ -971,7 +971,7 @@ async def test_postgres_select_returns_result_set_contract():
 
 @pytest.mark.asyncio
 async def test_postgres_update_returns_no_result_set_contract():
-    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbguard")
+    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbclaw")
     conn = AsyncMock()
     prepared = _prepared_statement()
     conn.prepare.return_value = prepared
@@ -995,7 +995,7 @@ async def test_postgres_update_returns_no_result_set_contract():
 
 @pytest.mark.asyncio
 async def test_postgres_create_table_without_numeric_count_returns_zero_row_count():
-    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbguard")
+    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbclaw")
     conn = AsyncMock()
     prepared = _prepared_statement()
     conn.prepare.return_value = prepared
@@ -1020,7 +1020,7 @@ async def test_postgres_create_table_without_numeric_count_returns_zero_row_coun
 
 @pytest.mark.asyncio
 async def test_postgres_insert_returning_still_uses_bounded_cursor_fetch():
-    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbguard")
+    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbclaw")
     conn = AsyncMock()
     rows = [FakeRecord({"id": 42})]
     prepared = _prepared_statement(["id"], rows)
@@ -1050,7 +1050,7 @@ async def test_postgres_insert_returning_still_uses_bounded_cursor_fetch():
 
 @pytest.mark.asyncio
 async def test_postgres_select_exact_max_rows_is_not_truncated_without_fetching_all_rows():
-    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbguard")
+    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbclaw")
     conn = AsyncMock()
     rows = [FakeRecord({"id": 1}), FakeRecord({"id": 2})]
     prepared = _prepared_statement(["id"], rows)
@@ -1081,7 +1081,7 @@ async def test_postgres_select_exact_max_rows_is_not_truncated_without_fetching_
 
 @pytest.mark.asyncio
 async def test_postgres_select_more_than_max_rows_is_truncated_to_visible_rows():
-    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbguard")
+    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbclaw")
     conn = AsyncMock()
     rows = [FakeRecord({"id": 1}), FakeRecord({"id": 2}), FakeRecord({"id": 3})]
     prepared = _prepared_statement(["id"], rows)
@@ -1112,7 +1112,7 @@ async def test_postgres_select_more_than_max_rows_is_truncated_to_visible_rows()
 
 @pytest.mark.asyncio
 async def test_postgres_with_update_without_returning_uses_execute():
-    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbguard")
+    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbclaw")
     conn = AsyncMock()
     prepared = _prepared_statement()
     conn.prepare.return_value = prepared
@@ -1133,7 +1133,7 @@ async def test_postgres_with_update_without_returning_uses_execute():
 
 @pytest.mark.asyncio
 async def test_postgres_with_nested_returning_but_top_level_update_uses_execute():
-    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbguard")
+    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbclaw")
     conn = AsyncMock()
     prepared = _prepared_statement()
     conn.prepare.return_value = prepared
@@ -1162,7 +1162,7 @@ async def test_postgres_with_nested_returning_but_top_level_update_uses_execute(
 
 @pytest.mark.asyncio
 async def test_postgres_with_materialized_cte_select_uses_bounded_cursor_fetch():
-    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbguard")
+    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbclaw")
     conn = AsyncMock()
     rows = [FakeRecord({"id": 1})]
     prepared = _prepared_statement(["id"], rows)
@@ -1192,7 +1192,7 @@ async def test_postgres_with_materialized_cte_select_uses_bounded_cursor_fetch()
 
 @pytest.mark.asyncio
 async def test_postgres_with_not_materialized_cte_select_uses_bounded_cursor_fetch():
-    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbguard")
+    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbclaw")
     conn = AsyncMock()
     rows = [FakeRecord({"id": 2})]
     prepared = _prepared_statement(["id"], rows)
@@ -1222,7 +1222,7 @@ async def test_postgres_with_not_materialized_cte_select_uses_bounded_cursor_fet
 
 @pytest.mark.asyncio
 async def test_postgres_explain_analyze_uses_bounded_cursor_fetch_via_prepared_metadata():
-    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbguard")
+    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbclaw")
     conn = AsyncMock()
     rows = [FakeRecord({"QUERY PLAN": "Seq Scan on users"})]
     prepared = _prepared_statement(["QUERY PLAN"], rows)
@@ -1252,7 +1252,7 @@ async def test_postgres_explain_analyze_uses_bounded_cursor_fetch_via_prepared_m
 
 @pytest.mark.asyncio
 async def test_postgres_connect_retries_after_timeout():
-    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbguard")
+    connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbclaw")
     successful_connection = object()
     connect_mock = AsyncMock(side_effect=[TimeoutError("first timeout"), successful_connection])
 
@@ -1268,7 +1268,7 @@ async def test_postgres_connect_retries_after_timeout():
 
 @pytest.mark.asyncio
 async def test_opengauss_select_returns_result_set_contract():
-    connector = OpenGaussConnector(host="localhost", port=5432, username="tester", password="secret", database="dbguard")
+    connector = OpenGaussConnector(host="localhost", port=5432, username="tester", password="secret", database="dbclaw")
     conn = AsyncMock()
     rows = [FakeRecord({"id": 1, "name": "alice"})]
     prepared = _prepared_statement(["id", "name"], rows)
@@ -1299,7 +1299,7 @@ async def test_opengauss_select_returns_result_set_contract():
 
 @pytest.mark.asyncio
 async def test_opengauss_ddl_returns_no_result_set_contract():
-    connector = OpenGaussConnector(host="localhost", port=5432, username="tester", password="secret", database="dbguard")
+    connector = OpenGaussConnector(host="localhost", port=5432, username="tester", password="secret", database="dbclaw")
     conn = AsyncMock()
     prepared = _prepared_statement()
     conn.prepare.return_value = prepared
@@ -1324,7 +1324,7 @@ async def test_opengauss_ddl_returns_no_result_set_contract():
 
 @pytest.mark.asyncio
 async def test_opengauss_insert_returning_uses_bounded_cursor_fetch_via_prepared_metadata():
-    connector = OpenGaussConnector(host="localhost", port=5432, username="tester", password="secret", database="dbguard")
+    connector = OpenGaussConnector(host="localhost", port=5432, username="tester", password="secret", database="dbclaw")
     conn = AsyncMock()
     rows = [FakeRecord({"id": 42})]
     prepared = _prepared_statement(["id"], rows)
@@ -1354,7 +1354,7 @@ async def test_opengauss_insert_returning_uses_bounded_cursor_fetch_via_prepared
 
 @pytest.mark.asyncio
 async def test_opengauss_select_exact_max_rows_is_not_truncated_without_fetching_all_rows():
-    connector = OpenGaussConnector(host="localhost", port=5432, username="tester", password="secret", database="dbguard")
+    connector = OpenGaussConnector(host="localhost", port=5432, username="tester", password="secret", database="dbclaw")
     conn = AsyncMock()
     rows = [FakeRecord({"id": 1}), FakeRecord({"id": 2})]
     prepared = _prepared_statement(["id"], rows)
@@ -1385,7 +1385,7 @@ async def test_opengauss_select_exact_max_rows_is_not_truncated_without_fetching
 
 @pytest.mark.asyncio
 async def test_opengauss_select_more_than_max_rows_is_truncated_to_visible_rows():
-    connector = OpenGaussConnector(host="localhost", port=5432, username="tester", password="secret", database="dbguard")
+    connector = OpenGaussConnector(host="localhost", port=5432, username="tester", password="secret", database="dbclaw")
     conn = AsyncMock()
     rows = [FakeRecord({"id": 1}), FakeRecord({"id": 2}), FakeRecord({"id": 3})]
     prepared = _prepared_statement(["id"], rows)
@@ -1416,7 +1416,7 @@ async def test_opengauss_select_more_than_max_rows_is_truncated_to_visible_rows(
 
 @pytest.mark.asyncio
 async def test_opengauss_explain_analyze_uses_fetch_via_prepared_metadata():
-    connector = OpenGaussConnector(host="localhost", port=5432, username="tester", password="secret", database="dbguard")
+    connector = OpenGaussConnector(host="localhost", port=5432, username="tester", password="secret", database="dbclaw")
     conn = AsyncMock()
     rows = [FakeRecord({"QUERY PLAN": "Seq Scan on users"})]
     prepared = _prepared_statement(["QUERY PLAN"], rows)
@@ -1440,7 +1440,7 @@ async def test_opengauss_explain_analyze_uses_fetch_via_prepared_metadata():
 
 @pytest.mark.asyncio
 async def test_opengauss_with_delete_without_returning_uses_execute():
-    connector = OpenGaussConnector(host="localhost", port=5432, username="tester", password="secret", database="dbguard")
+    connector = OpenGaussConnector(host="localhost", port=5432, username="tester", password="secret", database="dbclaw")
     conn = AsyncMock()
     prepared = _prepared_statement()
     conn.prepare.return_value = prepared
@@ -1464,7 +1464,7 @@ async def test_opengauss_with_delete_without_returning_uses_execute():
 
 @pytest.mark.asyncio
 async def test_opengauss_with_top_level_write_without_returning_uses_execute():
-    connector = OpenGaussConnector(host="localhost", port=5432, username="tester", password="secret", database="dbguard")
+    connector = OpenGaussConnector(host="localhost", port=5432, username="tester", password="secret", database="dbclaw")
     conn = AsyncMock()
     prepared = _prepared_statement()
     conn.prepare.return_value = prepared
@@ -1488,7 +1488,7 @@ async def test_opengauss_with_top_level_write_without_returning_uses_execute():
 
 @pytest.mark.asyncio
 async def test_opengauss_insert_command_tag_with_multiple_numbers_uses_last_number_as_row_count():
-    connector = OpenGaussConnector(host="localhost", port=5432, username="tester", password="secret", database="dbguard")
+    connector = OpenGaussConnector(host="localhost", port=5432, username="tester", password="secret", database="dbclaw")
     conn = AsyncMock()
     prepared = _prepared_statement()
     conn.prepare.return_value = prepared

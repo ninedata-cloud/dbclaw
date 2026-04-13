@@ -40,7 +40,6 @@
     font-weight: 800;
     line-height: 1.05;
     letter-spacing: 0.02em;
-    text-transform: uppercase;
     background: linear-gradient(90deg, #12d7ff 0%, #18d3f4 38%, #3ee7d5 72%, #bdf8ee 100%);
     -webkit-background-clip: text;
     background-clip: text;

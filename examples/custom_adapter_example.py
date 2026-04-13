@@ -5,7 +5,7 @@
 此脚本演示如何编写自定义适配器来对接第三方监控系统。
 
 输出格式：JSON 数组，每个元素包含以下字段：
-- datasource_id: SmartDBA 数据源 ID（整数）
+- datasource_id: DBClaw 数据源 ID（整数）
 - metric_name: 指标名称（字符串）
 - value: 指标值（数字）
 - timestamp: 时间戳（ISO 8601 格式字符串）
@@ -46,7 +46,7 @@ def fetch_from_custom_system():
     response.raise_for_status()
     data = response.json()
 
-    # 转换为 SmartDBA 格式
+    # 转换为 DBClaw 格式
     metrics = []
     datasource_mapping = config.get("datasource_mapping", {})
 
@@ -54,7 +54,7 @@ def fetch_from_custom_system():
         # 获取外部数据库 ID
         external_db_id = item.get("db_id") or item.get("instance_id")
 
-        # 映射到 SmartDBA 数据源 ID
+        # 映射到 DBClaw 数据源 ID
         datasource_id = datasource_mapping.get(external_db_id)
         if not datasource_id:
             continue

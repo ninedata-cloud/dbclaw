@@ -1,7 +1,7 @@
 id: query_system_metadata
 name: Query System Metadata
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: system
 description: Query system metadata with 5 modes - sql (safe SELECT queries), config (system configuration), statistics (counts), users (user list), health (service status)
 tags: [metadata, query, sql, statistics, system]

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, JSON, CheckConstraint
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, JSON, CheckConstraint, UniqueConstraint
 from sqlalchemy.sql import func
 from backend.database import Base
 
@@ -40,6 +40,9 @@ class SkillExecution(Base):
 
 class SkillRating(Base):
     __tablename__ = "skill_ratings"
+    __table_args__ = (
+        UniqueConstraint("skill_id", "user_id", name="uq_skill_ratings_skill_user"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     skill_id = Column(String(100), nullable=False)

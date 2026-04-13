@@ -3,12 +3,19 @@ from typing import Optional, List, Any, Literal
 from datetime import datetime
 
 
+class SkillAuthorizationSettings(BaseModel):
+    platform_operations: bool = True
+    high_privilege_operations: bool = True
+    knowledge_retrieval: bool = True
+
+
 class ChatSessionCreate(BaseModel):
     datasource_id: Optional[int] = None
     title: Optional[str] = "New Session"
     ai_model_id: Optional[int] = None
     kb_ids: Optional[List[int]] = None
     disabled_tools: Optional[List[str]] = None
+    skill_authorizations: Optional[SkillAuthorizationSettings] = None
 
 
 class ChatSessionResponse(BaseModel):
@@ -19,6 +26,7 @@ class ChatSessionResponse(BaseModel):
     kb_ids: Optional[List[int]] = None
     knowledge_snapshot: Optional[Any] = None
     disabled_tools: Optional[List[str]] = None
+    skill_authorizations: Optional[SkillAuthorizationSettings] = None
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0

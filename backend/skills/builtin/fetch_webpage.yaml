@@ -1,7 +1,7 @@
 id: fetch_webpage
 name: Fetch Webpage Content
 version: 2.0.0
-author: DbGuard
+author: DBClaw
 category: external_api
 description: Fetch and extract text content from a web page URL using a headless browser. Supports JavaScript-rendered pages (SPAs) like Feishu, Notion, etc. Useful for reading documentation, error messages, release notes, or any web-based reference material.
 tags: [web, fetch, webpage, external, content]

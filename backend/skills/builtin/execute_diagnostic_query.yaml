@@ -1,7 +1,7 @@
 id: execute_diagnostic_query
 name: Execute Diagnostic Query
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: general
 description: Execute a read-only SQL query for diagnostic purposes. Supports SELECT, SHOW, EXPLAIN, EXEC/EXECUTE (SQL Server), and DESCRIBE statements across all database types
 tags: [query, diagnostic, select, show, explain, exec, describe, general]

@@ -1,7 +1,7 @@
 id: diagnose_high_memory
 name: Diagnose High Memory Usage
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: diagnosis
 description: Diagnose high memory usage by checking OS-level memory distribution, swap usage, top memory consumers, OOM killer logs, and database process memory
 tags: [linux, memory, diagnosis, performance, system, swap, oom]

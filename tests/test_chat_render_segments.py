@@ -78,10 +78,13 @@ def test_approval_request_creates_waiting_tool_and_tool_call_reuses_same_segment
     segments = []
     segments = apply_render_segments_event(segments, {
         "type": "approval_request",
+        "approval_id": "approval_1",
         "tool_name": "execute_any_sql",
         "tool_args": {"sql": "DELETE FROM t"},
         "tool_call_id": "call_approval",
         "summary": "技能 execute_any_sql 需要确认后再执行。",
+        "risk_level": "high",
+        "risk_reason": "该 SQL 可能修改数据库状态，需要确认后再执行。",
     })
     segments = apply_render_segments_event(segments, {
         "type": "tool_call",
@@ -94,7 +97,11 @@ def test_approval_request_creates_waiting_tool_and_tool_call_reuses_same_segment
     assert segments[0]["type"] == "tool"
     assert segments[0]["tool_call_id"] == "call_approval"
     assert segments[0]["status"] == "running"
+    assert segments[0]["summary"] == "已发起调用，等待返回结果"
     assert segments[0]["args"]["sql"] == "DELETE FROM t"
+    assert segments[0]["metadata"]["approval_id"] == "approval_1"
+    assert segments[0]["metadata"]["approval_status"] == "pending"
+    assert segments[0]["metadata"]["risk_reason"] == "该 SQL 可能修改数据库状态，需要确认后再执行。"
 
 
 def test_failed_tool_result_marks_segment_failed():

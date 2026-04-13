@@ -503,7 +503,7 @@ async def _process_pending_alerts():
 
 async def _already_delivered(db, alert_id: int, subscription_id: int) -> bool:
     """Check if a successful delivery already exists for this alert+subscription"""
-    from backend.models.alert_delivery_log import AlertDeliveryLog
+    from backend.models.alert_delivery_logs import AlertDeliveryLog
     from sqlalchemy import select, and_
 
     result = await db.execute(
@@ -539,7 +539,7 @@ async def _send_via_integrations(db, alert, subscription, diagnosis_result=None)
     """通过 Integration 系统发送通知"""
     from backend.config import get_settings
     from backend.models.integration import Integration, IntegrationExecutionLog
-    from backend.models.alert_delivery_log import AlertDeliveryLog
+    from backend.models.alert_delivery_logs import AlertDeliveryLog
     from backend.models.datasource import Datasource
     from backend.services.integration_executor import IntegrationExecutor
     from backend.services.public_share_service import PublicShareService
@@ -763,7 +763,7 @@ async def _send_via_integrations(db, alert, subscription, diagnosis_result=None)
 async def _send_recovery_via_integrations(db, alert, subscription):
     """通过 Integration 系统发送恢复通知"""
     from backend.models.integration import Integration, IntegrationExecutionLog
-    from backend.models.alert_delivery_log import AlertDeliveryLog
+    from backend.models.alert_delivery_logs import AlertDeliveryLog
     from backend.models.datasource import Datasource
     from backend.services.integration_executor import IntegrationExecutor
     from sqlalchemy import select

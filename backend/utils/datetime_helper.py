@@ -1,24 +1,24 @@
 """
-DateTime helper utilities - use local timezone consistently
+DateTime helper utilities - use UTC naive timestamps consistently.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
 def now() -> datetime:
-    """Get current local time (without timezone info)"""
-    return datetime.now()
+    """Get current UTC time without timezone info."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def normalize_local_datetime(dt: Optional[datetime]) -> Optional[datetime]:
-    """Normalize query datetimes to local naive values for TIMESTAMP columns."""
+    """Normalize datetimes to UTC naive values for TIMESTAMP columns."""
     if dt is None:
         return None
 
     if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
         return dt
 
-    return dt.astimezone().replace(tzinfo=None)
+    return dt.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def format_datetime(dt: datetime, fmt: str = "%Y-%m-%d %H:%M:%S") -> str:

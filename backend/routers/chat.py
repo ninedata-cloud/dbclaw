@@ -10,11 +10,15 @@ from typing import List
 
 from backend.database import get_db, async_session
 from backend.config import get_settings
+from backend.agent.skill_authorization import (
+    build_skill_authorization_catalog,
+    normalize_skill_authorizations,
+)
 from backend.models.diagnostic_session import DiagnosticSession, ChatMessage
 from backend.models.user import User
 from backend.models.soft_delete import alive_filter, alive_select, get_alive_by_id
 from backend.schemas.chat import ChatSessionCreate, ChatSessionResponse, ChatMessageResponse, ChatApprovalResolveRequest
-from backend.agent.tools import HIGH_RISK_TOOLS
+from backend.skills.registry import SkillRegistry
 
 from backend.dependencies import get_current_user
 from backend.services.chat_orchestration_service import (
@@ -37,6 +41,29 @@ PENDING_APPROVALS: dict[int, dict[str, dict]] = {}
 # session_id -> running asyncio.Task for AI stream
 ACTIVE_STREAM_TASKS: dict[int, asyncio.Task] = {}
 ACTIVE_STREAM_STATES: dict[int, dict[str, object | None]] = {}
+
+
+def _serialize_chat_session(session: DiagnosticSession) -> ChatSessionResponse:
+    return ChatSessionResponse.model_validate(
+        {
+            "id": session.id,
+            "datasource_id": session.datasource_id,
+            "ai_model_id": session.ai_model_id,
+            "title": session.title,
+            "kb_ids": session.kb_ids,
+            "knowledge_snapshot": session.knowledge_snapshot,
+            "disabled_tools": session.disabled_tools,
+            "skill_authorizations": normalize_skill_authorizations(
+                getattr(session, "skill_authorizations", None),
+                getattr(session, "disabled_tools", None),
+            ),
+            "input_tokens": session.input_tokens,
+            "output_tokens": session.output_tokens,
+            "total_tokens": session.total_tokens,
+            "created_at": session.created_at,
+            "updated_at": session.updated_at,
+        }
+    )
 
 
 def _register_socket(session_id: int, websocket: WebSocket) -> None:
@@ -151,7 +178,7 @@ async def _continue_conversation_after_tool(
     model_id: int | None,
     kb_ids,
     knowledge_context,
-    disabled_tools,
+    skill_authorizations,
     run_id: str | None = None,
 ):
     async with async_session() as db:
@@ -163,7 +190,7 @@ async def _continue_conversation_after_tool(
             model_id=model_id,
             kb_ids=kb_ids,
             knowledge_context=knowledge_context,
-            disabled_tools=disabled_tools,
+            skill_authorizations=skill_authorizations,
             pending_approvals=PENDING_APPROVALS,
             on_event=lambda payload: _emit_session_event(session_id, payload),
             run_id=run_id,
@@ -219,10 +246,16 @@ async def _authenticate_websocket_session(websocket: WebSocket, session_id: int)
         return user, chat_session
 
 
-@router.get("/api/chat/high-risk-tools")
-async def get_high_risk_tools(user=Depends(get_current_user)):
-    """Return the list of high-risk tools that users can toggle."""
-    return [{"name": name, "description": description} for name, description in HIGH_RISK_TOOLS.items()]
+@router.get("/api/chat/skill-authorizations")
+async def get_skill_authorization_catalog(
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    registry = SkillRegistry(db)
+    skills = await registry.list_skills(is_enabled=True, is_builtin=True)
+    return {
+        "groups": build_skill_authorization_catalog(skills),
+    }
 
 
 @router.get("/api/chat/sessions", response_model=List[ChatSessionResponse])
@@ -243,22 +276,27 @@ async def list_sessions(
         query = query.where(DiagnosticSession.datasource_id == datasource_id)
 
     result = await db.execute(query)
-    return result.scalars().all()
+    return [_serialize_chat_session(session) for session in result.scalars().all()]
 
 
 @router.post("/api/chat/sessions", response_model=ChatSessionResponse)
 async def create_session(data: ChatSessionCreate, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
+    skill_authorizations = normalize_skill_authorizations(
+        data.skill_authorizations.model_dump() if data.skill_authorizations else None,
+        data.disabled_tools,
+    )
     session = DiagnosticSession(
         user_id=user.id,
         datasource_id=data.datasource_id,
         title=data.title or "New Session",
         ai_model_id=data.ai_model_id,
         disabled_tools=data.disabled_tools,
+        skill_authorizations=skill_authorizations,
     )
     db.add(session)
     await db.commit()
     await db.refresh(session)
-    return session
+    return _serialize_chat_session(session)
 
 
 @router.post("/api/chat/sessions/{session_id}/upload")
@@ -460,7 +498,7 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
                 _start_stream_state(sid)
                 try:
                     async with async_session() as db:
-                        messages, effective_datasource_id, m_id_resolved, kb_ids, knowledge_context, disabled_tools = await prepare_user_turn(
+                        messages, effective_datasource_id, m_id_resolved, kb_ids, knowledge_context, skill_authorizations = await prepare_user_turn(
                             db,
                             session_id=sid,
                             user_id=uid,
@@ -479,7 +517,7 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
                             model_id=m_id_resolved,
                             kb_ids=kb_ids,
                             knowledge_context=knowledge_context,
-                            disabled_tools=disabled_tools,
+                            skill_authorizations=skill_authorizations,
                             pending_approvals=PENDING_APPROVALS,
                             on_event=lambda payload: _emit_session_event(sid, payload),
                         )

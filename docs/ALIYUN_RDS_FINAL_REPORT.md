@@ -97,16 +97,16 @@ access_key_secret = await context.get_system_config("aliyun_access_key_secret")
 
 ```python
 value_parts = value_str.split("&") if value_str else []
-for smartdba_name, index, unit in mappings:
+for dbclaw_name, index, unit in mappings:
     if index < len(value_parts):
         value = float(value_parts[index])
 ```
 
 ### 4. 完整指标映射
 
-实现了 7 种阿里云指标到 15 个 SmartDBA 指标的映射：
+实现了 7 种阿里云指标到 15 个 DBClaw 指标的映射：
 
-| 阿里云指标 | SmartDBA 指标 | 索引 | 单位 |
+| 阿里云指标 | DBClaw 指标 | 索引 | 单位 |
 |-----------|--------------|------|------|
 | MySQL_MemCpuUsage | cpu_usage | 0 | % |
 | MySQL_MemCpuUsage | memory_usage | 1 | % |

@@ -1,7 +1,7 @@
 id: web_search_bocha
 name: Web Search (Bocha AI)
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: external_api
 description: Search the web using Bocha AI search API to get real-time information
 tags: [web, search, external, bocha, realtime]

@@ -1,7 +1,7 @@
 id: mssql_get_index_usage
 name: SQL Server Index Usage
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: sqlserver
 description: Analyze index usage patterns to identify unused or inefficient indexes
 tags: [sqlserver, indexes, performance, optimization]

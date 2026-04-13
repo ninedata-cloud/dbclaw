@@ -98,9 +98,9 @@ class SelfCheckReport:
 
     def to_console_text(self, title: str | None = None, include_passes: bool = False) -> str:
         report_title = title or {
-            "fail": "DBGuard 启动自检失败",
-            "warn": "DBGuard 启动自检通过（含警告）",
-            "pass": "DBGuard 启动自检通过",
+            "fail": "DBClaw 启动自检失败",
+            "warn": "DBClaw 启动自检通过（含警告）",
+            "pass": "DBClaw 启动自检通过",
         }[self.status]
         lines = [
             report_title,
@@ -291,7 +291,7 @@ def _check_single_path(path: Path) -> CheckResult:
     detail = f"最近的可写父目录: {existing_parent}"
     if path.exists():
         try:
-            probe_file = path / ".dbguard_write_probe"
+            probe_file = path / ".dbclaw_write_probe"
             probe_file.write_text("ok", encoding="utf-8")
             probe_file.unlink()
             detail = f"{path} 已存在且可写。"
@@ -397,7 +397,7 @@ async def _check_metadata_database(settings: Settings) -> CheckResult:
             detail=str(exc),
             suggestion=(
                 "请检查 DATABASE_URL 格式是否正确。\n"
-                "PostgreSQL 示例: postgresql+asyncpg://dbguard:password@127.0.0.1:5432/dbguard"
+                "PostgreSQL 示例: postgresql+asyncpg://dbclaw:password@127.0.0.1:5432/dbclaw"
             ),
         )
 

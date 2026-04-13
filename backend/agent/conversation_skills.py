@@ -11,6 +11,10 @@ from typing import AsyncGenerator, List, Dict, Any, Optional
 from backend.agent.diagnosis_context import build_diagnostic_brief, render_diagnostic_brief_for_prompt
 from backend.agent.prompts import DIAGNOSTIC_PROMPT, INFORMATIONAL_PROMPT, ADMINISTRATIVE_PROMPT
 from backend.agent.intent_detector import analyze_query_intent
+from backend.agent.skill_authorization import (
+    is_static_tool_authorized,
+    normalize_skill_authorizations,
+)
 from backend.agent.skill_selector import get_available_skills_as_tools
 from backend.agent.tools import get_filtered_tools
 from backend.agent.context_builder import execute_tool
@@ -406,6 +410,7 @@ async def run_conversation_with_skills(
     db: Optional[Any] = None,
     user_id: Optional[int] = None,
     session_id: Optional[int] = None,
+    skill_authorizations: Optional[Dict[str, Any]] = None,
     disabled_tools: Optional[List[str]] = None,
     system_prompt_override: Optional[str] = None,
     skip_approval: bool = False,
@@ -482,6 +487,15 @@ async def run_conversation_with_skills(
         system_msg = ADMINISTRATIVE_PROMPT
     else:
         system_msg = INFORMATIONAL_PROMPT
+
+    normalized_skill_authorizations = normalize_skill_authorizations(
+        skill_authorizations,
+        disabled_tools,
+    )
+    knowledge_retrieval_enabled = any(
+        is_static_tool_authorized(tool_name, normalized_skill_authorizations)
+        for tool_name in KB_TOOL_NAMES
+    )
 
     datasource_db_type = None
     host_configured_for_tools = None
@@ -597,8 +611,11 @@ async def run_conversation_with_skills(
                 f"\n   reason: {item.get('reason') or '匹配当前上下文'}"
                 f"\n   document_id: {item.get('document_id')}"
             )
-        system_msg += "\nUse read_document to open one of the recommended documents when you need detailed steps or commands. Prefer these recommended documents over browsing the full directory."
-    elif kb_ids:
+        if knowledge_retrieval_enabled:
+            system_msg += "\nUse read_document to open one of the recommended documents when you need detailed steps or commands. Prefer these recommended documents over browsing the full directory."
+        else:
+            system_msg += "\nKnowledge retrieval is not authorized in this session. Rely on the brief above and do not attempt additional document browsing."
+    elif kb_ids and knowledge_retrieval_enabled:
         system_msg += f"\n\nLegacy knowledge base IDs are present ({kb_ids}), but diagnosis should rely on auto-selected documents. Use list_documents only if you truly need to browse beyond the recommended set."
 
     if intent == "diagnostic" and datasource_id and db:
@@ -653,13 +670,25 @@ async def run_conversation_with_skills(
 
     active_tools = await get_available_skills_as_tools(
         db,
-        disabled_tools,
+        skill_authorizations=normalized_skill_authorizations,
+        disabled_tools=disabled_tools,
         datasource_db_type=datasource_db_type,
         host_configured=host_configured_for_tools,
     )
-    static_kb_tools = [tool for tool in get_filtered_tools(disabled_tools) if tool.get("function", {}).get("name") in KB_TOOL_NAMES]
+    static_kb_tools = [
+        tool
+        for tool in get_filtered_tools(
+            disabled_tools,
+            skill_authorizations=normalized_skill_authorizations,
+        )
+        if tool.get("function", {}).get("name") in KB_TOOL_NAMES
+    ]
     active_tools = active_tools + static_kb_tools
-    disabled_set = set(disabled_tools) if disabled_tools else set()
+    active_tool_names = {
+        tool.get("function", {}).get("name")
+        for tool in active_tools
+        if tool.get("function", {}).get("name")
+    }
 
     # 阶段3: 技能选择完成
     skill_count = len(active_tools)
@@ -758,17 +787,17 @@ async def run_conversation_with_skills(
                 except json.JSONDecodeError:
                     tool_args = {}
 
-                if tool_name in disabled_set:
+                if tool_name not in active_tool_names:
                     yield {
                         "type": "plan_step_status",
                         "step_id": tc["id"],
                         "tool_name": tool_name,
                         "status": "failed",
                         "title": f"尝试调用技能 {tool_name}",
-                        "summary": f"技能 {tool_name} 已被用户在当前会话中禁用。",
-                        "error": f"Tool '{tool_name}' is disabled for this session by the user.",
+                        "summary": f"技能 {tool_name} 在当前会话中未被授权或不可用。",
+                        "error": f"Tool '{tool_name}' is not authorized or available for this session.",
                     }
-                    tool_result = json.dumps({"error": f"Tool '{tool_name}' is disabled for this session by the user."})
+                    tool_result = json.dumps({"error": f"Tool '{tool_name}' is not authorized or available for this session."})
                     yield {
                         "type": "tool_call",
                         "tool_name": tool_name,

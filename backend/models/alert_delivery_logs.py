@@ -4,7 +4,7 @@ from backend.database import Base
 
 
 class AlertDeliveryLog(Base):
-    __tablename__ = "alert_delivery_log"
+    __tablename__ = "alert_delivery_logs"
 
     id = Column(Integer, primary_key=True, index=True)
     alert_id = Column(Integer, nullable=False, index=True)

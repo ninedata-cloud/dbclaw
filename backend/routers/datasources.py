@@ -128,7 +128,7 @@ async def get_datasources_latest_metrics(
     result = await db.execute(
         select(MetricSnapshot)
         .where(MetricSnapshot.metric_type == 'db_status')
-        .order_by(MetricSnapshot.datasource_id, desc(MetricSnapshot.collected_at))
+        .order_by(MetricSnapshot.datasource_id, desc(MetricSnapshot.id))
         .distinct(MetricSnapshot.datasource_id)
     )
     metrics = result.scalars().all()

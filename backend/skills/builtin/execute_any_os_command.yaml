@@ -1,7 +1,7 @@
 id: execute_any_os_command
 name: Execute Any OS Command
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: admin
 description: |
   Execute ANY shell command on a server via SSH host connection, including write operations and system modifications.

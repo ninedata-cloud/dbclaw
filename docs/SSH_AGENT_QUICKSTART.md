@@ -2,7 +2,7 @@
 
 ## 快速开始
 
-如果你的服务器已经通过 SSH 打通了通道，可以通过以下步骤快速添加到 SmartDBA：
+如果你的服务器已经通过 SSH 打通了通道，可以通过以下步骤快速添加到 DBClaw：
 
 ### 1. 确认 SSH Agent 已配置
 
@@ -16,9 +16,9 @@ eval "$(ssh-agent -s)"
 ssh-add ~/.ssh/id_rsa
 ```
 
-### 2. 在 SmartDBA 中添加主机
+### 2. 在 DBClaw 中添加主机
 
-1. 打开 SmartDBA 界面，进入"主机管理"页面
+1. 打开 DBClaw 界面，进入"主机管理"页面
 2. 点击"New Host"按钮
 3. 填写表单：
    - **名称**：服务器名称（如"生产数据库服务器"）
@@ -42,7 +42,7 @@ ssh-add ~/.ssh/id_rsa
 | 适用场景 | 开发/运维环境 | 简单环境 | 生产环境 |
 
 **SSH Agent 的优势**：
-- ✅ 无需在 SmartDBA 中存储任何凭据
+- ✅ 无需在 DBClaw 中存储任何凭据
 - ✅ 使用系统已有的 SSH 密钥
 - ✅ 支持密码保护的私钥（密码只需输入一次）
 - ✅ 可以随时撤销访问（从 Agent 中移除密钥）
@@ -67,7 +67,7 @@ ssh-add ~/.ssh/id_rsa
    ```bash
    ssh username@target-host
    ```
-   如果不能直接连接，SmartDBA 也无法连接。
+   如果不能直接连接，DBClaw 也无法连接。
 
 3. **检查目标主机的公钥配置**
    ```bash
@@ -131,10 +131,10 @@ ssh-add -l
 ### 工作流程
 
 ```
-SmartDBA → paramiko → SSH Agent → 私钥 → 目标主机
+DBClaw → paramiko → SSH Agent → 私钥 → 目标主机
 ```
 
-1. SmartDBA 通过 paramiko 发起 SSH 连接
+1. DBClaw 通过 paramiko 发起 SSH 连接
 2. paramiko 设置 `allow_agent=True`
 3. paramiko 自动查找系统的 SSH Agent
 4. SSH Agent 使用已加载的私钥进行认证

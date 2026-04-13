@@ -23,7 +23,7 @@ def send_ding_msg(url, content):
         "msgtype": "markdown",
         "markdown": {
             "title": "任务通知",
-            "text": f"### 数据库智能卫士告警通知\n> {content}\n\n[点击查看详情](https://www.dingtalk.com)"
+            "text": f"### DBClaw 告警通知\n> {content}\n\n[点击查看详情](https://www.dingtalk.com)"
         }
     }
     requests.post(url, data=json.dumps(payload), headers=headers)

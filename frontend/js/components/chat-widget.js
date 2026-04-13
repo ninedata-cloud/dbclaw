@@ -596,6 +596,8 @@ const ChatWidget = {
         const meta = statusMap[status] || statusMap.running;
         const metadata = segment.metadata || {};
         const visualization = segment.visualization || null;
+        const approvalId = metadata.approval_id || null;
+        const approvalStatus = metadata.approval_status || (status === 'waiting_approval' ? 'pending' : null);
 
         return {
             toolId: segment.tool_call_id || segment.id || `inline-tool-${segment.tool_name || 'tool'}`,
@@ -613,6 +615,10 @@ const ChatWidget = {
             isError: status === 'failed' || parsed.isError,
             isTruncated: parsed.isTruncated,
             visualization,
+            approvalId,
+            approvalStatus,
+            riskLevel: metadata.risk_level || null,
+            riskReason: metadata.risk_reason || '',
         };
     },
 
@@ -859,6 +865,67 @@ const ChatWidget = {
         `;
     },
 
+    _buildToolApprovalHtml(toolState) {
+        if (!toolState?.approvalId) return '';
+
+        const riskText = toolState.riskReason
+            ? `<div class="chat-tool-approval-reason">${this._escapeHtml(toolState.riskReason)}</div>`
+            : '';
+
+        if (toolState.approvalStatus === 'pending' && toolState.statusClass === 'pending') {
+            return `
+                <div class="chat-tool-section">
+                    <div class="chat-tool-section-title">
+                        <span>审批确认</span>
+                    </div>
+                    ${riskText}
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+                        <button
+                            type="button"
+                            class="btn btn-sm"
+                            style="background:var(--accent-green);color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;"
+                            onclick="DiagnosisPage._resolveApproval('${this._escapeHtml(toolState.approvalId)}', 'approved')"
+                        >
+                            批准执行
+                        </button>
+                        <button
+                            type="button"
+                            class="btn btn-sm"
+                            style="background:var(--accent-red);color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;"
+                            onclick="DiagnosisPage._resolveApproval('${this._escapeHtml(toolState.approvalId)}', 'rejected')"
+                        >
+                            拒绝
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        if (toolState.approvalStatus === 'approving' && toolState.statusClass === 'running') {
+            return `
+                <div class="chat-tool-section">
+                    <div class="chat-tool-section-title">
+                        <span>审批确认</span>
+                    </div>
+                    <div class="chat-tool-approval-reason" style="color:var(--accent-green);">已批准，正在执行...</div>
+                </div>
+            `;
+        }
+
+        if (toolState.approvalStatus === 'rejected') {
+            return `
+                <div class="chat-tool-section">
+                    <div class="chat-tool-section-title">
+                        <span>审批确认</span>
+                    </div>
+                    <div class="chat-tool-approval-reason" style="color:var(--accent-red);">已拒绝执行</div>
+                </div>
+            `;
+        }
+
+        return '';
+    },
+
     _buildToolVisualizationSectionHtml(toolState) {
         if (!toolState?.visualization || toolState.visualization.type !== 'monitoring_history') return '';
 
@@ -882,9 +949,11 @@ const ChatWidget = {
         const summaryText = toolState.summary || '已发起调用，等待返回结果';
         const detailClass = `chat-tool-details tool-tone-${toolState.statusClass || 'running'}`;
         const wrapperClass = options.inline ? 'assistant-tool-block' : 'chat-system-body';
+        const shouldOpenByDefault = toolState.approvalStatus === 'pending' && toolState.statusClass === 'pending';
         const detailAttrs = [
             options.segmentId ? `data-tool-segment-id="${this._escapeHtml(options.segmentId)}"` : '',
             options.inline ? 'data-inline-tool="true"' : '',
+            shouldOpenByDefault ? 'open' : '',
         ].filter(Boolean).join(' ');
 
         return `
@@ -907,6 +976,7 @@ const ChatWidget = {
                         ${this._buildToolTextSectionHtml('入参', `${toolState.toolId}-args`, toolState.argsStr)}
                         ${this._buildToolTextSectionHtml('结果', `${toolState.toolId}-result-content`, toolState.displayResultStr)}
                         ${this._buildToolVisualizationSectionHtml(toolState)}
+                        ${this._buildToolApprovalHtml(toolState)}
                         ${this._buildToolMetadataHtml(toolState.metadata)}
                         ${toolState.isTruncated ? '<div class="chat-tool-truncate">结果过长，当前仅展示前 2000 个字符</div>' : ''}
                     </div>
@@ -1050,6 +1120,7 @@ const ChatWidget = {
         this.currentRenderSegments = this._upsertToolRenderSegment(this.currentRenderSegments, toolName, toolCallId, {
             status: 'running',
             args: args || {},
+            summary: '已发起调用，等待返回结果',
             metadata: this._getToolSegmentMetadata({}, metadata),
         });
         return this._renderStreamingAssistantSegments();
@@ -1192,6 +1263,75 @@ const ChatWidget = {
             metadata: this._getToolSegmentMetadata({}, metadata),
         });
         return this._renderStreamingAssistantSegments();
+    },
+
+    _patchApprovalSegment(segments = [], approvalId, patch = {}) {
+        const normalized = this._cloneRenderSegments(segments);
+        let updated = false;
+
+        normalized.forEach((segment) => {
+            if (segment?.type !== 'tool') return;
+            const metadata = segment.metadata || {};
+            if (metadata.approval_id !== approvalId) return;
+
+            if (patch.status !== undefined) {
+                segment.status = patch.status;
+            }
+            if (patch.summary !== undefined) {
+                if (patch.summary === null) {
+                    delete segment.summary;
+                } else {
+                    segment.summary = patch.summary;
+                }
+            }
+            segment.metadata = {
+                ...metadata,
+                ...(patch.metadata || {}),
+            };
+            updated = true;
+        });
+
+        return { updated, segments: normalized };
+    },
+
+    updateApprovalState(approvalId, patch = {}) {
+        if (!approvalId) return false;
+
+        let anyUpdated = false;
+        const assistantMessages = Array.from(document.querySelectorAll('.chat-message.assistant'));
+
+        assistantMessages.forEach((msgEl) => {
+            if (msgEl.hasAttribute('data-approval-id')) return;
+            const rawSegments = msgEl.getAttribute('data-render-segments');
+            if (!rawSegments) return;
+
+            let parsedSegments;
+            try {
+                parsedSegments = JSON.parse(rawSegments);
+            } catch (error) {
+                return;
+            }
+
+            const { updated, segments } = this._patchApprovalSegment(parsedSegments, approvalId, patch);
+            if (!updated) return;
+
+            const bubble = msgEl.querySelector('.chat-bubble');
+            const rawContent = msgEl.getAttribute('data-raw-content') || this._extractTextFromRenderSegments(segments);
+            msgEl.setAttribute('data-render-segments', JSON.stringify(segments));
+            msgEl.setAttribute('data-raw-content', rawContent);
+            this._renderAssistantSegments(bubble, segments, rawContent);
+
+            if (msgEl.id === 'streaming-message') {
+                this.currentRenderSegments = this._cloneRenderSegments(segments);
+                this.currentContent = rawContent;
+            } else if (!DOM.$('#streaming-message')) {
+                this.currentRenderSegments = this._cloneRenderSegments(segments);
+                this.currentContent = rawContent;
+            }
+            anyUpdated = true;
+        });
+
+        return anyUpdated;
     },
 
     _getVisualizationPalette(index = 0) {
@@ -1769,6 +1909,23 @@ const ChatWidget = {
         return toolCallIds;
     },
 
+    _collectEmbeddedResolvableApprovalToolCallIds(messages = []) {
+        const toolCallIds = new Set();
+        (messages || []).forEach((msg) => {
+            if (msg?.role !== 'assistant' || !Array.isArray(msg?.render_segments)) return;
+            msg.render_segments.forEach((segment) => {
+                if (
+                    segment?.type === 'tool' &&
+                    segment?.tool_call_id &&
+                    segment?.metadata?.approval_id
+                ) {
+                    toolCallIds.add(segment.tool_call_id);
+                }
+            });
+        });
+        return toolCallIds;
+    },
+
     loadMessages(messages) {
         const container = DOM.$('#chat-messages');
         if (!container) return;
@@ -1782,6 +1939,7 @@ const ChatWidget = {
         this.currentRenderSegments = [];
         this._suppressMessageAutoScroll = true;
         const embeddedToolCallIds = this._collectEmbeddedToolCallIds(messages);
+        const embeddedResolvableApprovalToolCallIds = this._collectEmbeddedResolvableApprovalToolCallIds(messages);
         try {
             for (const msg of messages) {
                 if (msg.role === 'user') {
@@ -1840,10 +1998,16 @@ const ChatWidget = {
                 } else if (msg.role === 'approval_request') {
                     try {
                         const data = JSON.parse(msg.content);
-                        // Check if this approval has been resolved
+                        const toolCallId = data.tool_call_id || null;
                         const resolved = messages.some(m =>
                             m.role === 'approval_response' && m.content && m.content.includes(data.approval_id)
                         );
+                        if (
+                            (toolCallId && embeddedResolvableApprovalToolCallIds.has(toolCallId)) ||
+                            (resolved && toolCallId && embeddedToolCallIds.has(toolCallId))
+                        ) {
+                            continue;
+                        }
                         if (this.onApprovalRequest) {
                             this.onApprovalRequest(data, resolved);
                         }

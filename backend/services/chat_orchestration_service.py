@@ -10,6 +10,7 @@ from typing import Any, AsyncGenerator, Awaitable, Callable, Optional
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.agent.skill_authorization import normalize_skill_authorizations
 from backend.agent.conversation_skills import execute_skill_call, run_conversation_with_skills
 from backend.agent.intent_detector import analyze_query_intent
 from backend.models.diagnosis_conclusion import DiagnosisConclusion
@@ -69,6 +70,10 @@ def _build_tool_segment_metadata(
     action_run_id: Any = None,
     action_title: Any = None,
     phase: Any = None,
+    approval_id: Any = None,
+    approval_status: Any = None,
+    risk_level: Any = None,
+    risk_reason: Any = None,
 ) -> dict[str, Any] | None:
     merged = dict(metadata or {})
     if skill_execution_id is not None:
@@ -79,6 +84,14 @@ def _build_tool_segment_metadata(
         merged["action_title"] = action_title
     if phase is not None:
         merged["phase"] = phase
+    if approval_id is not None:
+        merged["approval_id"] = approval_id
+    if approval_status is not None:
+        merged["approval_status"] = approval_status
+    if risk_level is not None:
+        merged["risk_level"] = risk_level
+    if risk_reason is not None:
+        merged["risk_reason"] = risk_reason
     return merged or None
 
 
@@ -210,6 +223,7 @@ def apply_render_segments_event(
             tool_name=event.get("tool_name"),
             status="running",
             args=event.get("tool_args"),
+            summary="已发起调用，等待返回结果",
             metadata=_build_tool_segment_metadata(
                 action_run_id=event.get("action_run_id"),
                 action_title=event.get("action_title"),
@@ -245,6 +259,40 @@ def apply_render_segments_event(
             args=event.get("tool_args"),
             summary=event.get("summary"),
             metadata=_build_tool_segment_metadata(
+                action_run_id=event.get("action_run_id"),
+                action_title=event.get("action_title"),
+                phase=event.get("phase"),
+                approval_id=event.get("approval_id"),
+                approval_status="pending",
+                risk_level=event.get("risk_level"),
+                risk_reason=event.get("risk_reason"),
+            ),
+        )
+
+    if event_type == "confirmation_resolved":
+        action = str(event.get("action") or "").strip().lower()
+        if action == "approved":
+            status = "running"
+            approval_status = "approved"
+            summary = "已批准，正在执行..."
+        elif action == "rejected":
+            status = "failed"
+            approval_status = "rejected"
+            summary = "用户已拒绝执行"
+        else:
+            status = None
+            approval_status = action or None
+            summary = None
+
+        return upsert_tool_render_segment(
+            segments,
+            tool_call_id=event.get("tool_call_id"),
+            tool_name=event.get("tool_name"),
+            status=status,
+            summary=summary,
+            metadata=_build_tool_segment_metadata(
+                approval_id=event.get("approval_id"),
+                approval_status=approval_status,
                 action_run_id=event.get("action_run_id"),
                 action_title=event.get("action_title"),
                 phase=event.get("phase"),
@@ -487,6 +535,39 @@ async def _persist_assistant_message(
     return assistant_msg
 
 
+async def _apply_assistant_event_to_run(
+    db: AsyncSession,
+    *,
+    session_id: int,
+    run_id: str | None,
+    event: dict[str, Any],
+    status: str = ASSISTANT_STATUS_PARTIAL,
+) -> ChatMessage | None:
+    if not run_id:
+        return None
+
+    assistant_msg = await _load_assistant_message_by_run_id(
+        db,
+        session_id=session_id,
+        run_id=run_id,
+    )
+    if assistant_msg is None:
+        return None
+
+    render_segments = apply_render_segments_event(
+        assistant_msg.render_segments,
+        event,
+    )
+    return await _persist_assistant_message(
+        db,
+        session_id=session_id,
+        run_id=run_id,
+        content=assistant_msg.content or "",
+        render_segments=render_segments,
+        status=status,
+    )
+
+
 async def _store_diagnosis_event(
     db: AsyncSession,
     *,
@@ -560,7 +641,7 @@ async def _store_approval_request(
     model_id: int | None,
     kb_ids,
     knowledge_context,
-    disabled_tools,
+    skill_authorizations,
     user_id: int | None,
     history_window_hours: int | None,
 ) -> None:
@@ -575,7 +656,7 @@ async def _store_approval_request(
         "model_id": model_id,
         "kb_ids": kb_ids,
         "knowledge_context": knowledge_context,
-        "disabled_tools": disabled_tools,
+        "skill_authorizations": skill_authorizations,
         "user_id": user_id,
         "history_window_hours": history_window_hours,
         "risk_level": event.get("risk_level", "high"),
@@ -659,7 +740,10 @@ async def _load_pending_approval_from_db(
         "model_id": session.ai_model_id if session else None,
         "kb_ids": session.kb_ids if session else None,
         "knowledge_context": session.knowledge_snapshot if session else None,
-        "disabled_tools": session.disabled_tools if session else None,
+        "skill_authorizations": normalize_skill_authorizations(
+            getattr(session, "skill_authorizations", None) if session else None,
+            getattr(session, "disabled_tools", None) if session else None,
+        ),
         "user_id": user_id,
         "history_window_hours": data.get("history_window_hours"),
         "risk_level": data.get("risk_level", "high"),
@@ -940,7 +1024,7 @@ async def process_stream_events(
     model_id: int | None,
     kb_ids,
     knowledge_context,
-    disabled_tools,
+    skill_authorizations,
     pending_approvals: PendingApprovalsStore,
     on_event: EventCallback = None,
     system_prompt_override: str | None = None,
@@ -992,7 +1076,7 @@ async def process_stream_events(
                 db,
                 user_id=user_id,
                 session_id=session_id,
-                disabled_tools=disabled_tools,
+                skill_authorizations=skill_authorizations,
                 system_prompt_override=system_prompt_override,
                 skip_approval=skip_approval,
             ):
@@ -1059,7 +1143,7 @@ async def process_stream_events(
                         model_id,
                         kb_ids,
                         knowledge_context,
-                        disabled_tools,
+                        skill_authorizations,
                         user_id,
                         history_window_hours,
                     )
@@ -1167,7 +1251,7 @@ async def prepare_user_turn(
     effective_model_id = model_id
     kb_ids = None
     knowledge_context = None
-    disabled_tools = None
+    skill_authorizations = None
 
     msg = ChatMessage(
         session_id=session_id,
@@ -1211,7 +1295,10 @@ async def prepare_user_turn(
             issue_category=intent_analysis.issue_category,
         )
         session.knowledge_snapshot = knowledge_context
-        disabled_tools = session.disabled_tools
+        skill_authorizations = normalize_skill_authorizations(
+            getattr(session, "skill_authorizations", None),
+            getattr(session, "disabled_tools", None),
+        )
 
     await db.commit()
 
@@ -1221,7 +1308,7 @@ async def prepare_user_turn(
         history_window_hours=history_window_hours,
     )
     messages = await rebuild_llm_messages(all_msgs)
-    return messages, effective_datasource_id, effective_model_id, kb_ids, knowledge_context, disabled_tools
+    return messages, effective_datasource_id, effective_model_id, kb_ids, knowledge_context, skill_authorizations
 
 
 async def continue_conversation_after_tool(
@@ -1233,7 +1320,7 @@ async def continue_conversation_after_tool(
     model_id: int | None,
     kb_ids,
     knowledge_context,
-    disabled_tools,
+    skill_authorizations,
     pending_approvals: PendingApprovalsStore,
     on_event: EventCallback = None,
     run_id: str | None = None,
@@ -1254,7 +1341,7 @@ async def continue_conversation_after_tool(
         model_id=model_id,
         kb_ids=kb_ids,
         knowledge_context=knowledge_context,
-        disabled_tools=disabled_tools,
+        skill_authorizations=skill_authorizations,
         pending_approvals=pending_approvals,
         on_event=on_event,
         run_id=run_id or f"resume_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{session_id}",
@@ -1311,11 +1398,19 @@ async def resolve_pending_approval(
         "action": action,
         "comment": comment,
         "run_id": pending.get("run_id"),
+        "tool_call_id": pending.get("tool_call_id"),
+        "tool_name": pending.get("tool_name"),
         "action_run_id": pending.get("action_run_id"),
         "recommendation_id": pending.get("recommendation_id"),
         "action_title": pending.get("action_title"),
         "phase": pending.get("phase"),
     }
+    await _apply_assistant_event_to_run(
+        db,
+        session_id=session_id,
+        run_id=pending.get("run_id"),
+        event=resolved_event,
+    )
     await _emit(resolved_event, on_event)
 
     session_pending.pop(approval_id, None)
@@ -1339,6 +1434,15 @@ async def resolve_pending_approval(
                 status="failed",
                 args=pending.get("tool_args"),
                 summary="用户已拒绝执行",
+                metadata=_build_tool_segment_metadata(
+                    approval_id=approval_id,
+                    approval_status="rejected",
+                    action_run_id=pending.get("action_run_id"),
+                    action_title=pending.get("action_title"),
+                    phase=pending.get("phase"),
+                    risk_level=pending.get("risk_level"),
+                    risk_reason=pending.get("risk_reason"),
+                ),
             )
             await _persist_assistant_message(
                 db,
@@ -1362,6 +1466,12 @@ async def resolve_pending_approval(
         "phase": pending.get("phase"),
     }
     await _store_tool_call(db, session_id, tool_call_event)
+    await _apply_assistant_event_to_run(
+        db,
+        session_id=session_id,
+        run_id=pending.get("run_id"),
+        event=tool_call_event,
+    )
     await _emit(tool_call_event, on_event)
 
     tool_result, execution_time_ms, skill_execution_id, visualization = await execute_skill_call(
@@ -1386,6 +1496,12 @@ async def resolve_pending_approval(
         "visualization": visualization,
     }
     await _store_tool_result(db, session_id, tool_result_event)
+    await _apply_assistant_event_to_run(
+        db,
+        session_id=session_id,
+        run_id=pending.get("run_id"),
+        event=tool_result_event,
+    )
     await _emit(tool_result_event, on_event)
 
     await continue_conversation_after_tool(
@@ -1396,7 +1512,10 @@ async def resolve_pending_approval(
         model_id=pending.get("model_id"),
         kb_ids=pending.get("kb_ids"),
         knowledge_context=pending.get("knowledge_context"),
-        disabled_tools=pending.get("disabled_tools"),
+        skill_authorizations=normalize_skill_authorizations(
+            pending.get("skill_authorizations"),
+            pending.get("disabled_tools"),
+        ),
         pending_approvals=pending_approvals,
         on_event=on_event,
         run_id=pending.get("run_id"),

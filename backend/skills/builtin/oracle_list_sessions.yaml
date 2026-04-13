@@ -1,7 +1,7 @@
 id: oracle_list_sessions
 name: Oracle Active Sessions
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: oracle
 description: List active Oracle database sessions with details
 tags: [oracle, sessions, connections, monitoring]

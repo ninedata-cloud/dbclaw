@@ -71,7 +71,7 @@ async def monitor_websocket(websocket: WebSocket, conn_id: int):
             result = await db.execute(
                 select(MetricSnapshot)
                 .where(MetricSnapshot.datasource_id == conn_id, MetricSnapshot.metric_type == "db_status")
-                .order_by(MetricSnapshot.collected_at.desc())
+                .order_by(MetricSnapshot.id.desc())
                 .limit(1)
             )
             latest_snapshot = result.scalar_one_or_none()

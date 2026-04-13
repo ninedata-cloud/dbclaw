@@ -1,7 +1,7 @@
 id: manage_alert_settings
 name: Manage Alert Settings
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: system
 description: Manage alert subscriptions, alert templates, datasource alert config, and datasource silence settings
 tags: [alert, settings, subscription, template, silence, inspection]

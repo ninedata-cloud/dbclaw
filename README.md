@@ -1,12 +1,12 @@
-# DBGuard
+# DBClaw
 
 ![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg) ![Python](https://img.shields.io/badge/python-3.10%2B-green.svg)
 
 ## 简介 / Overview
 
-DBGuard 是一个 AI 驱动的数据库运维平台，面向多种主流数据库提供智能诊断、主动监控、自动巡检和告警通知能力。它采用 FastAPI + 原生 JavaScript 架构，无需前端构建步骤，开箱即可运行。平台内置技能系统与意图感知 AI Agent，可根据用户问题自动选择合适的诊断能力和响应方式。除了数据库本身，DBGuard 还支持通过 SSH 采集主机级指标，帮助运维人员统一查看数据库与主机健康状态。
+DBClaw 是一个 AI 驱动的数据库运维平台，面向多种主流数据库提供智能诊断、主动监控、自动巡检和告警通知能力。它采用 FastAPI + 原生 JavaScript 架构，无需前端构建步骤，开箱即可运行。平台内置技能系统与意图感知 AI Agent，可根据用户问题自动选择合适的诊断能力和响应方式。除了数据库本身，DBClaw 还支持通过 SSH 采集主机级指标，帮助运维人员统一查看数据库与主机健康状态。
 
-DBGuard is an AI-powered database operations platform designed for intelligent diagnostics, proactive monitoring, automated inspections, and alert notifications across multiple database engines. It uses a FastAPI backend with a vanilla JavaScript frontend, so there is no frontend build step required. The platform includes a built-in skills system and an intent-aware AI agent that can adapt its responses based on user intent. In addition to database monitoring, DBGuard can collect host-level metrics over SSH, giving operators a unified view of database and infrastructure health.
+DBClaw is an AI-powered database operations platform designed for intelligent diagnostics, proactive monitoring, automated inspections, and alert notifications across multiple database engines. It uses a FastAPI backend with a vanilla JavaScript frontend, so there is no frontend build step required. The platform includes a built-in skills system and an intent-aware AI agent that can adapt its responses based on user intent. In addition to database monitoring, DBClaw can collect host-level metrics over SSH, giving operators a unified view of database and infrastructure health.
 
 ## ✨ 核心特性 / Features
 
@@ -55,7 +55,7 @@ FastAPI Backend
 
 ```bash
 git clone <your-repository-url>
-cd smartdba
+cd dbclaw
 ```
 
 ### 2. 安装 Python 依赖 / Install Python Dependencies
@@ -94,7 +94,7 @@ DEBUG=false
 APP_HOST=0.0.0.0
 APP_PORT=9939
 ENCRYPTION_KEY=<generate-a-random-fernet-key>
-DATABASE_URL=postgresql+asyncpg://dbguard:<strong-password>@<db-host>:5432/dbguard
+DATABASE_URL=postgresql+asyncpg://dbclaw:<strong-password>@<db-host>:5432/dbclaw
 PUBLIC_SHARE_SECRET_KEY=<random-secret>
 INITIAL_ADMIN_PASSWORD=<strong-admin-password>
 OPENAI_API_KEY=<your-api-key>
@@ -121,9 +121,9 @@ Create the database and user first, and make sure the user in `DATABASE_URL` has
 Example:
 
 ```sql
-CREATE DATABASE dbguard;
-CREATE USER dbguard WITH PASSWORD '<strong-password>';
-GRANT ALL PRIVILEGES ON DATABASE dbguard TO dbguard;
+CREATE DATABASE dbclaw;
+CREATE USER dbclaw WITH PASSWORD '<strong-password>';
+GRANT ALL PRIVILEGES ON DATABASE dbclaw TO dbclaw;
 ```
 
 ### 5. 启动服务 / Start the Service
@@ -134,7 +134,7 @@ python run.py
 
 如果基础服务未准备好，启动前会先执行一轮中文自检，优先检查：
 
-If the base services are not ready, DBGuard now performs a startup self-check before booting and prints actionable diagnostics for:
+If the base services are not ready, DBClaw now performs a startup self-check before booting and prints actionable diagnostics for:
 
 - 元数据库连接 / metadata database connectivity
 - `ENCRYPTION_KEY` 与 `PUBLIC_SHARE_SECRET_KEY`
@@ -143,7 +143,7 @@ If the base services are not ready, DBGuard now performs a startup self-check be
 
 首次启动会自动完成：
 
-On first startup, DBGuard will automatically:
+On first startup, DBClaw will automatically:
 
 - 初始化元数据库表结构 / initialize metadata tables
 - 执行内置迁移脚本 / run built-in migrations
@@ -172,15 +172,15 @@ Health endpoints:
 The single-container image bundles PostgreSQL for metadata storage. On first startup, the container automatically generates and persists `ENCRYPTION_KEY`, `PUBLIC_SHARE_SECRET_KEY`, and `POSTGRES_PASSWORD` under `/app/data/bootstrap/runtime.env`.
 
 ```bash
-docker build -t dbguard:latest .
+docker build -t dbclaw:latest .
 
 docker run -d \
-  --name dbguard \
+  --name dbclaw \
   -p 9939:9939 \
-  -v dbguard-pgdata:/var/lib/postgresql/data \
-  -v dbguard-appdata:/app/data \
-  -v dbguard-uploads:/app/uploads \
-  dbguard:latest
+  -v dbclaw-pgdata:/var/lib/postgresql/data \
+  -v dbclaw-appdata:/app/data \
+  -v dbclaw-uploads:/app/uploads \
+  dbclaw:latest
 ```
 
 首次登录信息：
@@ -240,6 +240,6 @@ This project is licensed under the **GNU Affero General Public License v3.0 (AGP
 
 If you need to deploy, modify, or offer this project in a **closed-source** environment or as a SaaS service without AGPL reciprocity obligations, please contact the project authors for a commercial license.
 
-项目仓库地址占位：`https://github.com/your-org/dbguard`
+项目仓库地址占位：`https://github.com/your-org/dbclaw`
 
-Repository placeholder: `https://github.com/your-org/dbguard`
+Repository placeholder: `https://github.com/your-org/dbclaw`

@@ -7,7 +7,7 @@ class UserSession(Base):
     __tablename__ = "user_sessions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     session_id_hash = Column(String(128), unique=True, nullable=False, index=True)
     session_version = Column(Integer, nullable=False, default=1)
     status = Column(String(20), nullable=False, default="active", index=True)

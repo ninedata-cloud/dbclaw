@@ -1,8 +1,8 @@
-# DbGuard Logo Design
+# DBClaw Logo Design
 
 ## 设计理念
 
-新的DbGuard图标融合了三个核心属性：
+新的DBClaw图标融合了三个核心属性：
 
 ### 1. 数据库 (Database)
 - **视觉元素**：三层绿色圆柱体数据库堆栈

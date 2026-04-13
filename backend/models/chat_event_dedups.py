@@ -5,7 +5,7 @@ from backend.database import Base
 
 
 class ChatEventDedup(Base):
-    __tablename__ = "chat_event_dedup"
+    __tablename__ = "chat_event_dedups"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     channel_type = Column(String(50), nullable=False, index=True)

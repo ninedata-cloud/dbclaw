@@ -1,7 +1,7 @@
 id: send_webhook
 name: Send Webhook Notification
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: notification
 description: Send a notification to a webhook URL. Supports generic webhooks, Feishu (Lark), and DingTalk bots with optional HMAC signing.
 tags: [webhook, notification, alert, feishu, dingtalk]

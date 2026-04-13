@@ -1,6 +1,6 @@
 # System Management Skills
 
-DbGuard provides 7 system management skills that enable AI-driven management of system resources through natural language. These skills are designed for AI conversation use only.
+DBClaw provides 7 system management skills that enable AI-driven management of system resources through natural language. These skills are designed for AI conversation use only.
 
 ## Overview
 

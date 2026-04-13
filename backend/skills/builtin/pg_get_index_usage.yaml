@@ -1,7 +1,7 @@
 id: pg_get_index_usage
 name: PostgreSQL Index Usage
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: postgresql
 description: Analyze index usage patterns to identify unused or inefficient indexes
 tags: [postgresql, indexes, performance, optimization]

@@ -138,3 +138,42 @@ async def test_get_available_skills_as_tools_keeps_alert_skills_when_datasource_
         "manage_alert_settings",
         "mysql_get_db_status",
     ]
+
+
+@pytest.mark.asyncio
+async def test_get_available_skills_as_tools_respects_platform_skill_authorization():
+    platform_skill = SimpleNamespace(
+        id="query_monitoring_history",
+        name="Query Monitoring History",
+        description="history",
+        parameters=[],
+        category="平台运维",
+        tags=["monitoring"],
+        is_builtin=True,
+    )
+    mysql_skill = SimpleNamespace(
+        id="mysql_get_db_status",
+        name="MySQL Status",
+        description="mysql",
+        parameters=[],
+        category="MySQL",
+        tags=["mysql"],
+        is_builtin=True,
+    )
+
+    with patch(
+        "backend.skills.registry.SkillRegistry.list_skills",
+        new=AsyncMock(return_value=[platform_skill, mysql_skill]),
+    ):
+        tools = await get_available_skills_as_tools(
+            db=object(),
+            skill_authorizations={
+                "platform_operations": False,
+                "high_privilege_operations": True,
+                "knowledge_retrieval": True,
+            },
+            datasource_db_type="mysql",
+            host_configured=False,
+        )
+
+    assert [tool["function"]["name"] for tool in tools] == ["mysql_get_db_status"]

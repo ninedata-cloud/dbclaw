@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-DbGuard 是一个 AI 驱动的数据库运维平台，提供数据库诊断、监控、巡检和告警能力。
+DBClaw 是一个 AI 驱动的数据库运维平台，提供数据库诊断、监控、巡检和告警能力。
 
 **架构**：FastAPI 后端 + 原生 JavaScript SPA（无构建步骤） + PostgreSQL 元数据库。
 
@@ -43,7 +43,7 @@ python tests/test_skills.py
 python backend/migrations/<migration_name>.py
 
 # Docker 镜像
-# docker build -t dbguard:latest .
+# docker build -t dbclaw:latest .
 ```
 
 说明：

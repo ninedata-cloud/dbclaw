@@ -1,7 +1,7 @@
 id: mssql_get_slow_queries
 name: SQL Server Slow Queries
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: sqlserver
 description: Get slow running queries from query store or DMVs
 tags: [sqlserver, slow-queries, performance]

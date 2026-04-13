@@ -7,7 +7,12 @@ from backend.database import engine
 async def migrate():
     """Create diagnosis_conclusions table"""
     async with engine.begin() as conn:
-        result = await conn.execute(text("SELECT table_name FROM information_schema.tables WHERE table_name='diagnosis_conclusions'"))
+        result = await conn.execute(text("""
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = 'diagnosis_conclusions'
+        """))
         if result.scalar_one_or_none():
             print("Table diagnosis_conclusions already exists, skipping")
             return

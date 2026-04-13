@@ -10,7 +10,7 @@ class DocCategory(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), nullable=False)
     db_type = Column(String(50), nullable=False)  # mysql/postgresql/oracle/sqlserver/general
-    parent_id = Column(Integer, ForeignKey("doc_categories.id"), nullable=True)
+    parent_id = Column(Integer, ForeignKey("doc_categories.id", ondelete="SET NULL"), nullable=True)
     sort_order = Column(Integer, default=0)
     icon = Column(String(50), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
@@ -20,7 +20,7 @@ class DocDocument(SoftDeleteMixin, Base):
     __tablename__ = "doc_documents"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    category_id = Column(Integer, ForeignKey("doc_categories.id"), nullable=False)
+    category_id = Column(Integer, ForeignKey("doc_categories.id", ondelete="RESTRICT"), nullable=False)
     title = Column(String(200), nullable=False)
     content = Column(Text, nullable=False)   # 完整 Markdown，最大约 50K 字符
     summary = Column(Text, nullable=True)    # 100 字内摘要，供 AI 目录使用

@@ -252,6 +252,6 @@ A: 在代码中使用 try-except 捕获异常，并返回 `{"success": False, "m
 ## 获取帮助
 
 如有问题，请查看：
-- 系统日志：`/var/log/dbguard/app.log`
+- 系统日志：`/var/log/dbclaw/app.log`
 - 执行日志：在 Integration 管理页面查看执行历史
 - 技术文档：`docs/INTEGRATION_SYSTEM_IMPLEMENTATION.md`

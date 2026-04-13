@@ -185,7 +185,7 @@ async def _get_db_status_snapshots(
             MetricSnapshot.datasource_id == conn_id,
             MetricSnapshot.metric_type == 'db_status',
         )
-        .order_by(desc(MetricSnapshot.collected_at))
+        .order_by(desc(MetricSnapshot.id))
         .limit(limit)
     )
     return result.scalars().all()
@@ -281,7 +281,7 @@ async def get_latest_metric(
             MetricSnapshot.datasource_id == conn_id,
             MetricSnapshot.metric_type == metric_type,
         )
-        .order_by(desc(MetricSnapshot.collected_at))
+        .order_by(desc(MetricSnapshot.id))
         .limit(1)
     )
     return result.scalar_one_or_none()

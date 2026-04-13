@@ -144,7 +144,7 @@ Suppressing alert XXX due to recent delivery (datasource=YYY, type=ZZZ, found N 
 
 - `backend/services/aggregation_engine.py` - 聚合引擎（已修复）
 - `backend/config.py` - 配置文件
-- `backend/models/alert_delivery_log.py` - 发送日志模型
+- `backend/models/alert_delivery_logs.py` - 发送日志模型
 
 ## 部署
 

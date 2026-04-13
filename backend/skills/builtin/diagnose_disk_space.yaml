@@ -1,7 +1,7 @@
 id: diagnose_disk_space
 name: Diagnose Disk Space Usage
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: diagnosis
 description: Diagnose disk space usage by checking partition usage, large files/directories, database data directory size, log files, and inode usage
 tags: [linux, disk, space, diagnosis, performance, system, storage]

@@ -1,7 +1,7 @@
 id: diagnose_disk_io
 name: Diagnose Disk I/O Performance
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: diagnosis
 description: Diagnose disk I/O performance by checking iostat, I/O wait, per-device read/write rates, latency, queue depth, and top I/O consuming processes
 tags: [linux, disk, io, diagnosis, performance, system, iowait, iostat]

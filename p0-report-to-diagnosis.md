@@ -1,10 +1,10 @@
 - generic [ref=e2]:
   - complementary [ref=e18]:
     - generic [ref=e19]:
-      - img "数据库智能卫士" [ref=e20]
+      - img "DBClaw" [ref=e20]
       - generic [ref=e21]:
-        - generic [ref=e22]: NineData
-        - generic [ref=e23]: 数据库智能卫士
+        - generic [ref=e22]: DBClaw
+        - generic [ref=e23]: AI 数据库运维
     - navigation [ref=e24]:
       - generic [ref=e25] [cursor=pointer]:
         - img [ref=e2427]
@@ -130,7 +130,7 @@
             - button [ref=e2557]:
               - img [ref=e2558]
           - generic [ref=e2561] [cursor=pointer]:
-            - generic [ref=e2562]: 请在这台主机上创建一个测试文件，执行 touch /tmp/dbguard-ri
+            - generic [ref=e2562]: 请在这台主机上创建一个测试文件，执行 touch /tmp/dbclaw-ri
             - button [ref=e2563]:
               - img [ref=e2564]
           - generic [ref=e2567] [cursor=pointer]:

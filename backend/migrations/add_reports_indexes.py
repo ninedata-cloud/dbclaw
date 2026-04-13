@@ -14,12 +14,14 @@ async def migrate():
             # Check existing indexes via pg_indexes
             result = await db.execute(text("""
                 SELECT indexname FROM pg_indexes
-                WHERE tablename = 'reports'
+                WHERE schemaname = current_schema()
+                AND tablename = 'reports'
             """))
             existing_indexes = {row[0] for row in result.fetchall()}
 
             indexes_to_create = [
                 ("idx_reports_datasource_id", "CREATE INDEX IF NOT EXISTS idx_reports_datasource_id ON reports(datasource_id)"),
+                ("idx_reports_datasource_created_at", "CREATE INDEX IF NOT EXISTS idx_reports_datasource_created_at ON reports(datasource_id, created_at DESC)"),
                 ("idx_reports_status", "CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status)"),
                 ("idx_reports_trigger_type", "CREATE INDEX IF NOT EXISTS idx_reports_trigger_type ON reports(trigger_type)"),
                 ("idx_reports_created_at", "CREATE INDEX IF NOT EXISTS idx_reports_created_at ON reports(created_at DESC)"),

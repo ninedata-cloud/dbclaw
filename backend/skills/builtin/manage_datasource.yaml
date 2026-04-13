@@ -1,7 +1,7 @@
 id: manage_datasource
 name: Manage Datasource
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: system
 description: Manage database datasources - create, update, delete, list, get details, and test connections
 tags: [datasource, management, crud, system]
@@ -59,9 +59,9 @@ parameters:
     required: false
     description: Monitoring interval in seconds (optional for create/update)
   - name: extra_params
-    type: string
+    type: object
     required: false
-    description: Extra connection parameters as JSON string (optional for create/update)
+    description: Extra connection parameters as JSON object (optional for create/update)
 
 permissions:
   - execute_command

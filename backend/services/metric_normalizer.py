@@ -11,6 +11,8 @@ from backend.utils.datetime_helper import now
 class MetricNormalizer:
     """指标标准化器"""
 
+    _POSTGRES_FAMILY_DB_TYPES = {"postgresql", "opengauss"}
+
     # 上次采集的累积值（用于计算增量）
     _last_values: Dict[int, Dict[str, Any]] = {}
 
@@ -28,7 +30,7 @@ class MetricNormalizer:
         """
         normalized = raw_metrics.copy()
 
-        if db_type == 'postgresql':
+        if db_type in cls._POSTGRES_FAMILY_DB_TYPES:
             normalized.update(cls._normalize_postgresql(datasource_id, raw_metrics))
         elif db_type in {'mysql', 'tdsql-c-mysql'}:
             normalized.update(cls._normalize_mysql(datasource_id, raw_metrics))

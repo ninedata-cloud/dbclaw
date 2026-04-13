@@ -1,20 +1,17 @@
-# Tools that can modify state or execute arbitrary commands.
-# Users can disable these per-session from the diagnosis UI.
-HIGH_RISK_TOOLS = {
-    "execute_diagnostic_query": "执行只读 SQL 诊断查询（SELECT / SHOW / EXPLAIN）",
-    "execute_os_command": "执行只读 OS 诊断命令（df、free、ps、ss、日志查看等）",
-    "explain_query": "分析 SQL 执行计划（只读）",
-    "execute_any_sql": "⚠️ 允许执行任意 SQL，可能修改数据库数据或结构",
-    "execute_any_os_command": "⚠️ 允许执行任意 OS 命令，可能修改主机状态",
-    "manage_alert_settings": "⚠️ 管理告警模板、订阅、实例告警配置和静默设置，可能修改平台配置",
-}
+from backend.agent.skill_authorization import is_static_tool_authorized
 
 
-def get_filtered_tools(disabled_tools=None):
-    """Return TOOL_DEFINITIONS with disabled tools removed."""
-    if not disabled_tools:
-        return TOOL_DEFINITIONS
-    return [t for t in TOOL_DEFINITIONS if t["function"]["name"] not in disabled_tools]
+def get_filtered_tools(disabled_tools=None, skill_authorizations=None):
+    """Return TOOL_DEFINITIONS after legacy filtering and session authorization checks."""
+    filtered = TOOL_DEFINITIONS
+    if disabled_tools:
+        filtered = [t for t in filtered if t["function"]["name"] not in disabled_tools]
+    if skill_authorizations:
+        filtered = [
+            t for t in filtered
+            if is_static_tool_authorized(t.get("function", {}).get("name"), skill_authorizations, disabled_tools)
+        ]
+    return filtered
 
 
 TOOL_DEFINITIONS = [

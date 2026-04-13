@@ -17,8 +17,8 @@ const LoginPage = {
 
         card.innerHTML = `
             <div class="login-logo">
-                <img src="/assets/logo-1.svg" alt="数据库智能卫士">
-                <span>数据库智能卫士</span>
+                <img src="/assets/logo-1.svg" alt="DBClaw">
+                <span>DBClaw</span>
             </div>
             <div class="login-error" id="login-error"></div>
             <form class="login-form" id="login-form">

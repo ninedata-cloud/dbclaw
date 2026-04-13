@@ -35,6 +35,10 @@ Thumbs.db
 *.log
 logs/
 
+# Runtime data
+data/*
+!data/.gitkeep
+
 # Node (if any)
 node_modules/
 

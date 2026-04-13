@@ -1,7 +1,7 @@
 id: oracle_explain_query
 name: Oracle Explain Query
 version: 1.0.0
-author: DbGuard
+author: DBClaw
 category: oracle
 description: Get Oracle execution plan for a SQL query
 tags: [oracle, explain, execution-plan, performance]
