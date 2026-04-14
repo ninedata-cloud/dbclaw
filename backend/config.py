@@ -4,9 +4,19 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     app_name: str = "DBClaw"
+    app_version: str = "1.0.0"
+    build_commit: str = ""
+    build_time: str = "2026-04-15"
     app_host: str = "0.0.0.0"
     app_port: int = 9939
     debug: bool = True
+    log_level: str = ""
+    log_format: str = "text"
+    access_log_enabled: bool = True
+    log_file_enabled: bool = True
+    log_dir: str = "data/logs"
+    log_file_max_bytes: int = 104857600
+    log_file_backup_count: int = 10
 
     encryption_key: str = "temporary-encryption-key"
     initial_admin_password: str = "admin1234"

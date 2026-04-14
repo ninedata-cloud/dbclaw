@@ -1,6 +1,6 @@
 # DBClaw
 
-![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg) ![Python](https://img.shields.io/badge/python-3.10%2B-green.svg)
+![License](https://img.shields.io/badge/license-MIT-yellow.svg) ![Python](https://img.shields.io/badge/python-3.10%2B-green.svg)
 
 ## 简介 / Overview
 
@@ -232,13 +232,9 @@ Change the admin password immediately after the first login.
 
 ## 📄 许可证 / License
 
-本项目采用 **GNU Affero General Public License v3.0 (AGPL-3.0)** 开源协议。你可以自由使用、修改和分发本项目，但如果你分发修改版本，或将其作为网络服务提供给第三方使用，则需要按照 AGPL-3.0 的要求开放相应源码。
+本项目采用 **MIT License**。你可以在保留版权声明和许可声明的前提下，自由使用、复制、修改、合并、发布、分发、再许可及销售本项目。
 
-This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. You are free to use, modify, and redistribute this software, but if you distribute modified versions or provide it to third parties as a network service, you must make the corresponding source code available under the AGPL-3.0 terms.
-
-如果你希望在**闭源环境**中部署、二次开发或以 SaaS 形式提供而不履行 AGPL 开源义务，请联系项目作者获取商业授权。
-
-If you need to deploy, modify, or offer this project in a **closed-source** environment or as a SaaS service without AGPL reciprocity obligations, please contact the project authors for a commercial license.
+This project is licensed under the **MIT License**. You may use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of this software, provided that the copyright notice and permission notice are included.
 
 项目仓库地址占位：`https://github.com/your-org/dbclaw`
 

@@ -23,7 +23,6 @@ class Datasource(SoftDeleteMixin, Base):
 
     # 用户配置的重要等级
     importance_level = Column(String(20), default='production')  # core, production, development, temporary
-    monitoring_interval = Column(Integer, default=60)  # 监控间隔（秒）
 
     # 备注信息
     remark = Column(Text, nullable=True)  # 备注，帮助 AI 诊断时理解数据源背景
@@ -31,7 +30,7 @@ class Datasource(SoftDeleteMixin, Base):
     # 监控数据来源配置
     metric_source = Column(String(20), default='system', nullable=False)  # system, integration
     external_instance_id = Column(String(255), nullable=True)  # 外部系统实例 ID（如阿里云 RDS 实例 ID）
-    inbound_source = Column(JSON, nullable=True)  # integration binding + params + schedule
+    inbound_source = Column(JSON, nullable=True)  # integration binding + params
 
     # 临时静默配置（用于临时关闭监控和告警）
     silence_until = Column(DateTime, nullable=True)  # 静默截止时间，为空表示未静默

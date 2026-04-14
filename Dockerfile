@@ -6,7 +6,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     APP_HOST=0.0.0.0 \
     APP_PORT=9939 \
-    DEBUG=false
+    DEBUG=false \
+    SQLSERVER_ODBC_DRIVER="ODBC Driver 18 for SQL Server"
 
 WORKDIR /app
 
@@ -15,23 +16,34 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gcc \
     g++ \
+    ca-certificates \
     curl \
+    dstat \
     gnupg \
+    inetutils-telnet \
+    iputils-ping \
     lsb-release \
     supervisor \
     libpq-dev \
     libffi-dev \
     libssl-dev \
     libkrb5-dev \
+    libgssapi-krb5-2 \
     unixodbc \
     unixodbc-dev \
+    vim-tiny \
     freetds-bin \
     freetds-dev \
+    && . /etc/os-release \
+    && curl -fsSL -O https://packages.microsoft.com/config/debian/${VERSION_ID}/packages-microsoft-prod.deb \
+    && dpkg -i packages-microsoft-prod.deb \
+    && rm packages-microsoft-prod.deb \
     && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
     && apt-get update && apt-get install -y --no-install-recommends \
     postgresql-18 \
     postgresql-client-18 \
+    && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 \
     && rm -rf /var/lib/apt/lists/*
 
 # 先安装 Python 依赖，提升缓存命中率
@@ -45,13 +57,17 @@ COPY docker ./docker
 COPY run.py ./
 COPY .env.example ./
 
+RUN printf "\n# DBClaw convenience aliases\nalias ll='ls -l --color=auto'\n" >> /etc/bash.bashrc
+
 # 创建运行目录并设置权限
 RUN mkdir -p \
     /app/data/bootstrap \
     /app/uploads/chat_attachments \
+    /app/data/logs/app \
+    /app/data/logs/postgresql \
     /var/log/supervisor \
     /etc/supervisor/conf.d \
-    && chmod +x /app/docker/entrypoint.sh /app/docker/init-db.sh \
+    && chmod +x /app/docker/entrypoint.sh /app/docker/init-db.sh /app/docker/tee-log.sh \
     && useradd -m -u 1000 dbclaw \
     && chown -R dbclaw:dbclaw /app \
     && chown -R postgres:postgres /var/lib/postgresql

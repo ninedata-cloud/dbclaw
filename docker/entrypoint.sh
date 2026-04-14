@@ -5,6 +5,7 @@ set -euo pipefail
 RUNTIME_ENV_FILE="${RUNTIME_ENV_FILE:-/app/data/bootstrap/runtime.env}"
 BOOTSTRAP_DIR="$(dirname "$RUNTIME_ENV_FILE")"
 DEFAULT_ADMIN_PASSWORD="${DEFAULT_ADMIN_PASSWORD:-admin1234}"
+LOG_DIR="${LOG_DIR:-/app/data/logs}"
 
 generate_fernet_key() {
     python - <<'PY'
@@ -34,6 +35,12 @@ PY
 
 mkdir -p "$BOOTSTRAP_DIR"
 chmod 700 "$BOOTSTRAP_DIR"
+install -d -m 775 -o dbclaw -g dbclaw "$LOG_DIR/app"
+install -d -m 775 -o postgres -g postgres "$LOG_DIR/postgresql"
+touch "$LOG_DIR/app/app.log" "$LOG_DIR/app/error.log" "$LOG_DIR/postgresql/postgresql.log"
+chown dbclaw:dbclaw "$LOG_DIR/app/app.log" "$LOG_DIR/app/error.log"
+chown postgres:postgres "$LOG_DIR/postgresql/postgresql.log"
+chmod 664 "$LOG_DIR/app/app.log" "$LOG_DIR/app/error.log" "$LOG_DIR/postgresql/postgresql.log"
 
 if [ -f "$RUNTIME_ENV_FILE" ]; then
     set -a
@@ -71,6 +78,7 @@ export POSTGRES_USER
 export POSTGRES_PASSWORD
 export INITIAL_ADMIN_PASSWORD
 export DATABASE_URL
+export LOG_DIR
 
 umask 077
 cat > "$RUNTIME_ENV_FILE" <<EOF

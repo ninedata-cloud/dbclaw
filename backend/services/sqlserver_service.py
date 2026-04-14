@@ -1,3 +1,4 @@
+import os
 import time
 from typing import Any, Dict, List, Optional
 from backend.services.db_connector import DBConnector
@@ -40,8 +41,26 @@ ORDER BY COALESCE(r.cpu_time, s.cpu_time) DESC, s.last_request_start_time DESC
 class SQLServerConnector(DBConnector):
     """SQL Server connector using pyodbc."""
 
-    def _get_conn_string(self):
-        driver = "{ODBC Driver 18 for SQL Server}"
+    def _resolve_driver_name(self, pyodbc_module=None) -> str:
+        configured_driver = os.getenv("SQLSERVER_ODBC_DRIVER", "").strip().strip("{}")
+        if configured_driver:
+            return configured_driver
+
+        pyodbc_module = pyodbc_module or __import__("pyodbc")
+        available_drivers = set(pyodbc_module.drivers())
+        for driver_name in (
+            "ODBC Driver 18 for SQL Server",
+            "ODBC Driver 17 for SQL Server",
+            "FreeTDS",
+        ):
+            if driver_name in available_drivers:
+                return driver_name
+
+        return "ODBC Driver 18 for SQL Server"
+
+    def _get_conn_string(self, driver_name: Optional[str] = None):
+        driver_name = (driver_name or self._resolve_driver_name()).strip("{}")
+        driver = f"{{{driver_name}}}"
         s = (f"DRIVER={driver};SERVER={self.host},{self.port};"
              f"DATABASE={self.database or 'master'};"
              f"UID={self.username};PWD={self.password};"
@@ -50,16 +69,25 @@ class SQLServerConnector(DBConnector):
 
     def _connect(self):
         import pyodbc
-        conn = pyodbc.connect(self._get_conn_string(), autocommit=True)
+        driver_name = self._resolve_driver_name(pyodbc)
+        try:
+            conn = pyodbc.connect(self._get_conn_string(driver_name), autocommit=True)
 
-        # Add output converter for sql_variant type (ODBC type -16)
-        # This handles columns like sys.configurations.value
-        def handle_sql_variant(value):
-            return str(value) if value is not None else None
+            # Handle sql_variant columns such as sys.configurations.value consistently.
+            def handle_sql_variant(value):
+                return str(value) if value is not None else None
 
-        conn.add_output_converter(-16, handle_sql_variant)
-
-        return conn
+            conn.add_output_converter(-16, handle_sql_variant)
+            return conn
+        except pyodbc.Error as exc:
+            available_drivers = ", ".join(pyodbc.drivers()) or "none"
+            message = str(exc)
+            if "driver manager" in message.lower() or "data source name not found" in message.lower():
+                raise RuntimeError(
+                    f"SQL Server ODBC 驱动不可用，当前尝试: {driver_name}；已安装驱动: {available_drivers}。"
+                    "请在镜像中安装 msodbcsql18，或通过环境变量 SQLSERVER_ODBC_DRIVER 指定已安装驱动。"
+                ) from exc
+            raise
 
     async def test_connection(self) -> str:
         import asyncio
@@ -222,8 +250,12 @@ class SQLServerConnector(DBConnector):
             conn = self._connect()
             try:
                 cursor = conn.cursor()
-                cursor.execute("SELECT name, value_in_use FROM sys.configurations ORDER BY name")
-                return {row[0]: str(row[1]) for row in cursor.fetchall()}
+                cursor.execute(
+                    "SELECT name, "
+                    "COALESCE(CONVERT(NVARCHAR(256), value_in_use), CONVERT(NVARCHAR(256), value), '') AS value_text "
+                    "FROM sys.configurations ORDER BY name"
+                )
+                return {row[0]: row[1] for row in cursor.fetchall()}
             finally:
                 conn.close()
         return await asyncio.get_event_loop().run_in_executor(None, _vars)

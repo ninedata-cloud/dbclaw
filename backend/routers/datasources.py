@@ -226,7 +226,6 @@ async def create_datasource(data: DatasourceCreate, db: AsyncSession = Depends(g
         extra_params=data.extra_params,
         tags=normalize_tags(data.tags),
         importance_level=data.importance_level,
-        monitoring_interval=data.monitoring_interval,
         metric_source=data.metric_source,
         external_instance_id=data.external_instance_id,
         inbound_source=data.inbound_source,

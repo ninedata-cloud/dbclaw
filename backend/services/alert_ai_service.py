@@ -874,8 +874,11 @@ def _find_snapshot_value_at_window(
     return None
 
 
-def _resolve_sampling_interval_seconds(datasource, snapshots_desc: list[MetricSnapshot]) -> int:
-    configured_interval = _to_float(getattr(datasource, "monitoring_interval", None))
+def _resolve_sampling_interval_seconds(
+    snapshots_desc: list[MetricSnapshot],
+    configured_interval_seconds: Optional[int] = None,
+) -> int:
+    configured_interval = _to_float(configured_interval_seconds)
     if configured_interval and configured_interval > 0:
         return max(1, int(round(configured_interval)))
 
@@ -1163,7 +1166,10 @@ async def build_alert_ai_feature_summary(
     runtime_state: Optional[AlertAIRuntimeState] = None,
     gate_decision: Optional[AlertAIGateDecision] = None,
     snapshots_desc: Optional[list[MetricSnapshot]] = None,
+    sampling_interval_seconds: Optional[int] = None,
 ) -> dict[str, Any]:
+    from backend.services.monitoring_scheduler_service import get_monitoring_collection_interval_seconds
+
     if snapshots_desc is None:
         result = await db.execute(
             select(MetricSnapshot)
@@ -1191,7 +1197,12 @@ async def build_alert_ai_feature_summary(
     profile = _merge_compiled_trigger_profile(compiled_trigger_profile, rule_text)
     metric_names = list(profile.get("focus_metrics") or []) or _extract_focus_metric_names(rule_text, current_metrics)
     metric_features = _build_metric_features(snapshots_desc, current_metrics, metric_names, collected_at)
-    sampling_interval_seconds = _resolve_sampling_interval_seconds(datasource, snapshots_desc)
+    if sampling_interval_seconds is None:
+        try:
+            sampling_interval_seconds = await get_monitoring_collection_interval_seconds(db)
+        except ValueError:
+            sampling_interval_seconds = None
+    sampling_interval_seconds = _resolve_sampling_interval_seconds(snapshots_desc, sampling_interval_seconds)
     compact_metric_features = {
         metric: {
             "current": feature.get("current"),
@@ -1566,12 +1577,13 @@ def decide_alert_ai_candidate(
     threshold_rules: Optional[dict[str, Any]] = None,
     current_alert_severity: Optional[str] = None,
     datasource=None,
+    sampling_interval_seconds: Optional[int] = None,
 ) -> tuple[AlertAIGateDecision, dict[str, Any]]:
     profile = _merge_compiled_trigger_profile(binding.compiled_trigger_profile, binding.rule_text)
     analysis_config = normalize_analysis_config(binding.analysis_config)
     focus_metrics = list(profile.get("focus_metrics") or []) or _extract_focus_metric_names(binding.rule_text, current_metrics)
     metric_features = _build_metric_features(snapshots_desc, current_metrics, focus_metrics, collected_at)
-    sampling_interval_seconds = _resolve_sampling_interval_seconds(datasource, snapshots_desc) if datasource else 60
+    sampling_interval_seconds = _resolve_sampling_interval_seconds(snapshots_desc, sampling_interval_seconds)
     trend_window = int(analysis_config.get("trend_window_samples", 5) or 5)
     near_ratio = float(analysis_config.get("near_threshold_ratio", 0.9) or 0.9)
     fallback_mode = profile.get("fallback_mode") or "trend_heuristic"

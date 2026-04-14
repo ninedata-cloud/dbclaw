@@ -43,7 +43,7 @@ SKILL_AUTHORIZATION_GROUP_BY_CATEGORY = {
 }
 
 DEFAULT_SKILL_AUTHORIZATIONS: dict[str, bool] = {
-    item["id"]: True for item in SKILL_AUTHORIZATION_GROUPS
+    item["id"]: False for item in SKILL_AUTHORIZATION_GROUPS
 }
 
 STATIC_GROUP_ITEMS: dict[str, list[dict[str, str]]] = {

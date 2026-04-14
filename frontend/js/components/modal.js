@@ -2,7 +2,19 @@
 const Modal = {
     _onHide: null,
 
-    show({ title, content, buttons, footer, size = 'medium', width, maxHeight, containerClassName = '', bodyClassName = '', onHide = null }) {
+    show({
+        title,
+        content,
+        buttons,
+        footer,
+        size = 'medium',
+        width,
+        maxHeight,
+        containerClassName = '',
+        bodyClassName = '',
+        onHide = null,
+        closeOnOverlayClick = false,
+    }) {
         const overlay = DOM.$('#modal-overlay');
         const container = DOM.$('#modal-container');
 
@@ -60,7 +72,7 @@ const Modal = {
 
         DOM.show(overlay);
         overlay.onclick = (event) => {
-            if (event.target === overlay) {
+            if (closeOnOverlayClick && event.target === overlay) {
                 this.hide();
             }
         };

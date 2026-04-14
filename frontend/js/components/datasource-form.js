@@ -101,20 +101,14 @@ const DatasourceForm = {
                     <option value="">无</option>
                 </select>
             </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label>重要性级别</label>
-                    <select class="form-select" name="importance_level" required>
-                        <option value="core" ${datasource?.importance_level === 'core' ? 'selected' : ''}>核心系统 (Core)</option>
-                        <option value="production" ${datasource?.importance_level === 'production' || !datasource ? 'selected' : ''}>生产系统 (Production)</option>
-                        <option value="development" ${datasource?.importance_level === 'development' ? 'selected' : ''}>开发测试 (Development)</option>
-                        <option value="temporary" ${datasource?.importance_level === 'temporary' ? 'selected' : ''}>临时 (Temporary)</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>监控间隔（秒）</label>
-                    <input type="number" class="form-input" name="monitoring_interval" value="${datasource?.monitoring_interval || 60}" min="5" max="3600" required>
-                </div>
+            <div class="form-group">
+                <label>重要性级别</label>
+                <select class="form-select" name="importance_level" required>
+                    <option value="core" ${datasource?.importance_level === 'core' ? 'selected' : ''}>核心系统 (Core)</option>
+                    <option value="production" ${datasource?.importance_level === 'production' || !datasource ? 'selected' : ''}>生产系统 (Production)</option>
+                    <option value="development" ${datasource?.importance_level === 'development' ? 'selected' : ''}>开发测试 (Development)</option>
+                    <option value="temporary" ${datasource?.importance_level === 'temporary' ? 'selected' : ''}>临时 (Temporary)</option>
+                </select>
             </div>
             <div class="form-group">
                 <label>监控数据来源</label>
@@ -143,10 +137,6 @@ const DatasourceForm = {
                         placeholder="例如：云厂商或外部监控系统中的实例 ID"
                     >
                     <small class="text-muted" id="external-instance-id-help">外部监控系统中的实例标识。华为云/阿里云 RDS 场景通常必填。</small>
-                </div>
-                <div class="form-group">
-                    <label>采集间隔（秒）</label>
-                    <input type="number" class="form-input" id="inbound-schedule-seconds" value="${(inboundSource.schedule && inboundSource.schedule.seconds) ? inboundSource.schedule.seconds : 60}" min="5" max="3600">
                 </div>
                 <div id="inbound-params-container"></div>
             </div>
@@ -251,7 +241,6 @@ const DatasourceForm = {
             const formData = new FormData(form);
             const data = Object.fromEntries(formData.entries());
             data.port = parseInt(data.port);
-            data.monitoring_interval = parseInt(data.monitoring_interval);
             data.tags = this._normalizeTags(data.tags);
             if (!data.password) delete data.password;
             if (!data.host_id) data.host_id = null;
@@ -282,7 +271,6 @@ const DatasourceForm = {
                     return;
                 }
 
-                const scheduleSeconds = parseInt(form.querySelector('#inbound-schedule-seconds')?.value || '60');
                 const params = {};
                 form.querySelectorAll('.inbound-param').forEach(input => {
                     const key = input.dataset.key;
@@ -298,8 +286,7 @@ const DatasourceForm = {
                 data.inbound_source = {
                     integration_id: parseInt(integrationId),
                     enabled: true,
-                    params,
-                    schedule: { mode: 'interval', seconds: scheduleSeconds }
+                    params
                 };
             }
 
@@ -380,6 +367,7 @@ const DatasourceForm = {
             title: isEdit ? 'Edit Datasource' : 'New Datasource',
             content: form,
             footer: footer,
+            closeOnOverlayClick: false,
         });
     },
 

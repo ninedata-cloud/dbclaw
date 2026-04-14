@@ -56,6 +56,8 @@ const API = {
     put(url, body) { return this.request(url, { method: 'PUT', body }); },
     delete(url) { return this.request(url, { method: 'DELETE' }); },
 
+    getAppInfo() { return this.get('/api/app/info'); },
+
     async postFormData(url, formData) {
         const response = await fetch(url, {
             method: 'POST',

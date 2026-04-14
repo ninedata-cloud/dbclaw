@@ -94,3 +94,74 @@ async def test_sqlserver_status_prefers_explicit_user_connections_limit():
 
     assert result["max_connections"] == 200
     assert conn.closed is True
+
+
+@pytest.mark.asyncio
+async def test_sqlserver_variables_cast_sql_variant_values_to_text():
+    cursor = _FakeCursor(
+        fetchone_results=[],
+        fetchall_results=[
+            [
+                ("affinity mask", "0"),
+                ("max server memory (MB)", "2147483647"),
+            ]
+        ],
+    )
+    conn = _FakeConnection(cursor)
+    connector = SQLServerConnector(
+        host="localhost",
+        port=1433,
+        username="sa",
+        password="secret",
+        database="master",
+    )
+
+    with patch.object(connector, "_connect", return_value=conn):
+        result = await connector.get_variables()
+
+    executed_sql = cursor.executed_sql[0]
+    assert "CONVERT(NVARCHAR(256), value_in_use)" in executed_sql
+    assert "CONVERT(NVARCHAR(256), value)" in executed_sql
+    assert result == {
+        "affinity mask": "0",
+        "max server memory (MB)": "2147483647",
+    }
+    assert conn.closed is True
+
+
+def test_sqlserver_driver_resolution_prefers_installed_driver_when_env_not_set(monkeypatch):
+    connector = SQLServerConnector(
+        host="localhost",
+        port=1433,
+        username="sa",
+        password="secret",
+        database="master",
+    )
+
+    class _FakePyodbc:
+        @staticmethod
+        def drivers():
+            return ["ODBC Driver 17 for SQL Server", "SQLite3"]
+
+    monkeypatch.delenv("SQLSERVER_ODBC_DRIVER", raising=False)
+
+    assert connector._resolve_driver_name(_FakePyodbc()) == "ODBC Driver 17 for SQL Server"
+
+
+def test_sqlserver_driver_resolution_prefers_env_override(monkeypatch):
+    connector = SQLServerConnector(
+        host="localhost",
+        port=1433,
+        username="sa",
+        password="secret",
+        database="master",
+    )
+
+    class _FakePyodbc:
+        @staticmethod
+        def drivers():
+            return ["ODBC Driver 17 for SQL Server"]
+
+    monkeypatch.setenv("SQLSERVER_ODBC_DRIVER", "{Custom SQL Server Driver}")
+
+    assert connector._resolve_driver_name(_FakePyodbc()) == "Custom SQL Server Driver"

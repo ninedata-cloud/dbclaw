@@ -6,12 +6,10 @@
 
 import asyncio
 import logging
-from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select, and_, desc
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import async_session
 from backend.models.integration import Integration, IntegrationExecutionLog
@@ -29,10 +27,7 @@ logger = logging.getLogger(__name__)
 
 # Global scheduler instance
 scheduler: Optional[AsyncIOScheduler] = None
-
-
-def _job_id_for_datasource(datasource_id: int) -> str:
-    return f"integration_ds_{datasource_id}"
+GLOBAL_INTEGRATION_JOB_ID = "integration_global_collector"
 
 
 def _ensure_scheduler_started():
@@ -44,66 +39,43 @@ def _ensure_scheduler_started():
         logger.info("集成调度器已启动")
 
 
+async def refresh_scheduler(interval_seconds: Optional[int] = None, trigger_now: bool = False):
+    """按全局监控采集周期刷新外部集成调度任务。"""
+    _ensure_scheduler_started()
+
+    if interval_seconds is None:
+        from backend.services.monitoring_scheduler_service import get_monitoring_collection_interval_seconds
+
+        async with async_session() as session:
+            interval_seconds = await get_monitoring_collection_interval_seconds(session)
+
+    scheduler.add_job(
+        execute_all_integrations,
+        'interval',
+        seconds=interval_seconds,
+        id=GLOBAL_INTEGRATION_JOB_ID,
+        replace_existing=True
+    )
+    logger.info("已刷新全局入站集成调度任务: 每 %s 秒", interval_seconds)
+
+    if trigger_now:
+        asyncio.create_task(execute_all_integrations())
+
+
 async def sync_datasource_schedule(datasource_id: int, trigger_now: bool = True):
     """
-    按单个数据源刷新入站集成调度。
-
-    - 数据源不存在、已删除、未启用、不是 integration 模式时，移除已有任务
-    - 否则按最新 schedule.seconds 重建任务
+    兼容旧调用入口：
+    - 刷新全局集成调度
+    - 可选立即执行当前数据源一次外部指标采集
     """
-    _ensure_scheduler_started()
-    job_id = _job_id_for_datasource(datasource_id)
-
-    async with async_session() as session:
-        datasource = await get_alive_by_id(session, Datasource, datasource_id)
-
-        if (
-            not datasource
-            or not datasource.is_active
-            or datasource.metric_source != 'integration'
-        ):
-            if scheduler.get_job(job_id):
-                scheduler.remove_job(job_id)
-                logger.info("已移除入站集成调度任务: datasource_id=%s", datasource_id)
-            return
-
-        inbound_source = datasource.inbound_source or {}
-        integration_id = inbound_source.get('integration_id')
-        enabled = inbound_source.get('enabled', True)
-
-        if not integration_id or not enabled:
-            if scheduler.get_job(job_id):
-                scheduler.remove_job(job_id)
-                logger.info("已移除未启用的入站集成调度任务: datasource_id=%s", datasource_id)
-            return
-
-        interval_seconds = ((inbound_source.get('schedule') or {}).get('seconds')) or 60
-
-        scheduler.add_job(
-            execute_integration,
-            'interval',
-            seconds=interval_seconds,
-            args=[datasource.id],
-            id=job_id,
-            replace_existing=True
-        )
-        logger.info("已刷新入站集成调度任务: %s (每 %s 秒)", datasource.name, interval_seconds)
-
+    await refresh_scheduler(trigger_now=False)
     if trigger_now:
         asyncio.create_task(execute_integration(datasource_id))
 
 
 async def unschedule_datasource(datasource_id: int):
-    """移除单个数据源的入站集成调度任务。"""
-    global scheduler
-
-    if scheduler is None:
-        return
-
-    job_id = _job_id_for_datasource(datasource_id)
-    if scheduler.get_job(job_id):
-        scheduler.remove_job(job_id)
-        logger.info("已移除入站集成调度任务: datasource_id=%s", datasource_id)
+    """兼容旧调用入口：删除数据源后刷新全局集成调度。"""
+    await refresh_scheduler(trigger_now=False)
 
 
 async def execute_integration(datasource_id: int):
@@ -231,14 +203,8 @@ async def execute_integration(datasource_id: int):
             await session.commit()
 
 
-async def schedule_all_integrations():
-    """按数据源调度所有启用的 inbound_metric 配置"""
-    _ensure_scheduler_started()
-
-    for job in scheduler.get_jobs():
-        if job.id.startswith("integration_ds_"):
-            scheduler.remove_job(job.id)
-
+async def execute_all_integrations():
+    """按全局采集周期执行所有启用的 inbound_metric 数据源。"""
     async with async_session() as session:
         result = await session.execute(
             select(Datasource).where(
@@ -250,35 +216,33 @@ async def schedule_all_integrations():
             )
         )
         datasources = result.scalars().all()
-        logger.info(f"找到 {len(datasources)} 个启用的入站集成数据源")
+        datasource_ids = [
+            datasource.id
+            for datasource in datasources
+            if (datasource.inbound_source or {}).get('integration_id')
+            and (datasource.inbound_source or {}).get('enabled', True)
+        ]
 
-        for datasource in datasources:
-            inbound_source = datasource.inbound_source or {}
-            if not inbound_source.get('integration_id') or not inbound_source.get('enabled', True):
-                continue
+    if not datasource_ids:
+        logger.debug("当前没有启用的入站集成数据源")
+        return
 
-            interval_seconds = ((inbound_source.get('schedule') or {}).get('seconds')) or 60
-            job_id = _job_id_for_datasource(datasource.id)
+    logger.info("开始执行 %s 个入站集成数据源的全局采集任务", len(datasource_ids))
+    await asyncio.gather(
+        *(execute_integration(datasource_id) for datasource_id in datasource_ids),
+        return_exceptions=True,
+    )
 
-            scheduler.add_job(
-                execute_integration,
-                'interval',
-                seconds=interval_seconds,
-                args=[datasource.id],
-                id=job_id,
-                replace_existing=True
-            )
 
-            logger.info(f"已调度入站集成数据源: {datasource.name} (每 {interval_seconds} 秒)")
-
-            # 立即执行一次
-            asyncio.create_task(execute_integration(datasource.id))
+async def schedule_all_integrations():
+    """兼容旧调用入口：刷新全局入站集成调度。"""
+    await refresh_scheduler(trigger_now=True)
 
 
 async def start_integration_scheduler():
     """启动集成调度器"""
     logger.info("正在启动集成调度器...")
-    await schedule_all_integrations()
+    await refresh_scheduler(trigger_now=True)
     logger.info("集成调度器启动完成")
 
 

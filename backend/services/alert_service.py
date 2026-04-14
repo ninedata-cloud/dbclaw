@@ -51,6 +51,13 @@ CONNECTION_FAILURE_PREFIXES = [
     "数据库连接失败:",
     "数据库连接失败",
 ]
+GENERIC_AI_POLICY_METRIC_NAMES = {"ai 智能判警", "ai 判警"}
+AI_POLICY_FALLBACK_TITLES = {
+    "AI 智能判警告警",
+    "AI 判警告警",
+    "AI 智能判警",
+    "AI 判警",
+}
 DEFAULT_EVENT_AI_CONFIG = {
     "enabled": True,
     "trigger_on_create": True,
@@ -250,6 +257,132 @@ def extract_connection_failure_detail(trigger_reason: Optional[str]) -> Optional
     return reason.strip(" ：:") or None
 
 
+def _is_generic_ai_policy_metric_name(metric_name: Optional[str]) -> bool:
+    normalized = (metric_name or "").strip().lower()
+    return not normalized or normalized in GENERIC_AI_POLICY_METRIC_NAMES
+
+
+def _is_generic_ai_policy_title(title: Optional[str]) -> bool:
+    normalized = (title or "").strip()
+    if not normalized:
+        return True
+    return normalized in AI_POLICY_FALLBACK_TITLES
+
+
+def _build_ai_policy_reason_title(trigger_reason: Optional[str]) -> Optional[str]:
+    cleaned = _compact_summary_text(trigger_reason, max_chars=72)
+    if not cleaned:
+        return None
+
+    cleaned = re.sub(r"^(原因|触发原因)\s*[：:]\s*", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(
+        r"[，,；;。\s]*(AI|智能)\s*(判定|判警)(为|出)?(风险较高|存在异常风险|命中告警策略|命中策略|异常).*$",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"[，,；;。\s]*AI\s*判定\s*(风险较高|存在异常风险|异常|命中告警策略).*$",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = cleaned.strip("，,；;。:： ")
+    return cleaned or None
+
+
+def build_ai_policy_display_metric_name(
+    metric_name: Optional[str],
+    *,
+    trigger_reason: Optional[str] = None,
+    fault_domain: Optional[str] = None,
+) -> str:
+    if not _is_generic_ai_policy_metric_name(metric_name):
+        return str(metric_name).strip()
+
+    reason = (trigger_reason or "").lower()
+    if any(token in reason for token in ("连接失败", "connection failed", "login failed", "socket", "无法连接", "连通失败")):
+        return "连接异常"
+    if any(token in reason for token in ("复制", "replication", "lag", "延迟")):
+        return "复制异常"
+
+    perf_hits: set[str] = set()
+    if any(token in reason for token in ("cpu", "处理器")):
+        perf_hits.add("cpu")
+    if any(token in reason for token in ("内存", "memory", "buffer")):
+        perf_hits.add("memory")
+    if any(token in reason for token in ("磁盘", "disk", "i/o", "io", "存储", "tempdb")):
+        perf_hits.add("storage")
+    if any(token in reason for token in ("连接数", "连接池", "session", "会话", "阻塞", "wait", "死锁", "lock")):
+        perf_hits.add("connection")
+    if any(token in reason for token in ("qps", "tps", "吞吐", "请求", "慢查询", "事务")):
+        perf_hits.add("throughput")
+
+    if len(perf_hits) >= 2:
+        return "综合性能异常"
+    if "cpu" in perf_hits:
+        return "CPU 异常"
+    if "memory" in perf_hits:
+        return "内存异常"
+    if "storage" in perf_hits:
+        return "存储异常"
+    if "connection" in perf_hits:
+        return "连接异常"
+    if "throughput" in perf_hits:
+        return "吞吐异常"
+
+    domain_labels = {
+        "availability": "可用性异常",
+        "performance": "性能异常",
+        "storage": "存储异常",
+        "replication": "复制异常",
+        "general": "智能判定异常",
+    }
+    return domain_labels.get((fault_domain or "").lower(), "智能判定异常")
+
+
+def build_alert_display_title(
+    *,
+    alert_type: Optional[str],
+    title: Optional[str],
+    metric_name: Optional[str],
+    trigger_reason: Optional[str],
+    fault_domain: Optional[str] = None,
+) -> str:
+    if (alert_type or "") != "ai_policy_violation":
+        return title or "-"
+
+    if not _is_generic_ai_policy_title(title):
+        return title or "-"
+
+    reason_title = _build_ai_policy_reason_title(trigger_reason)
+    if reason_title:
+        return reason_title
+
+    metric_label = build_ai_policy_display_metric_name(
+        metric_name,
+        trigger_reason=trigger_reason,
+        fault_domain=fault_domain,
+    )
+    return f"{metric_label}告警"
+
+
+def build_alert_display_metric_name(
+    *,
+    alert_type: Optional[str],
+    metric_name: Optional[str],
+    trigger_reason: Optional[str],
+    fault_domain: Optional[str] = None,
+) -> Optional[str]:
+    if (alert_type or "") != "ai_policy_violation":
+        return metric_name
+    return build_ai_policy_display_metric_name(
+        metric_name,
+        trigger_reason=trigger_reason,
+        fault_domain=fault_domain,
+    )
+
+
 def build_alert_title_and_content(
     *,
     alert_type: str,
@@ -271,7 +404,12 @@ def build_alert_title_and_content(
     elif alert_type == "baseline_deviation" and metric_name:
         title = f"{metric_name} 基线偏移告警"
     elif alert_type == "ai_policy_violation":
-        title = f"{metric_name or 'AI 智能判警'}告警"
+        title = build_alert_display_title(
+            alert_type=alert_type,
+            title=None,
+            metric_name=metric_name,
+            trigger_reason=trigger_reason,
+        )
     else:
         title = f"{alert_type.replace('_', ' ').title()}"
 

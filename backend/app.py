@@ -15,6 +15,11 @@ from backend.services.startup_self_check import (
     run_startup_self_check,
     set_last_startup_report,
 )
+from backend.services.monitoring_scheduler_service import (
+    DEFAULT_MONITORING_COLLECTION_INTERVAL_SECONDS,
+    MONITORING_COLLECTION_INTERVAL_CONFIG_KEY,
+    get_monitoring_collection_interval_seconds,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +28,6 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     # Startup
     settings = get_settings()
-    logging.basicConfig(
-        level=logging.DEBUG if settings.debug else logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    )
     logger.info(f"Starting {settings.app_name}...")
 
     startup_report = await run_startup_self_check(settings, include_app_port_check=False)
@@ -325,6 +326,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Archive legacy adapter schema migration: {e}")
 
+    try:
+        from backend.migrations.remove_datasource_monitoring_intervals import migrate as remove_datasource_monitoring_intervals
+        await remove_datasource_monitoring_intervals()
+    except Exception as e:
+        logger.warning(f"Remove datasource monitoring intervals migration: {e}")
+
 
     # Seed default system configs
     from backend.database import async_session as _async_session
@@ -434,6 +441,19 @@ async def lifespan(app: FastAPI):
                 category="monitoring"
             )
 
+        _monitoring_interval_exists = await _db.execute(
+            _select(_SystemConfig).where(_SystemConfig.key == MONITORING_COLLECTION_INTERVAL_CONFIG_KEY)
+        )
+        if not _monitoring_interval_exists.scalar_one_or_none():
+            await _config_service.set_config(
+                _db,
+                key=MONITORING_COLLECTION_INTERVAL_CONFIG_KEY,
+                value=str(settings.metric_interval or DEFAULT_MONITORING_COLLECTION_INTERVAL_SECONDS),
+                value_type="integer",
+                description="全局监控采集周期（秒），系统直连采集与外部集成采集统一使用该周期",
+                category="monitoring"
+            )
+
         _external_base_exists = await _db.execute(_select(_SystemConfig).where(_SystemConfig.key == "app_external_base_url"))
         if not _external_base_exists.scalar_one_or_none():
             await _config_service.set_config(
@@ -464,7 +484,12 @@ async def lifespan(app: FastAPI):
 
     # Start metric collector
     from backend.services.metric_collector import start_scheduler
-    start_scheduler(settings.metric_interval)
+    async with _async_session() as _db:
+        monitoring_interval_seconds = await get_monitoring_collection_interval_seconds(
+            _db,
+            fallback=settings.metric_interval,
+        )
+    start_scheduler(monitoring_interval_seconds)
 
     # Start Inspection Service
     from backend.services.inspection_service import InspectionService
@@ -578,6 +603,15 @@ def create_app() -> FastAPI:
         return {
             "startup": app.state.startup_self_check_report or get_last_startup_report(),
             "current": current_report.to_dict(),
+        }
+
+    @app.get("/api/app/info")
+    async def app_info():
+        return {
+            "app_name": settings.app_name,
+            "app_version": settings.app_version,
+            "build_commit": settings.build_commit,
+            "build_time": settings.build_time,
         }
 
     # Register routers

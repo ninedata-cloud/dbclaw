@@ -1,6 +1,7 @@
 /* Sidebar component */
 const Sidebar = {
     _collapsed: false,
+    _appInfoLoaded: false,
 
     _maskPhone(phone) {
         if (!phone) return '-';
@@ -30,6 +31,7 @@ const Sidebar = {
     render() {
         const nav = DOM.$('#sidebar-nav');
         DOM.clear(nav);
+        this._loadAppVersion();
 
         const currentUser = Store.get('currentUser');
 
@@ -135,6 +137,26 @@ const Sidebar = {
 
         // Add toggle button
         this._renderToggleButton();
+    },
+
+    async _loadAppVersion() {
+        const versionNode = DOM.$('#sidebar-version');
+        if (!versionNode) return;
+
+        if (this._appInfoLoaded) return;
+
+        try {
+            const appInfo = await API.getAppInfo();
+            const version = (appInfo?.app_version || 'dev').trim();
+            const commit = (appInfo?.build_commit || '').trim();
+            versionNode.textContent = `v${version}`;
+            versionNode.title = commit ? `版本 ${version} (${commit})` : `版本 ${version}`;
+            this._appInfoLoaded = true;
+        } catch (error) {
+            console.error('Failed to load app version:', error);
+            versionNode.textContent = 'vdev';
+            versionNode.title = '版本信息加载失败';
+        }
     },
 
     _renderToggleButton() {

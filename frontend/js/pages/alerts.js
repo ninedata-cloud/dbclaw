@@ -831,10 +831,6 @@ const AlertsPage = {
                         <span class="detail-label">等级</span>
                         <span class="detail-value">${this._getImportanceBadge(dsInfo.importance_level)}</span>
                     </div>
-                    <div class="detail-row-item">
-                        <span class="detail-label">监控间隔</span>
-                        <span class="detail-value">${dsInfo.monitoring_interval || 60}秒</span>
-                    </div>
                 </div>
                 ${dsInfo.remark ? `
                 <div class="detail-row">
@@ -1439,7 +1435,7 @@ const AlertsPage = {
             baseline_deviation: '偏离基线',
             custom_expression: '自定义表达式',
             system_error: '系统错误',
-            ai_policy_violation: 'AI 判警'
+            ai_policy_violation: '智能判定异常'
         };
         return labels[type] || type;
     },

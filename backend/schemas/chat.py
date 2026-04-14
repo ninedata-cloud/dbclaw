@@ -4,9 +4,9 @@ from datetime import datetime
 
 
 class SkillAuthorizationSettings(BaseModel):
-    platform_operations: bool = True
-    high_privilege_operations: bool = True
-    knowledge_retrieval: bool = True
+    platform_operations: bool = False
+    high_privilege_operations: bool = False
+    knowledge_retrieval: bool = False
 
 
 class ChatSessionCreate(BaseModel):

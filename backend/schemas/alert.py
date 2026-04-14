@@ -52,7 +52,6 @@ class AlertDatasourceInfo(BaseModel):
     port: int
     database: Optional[str] = None
     importance_level: str
-    monitoring_interval: int
     remark: Optional[str] = None
     connection_status: str
     connection_error: Optional[str] = None

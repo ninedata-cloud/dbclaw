@@ -26,6 +26,21 @@ const InspectionPage = {
         return this._escapeHtml(value).replace(/"/g, '&quot;');
     },
 
+    _formatDurationSeconds(totalSeconds) {
+        if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return null;
+
+        const seconds = Math.floor(totalSeconds);
+        const days = Math.floor(seconds / 86400);
+        const hours = Math.floor((seconds % 86400) / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const remainSeconds = seconds % 60;
+
+        if (days > 0) return `${days} 天 ${hours} 小时`;
+        if (hours > 0) return `${hours} 小时 ${minutes} 分`;
+        if (minutes > 0) return `${minutes} 分 ${remainSeconds} 秒`;
+        return `${remainSeconds} 秒`;
+    },
+
     async render() {
         return this.renderWithOptions({});
     },
@@ -416,9 +431,14 @@ const InspectionPage = {
 
             const statusMeta = this.formatReportStatus(report.status);
             const triggerTypeLabel = this.formatTriggerType(report.trigger_type || 'manual');
-            const datasourceLabel = report.datasource_name || `ID: ${report.datasource_id || '-'}`;
+            const datasourceLabel = report.datasource_name || (report.datasource_id ? `数据源 #${report.datasource_id}` : '未关联数据源');
             const createdAtLabel = report.created_at ? Format.datetime(report.created_at) : '-';
             const completedAtLabel = report.completed_at ? Format.datetime(report.completed_at) : null;
+            const completedAtDisplay = completedAtLabel
+                ? `${completedAtLabel}${report.completed_at_inferred ? '（补记）' : ''}`
+                : (report.status === 'generating' ? '生成中' : '未记录');
+            const durationLabel = this._formatDurationSeconds(report.duration_seconds);
+            const reportIdLabel = report.id ? `#${report.id}` : '-';
 
             const summaryHtml = report.summary ? `
                 <section class="inspection-report-section inspection-report-summary">
@@ -480,27 +500,33 @@ const InspectionPage = {
                     </div>
 
                     <div class="inspection-report-header">
-                        <div>
-                            <div class="inspection-report-kicker">巡检报告</div>
-                            <h1 class="inspection-report-title">${safe(report.title)}</h1>
+                        <div class="inspection-report-header-top">
+                            <div class="inspection-report-heading-meta">
+                                <div class="inspection-report-kicker">巡检报告</div>
+                                <div class="inspection-report-id-chip">${safe(reportIdLabel)}</div>
+                            </div>
                             <div class="inspection-report-badges">
                                 <span class="badge badge-${statusMeta.badge}">${safe(statusMeta.text)}</span>
                                 <span class="badge badge-info">${safe(triggerTypeLabel)}</span>
-                                <span class="badge badge-secondary" title="${safeAttr(datasourceLabel)}">${safe(datasourceLabel)}</span>
                             </div>
                         </div>
-                        <div class="inspection-report-meta">
-                            <div class="inspection-report-meta-item">
-                                <span class="inspection-report-meta-label">创建时间</span>
-                                <span class="inspection-report-meta-value">${safe(createdAtLabel)}</span>
+                        <h1 class="inspection-report-title">${safe(report.title)}</h1>
+                        <div class="inspection-report-facts">
+                            <div class="inspection-report-fact">
+                                <span class="inspection-report-fact-label">数据源</span>
+                                <span class="inspection-report-fact-value" title="${safeAttr(datasourceLabel)}">${safe(datasourceLabel)}</span>
                             </div>
-                            <div class="inspection-report-meta-item">
-                                <span class="inspection-report-meta-label">完成时间</span>
-                                <span class="inspection-report-meta-value">${safe(completedAtLabel || '—')}</span>
+                            <div class="inspection-report-fact">
+                                <span class="inspection-report-fact-label">创建时间</span>
+                                <span class="inspection-report-fact-value">${safe(createdAtLabel)}</span>
                             </div>
-                            <div class="inspection-report-meta-item">
-                                <span class="inspection-report-meta-label">报告 ID</span>
-                                <span class="inspection-report-meta-value">#${safe(report.id)}</span>
+                            <div class="inspection-report-fact">
+                                <span class="inspection-report-fact-label">完成时间</span>
+                                <span class="inspection-report-fact-value">${safe(completedAtDisplay)}</span>
+                            </div>
+                            <div class="inspection-report-fact">
+                                <span class="inspection-report-fact-label">耗时</span>
+                                <span class="inspection-report-fact-value">${safe(durationLabel || '—')}</span>
                             </div>
                         </div>
                     </div>

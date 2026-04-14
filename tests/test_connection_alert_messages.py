@@ -2,6 +2,8 @@ from datetime import datetime
 from types import SimpleNamespace
 
 from backend.services.alert_service import (
+    build_alert_display_metric_name,
+    build_alert_display_title,
     build_alert_title_and_content,
     extract_connection_failure_detail,
 )
@@ -40,7 +42,7 @@ def test_connection_alert_title_and_content_are_human_friendly():
     assert content == "状态：数据库连接失败\n错误详情：timeout after 5s"
 
 
-def test_ai_policy_alert_title_uses_friendly_display_name():
+def test_ai_policy_alert_title_uses_trigger_reason_summary():
     title, content = build_alert_title_and_content(
         alert_type="ai_policy_violation",
         metric_name="AI 智能判警",
@@ -49,8 +51,31 @@ def test_ai_policy_alert_title_uses_friendly_display_name():
         trigger_reason="CPU、连接数持续升高，AI 判定风险较高",
     )
 
-    assert title == "AI 智能判警告警"
+    assert title == "CPU、连接数持续升高"
     assert content == "原因：CPU、连接数持续升高，AI 判定风险较高"
+
+
+def test_ai_policy_display_metric_name_uses_more_direct_label():
+    metric_name = build_alert_display_metric_name(
+        alert_type="ai_policy_violation",
+        metric_name="AI 智能判警",
+        trigger_reason="CPU、连接数持续升高，AI 判定风险较高",
+        fault_domain="performance",
+    )
+
+    assert metric_name == "综合性能异常"
+
+
+def test_ai_policy_display_title_rewrites_legacy_generic_title():
+    title = build_alert_display_title(
+        alert_type="ai_policy_violation",
+        title="AI 智能判警告警",
+        metric_name="AI 智能判警",
+        trigger_reason="CPU、连接数持续升高，AI 判定风险较高",
+        fault_domain="performance",
+    )
+
+    assert title == "CPU、连接数持续升高"
 
 
 def test_extract_connection_failure_detail_strips_generic_prefix():

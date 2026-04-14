@@ -717,7 +717,6 @@ const InstanceDetailPage = {
         if (monitoring) {
             monitoring.innerHTML = `
                 ${this._configField('监控源', datasource.metric_source || 'system')}
-                ${this._configField('监控间隔', `${datasource.monitoring_interval || 60} 秒`)}
                 ${this._configField('外部实例 ID', datasource.external_instance_id || '-')}
                 ${this._configField('启用巡检', inspectionConfig?.enabled ? '是' : '否')}
                 ${this._configField('巡检周期', inspectionConfig?.schedule_interval ? `${inspectionConfig.schedule_interval} 秒` : '-')}

@@ -13,6 +13,8 @@ from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
 
+TERMINAL_REPORT_STATUSES = {"completed", "partial", "timed_out", "awaiting_confirm", "failed"}
+
 
 def _strip_markdown(text: str) -> str:
     if not text:
@@ -105,8 +107,8 @@ class ReportGenerator:
             report.summary = result.get("summary") or None
             report.error_message = result.get("error_message")
             report.skill_executions = result.get("skill_executions")
-
-            # completed_at is managed by the unified status setter below
+            if report.status in TERMINAL_REPORT_STATUSES and report.completed_at is None:
+                report.completed_at = now()
 
             # Generate HTML only when we have content
             if report.content_md:
@@ -266,6 +268,8 @@ class ReportGenerator:
             logger.error(f"Error generating inspection report: {e}", exc_info=True)
             report.status = "failed"
             report.error_message = str(e)
+            if report.completed_at is None:
+                report.completed_at = now()
 
         await self.db.commit()
         return report.id

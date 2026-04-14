@@ -8,8 +8,27 @@ from backend.models.user import User
 from backend.models.system_config import SystemConfig
 from backend.schemas.system_config import SystemConfigCreate, SystemConfigUpdate, SystemConfigResponse
 from backend.services import config_service
+from backend.services.monitoring_scheduler_service import (
+    is_monitoring_collection_interval_config,
+    normalize_monitoring_collection_interval_seconds,
+    refresh_monitoring_schedulers,
+)
 
 router = APIRouter(prefix="/api/system-configs", tags=["system-configs"])
+
+
+def _validate_special_config(key: str, value: Optional[str], value_type: Optional[str]):
+    if not is_monitoring_collection_interval_config(key):
+        return
+
+    if value_type is not None and value_type != "integer":
+        raise HTTPException(status_code=400, detail="全局监控采集周期必须使用整数类型")
+
+    if value is not None:
+        try:
+            normalize_monitoring_collection_interval_seconds(value)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("", response_model=List[SystemConfigResponse])
@@ -43,10 +62,13 @@ async def create_config(
     current_user: User = Depends(get_current_admin)
 ):
     """Create new configuration"""
+    _validate_special_config(data.key, data.value, data.value_type)
     try:
         config = await config_service.set_config(
             db, data.key, data.value, data.value_type, data.description, data.category, data.is_encrypted
         )
+        if is_monitoring_collection_interval_config(data.key):
+            await refresh_monitoring_schedulers()
         return config
     except IntegrityError:
         raise HTTPException(status_code=400, detail="Configuration key already exists")
@@ -64,6 +86,8 @@ async def update_config(
     config = await db.get(SystemConfig, id)
     if not config:
         raise HTTPException(status_code=404, detail="Configuration not found")
+
+    _validate_special_config(config.key, data.value, data.value_type)
 
     if data.is_encrypted is not None:
         config.is_encrypted = data.is_encrypted
@@ -83,6 +107,8 @@ async def update_config(
 
     await db.commit()
     await db.refresh(config)
+    if is_monitoring_collection_interval_config(config.key):
+        await refresh_monitoring_schedulers()
     # Decrypt value before returning
     if config.is_encrypted and config.value:
         from backend.utils.encryption import decrypt_value
@@ -103,4 +129,6 @@ async def delete_config(
 
     config.is_active = False
     await db.commit()
+    if is_monitoring_collection_interval_config(config.key):
+        await refresh_monitoring_schedulers()
     return {"message": "Configuration deleted successfully"}

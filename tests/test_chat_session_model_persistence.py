@@ -141,4 +141,4 @@ async def test_prepare_user_turn_normalizes_legacy_disabled_tools(monkeypatch):
 
     assert skill_authorizations["platform_operations"] is False
     assert skill_authorizations["high_privilege_operations"] is False
-    assert skill_authorizations["knowledge_retrieval"] is True
+    assert skill_authorizations["knowledge_retrieval"] is False

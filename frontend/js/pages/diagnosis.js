@@ -24,9 +24,9 @@ const DiagnosisPage = {
 
     _normalizeSkillAuthorizations(authorizations = null, legacyDisabledTools = []) {
         const defaults = {
-            platform_operations: true,
-            high_privilege_operations: true,
-            knowledge_retrieval: true,
+            platform_operations: false,
+            high_privilege_operations: false,
+            knowledge_retrieval: false,
         };
         const catalogGroups = this.skillAuthorizationCatalog?.groups || [];
         catalogGroups.forEach(group => {

@@ -30,8 +30,6 @@ from backend.services.baseline_service import (
 )
 from backend.services.alert_template_service import resolve_effective_inspection_config
 from backend.utils.datetime_helper import now
-from backend.config import get_settings
-
 logger = logging.getLogger(__name__)
 
 # Global scheduler instance
@@ -664,6 +662,7 @@ async def _check_ai_alerts_and_trigger(db, datasource, config, metrics: Dict[str
             should_skip_candidate_due_to_interval,
             _resolve_current_alert_severity,
         )
+        from backend.services.monitoring_scheduler_service import get_monitoring_collection_interval_seconds
 
         binding = await resolve_configured_alert_ai_policy_binding(db, config)
         if not binding:
@@ -671,6 +670,7 @@ async def _check_ai_alerts_and_trigger(db, datasource, config, metrics: Dict[str
 
         runtime_state = await get_or_create_runtime_state(db, datasource.id, binding)
         collected_at = now()
+        sampling_interval_seconds = await get_monitoring_collection_interval_seconds(db)
         snapshots_result = await db.execute(
             select(MetricSnapshot)
             .where(
@@ -692,6 +692,7 @@ async def _check_ai_alerts_and_trigger(db, datasource, config, metrics: Dict[str
             threshold_rules=getattr(config, "threshold_rules", None),
             current_alert_severity=current_alert_severity,
             datasource=datasource,
+            sampling_interval_seconds=sampling_interval_seconds,
         )
 
         if mode == "formal":
@@ -737,6 +738,7 @@ async def _check_ai_alerts_and_trigger(db, datasource, config, metrics: Dict[str
             runtime_state=runtime_state,
             gate_decision=gate_decision,
             snapshots_desc=snapshots_desc,
+            sampling_interval_seconds=sampling_interval_seconds,
         )
         judge_result, evaluation_log = await evaluate_alert_ai_policy(
             db,
@@ -942,13 +944,12 @@ async def collect_all_metrics():
         logger.error(f"Error in collect_all_metrics: {e}", exc_info=True)
 
 
-def start_scheduler(interval_seconds: int = 15):
+def start_scheduler(interval_seconds: int = 60):
     """Start the APScheduler for periodic metric collection."""
     global scheduler
-    if scheduler and scheduler.running:
-        return
+    if scheduler is None:
+        scheduler = AsyncIOScheduler()
 
-    scheduler = AsyncIOScheduler()
     scheduler.add_job(
         collect_all_metrics,
         "interval",
@@ -956,8 +957,12 @@ def start_scheduler(interval_seconds: int = 15):
         id="metric_collector",
         replace_existing=True,
     )
-    scheduler.start()
-    logger.info(f"Metric collector started (interval: {interval_seconds}s)")
+    if not scheduler.running:
+        scheduler.start()
+        logger.info(f"Metric collector started (interval: {interval_seconds}s)")
+        return
+
+    logger.info(f"Metric collector refreshed (interval: {interval_seconds}s)")
 
 
 def stop_scheduler():

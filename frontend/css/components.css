@@ -319,6 +319,84 @@
     opacity: 1;
 }
 
+.datasource-table .datasource-col-host {
+    width: 176px;
+}
+
+.datasource-table .datasource-col-actions {
+    width: 76px;
+}
+
+.datasource-table td.datasource-host-cell {
+    max-width: 176px;
+}
+
+.datasource-table th.datasource-actions-header,
+.datasource-table td.datasource-actions-cell {
+    text-align: right;
+}
+
+.datasource-action-menu {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.datasource-action-trigger {
+    min-width: 36px;
+    justify-content: center;
+    padding-inline: 8px;
+}
+
+.datasource-more-menu {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 9999;
+    min-width: 168px;
+    padding: 4px 0;
+}
+
+.datasource-more-menu-item {
+    width: 100%;
+    border: none;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    text-align: left;
+}
+
+.datasource-more-menu-item.danger {
+    color: var(--accent-red);
+}
+
+.datasource-more-menu-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.datasource-more-menu-divider {
+    border-top: 1px solid var(--border-color);
+    margin: 4px 0;
+}
+
+@media (max-width: 1440px) {
+    .datasource-table .datasource-col-host {
+        width: 152px;
+    }
+
+    .datasource-table td.datasource-host-cell {
+        max-width: 152px;
+    }
+}
+
 /* === Toast === */
 .toast-container {
     position: fixed;

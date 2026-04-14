@@ -357,7 +357,7 @@
 .inspection-report-shell {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 16px;
     max-width: 1200px;
     margin: 0 auto;
     padding: 8px 4px 24px;
@@ -389,67 +389,98 @@
 
 .inspection-report-header {
     display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px 22px;
+}
+
+.inspection-report-header-top {
+    display: flex;
+    align-items: center;
     justify-content: space-between;
-    align-items: flex-start;
-    gap: 20px;
+    gap: 12px;
     flex-wrap: wrap;
-    padding: 24px;
+}
+
+.inspection-report-heading-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
 }
 
 .inspection-report-kicker {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--text-muted);
-    margin-bottom: 8px;
+}
+
+.inspection-report-id-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
+    padding: 0 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
 }
 
 .inspection-report-title {
     margin: 0;
-    font-size: 30px;
-    line-height: 1.25;
+    font-size: 26px;
+    line-height: 1.3;
     color: var(--text-primary);
+    overflow-wrap: anywhere;
 }
 
 .inspection-report-badges {
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
-    margin-top: 16px;
+    justify-content: flex-end;
 }
 
-.inspection-report-meta {
-    min-width: 280px;
+.inspection-report-facts {
     display: grid;
-    gap: 12px;
+    gap: 10px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-.inspection-report-meta-item {
+.inspection-report-fact {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    padding: 14px 16px;
+    min-width: 0;
+    padding: 12px 14px;
     border-radius: 12px;
     background: rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.06);
 }
 
-.inspection-report-meta-label {
+.inspection-report-fact-label {
     font-size: 12px;
     color: var(--text-secondary);
 }
 
-.inspection-report-meta-value {
+.inspection-report-fact-value {
     font-size: 14px;
     font-weight: 700;
     color: var(--text-primary);
     font-variant-numeric: tabular-nums;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .inspection-report-overview {
     display: grid;
-    gap: 18px;
+    gap: 16px;
 }
 
 .inspection-report-section {
@@ -710,10 +741,17 @@
         flex-direction: column;
     }
 
-    .inspection-report-meta {
+    .inspection-report-header-top {
+        align-items: flex-start;
+    }
+
+    .inspection-report-badges {
+        justify-content: flex-start;
+    }
+
+    .inspection-report-facts {
         width: 100%;
-        min-width: 0;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 
@@ -752,11 +790,11 @@
         align-items: stretch;
     }
 
-    .inspection-report-meta {
+    .inspection-report-facts {
         grid-template-columns: 1fr;
     }
 
     .inspection-report-title {
-        font-size: 24px;
+        font-size: 22px;
     }
 }

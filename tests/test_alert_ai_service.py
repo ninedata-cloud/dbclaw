@@ -313,25 +313,23 @@ def test_build_metric_features_includes_recent_samples_for_duration_judgement():
     ]
 
 
-def test_resolve_sampling_interval_seconds_prefers_datasource_config():
-    datasource = SimpleNamespace(monitoring_interval=45)
+def test_resolve_sampling_interval_seconds_prefers_global_config():
     snapshots_desc = [
         SimpleNamespace(collected_at=datetime(2026, 4, 11, 18, 39, 17), data={}),
         SimpleNamespace(collected_at=datetime(2026, 4, 11, 18, 38, 17), data={}),
     ]
 
-    assert _resolve_sampling_interval_seconds(datasource, snapshots_desc) == 45
+    assert _resolve_sampling_interval_seconds(snapshots_desc, 45) == 45
 
 
 def test_resolve_sampling_interval_seconds_falls_back_to_snapshot_gap():
-    datasource = SimpleNamespace(monitoring_interval=None)
     snapshots_desc = [
         SimpleNamespace(collected_at=datetime(2026, 4, 11, 18, 39, 17), data={}),
         SimpleNamespace(collected_at=datetime(2026, 4, 11, 18, 38, 7), data={}),
         SimpleNamespace(collected_at=datetime(2026, 4, 11, 18, 36, 57), data={}),
     ]
 
-    assert _resolve_sampling_interval_seconds(datasource, snapshots_desc) == 70
+    assert _resolve_sampling_interval_seconds(snapshots_desc, None) == 70
 
 
 def test_compile_policy_profile_locally_extracts_trigger_and_recovery_profiles():
@@ -386,7 +384,7 @@ def test_decide_alert_ai_candidate_uses_near_threshold_rising_signal():
         snapshots_desc=snapshots_desc,
         threshold_rules=None,
         current_alert_severity=None,
-        datasource=SimpleNamespace(monitoring_interval=60),
+        sampling_interval_seconds=60,
     )
 
     assert gate_decision.should_evaluate is True
@@ -426,7 +424,7 @@ def test_decide_alert_ai_candidate_supports_recovery_for_active_alert():
         snapshots_desc=snapshots_desc,
         threshold_rules=None,
         current_alert_severity="low",
-        datasource=SimpleNamespace(monitoring_interval=60),
+        sampling_interval_seconds=60,
     )
 
     assert gate_decision.should_evaluate is True

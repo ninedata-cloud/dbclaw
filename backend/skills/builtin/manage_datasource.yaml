@@ -54,10 +54,6 @@ parameters:
     required: false
     description: Importance level (optional for create/update)
     enum: [core, production, development, temporary]
-  - name: monitoring_interval
-    type: integer
-    required: false
-    description: Monitoring interval in seconds (optional for create/update)
   - name: extra_params
     type: object
     required: false
@@ -96,7 +92,6 @@ code: |
                       "database": ds.database,
                       "host_id": ds.host_id,
                       "importance_level": ds.importance_level,
-                      "monitoring_interval": ds.monitoring_interval,
                       "is_active": ds.is_active,
                       "created_at": ds.created_at.isoformat() if ds.created_at else None,
                       "updated_at": ds.updated_at.isoformat() if ds.updated_at else None
@@ -130,7 +125,6 @@ code: |
                   "database": datasource.database,
                   "host_id": datasource.host_id,
                   "importance_level": datasource.importance_level,
-                  "monitoring_interval": datasource.monitoring_interval,
                   "extra_params": datasource.extra_params,
                   "is_active": datasource.is_active,
                   "created_at": datasource.created_at.isoformat() if datasource.created_at else None,
@@ -155,7 +149,6 @@ code: |
               database=params.get('database'),
               host_id=params.get('host_id'),
               importance_level=params.get('importance_level', 'production'),
-              monitoring_interval=params.get('monitoring_interval', 60),
               extra_params=params.get('extra_params')
           )
           
@@ -207,8 +200,6 @@ code: |
               datasource.host_id = params['host_id']
           if 'importance_level' in params:
               datasource.importance_level = params['importance_level']
-          if 'monitoring_interval' in params:
-              datasource.monitoring_interval = params['monitoring_interval']
           if 'extra_params' in params:
               datasource.extra_params = params['extra_params']
           

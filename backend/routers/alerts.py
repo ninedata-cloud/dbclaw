@@ -13,6 +13,7 @@ from backend.dependencies import get_current_user
 from backend.models.user import User
 from backend.models.soft_delete import alive_filter, get_alive_by_id
 from backend.services.alert_service import AlertService
+from backend.services.alert_service import build_alert_display_metric_name, build_alert_display_title
 from backend.services.alert_event_service import AlertEventService
 from backend.services.notification_service import NotificationService
 from backend.services.public_share_service import PublicShareService
@@ -75,7 +76,6 @@ def _build_datasource_info(datasource: Optional[Datasource]) -> Optional[AlertDa
         port=datasource.port,
         database=datasource.database,
         importance_level=datasource.importance_level or 'production',
-        monitoring_interval=datasource.monitoring_interval or 60,
         remark=datasource.remark,
         connection_status=datasource.connection_status or 'unknown',
         connection_error=datasource.connection_error,
@@ -258,6 +258,17 @@ async def _build_alert_response(db: AsyncSession, alert) -> AlertMessageResponse
     datasource_info = _build_datasource_info(datasource)
 
     payload = AlertMessageResponse.model_validate(alert)
+    payload.title = build_alert_display_title(
+        alert_type=payload.alert_type,
+        title=payload.title,
+        metric_name=payload.metric_name,
+        trigger_reason=payload.trigger_reason,
+    )
+    payload.metric_name = build_alert_display_metric_name(
+        alert_type=payload.alert_type,
+        metric_name=payload.metric_name,
+        trigger_reason=payload.trigger_reason,
+    )
     payload.diagnosis_context = AlertDiagnosisContext(
         datasource_name=datasource.name if datasource else None,
         datasource_type=datasource.db_type if datasource else None,
@@ -275,17 +286,55 @@ async def _build_alert_response(db: AsyncSession, alert) -> AlertMessageResponse
     return payload
 
 
+async def _load_latest_alert_trigger_reasons(db: AsyncSession, events) -> dict[int, Optional[str]]:
+    latest_alert_ids = [int(event.latest_alert_id) for event in events if getattr(event, "latest_alert_id", None)]
+    if not latest_alert_ids:
+        return {}
+
+    result = await db.execute(
+        select(AlertMessage.id, AlertMessage.trigger_reason)
+        .where(AlertMessage.id.in_(latest_alert_ids))
+    )
+    return {int(alert_id): trigger_reason for alert_id, trigger_reason in result.all()}
+
+
+def _build_event_response(event, latest_trigger_reason: Optional[str] = None) -> AlertEventResponse:
+    payload = AlertEventResponse.model_validate(event)
+    payload.title = build_alert_display_title(
+        alert_type=payload.alert_type,
+        title=payload.title,
+        metric_name=payload.metric_name,
+        trigger_reason=latest_trigger_reason,
+        fault_domain=payload.fault_domain,
+    )
+    payload.metric_name = build_alert_display_metric_name(
+        alert_type=payload.alert_type,
+        metric_name=payload.metric_name,
+        trigger_reason=latest_trigger_reason,
+        fault_domain=payload.fault_domain,
+    )
+    return payload
+
+
 async def _build_event_context(db: AsyncSession, event) -> AlertDiagnosisContext:
     hydrate_event_strategy_fields(event)
     datasource = await get_alive_by_id(db, Datasource, event.datasource_id)
     datasource_info = _build_datasource_info(datasource)
     recommended_action = _extract_recommended_action(event.recommended_actions or event.ai_diagnosis_summary)
     baseline_comparisons = await _build_event_baseline_comparisons(db, event)
+    latest_alert = await db.get(AlertMessage, event.latest_alert_id) if getattr(event, "latest_alert_id", None) else None
+    display_title = build_alert_display_title(
+        alert_type=getattr(event, "alert_type", None),
+        title=getattr(event, "title", None),
+        metric_name=getattr(event, "metric_name", None),
+        trigger_reason=getattr(latest_alert, "trigger_reason", None),
+        fault_domain=getattr(event, "fault_domain", None),
+    )
     return AlertDiagnosisContext(
         datasource_name=datasource.name if datasource else None,
         datasource_type=datasource.db_type if datasource else None,
         datasource_info=datasource_info,
-        case_summary=event.title,
+        case_summary=display_title,
         diagnosis_summary=event.ai_diagnosis_summary,
         root_cause=event.root_cause,
         recommended_action=recommended_action or event.recommended_actions,
@@ -376,9 +425,13 @@ async def list_alert_events(
         limit=limit,
         offset=offset
     )
+    latest_trigger_reason_map = await _load_latest_alert_trigger_reasons(db, events)
 
     return {
-        "events": [AlertEventResponse.model_validate(event) for event in events],
+        "events": [
+            _build_event_response(event, latest_trigger_reason_map.get(getattr(event, "latest_alert_id", 0)))
+            for event in events
+        ],
         "total": total,
         "limit": limit,
         "offset": offset
@@ -421,7 +474,8 @@ async def acknowledge_event(
         del request
         event = await AlertEventService.acknowledge_event(db, event_id, current_user.id)
         await db.commit()
-        return AlertEventResponse.model_validate(event)
+        latest_alert = await db.get(AlertMessage, event.latest_alert_id) if getattr(event, "latest_alert_id", None) else None
+        return _build_event_response(event, getattr(latest_alert, "trigger_reason", None))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -436,7 +490,8 @@ async def resolve_event(
     try:
         event = await AlertEventService.resolve_event(db, event_id)
         await db.commit()
-        return AlertEventResponse.model_validate(event)
+        latest_alert = await db.get(AlertMessage, event.latest_alert_id) if getattr(event, "latest_alert_id", None) else None
+        return _build_event_response(event, getattr(latest_alert, "trigger_reason", None))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -560,7 +615,7 @@ async def public_alert_page(
     status_color = {'active': '#dc2626', 'acknowledged': '#ea580c', 'resolved': '#16a34a'}.get(alert.status or '', '#6b7280')
 
     # Alert type label
-    alert_type_label = {'threshold_violation': '超过阈值', 'baseline_deviation': '偏离基线', 'custom_expression': '自定义表达式', 'system_error': '系统错误', 'ai_policy_violation': 'AI 判警'}.get(alert.alert_type or '', alert.alert_type or '-')
+    alert_type_label = {'threshold_violation': '超过阈值', 'baseline_deviation': '偏离基线', 'custom_expression': '自定义表达式', 'system_error': '系统错误', 'ai_policy_violation': '智能判定异常'}.get(alert.alert_type or '', alert.alert_type or '-')
 
     # Datasource info
     ds_name = escape_html(datasource.name if datasource else '-')
@@ -571,7 +626,6 @@ async def public_alert_page(
     ds_level = datasource.importance_level if datasource else 'production'
     ds_level_label = {'core': '核心', 'production': '生产', 'development': '开发', 'temporary': '临时'}.get(ds_level, ds_level)
     ds_level_color = {'core': '#dc2626', 'production': '#2563eb', 'development': '#7c3aed', 'temporary': '#6b7280'}.get(ds_level, '#6b7280')
-    ds_interval = datasource.monitoring_interval if datasource else 60
     ds_remark = escape_html(datasource.remark if datasource and datasource.remark else '')
     ds_status = datasource.connection_status if datasource else 'unknown'
     ds_status_label = {'normal': '正常', 'warning': '警告', 'failed': '失败', 'unknown': '未知'}.get(ds_status, ds_status)
@@ -747,10 +801,6 @@ async def public_alert_page(
                                     {ds_level_label}
                                 </span>
                             </div>
-                        </div>
-                        <div class="field">
-                            <div class="field-label">监控间隔</div>
-                            <div class="field-value">{ds_interval}秒</div>
                         </div>
                         <div class="field">
                             <div class="field-label">连接状态</div>

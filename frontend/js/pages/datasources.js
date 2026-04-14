@@ -314,95 +314,151 @@ const DatasourcesPage = {
         `;
     },
 
+    _renderActionMenuItem({ label, icon, onClick, danger = false, dividerBefore = false }) {
+        return `
+            ${dividerBefore ? '<div class="datasource-more-menu-divider"></div>' : ''}
+            <button
+                type="button"
+                class="ds-more-menu-item datasource-more-menu-item${danger ? ' danger' : ''}"
+                onclick="${onClick}"
+            >
+                <i data-lucide="${icon}" class="datasource-more-menu-icon"></i>
+                <span>${this._escapeHtml(label)}</span>
+            </button>
+        `;
+    },
+
     _renderTable() {
         const container = DOM.$('#datasource-table-container');
         if (!container) return;
 
         container.innerHTML = `
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th class="sortable" data-sort="id">编号 <span class="sort-icon" data-field="id"></span></th>
-                        <th class="sortable" data-sort="name">名称 <span class="sort-icon" data-field="name"></span></th>
-                        <th class="sortable" data-sort="db_type">类型 <span class="sort-icon" data-field="db_type"></span></th>
-                        <th>标签</th>
-                        <th class="sortable" data-sort="host">主机 <span class="sort-icon" data-field="host"></span></th>
-                        <th class="sortable" data-sort="database">数据库 <span class="sort-icon" data-field="database"></span></th>
-                        <th class="sortable" data-sort="connection_status">连接状态 <span class="sort-icon" data-field="connection_status"></span></th>
-                        <th class="sortable" data-sort="cpu_usage">CPU <span class="sort-icon" data-field="cpu_usage"></span></th>
-                        <th class="sortable" data-sort="qps">QPS <span class="sort-icon" data-field="qps"></span></th>
-                        <th class="sortable" data-sort="connections_active">活跃连接 <span class="sort-icon" data-field="connections_active"></span></th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${this.filteredDatasources.map(conn => {
-                        const silenceState = this._getSilenceState(conn);
-                        const silenceMenuItems = silenceState.isSilenced ? `
-                            <div class="ds-more-menu-item" onclick="DatasourcesPage._showSilenceModal(${conn.id})" style="display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;font-size:13px;color:var(--text-primary);white-space:nowrap;">
-                                <i data-lucide="bell-ring" style="width:14px;height:14px;"></i> 调整告警静默
-                            </div>
-                            <div class="ds-more-menu-item" onclick="DatasourcesPage._cancelDatasourceSilence(${conn.id})" style="display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;font-size:13px;color:#ef4444;white-space:nowrap;">
-                                <i data-lucide="bell-off" style="width:14px;height:14px;"></i> 取消告警静默
-                            </div>
-                        ` : `
-                            <div class="ds-more-menu-item" onclick="DatasourcesPage._showSilenceModal(${conn.id})" style="display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;font-size:13px;color:var(--text-primary);white-space:nowrap;">
-                                <i data-lucide="bell-off" style="width:14px;height:14px;"></i> 设置告警静默
-                            </div>
-                        `;
+            <div class="data-table-container datasource-table-shell">
+                <table class="data-table datasource-table">
+                    <colgroup>
+                        <col class="datasource-col-id">
+                        <col class="datasource-col-name">
+                        <col class="datasource-col-type">
+                        <col class="datasource-col-tags">
+                        <col class="datasource-col-host">
+                        <col class="datasource-col-database">
+                        <col class="datasource-col-status">
+                        <col class="datasource-col-cpu">
+                        <col class="datasource-col-qps">
+                        <col class="datasource-col-connections">
+                        <col class="datasource-col-actions">
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th class="sortable" data-sort="id">编号 <span class="sort-icon" data-field="id"></span></th>
+                            <th class="sortable" data-sort="name">名称 <span class="sort-icon" data-field="name"></span></th>
+                            <th class="sortable" data-sort="db_type">类型 <span class="sort-icon" data-field="db_type"></span></th>
+                            <th>标签</th>
+                            <th class="sortable" data-sort="host">主机 <span class="sort-icon" data-field="host"></span></th>
+                            <th class="sortable" data-sort="database">数据库 <span class="sort-icon" data-field="database"></span></th>
+                            <th class="sortable" data-sort="connection_status">连接状态 <span class="sort-icon" data-field="connection_status"></span></th>
+                            <th class="sortable" data-sort="cpu_usage">CPU <span class="sort-icon" data-field="cpu_usage"></span></th>
+                            <th class="sortable" data-sort="qps">QPS <span class="sort-icon" data-field="qps"></span></th>
+                            <th class="sortable" data-sort="connections_active">活跃连接 <span class="sort-icon" data-field="connections_active"></span></th>
+                            <th class="datasource-actions-header">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${this.filteredDatasources.map(conn => {
+                            const silenceState = this._getSilenceState(conn);
+                            const hostDisplay = `${conn.host}:${conn.port}`;
+                            const silenceMenuItems = silenceState.isSilenced
+                                ? [
+                                    this._renderActionMenuItem({
+                                        label: '调整告警静默',
+                                        icon: 'bell-ring',
+                                        onClick: `DatasourcesPage._showSilenceModal(${conn.id})`
+                                    }),
+                                    this._renderActionMenuItem({
+                                        label: '取消告警静默',
+                                        icon: 'bell-off',
+                                        onClick: `DatasourcesPage._cancelDatasourceSilence(${conn.id})`,
+                                        danger: true
+                                    })
+                                ].join('')
+                                : this._renderActionMenuItem({
+                                    label: '设置告警静默',
+                                    icon: 'bell-off',
+                                    onClick: `DatasourcesPage._showSilenceModal(${conn.id})`
+                                });
 
-                        return `
-                            <tr>
-                                <td class="instance-mono">${conn.id}</td>
-                                <td>
-                                    <strong>${conn.name}</strong>
-                                    ${this._renderSilenceBadge(conn)}
-                                </td>
-                                <td><span class="badge badge-info">${this._escapeHtml(this._getDbTypeLabel(conn.db_type))}</span></td>
-                                <td>${this._renderTags(conn.tags || [])}</td>
-                                <td>${conn.host}:${conn.port}</td>
-                                <td>${conn.database || '-'}</td>
-                                <td>${this._getStatusBadge(conn)}</td>
-                                ${this._renderMetricsCell(conn)}
-                                <td>
-                                    <div style="display:flex;gap:4px;align-items:center;">
-                                        <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._openInstanceDetail(${conn.id})" title="实例详情">
-                                            <i data-lucide="panel-left"></i>
-                                        </button>
-                                        <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._editDatasource(${conn.id})" title="编辑">
-                                            <i data-lucide="pencil"></i>
-                                        </button>
-                                        <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._triggerInspection(${conn.id})" title="诊断">
-                                            <i data-lucide="zap"></i>
-                                        </button>
-                                        <div class="ds-action-more" style="position:relative;">
-                                            <button class="btn btn-sm btn-secondary" onclick="DatasourcesPage._toggleMoreMenu(event, ${conn.id})" title="更多">
+                            return `
+                                <tr>
+                                    <td class="instance-mono">${conn.id}</td>
+                                    <td>
+                                        <strong>${this._escapeHtml(conn.name)}</strong>
+                                        ${this._renderSilenceBadge(conn)}
+                                    </td>
+                                    <td><span class="badge badge-info">${this._escapeHtml(this._getDbTypeLabel(conn.db_type))}</span></td>
+                                    <td>${this._renderTags(conn.tags || [])}</td>
+                                    <td class="datasource-host-cell" title="${this._escapeAttr(hostDisplay)}">${this._escapeHtml(hostDisplay)}</td>
+                                    <td title="${this._escapeAttr(conn.database || '-')}">${this._escapeHtml(conn.database || '-')}</td>
+                                    <td>${this._getStatusBadge(conn)}</td>
+                                    ${this._renderMetricsCell(conn)}
+                                    <td class="datasource-actions-cell">
+                                        <div class="ds-action-more datasource-action-menu">
+                                            <button
+                                                type="button"
+                                                class="btn btn-sm btn-secondary datasource-action-trigger"
+                                                onclick="DatasourcesPage._toggleMoreMenu(event, ${conn.id})"
+                                                title="操作菜单"
+                                                aria-label="操作菜单"
+                                            >
                                                 <i data-lucide="more-horizontal"></i>
                                             </button>
-                                            <div class="ds-more-menu" id="more-menu-${conn.id}" style="display:none;background:var(--bg-primary);border:1px solid var(--border-color);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:9999;min-width:140px;padding:4px 0;">
-                                                <div class="ds-more-menu-item" onclick="DatasourcesPage._testDatasource(${conn.id})" style="display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;font-size:13px;color:var(--text-primary);white-space:nowrap;">
-                                                    <i data-lucide="plug" style="width:14px;height:14px;"></i> 测试连接
-                                                </div>
-                                                <div class="ds-more-menu-item" onclick="DatasourcesPage._showInspectionConfig(${conn.id})" style="display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;font-size:13px;color:var(--text-primary);white-space:nowrap;">
-                                                    <i data-lucide="settings" style="width:14px;height:14px;"></i> 巡检配置
-                                                </div>
-                                                <div class="ds-more-menu-item" onclick="DatasourcesPage._monitorDatasource(${conn.id})" style="display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;font-size:13px;color:var(--text-primary);white-space:nowrap;">
-                                                    <i data-lucide="activity" style="width:14px;height:14px;"></i> 监控
-                                                </div>
+                                            <div class="ds-more-menu datasource-more-menu" id="more-menu-${conn.id}" style="display:none;">
+                                                ${this._renderActionMenuItem({
+                                                    label: '实例详情',
+                                                    icon: 'panel-left',
+                                                    onClick: `DatasourcesPage._openInstanceDetail(${conn.id})`
+                                                })}
+                                                ${this._renderActionMenuItem({
+                                                    label: '编辑数据源',
+                                                    icon: 'pencil',
+                                                    onClick: `DatasourcesPage._editDatasource(${conn.id})`
+                                                })}
+                                                ${this._renderActionMenuItem({
+                                                    label: '立即诊断',
+                                                    icon: 'zap',
+                                                    onClick: `DatasourcesPage._triggerInspection(${conn.id}, event)`
+                                                })}
+                                                ${this._renderActionMenuItem({
+                                                    label: '测试连接',
+                                                    icon: 'plug',
+                                                    onClick: `DatasourcesPage._testDatasource(${conn.id})`
+                                                })}
+                                                ${this._renderActionMenuItem({
+                                                    label: '巡检配置',
+                                                    icon: 'settings',
+                                                    onClick: `DatasourcesPage._showInspectionConfig(${conn.id})`
+                                                })}
+                                                ${this._renderActionMenuItem({
+                                                    label: '打开监控',
+                                                    icon: 'activity',
+                                                    onClick: `DatasourcesPage._monitorDatasource(${conn.id})`
+                                                })}
                                                 ${silenceMenuItems}
-                                                <div style="border-top:1px solid var(--border-color);margin:4px 0;"></div>
-                                                <div class="ds-more-menu-item" onclick="DatasourcesPage._deleteDatasource(${conn.id})" style="display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;font-size:13px;color:#ef4444;white-space:nowrap;">
-                                                    <i data-lucide="trash-2" style="width:14px;height:14px;"></i> 删除
-                                                </div>
+                                                ${this._renderActionMenuItem({
+                                                    label: '删除数据源',
+                                                    icon: 'trash-2',
+                                                    onClick: `DatasourcesPage._deleteDatasource(${conn.id})`,
+                                                    danger: true,
+                                                    dividerBefore: true
+                                                })}
                                             </div>
                                         </div>
-                                    </div>
-                                </td>
-                            </tr>
-                        `;
-                    }).join('')}
-                </tbody>
-            </table>
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
         `;
         this._updateSortIcons();
         container.querySelectorAll('th.sortable').forEach(th => {
@@ -418,6 +474,7 @@ const DatasourcesPage = {
     _toggleMoreMenu(event, id) {
         event.stopPropagation();
         const menu = document.getElementById(`more-menu-${id}`);
+        if (!menu) return;
         const isOpen = menu.style.display !== 'none';
         // close all open menus first
         document.querySelectorAll('.ds-more-menu').forEach(m => m.style.display = 'none');
@@ -426,13 +483,25 @@ const DatasourcesPage = {
             const btn = event.currentTarget;
             const rect = btn.getBoundingClientRect();
             menu.style.position = 'fixed';
-            menu.style.top = (rect.bottom + 4) + 'px';
+            menu.style.top = '0px';
             menu.style.left = '';
             menu.style.right = '';
             menu.style.display = 'block';
-            // align right edge of menu to right edge of button
-            const menuWidth = 140;
-            menu.style.left = Math.max(0, rect.right - menuWidth) + 'px';
+            const menuWidth = menu.offsetWidth || 180;
+            const menuHeight = menu.offsetHeight || 260;
+            const viewportPadding = 8;
+            const preferredLeft = rect.right - menuWidth;
+            const preferredTop = rect.bottom + 4;
+            const fitsBelow = preferredTop + menuHeight <= window.innerHeight - viewportPadding;
+            const resolvedTop = fitsBelow
+                ? preferredTop
+                : Math.max(viewportPadding, rect.top - menuHeight - 4);
+            const resolvedLeft = Math.min(
+                window.innerWidth - menuWidth - viewportPadding,
+                Math.max(viewportPadding, preferredLeft)
+            );
+            menu.style.top = `${resolvedTop}px`;
+            menu.style.left = `${resolvedLeft}px`;
             DOM.createIcons();
             // close on next outside click
             const handler = () => {
@@ -591,22 +660,26 @@ const DatasourcesPage = {
         }
     },
 
-    async _triggerInspection(datasourceId) {
+    async _triggerInspection(datasourceId, triggerEvent = null) {
         if (!confirm('触发手动巡检? 这将生成一份全面的诊断报告')) {
             return;
         }
-        const btn = event.target.closest('button');
-        btn.innerHTML = '<div class="spinner"></div>';
-        btn.disabled = true;
+        const trigger = triggerEvent?.target?.closest('button');
+        if (trigger) {
+            trigger.innerHTML = '<div class="spinner"></div>';
+            trigger.disabled = true;
+        }
         try {
             await API.post(`/api/inspections/trigger/${datasourceId}`);
             Toast.success('巡检已成功触发!');
         } catch (err) {
             Toast.error('触发巡检失败: ' + err.message);
         } finally {
-            btn.innerHTML = '<i data-lucide="zap"></i>';
-            btn.disabled = false;
-            DOM.createIcons();
+            if (trigger) {
+                trigger.innerHTML = '<i data-lucide="more-horizontal"></i>';
+                trigger.disabled = false;
+                DOM.createIcons();
+            }
         }
     },
 
