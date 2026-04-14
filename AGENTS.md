@@ -8,7 +8,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ## 项目概述
 
-DBClaw 是一个 AI 驱动的数据库运维平台，为多种数据库类型（MySQL、PostgreSQL、Oracle、SQL Server、DM、MongoDB、Redis、TiDB、OceanBase、openGauss）提供智能诊断、主动监控、自动巡检和告警通知。
+DBClaw 是一个 AI 驱动的数据库运维平台，为多种数据库类型（MySQL、PostgreSQL、Oracle、SQL Server、TDSQL-C MySQL、openGauss）提供智能诊断、主动监控、自动巡检和告警通知。
 
 **架构**：FastAPI 后端 + 原生 JavaScript 前端（无构建步骤） + PostgreSQL 元数据存储
 
@@ -41,8 +41,11 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 **环境变量**（`.env` 文件，参考 `.env.example`）：
 - `ENCRYPTION_KEY`：Fernet 加密密钥（必需）
 - `DATABASE_URL`：PostgreSQL 连接串（默认 `postgresql+asyncpg://dbclaw:dbclaw@localhost:5432/dbclaw`）
-- `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`：AI 配置
 - `BOCHA_API_KEY`：博查 AI 网络搜索（可选）
+
+**AI 模型配置**：
+- 不再通过 `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL` 环境变量配置
+- 统一由前端“AI 大模型管理”模块维护
 
 ## 架构概述
 

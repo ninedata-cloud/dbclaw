@@ -1,68 +1,98 @@
-# DBClaw
+# 数据库智能卫士 DBClaw
 
-![License](https://img.shields.io/badge/license-MIT-yellow.svg) ![Python](https://img.shields.io/badge/python-3.10%2B-green.svg)
+![License](https://img.shields.io/badge/license-MIT-yellow.svg)
+![Python](https://img.shields.io/badge/python-3.10%2B-green.svg)
+![FastAPI](https://img.shields.io/badge/backend-FastAPI-009688.svg)
+![Frontend](https://img.shields.io/badge/frontend-Vanilla%20JS-ffb300.svg)
 
-## 简介 / Overview
+数据库智能卫士（英文名：DBClaw）是一款面向企业数据库运维场景的 AI 驱动平台，提供数据库监控、告警管理、自动巡检、智能诊断、知识增强和外部集成能力，帮助 DBA、SRE 和运维团队提升日常运维效率与故障定位速度。
 
-DBClaw 是一个 AI 驱动的数据库运维平台，面向多种主流数据库提供智能诊断、主动监控、自动巡检和告警通知能力。它采用 FastAPI + 原生 JavaScript 架构，无需前端构建步骤，开箱即可运行。平台内置技能系统与意图感知 AI Agent，可根据用户问题自动选择合适的诊断能力和响应方式。除了数据库本身，DBClaw 还支持通过 SSH 采集主机级指标，帮助运维人员统一查看数据库与主机健康状态。
+## 产品定位
 
-DBClaw is an AI-powered database operations platform designed for intelligent diagnostics, proactive monitoring, automated inspections, and alert notifications across multiple database engines. It uses a FastAPI backend with a vanilla JavaScript frontend, so there is no frontend build step required. The platform includes a built-in skills system and an intent-aware AI agent that can adapt its responses based on user intent. In addition to database monitoring, DBClaw can collect host-level metrics over SSH, giving operators a unified view of database and infrastructure health.
+数据库智能卫士聚焦“数据库智能监控诊断”场景，目标不是替代现有监控体系，而是在统一的数据源管理、指标采集、告警处理和 AI 对话能力之上，补齐诊断分析、知识沉淀和自动化巡检能力。
 
-## ✨ 核心特性 / Features
+适用场景包括：
 
-- **智能诊断 / Intelligent Diagnostics**：通过 YAML 技能系统扩展数据库诊断能力，支持 AI 自动调用。
-- **主动监控 / Proactive Monitoring**：持续采集数据库与主机指标，识别健康状态与异常趋势。
-- **自动巡检 / Automated Inspections**：按计划执行巡检任务，支持阈值规则和去重窗口。
-- **告警通知 / Alerting & Notifications**：支持活跃告警、自动恢复、Webhook 与钉钉等通知渠道。
-- **多数据库支持 / Multi-Database Support**：支持 MySQL、PostgreSQL、Oracle、SQL Server、MongoDB、Redis、TiDB、OceanBase、openGauss 等。
-- **无构建前端 / No-Build Frontend**：原生 JavaScript SPA，部署简单，便于定制和排障。
+- 多数据库并存的企业环境
+- 需要统一纳管数据库与主机状态的运维团队
+- 希望引入 AI 辅助诊断和自动巡检的 DBA / SRE 团队
+- 需要私有化部署、可扩展技能和可对接外部系统的平台团队
 
-## 🖥 架构 / Architecture
+## 核心能力
+
+- 数据源统一管理：统一接入和管理多种数据库实例，支持连接测试、标签分类和主机关联
+- 主动监控：持续采集数据库指标与主机指标，支持实例详情与实时监控展示
+- 告警中心：支持阈值告警、事件追踪、自动恢复、通知分发和历史回溯
+- 自动巡检：支持定时巡检、规则检查、AI 辅助分析和结构化巡检报告
+- AI 智能诊断：基于意图识别、上下文构建和技能选择，提供对话式诊断能力
+- 技能系统：通过 YAML 定义诊断技能，支持持续扩展数据库运维能力
+- 知识增强：支持文档知识接入，为 AI 对话和诊断提供上下文补充
+- 外部集成：支持集成模板、入站指标采集、Webhook、邮件以及 IM 机器人能力
+
+## 支持的数据库类型
+
+当前产品支持的数据库类型包括：
+
+- MySQL
+- PostgreSQL
+- Oracle
+- SQL Server
+- TDSQL-C MySQL
+- openGauss
+
+## 系统架构
+
+项目采用以下技术架构：
+
+- 后端：FastAPI
+- 前端：原生 JavaScript SPA，无构建步骤
+- 元数据库：PostgreSQL
+- 指标采集：数据库指标采集 + SSH 主机指标采集
+- AI 能力：OpenAI 兼容模型接口 + 意图识别 + 技能系统
+
+核心运行链路：
 
 ```text
-Browser SPA (Vanilla JS)
-        |
-        v
-FastAPI Backend
-  ├─ Routers / REST APIs
-  ├─ Intent-aware AI Agent
-  ├─ Skills Registry / Executor
-  ├─ Inspection Service
-  ├─ Alert Service / Notification Dispatcher
-  ├─ Metric Collector / Host Collector
-  └─ Integration Scheduler
-        |
-        +--> PostgreSQL (metadata)
-        +--> PostgreSQL-backed document knowledge
-        +--> Target Databases / Hosts
+run.py
+  -> backend/app.py
+  -> FastAPI 应用生命周期初始化
+     -> 数据库初始化与迁移
+     -> 默认系统参数写入
+     -> 指标采集器启动
+     -> 巡检服务启动
+     -> 主机采集器启动
+     -> 通知分发器启动
+     -> 集成模板加载与集成调度启动
 ```
 
-> 架构截图与界面预览可后续补充到 `docs/`。
->
-> Architecture screenshots and UI previews can be added later under `docs/`.
+## 目录结构
 
-## 🚀 部署安装 / Production Deployment
+```text
+backend/    FastAPI 后端、业务逻辑、路由、服务、技能系统
+frontend/   原生 JavaScript 前端页面与组件
+docs/       产品与功能文档
+docker/     Docker 启动脚本与 supervisor 配置
+tests/      功能测试脚本
+run.py      本地开发启动入口
+```
 
-### 环境要求 / Requirements
+## 快速开始
+
+### 环境要求
 
 - Python 3.10+
-- PostgreSQL 13+
-- Linux/macOS 服务器
-- 可选：OpenAI 兼容模型服务、博查搜索 API
-- 可选：目标数据库访问权限、SSH 主机访问权限
+- PostgreSQL
+- Linux / macOS 开发环境
+- 可选：可访问的 AI 模型服务，模型连接信息在“AI 大模型管理”中配置
 
-### 1. 获取代码 / Get the Code
+### 1. 获取代码
 
 ```bash
-git clone <your-repository-url>
+git clone <your-repo-url> dbclaw
 cd dbclaw
 ```
 
-### 2. 安装 Python 依赖 / Install Python Dependencies
-
-建议先创建虚拟环境：
-
-It is recommended to create a virtual environment first:
+### 2. 安装依赖
 
 ```bash
 python -m venv .venv
@@ -71,105 +101,47 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-> `requirements.txt` 已按生产部署场景整理。若你暂时不接入某些数据库，可保留未使用驱动；仅 `pyodbc`、`oracledb`、`dmPython` 等驱动可能需要额外系统库或厂商客户端。
->
-> `requirements.txt` is organized for production deployment. You can keep unused drivers installed, but drivers such as `pyodbc`, `oracledb`, and `dmPython` may require extra system libraries or vendor clients.
-
-### 3. 配置环境变量 / Configure Environment
-
-复制 `.env.example` 为 `.env`：
-
-Copy `.env.example` to `.env`:
+### 3. 配置环境变量
 
 ```bash
 cp .env.example .env
 ```
 
-本地源码部署至少需要修改以下配置：
-
-At minimum, update the following values:
+最少需要关注以下配置：
 
 ```env
-DEBUG=false
+APP_NAME=DBClaw
 APP_HOST=0.0.0.0
 APP_PORT=9939
-ENCRYPTION_KEY=<generate-a-random-fernet-key>
-DATABASE_URL=postgresql+asyncpg://dbclaw:<strong-password>@<db-host>:5432/dbclaw
+ENCRYPTION_KEY=<fernet-key>
+DATABASE_URL=postgresql+asyncpg://dbclaw:<password>@localhost:5432/dbclaw
 PUBLIC_SHARE_SECRET_KEY=<random-secret>
-INITIAL_ADMIN_PASSWORD=<strong-admin-password>
-OPENAI_API_KEY=<your-api-key>
-OPENAI_BASE_URL=<your-openai-compatible-base-url>
-OPENAI_MODEL=<your-model-name>
+INITIAL_ADMIN_PASSWORD=<admin-password>
 ```
 
-生成 Fernet 密钥：
-
-Generate a Fernet key:
+生成 `ENCRYPTION_KEY`：
 
 ```bash
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
-### 4. 准备 PostgreSQL / Prepare PostgreSQL
-
-先创建数据库和账号，并确保 `DATABASE_URL` 对应的用户具备建表权限。
-
-Create the database and user first, and make sure the user in `DATABASE_URL` has permission to create tables.
-
-示例：
-
-Example:
-
-```sql
-CREATE DATABASE dbclaw;
-CREATE USER dbclaw WITH PASSWORD '<strong-password>';
-GRANT ALL PRIVILEGES ON DATABASE dbclaw TO dbclaw;
-```
-
-### 5. 启动服务 / Start the Service
+### 4. 启动服务
 
 ```bash
 python run.py
 ```
 
-如果基础服务未准备好，启动前会先执行一轮中文自检，优先检查：
+默认访问地址：
 
-If the base services are not ready, DBClaw now performs a startup self-check before booting and prints actionable diagnostics for:
+- Web 控制台：`http://127.0.0.1:9939`
+- 默认管理员账号：`admin`
+- 默认管理员密码：`admin1234`，可通过 `INITIAL_ADMIN_PASSWORD` 覆盖
 
-- 元数据库连接 / metadata database connectivity
-- `ENCRYPTION_KEY` 与 `PUBLIC_SHARE_SECRET_KEY`
-- 运行时目录可写性 / runtime directory writability
-- 应用监听端口占用 / application port conflicts
+首次登录后，请先进入“AI 大模型管理”页面添加至少一个可用模型，否则 AI 对话、AI 诊断等能力无法使用。
 
-首次启动会自动完成：
+## Docker 单容器部署
 
-On first startup, DBClaw will automatically:
-
-- 初始化元数据库表结构 / initialize metadata tables
-- 执行内置迁移脚本 / run built-in migrations
-- 创建默认管理员账号 / create the default admin account
-- 启动指标采集、巡检、通知等后台任务 / start collectors, inspections, and notification workers
-
-### 6. 访问系统 / Access the UI
-
-- 地址 / URL: `http://<server-ip>:9939`
-- 用户名 / Username: `admin`
-- 密码 / Password: `INITIAL_ADMIN_PASSWORD` 对应的值
-
-健康检查接口：
-
-Health endpoints:
-
-- `GET /health`：进程存活检查 / liveness
-- `GET /health/live`：进程存活检查 / liveness
-- `GET /health/ready`：关键依赖就绪检查 / readiness
-- `GET /health/checks`：启动自检结果与当前检查详情 / startup and current self-check details
-
-### Docker 单容器部署 / Single-Container Docker
-
-内置 PostgreSQL 元数据库，首次启动不再强制要求你手工准备 `ENCRYPTION_KEY`、`PUBLIC_SHARE_SECRET_KEY`、`POSTGRES_PASSWORD`。容器会自动生成这些值并持久化到 `/app/data/bootstrap/runtime.env`。
-
-The single-container image bundles PostgreSQL for metadata storage. On first startup, the container automatically generates and persists `ENCRYPTION_KEY`, `PUBLIC_SHARE_SECRET_KEY`, and `POSTGRES_PASSWORD` under `/app/data/bootstrap/runtime.env`.
+项目提供单容器部署方式，镜像内置 PostgreSQL、FastAPI 和静态前端。首次启动时，如果未显式提供运行所需密钥和数据库参数，容器会自动生成并写入 `/app/data/bootstrap/runtime.env`。
 
 ```bash
 docker build -t dbclaw:latest .
@@ -183,59 +155,36 @@ docker run -d \
   dbclaw:latest
 ```
 
-首次登录信息：
+## 关键配置说明
 
-First-login credentials:
-
-- 用户名 / Username: `admin`
-- 密码 / Password: `admin1234`
-
-建议首次登录后立即修改管理员密码。
-
-Change the admin password immediately after the first login.
-
-### 生产环境建议 / Production Notes
-
-- 将 `DEBUG` 设置为 `false`
-- 如需自定义或纳管密钥，可显式传入 `ENCRYPTION_KEY`、`PUBLIC_SHARE_SECRET_KEY`、`POSTGRES_PASSWORD`
-- 建议显式覆盖 `INITIAL_ADMIN_PASSWORD`，或在首次登录后立即修改默认密码 `admin1234`
-- 通过 systemd、supervisor 或容器编排守护 `python run.py`
-- 确保 PostgreSQL、目标数据库、SSH 网络访问策略已放通
-- 若需通过 HTTPS 对外提供，建议在 Nginx / Caddy 后挂载运行
-
-## ⚙️ 配置 / Configuration
-
-| 变量 / Variable | 说明 / Description |
+| 配置项 | 说明 |
 | --- | --- |
-| `ENCRYPTION_KEY` | Docker 单容器下可自动生成并持久化；本地源码部署建议显式设置 / Auto-generated in single-container Docker; set explicitly for local source deployment |
-| `DATABASE_URL` | PostgreSQL 元数据库连接串 / PostgreSQL metadata database URL |
-| `PUBLIC_SHARE_SECRET_KEY` | Docker 单容器下可自动生成并持久化 / Auto-generated and persisted in single-container Docker |
-| `INITIAL_ADMIN_PASSWORD` | 默认 `admin1234`，可通过环境变量覆盖 / Defaults to `admin1234`, can be overridden |
-| `POSTGRES_PASSWORD` | Docker 单容器下可自动生成并持久化 / Auto-generated and persisted in single-container Docker |
-| `OPENAI_API_KEY` | AI 模型服务密钥 / API key for AI model service |
-| `OPENAI_BASE_URL` | AI 服务基础地址 / Base URL for AI service |
-| `OPENAI_MODEL` | 默认模型名称 / Default model name |
-| `BOCHA_API_KEY` | 博查 AI 网络搜索密钥（可选）/ Optional Bocha web search API key |
-| `METRIC_INTERVAL` | 指标采集间隔（秒）/ Metric collection interval in seconds |
-| `INSPECTION_DEDUP_WINDOW_MINUTES` | 巡检去重窗口（分钟）/ Inspection deduplication window |
-| `ALERT_AGGREGATION_TIME_WINDOW_MINUTES` | 告警聚合窗口（分钟）/ Alert aggregation window |
+| `ENCRYPTION_KEY` | 数据库密码等敏感信息的加密密钥 |
+| `DATABASE_URL` | PostgreSQL 元数据库连接串 |
+| `PUBLIC_SHARE_SECRET_KEY` | 对外分享能力使用的签名密钥 |
+| `INITIAL_ADMIN_PASSWORD` | 初始管理员密码 |
 
-## 📚 文档 / Documentation
+## 监控采集周期
 
-- `AGENTS.md`：仓库协作说明与架构概览
-- `docs/PRODUCT_INTRODUCTION.md`：产品介绍文档
-- `docs/INTEGRATION_QUICKSTART.md`：集成系统快速上手
-- `docs/DATASOURCE_SELECTOR_GUIDE.md`：数据源选择器说明
-- `docs/SYSTEM_MANAGEMENT_SKILLS.md`：系统管理技能说明
-- `docs/BOCHA_WEB_SEARCH_SKILL.md`：博查搜索技能说明
-- `docs/archive/`：历史修复记录、设计稿与手工验证资料归档
+- 首次启动时，会使用环境变量 `METRIC_INTERVAL` 作为初始值
+- 系统运行后，通过系统参数 `monitoring_collection_interval_seconds` 统一维护
 
-## 📄 许可证 / License
+## 健康检查与系统信息接口
 
-本项目采用 **MIT License**。你可以在保留版权声明和许可声明的前提下，自由使用、复制、修改、合并、发布、分发、再许可及销售本项目。
+- `GET /health`：基础存活检查
+- `GET /health/live`：进程存活检查
+- `GET /health/ready`：依赖就绪检查
+- `GET /health/checks`：启动自检和当前检查结果，需要管理员权限
+- `GET /api/app/info`：应用名称、版本号、构建信息
 
-This project is licensed under the **MIT License**. You may use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of this software, provided that the copyright notice and permission notice are included.
 
-项目仓库地址占位：`https://github.com/your-org/dbclaw`
+## 开发命令
 
-Repository placeholder: `https://github.com/your-org/dbclaw`
+```bash
+pip install -r requirements.txt
+python run.py
+```
+
+## License
+
+[MIT](LICENSE)

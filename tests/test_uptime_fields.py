@@ -4,12 +4,7 @@ from backend.services.mysql_service import MySQLConnector
 from backend.services.postgres_service import PostgreSQLConnector
 from backend.services.oracle_service import OracleConnector
 from backend.services.sqlserver_service import SQLServerConnector
-from backend.services.mongo_service import MongoDBConnector
-from backend.services.redis_service import RedisConnector
-from backend.services.dm_service import DMConnector
 from backend.services.opengauss_service import OpenGaussConnector
-from backend.services.tidb_service import TiDBConnector
-from backend.services.oceanbase_service import OceanBaseConnector
 
 
 async def test_service_uptime_fields():
@@ -20,12 +15,7 @@ async def test_service_uptime_fields():
         'PostgreSQL': PostgreSQLConnector,
         'Oracle': OracleConnector,
         'SQL Server': SQLServerConnector,
-        'MongoDB': MongoDBConnector,
-        'Redis': RedisConnector,
-        'DM': DMConnector,
         'openGauss': OpenGaussConnector,
-        'TiDB': TiDBConnector,
-        'OceanBase': OceanBaseConnector,
     }
     
     print("Checking uptime field support in database services:\n")

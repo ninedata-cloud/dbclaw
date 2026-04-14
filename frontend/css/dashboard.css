@@ -297,11 +297,6 @@
 .type-postgresql { background: rgba(51,103,145,0.2);  color: #7bbfed; }
 .type-oracle     { background: rgba(0,129,194,0.15);  color: #4db8ff; }
 .type-sqlserver  { background: rgba(0,129,194,0.15);  color: #4db8ff; }
-.type-mongodb    { background: rgba(71,162,72,0.15);  color: #6bc96c; }
-.type-redis      { background: rgba(220,53,34,0.15);  color: #ff7055; }
-.type-tidb       { background: rgba(232,72,26,0.15);  color: #ff8060; }
-.type-dm         { background: rgba(0,100,200,0.15);  color: #5599dd; }
-.type-oceanbase  { background: rgba(0,180,120,0.15);  color: #33cc88; }
 .type-opengauss  { background: rgba(100,60,200,0.15); color: #9977ee; }
 
 /* DB dot colors for distribution */
@@ -309,8 +304,6 @@
 .db-dot-postgresql { background: #7bbfed; }
 .db-dot-oracle     { background: #f08060; }
 .db-dot-sqlserver  { background: #ff6b6b; }
-.db-dot-mongodb    { background: #6bc96c; }
-.db-dot-redis      { background: #ff7055; }
 .db-dot-other      { background: rgba(255,255,255,0.3); }
 
 /* Filters */

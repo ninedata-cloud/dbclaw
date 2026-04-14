@@ -21,10 +21,6 @@ class Settings(BaseSettings):
     encryption_key: str = "temporary-encryption-key"
     initial_admin_password: str = "admin1234"
 
-    openai_api_key: str = ""
-    openai_base_url: str = "https://api.openai.com/v1"
-    openai_model: str = ""
-
     database_url: str = "postgresql+asyncpg://dbclaw:dbclaw@localhost:5432/dbclaw"
 
     metric_interval: int = 60
@@ -53,6 +49,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        extra = "ignore"
 
 
 @lru_cache

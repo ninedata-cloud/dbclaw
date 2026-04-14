@@ -61,16 +61,10 @@ const DatasourcesPage = {
         const labels = {
             mysql: 'MySQL',
             postgresql: 'PostgreSQL',
-            mongodb: 'MongoDB',
-            redis: 'Redis',
             sqlserver: 'SQL Server',
             oracle: 'Oracle',
-            tidb: 'TiDB',
             'tdsql-c-mysql': 'TDSQL-C MySQL',
-            oceanbase: 'OceanBase',
-            oceanbase_mysql: 'OceanBase MySQL',
             opengauss: 'openGauss',
-            dm: 'DM',
         };
         return labels[dbType] || dbType || '-';
     },
@@ -160,10 +154,8 @@ const DatasourcesPage = {
                 <option value="postgresql">PostgreSQL</option>
                 <option value="oracle">Oracle</option>
                 <option value="sqlserver">SQL Server</option>
-                <option value="dm">DM</option>
                 <option value="tdsql-c-mysql">TDSQL-C MySQL</option>
-                <option value="mongodb">MongoDB</option>
-                <option value="redis">Redis</option>
+                <option value="opengauss">openGauss</option>
             </select>
         `;
 

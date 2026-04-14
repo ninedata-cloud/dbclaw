@@ -43,14 +43,8 @@ const DatasourceForm = {
                         <option value="postgresql" ${datasource?.db_type === 'postgresql' ? 'selected' : ''}>PostgreSQL</option>
                         <option value="oracle" ${datasource?.db_type === 'oracle' ? 'selected' : ''}>Oracle</option>
                         <option value="sqlserver" ${datasource?.db_type === 'sqlserver' ? 'selected' : ''}>SQL Server</option>
-                        <option value="tidb" ${datasource?.db_type === 'tidb' ? 'selected' : ''}>TiDB</option>
                         <option value="tdsql-c-mysql" ${datasource?.db_type === 'tdsql-c-mysql' ? 'selected' : ''}>TDSQL-C MySQL</option>
-                        <option value="dm" ${datasource?.db_type === 'dm' ? 'selected' : ''}>DM (达梦)</option>
-                        <option value="oceanbase" ${datasource?.db_type === 'oceanbase' ? 'selected' : ''}>OceanBase</option>
-                        <option value="oceanbase_mysql" ${datasource?.db_type === 'oceanbase_mysql' ? 'selected' : ''}>OceanBase MySQL</option>
                         <option value="opengauss" ${datasource?.db_type === 'opengauss' ? 'selected' : ''}>openGauss</option>
-                        <option value="mongodb" ${datasource?.db_type === 'mongodb' ? 'selected' : ''}>MongoDB</option>
-                        <option value="redis" ${datasource?.db_type === 'redis' ? 'selected' : ''}>Redis</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -459,14 +453,8 @@ const DatasourceForm = {
             postgresql: 5432,
             oracle: 1521,
             sqlserver: 1433,
-            tidb: 4000,
             'tdsql-c-mysql': 3306,
-            dm: 5236,
-            oceanbase: 2881,
-            oceanbase_mysql: 2881,
-            opengauss: 5432,
-            mongodb: 27017,
-            redis: 6379
+            opengauss: 5432
         };
         return ports[dbType] || 3306;
     },

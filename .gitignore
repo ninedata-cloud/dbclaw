@@ -38,9 +38,20 @@ logs/
 # Runtime data
 data/*
 !data/.gitkeep
+uploads/
 
 # Node (if any)
 node_modules/
 
 # Claude worktrees
 .worktrees/
+.claude/
+.playwright-mcp
+.superpowers/
+
+.VSCodeCounter/
+
+
+.cursor/
+
+.pytest_cache/

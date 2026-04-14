@@ -74,27 +74,6 @@ DB_TOOL_FAMILY_MAP: dict[str, dict[str, Set[str]]] = {
         "categories": {"opengauss"},
         "tags": {"opengauss"},
     },
-    "tidb": {
-        "prefixes": {"tidb_"},
-        "categories": {"tidb"},
-        "tags": {"tidb"},
-    },
-    "dm": {
-        "prefixes": {"dm_"},
-        "categories": {"dm"},
-        "tags": {"dm"},
-    },
-    # OceanBase uses a shared tool family for both oceanbase/oceanbase_mysql.
-    "oceanbase": {
-        "prefixes": {"oceanbase_"},
-        "categories": {"oceanbase"},
-        "tags": {"oceanbase"},
-    },
-    "oceanbase_mysql": {
-        "prefixes": {"oceanbase_"},
-        "categories": {"oceanbase"},
-        "tags": {"oceanbase", "oceanbase_mysql"},
-    },
 }
 
 

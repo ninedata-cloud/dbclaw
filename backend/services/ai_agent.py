@@ -8,8 +8,6 @@ import anthropic
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
 
-from backend.config import get_settings
-
 logger = logging.getLogger(__name__)
 THINK_START_TAG = "<think>"
 THINK_END_TAG = "</think>"
@@ -83,11 +81,6 @@ def get_ai_client(
     model_name: Optional[str] = None,
     protocol: str = OPENAI_PROTOCOL,
 ) -> Optional[AIClient]:
-    settings = get_settings()
-
-    api_key = api_key or settings.openai_api_key
-    base_url = base_url or settings.openai_base_url
-    model_name = model_name or settings.openai_model
     protocol = protocol or OPENAI_PROTOCOL
 
     if not api_key or api_key.startswith("sk-your"):
@@ -101,6 +94,9 @@ def get_ai_client(
             model_name=model_name or DEFAULT_MODEL,
             base_url=base_url,
         )
+
+    if not model_name:
+        return None
 
     client = AsyncOpenAI(api_key=api_key, base_url=base_url)
     return AIClient(

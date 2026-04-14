@@ -179,7 +179,7 @@ class ConnectionDiagnosticService:
             )
 
     def _validate_config(self, db_type: Optional[str], host: Optional[str], port: Optional[int]) -> Optional[str]:
-        supported = {"mysql", "postgresql", "mongodb", "redis", "sqlserver", "oracle", "tidb", "tdsql-c-mysql", "oceanbase", "oceanbase_mysql", "opengauss", "dm"}
+        supported = {"mysql", "postgresql", "sqlserver", "oracle", "tdsql-c-mysql", "opengauss"}
         if not db_type or db_type not in supported:
             return f"不支持的数据库类型: {db_type}"
         if not host or not str(host).strip():

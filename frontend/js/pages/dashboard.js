@@ -35,7 +35,7 @@ const DashboardPage = {
     },
 
     _dbDotClass(type) {
-        const known = ['mysql','postgresql','oracle','sqlserver','mongodb','redis'];
+        const known = ['mysql', 'postgresql', 'oracle', 'sqlserver'];
         return known.includes(type) ? `db-dot-${type}` : 'db-dot-other';
     },
 

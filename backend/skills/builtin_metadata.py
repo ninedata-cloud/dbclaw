@@ -14,10 +14,7 @@ BUILTIN_SKILL_CATEGORY_ORDER: list[str] = [
     "PostgreSQL",
     "SQL Server",
     "Oracle",
-    "TiDB",
-    "OceanBase",
     "openGauss",
-    "DM",
     "平台运维",
     "知识检索",
     "高危操作",
@@ -92,10 +89,7 @@ DB_CATEGORY_BY_PREFIX: list[tuple[str, str]] = [
     ("pg_", "PostgreSQL"),
     ("mssql_", "SQL Server"),
     ("oracle_", "Oracle"),
-    ("tidb_", "TiDB"),
-    ("oceanbase_", "OceanBase"),
     ("opengauss_", "openGauss"),
-    ("dm_", "DM"),
 ]
 
 BUILTIN_PERMISSION_OVERRIDES: dict[str, list[str]] = {

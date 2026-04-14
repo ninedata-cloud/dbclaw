@@ -47,9 +47,6 @@ def test_database_builtin_skills_keep_db_type_tags_after_regrouping():
         "pg_": {"postgresql"},
         "mssql_": {"sqlserver", "mssql"},
         "oracle_": {"oracle"},
-        "dm_": {"dm"},
-        "tidb_": {"tidb"},
-        "oceanbase_": {"oceanbase"},
         "opengauss_": {"opengauss"},
     }
 
@@ -73,10 +70,7 @@ def test_curated_category_examples_match_expected_groups():
         "pg_get_slow_queries": "PostgreSQL",
         "mssql_get_db_status": "SQL Server",
         "oracle_get_db_status": "Oracle",
-        "tidb_get_db_status": "TiDB",
-        "oceanbase_get_db_status": "OceanBase",
         "opengauss_get_db_status": "openGauss",
-        "dm_get_db_status": "DM",
         "diagnose_high_cpu": "平台运维",
         "query_monitoring_data": "平台运维",
         "query_monitoring_history": "平台运维",

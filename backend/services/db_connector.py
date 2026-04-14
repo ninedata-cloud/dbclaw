@@ -106,15 +106,9 @@ def get_connector(db_type: str, host: str, port: int, username: str = None,
         "mysql": "backend.services.mysql_service.MySQLConnector",
         "tdsql-c-mysql": "backend.services.mysql_service.MySQLConnector",
         "postgresql": "backend.services.postgres_service.PostgreSQLConnector",
-        "mongodb": "backend.services.mongo_service.MongoDBConnector",
-        "redis": "backend.services.redis_service.RedisConnector",
         "sqlserver": "backend.services.sqlserver_service.SQLServerConnector",
         "oracle": "backend.services.oracle_service.OracleConnector",
-        "tidb": "backend.services.tidb_service.TiDBConnector",
-        "oceanbase": "backend.services.oceanbase_service.OceanBaseConnector",
-        "oceanbase_mysql": "backend.services.oceanbase_mysql_service.OceanBaseMySQLConnector",
         "opengauss": "backend.services.opengauss_service.OpenGaussConnector",
-        "dm": "backend.services.dm_service.DMConnector",
     }
 
     if db_type not in connectors:

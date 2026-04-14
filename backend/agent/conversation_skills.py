@@ -442,9 +442,6 @@ async def run_conversation_with_skills(
                 protocol=getattr(model, "protocol", "openai"),
             )
     if not client:
-        client = get_ai_client()
-
-    if not client:
         yield {"type": "error", "message": "AI model not configured. Please add an AI model in the AI Model Management page."}
         return
 
@@ -523,10 +520,6 @@ async def run_conversation_with_skills(
                 'sqlserver': 'mssql',
                 'oracle': 'oracle',
                 'opengauss': 'opengauss',
-                'tidb': 'tidb',
-                'dm': 'dm',
-                'oceanbase': 'oceanbase',
-                'oceanbase_mysql': 'oceanbase',
             }
             skill_prefix = skill_prefix_map.get(datasource.db_type, datasource.db_type)
 

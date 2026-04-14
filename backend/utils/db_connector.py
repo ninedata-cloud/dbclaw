@@ -7,14 +7,9 @@ import re
 from backend.models.datasource import Datasource
 from backend.services.mysql_service import MySQLConnector
 from backend.services.postgres_service import PostgreSQLConnector
-from backend.services.mongo_service import MongoDBConnector
-from backend.services.redis_service import RedisConnector
 from backend.services.sqlserver_service import SQLServerConnector
 from backend.services.oracle_service import OracleConnector
-from backend.services.tidb_service import TiDBConnector
-from backend.services.oceanbase_service import OceanBaseConnector
 from backend.services.opengauss_service import OpenGaussConnector
-from backend.services.dm_service import DMConnector
 from backend.utils.encryption import decrypt_value
 
 logger = logging.getLogger(__name__)
@@ -120,22 +115,6 @@ async def execute_query(datasource: Datasource, query: str, allow_write: bool = 
                 password=password,
                 database=datasource.database,
             )
-        elif datasource.db_type == "mongodb":
-            service = MongoDBConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-            )
-        elif datasource.db_type == "redis":
-            service = RedisConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-            )
         elif datasource.db_type == "sqlserver":
             service = SQLServerConnector(
                 host=datasource.host,
@@ -152,32 +131,8 @@ async def execute_query(datasource: Datasource, query: str, allow_write: bool = 
                 password=password,
                 database=datasource.database,
             )
-        elif datasource.db_type == "tidb":
-            service = TiDBConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-            )
-        elif datasource.db_type == "oceanbase":
-            service = OceanBaseConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-            )
         elif datasource.db_type == "opengauss":
             service = OpenGaussConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-            )
-        elif datasource.db_type == "dm":
-            service = DMConnector(
                 host=datasource.host,
                 port=datasource.port,
                 username=datasource.username,

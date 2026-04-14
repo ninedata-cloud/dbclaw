@@ -13,7 +13,7 @@ description: |
   - Network: netstat, ss, ip addr, ifconfig, ping, traceroute, nslookup, dig
   - Logs: cat, tail, head, grep, less, more (for reading log files)
   - File inspection: ls, find, stat, file, wc, md5sum
-  - Database processes: checking MySQL/PostgreSQL/Oracle/SQL Server/Redis/MongoDB processes and connections
+  - Database processes: checking MySQL/PostgreSQL/Oracle/SQL Server/openGauss processes and connections
   - Docker：ps,logs,stats,inspect,exec
   - Performance: iotop, iftop, dstat, perf
   - Output safe redirection: >, >>, | (pipe), tee

@@ -41,8 +41,6 @@
 
 .type-mysql { background: rgba(0,120,215,0.15); color: #4db8ff; }
 .type-postgresql { background: rgba(51,103,214,0.15); color: #6c9df7; }
-.type-mongodb { background: rgba(63,185,80,0.15); color: var(--accent-green); }
-.type-redis { background: rgba(248,81,73,0.15); color: var(--accent-red); }
 .type-sqlserver { background: rgba(163,113,247,0.15); color: var(--accent-purple); }
 
 .datasource-card-info {

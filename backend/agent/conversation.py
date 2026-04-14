@@ -49,10 +49,6 @@ async def run_conversation(
                 model_name=model.model_name,
                 protocol=getattr(model, "protocol", "openai"),
             )
-    # Last resort: env var
-    if not client:
-        client = get_ai_client()
-
     if not client:
         yield {"type": "error", "content": "AI model not configured. Please add an AI model in the AI Model Management page."}
         return

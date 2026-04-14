@@ -205,7 +205,7 @@ SET GLOBAL max_heap_table_size = 67108864;
 1. 启用 Performance Schema 持续监控高耗 CPU 的 SQL
 2. 引入读写分离，将分析类查询路由到从库
 3. 考虑分区表或归档历史数据减少扫描量
-4. 对热点业务引入 Redis 缓存层降低 MySQL 压力"""
+4. 对热点业务引入应用层缓存降低 MySQL 压力"""
     },
     {
         "category": '性能诊断',
@@ -414,7 +414,7 @@ SET GLOBAL slave_compressed_protocol = ON;
 
 ### 引入缓存层
 
-对高频但结果变化不大的查询，在应用层引入 Redis 缓存，减少直接访问 MySQL 的次数。
+对高频但结果变化不大的查询，在应用层引入缓存层，减少直接访问 MySQL 的次数。
 
 ### 数据库连接优化
 

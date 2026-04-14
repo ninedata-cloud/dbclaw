@@ -86,7 +86,7 @@ code: |
 
       # 6. Database data directory size (common paths)
       db_data_dirs = await context.execute_command(
-          "for d in /var/lib/mysql /var/lib/postgresql /var/lib/pgsql /opt/oracle /var/opt/mssql /home/dmdba /var/lib/mongodb /var/lib/redis /tidb /var/lib/oceanbase /var/lib/opengauss; do [ -d \"$d\" ] && du -sh \"$d\" 2>/dev/null; done",
+          "for d in /var/lib/mysql /var/lib/postgresql /var/lib/pgsql /opt/oracle /var/opt/mssql /var/lib/opengauss; do [ -d \"$d\" ] && du -sh \"$d\" 2>/dev/null; done",
           datasource_id
       )
       if db_data_dirs.get("success"):

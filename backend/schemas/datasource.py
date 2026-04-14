@@ -5,7 +5,7 @@ from datetime import datetime
 
 class DatasourceCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
-    db_type: str = Field(..., pattern="^(mysql|postgresql|mongodb|redis|sqlserver|oracle|tidb|tdsql-c-mysql|oceanbase|oceanbase_mysql|opengauss|dm)$")
+    db_type: str = Field(..., pattern="^(mysql|postgresql|sqlserver|oracle|tdsql-c-mysql|opengauss)$")
     host: str = Field(..., min_length=1)
     port: int = Field(..., gt=0, lt=65536)
     username: Optional[str] = None
@@ -89,7 +89,7 @@ class DatasourceResponse(BaseModel):
 
 class DatasourceTestRequest(BaseModel):
     datasource_id: Optional[int] = None  # If provided, use saved password when password is None
-    db_type: str = Field(..., pattern="^(mysql|postgresql|mongodb|redis|sqlserver|oracle|tidb|tdsql-c-mysql|oceanbase|oceanbase_mysql|opengauss|dm)$")
+    db_type: str = Field(..., pattern="^(mysql|postgresql|sqlserver|oracle|tdsql-c-mysql|opengauss)$")
     host: str = Field(..., min_length=1)
     port: int = Field(..., gt=0, lt=65536)
     username: Optional[str] = None

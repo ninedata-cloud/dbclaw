@@ -34,10 +34,6 @@ class MetricNormalizer:
             normalized.update(cls._normalize_postgresql(datasource_id, raw_metrics))
         elif db_type in {'mysql', 'tdsql-c-mysql'}:
             normalized.update(cls._normalize_mysql(datasource_id, raw_metrics))
-        elif db_type == 'oceanbase':
-            normalized.update(cls._normalize_oceanbase(datasource_id, raw_metrics))
-        elif db_type == 'oceanbase_mysql':
-            normalized.update(cls._normalize_oceanbase_mysql(datasource_id, raw_metrics))
         elif db_type == 'sqlserver':
             normalized.update(cls._normalize_sqlserver(datasource_id, raw_metrics))
         elif db_type == 'oracle':
@@ -165,36 +161,6 @@ class MetricNormalizer:
             )
             if lock_waits_sec is not None:
                 normalized['lock_waits_per_sec'] = lock_waits_sec
-
-        return normalized
-
-    @classmethod
-    def _normalize_oceanbase(cls, datasource_id: int, metrics: Dict[str, Any]) -> Dict[str, Any]:
-        """OceanBase 指标标准化（MySQL 兼容模式）"""
-        normalized = {}
-
-        cache_hit_rate = metrics.get('cache_hit_rate')
-        if cache_hit_rate is None:
-            cache_hit_rate = metrics.get('buffer_pool_hit_rate')
-        if cache_hit_rate is not None:
-            normalized['cache_hit_rate'] = cache_hit_rate
-            normalized['buffer_pool_hit_rate'] = cache_hit_rate
-
-        return normalized
-
-    @classmethod
-    def _normalize_oceanbase_mysql(cls, datasource_id: int, metrics: Dict[str, Any]) -> Dict[str, Any]:
-        """OceanBase MySQL 模式指标标准化（独立类型）"""
-        # 目前仅做最小字段统一：缓存命中率字段对齐。
-        # 其他指标（如 max_connections）由 connector 自身保证语义。
-        normalized = {}
-
-        cache_hit_rate = metrics.get('cache_hit_rate')
-        if cache_hit_rate is None:
-            cache_hit_rate = metrics.get('buffer_pool_hit_rate')
-        if cache_hit_rate is not None:
-            normalized['cache_hit_rate'] = cache_hit_rate
-            normalized['buffer_pool_hit_rate'] = cache_hit_rate
 
         return normalized
 

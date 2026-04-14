@@ -32,10 +32,6 @@ DB_PREFIX_MAP = {
     "sqlserver": "mssql",
     "oracle": "oracle",
     "opengauss": "opengauss",
-    "tidb": "tidb",
-    "oceanbase": "oceanbase",
-    "oceanbase_mysql": "oceanbase",
-    "dm": "dm",
 }
 
 READ_ONLY_VERIFY_SKILLS = {
@@ -45,10 +41,6 @@ READ_ONLY_VERIFY_SKILLS = {
     "sqlserver": "mssql_list_connections",
     "oracle": "oracle_list_sessions",
     "opengauss": "opengauss_list_connections",
-    "tidb": "tidb_list_connections",
-    "oceanbase": "oceanbase_list_connections",
-    "oceanbase_mysql": "oceanbase_list_connections",
-    "dm": "dm_list_sessions",
 }
 
 

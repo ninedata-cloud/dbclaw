@@ -7,10 +7,7 @@ from backend.services.opengauss_service import OpenGaussConnector
 from backend.services.oracle_service import OracleConnector
 from backend.services.postgres_service import PostgreSQLConnector
 from backend.services.mysql_service import MySQLConnector
-from backend.services.tidb_service import TiDBConnector
-from backend.services.oceanbase_service import OceanBaseConnector
 from backend.services.sqlserver_service import SQLServerConnector
-from backend.services.dm_service import DMConnector
 from backend.utils import db_connector
 from backend.routers import query as query_router
 
@@ -264,34 +261,26 @@ async def test_query_router_consumes_unified_contract_without_breaking_message_a
     datasource = _make_datasource()
 
     class WrappedConnector:
-        async def execute_query(self, sql: str, max_rows: int = 1000):
-            return await db_connector.execute_query(datasource, sql)
-
         async def close(self):
             return None
 
-    class FakePostgreSQLConnector:
-        def __init__(self, **kwargs):
-            pass
-
-        async def execute_query(self, sql: str):
-            return {
-                "columns": ["id", "payload"],
-                "rows": [[1, {"nested": True}]],
-                "row_count": 1,
-                "execution_time_ms": 8.2,
-                "message": "Query executed successfully (1 row, already truncated)",
-                "truncated": True,
-            }
-
-    async def fake_get_connector_for(datasource_id: int, db):
+    async def fake_get_connector_for(datasource_id: int, db, selected_database=None):
         return WrappedConnector(), datasource
+
+    async def fake_execute_postgresql_query_with_context(connector, sql: str, max_rows: int, schema=None):
+        return {
+            "columns": ["id", "payload"],
+            "rows": [[1, {"nested": True}]],
+            "row_count": 1,
+            "execution_time_ms": 8.2,
+            "message": "Query executed successfully (1 row, already truncated)",
+            "truncated": True,
+        }
 
     req = QueryExecuteRequest(datasource_id=1, sql="SELECT * FROM metrics", max_rows=10)
 
     with patch("backend.routers.query._get_connector_for", fake_get_connector_for), \
-         patch("backend.utils.db_connector.decrypt_value", return_value="secret"), \
-         patch("backend.utils.db_connector.PostgreSQLConnector", FakePostgreSQLConnector):
+         patch("backend.routers.query._execute_postgresql_query_with_context", fake_execute_postgresql_query_with_context):
         result = await query_router.execute_query(req, db=None, current_user=MagicMock(id=7))
 
     assert result.columns == ["id", "payload"]
@@ -304,7 +293,7 @@ async def test_query_router_consumes_unified_contract_without_breaking_message_a
 
 @pytest.mark.asyncio
 async def test_query_router_rejects_multi_statement_bypass_before_connector_execution():
-    async def fake_get_connector_for(datasource_id: int, db):
+    async def fake_get_connector_for(datasource_id: int, db, selected_database=None):
         raise AssertionError("connector should not be created for blocked multi-statement query")
 
     req = QueryExecuteRequest(datasource_id=1, sql="SELECT 1; DROP TABLE users", max_rows=10)
@@ -319,7 +308,7 @@ async def test_query_router_rejects_multi_statement_bypass_before_connector_exec
 
 @pytest.mark.asyncio
 async def test_query_router_explain_rejects_write_operation_before_connector_execution():
-    async def fake_get_connector_for(datasource_id: int, db):
+    async def fake_get_connector_for(datasource_id: int, db, selected_database=None):
         raise AssertionError("connector should not be created for blocked explain write query")
 
     req = QueryExplainRequest(datasource_id=1, sql="EXPLAIN ANALYZE UPDATE users SET active = true")
@@ -610,154 +599,6 @@ async def test_mysql_select_more_than_max_rows_is_truncated_to_visible_rows():
 
 
 @pytest.mark.asyncio
-async def test_tidb_update_returns_no_result_set_contract_with_message_and_truncated_false_and_commits():
-    connector = TiDBConnector(host="localhost", port=4000, username="tester", password="secret", database="dbclaw")
-    cursor = FakeAioMysqlCursor(description=None, rowcount=2)
-    conn = MagicMock()
-    conn.cursor.return_value = SyncCursorContext(cursor)
-    conn.commit = AsyncMock()
-    conn.close = MagicMock()
-
-    sql = "UPDATE users SET active = 1"
-    with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
-        result = await connector.execute_query(sql)
-
-    cursor.execute.assert_awaited_once_with(sql)
-    cursor.fetchmany.assert_not_called()
-    conn.commit.assert_awaited_once()
-    assert result["columns"] == []
-    assert result["rows"] == []
-    assert result["row_count"] == 2
-    assert result["truncated"] is False
-    assert result["message"] == "Query OK, 2 rows affected"
-    conn.close.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_tidb_select_exact_max_rows_is_not_truncated_without_extra_row():
-    connector = TiDBConnector(host="localhost", port=4000, username="tester", password="secret", database="dbclaw")
-    cursor = FakeAioMysqlCursor(
-        description=[("ID",), ("NAME",)],
-        fetch_rows=[(1, "alice"), (2, "bob")],
-        rowcount=2,
-    )
-    conn = MagicMock()
-    conn.cursor.return_value = SyncCursorContext(cursor)
-    conn.close = MagicMock()
-
-    sql = "SELECT id, name FROM users ORDER BY id"
-    with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
-        result = await connector.execute_query(sql, max_rows=2)
-
-    cursor.execute.assert_awaited_once_with(sql)
-    cursor.fetchmany.assert_awaited_once_with(3)
-    assert result["columns"] == ["ID", "NAME"]
-    assert result["rows"] == [[1, "alice"], [2, "bob"]]
-    assert result["row_count"] == 2
-    assert result["truncated"] is False
-    conn.close.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_tidb_select_more_than_max_rows_is_truncated_to_visible_rows():
-    connector = TiDBConnector(host="localhost", port=4000, username="tester", password="secret", database="dbclaw")
-    cursor = FakeAioMysqlCursor(
-        description=[("ID",)],
-        fetch_rows=[(1,), (2,), (3,)],
-        rowcount=3,
-    )
-    conn = MagicMock()
-    conn.cursor.return_value = SyncCursorContext(cursor)
-    conn.close = MagicMock()
-
-    sql = "SELECT id FROM users ORDER BY id"
-    with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
-        result = await connector.execute_query(sql, max_rows=2)
-
-    cursor.execute.assert_awaited_once_with(sql)
-    cursor.fetchmany.assert_awaited_once_with(3)
-    assert result["columns"] == ["ID"]
-    assert result["rows"] == [[1], [2]]
-    assert result["row_count"] == 2
-    assert result["truncated"] is True
-    conn.close.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_oceanbase_update_returns_no_result_set_contract_with_message_and_truncated_false_and_commits():
-    connector = OceanBaseConnector(host="localhost", port=2881, username="tester", password="secret", database="dbclaw")
-    cursor = FakeAioMysqlCursor(description=None, rowcount=4)
-    conn = MagicMock()
-    conn.cursor.return_value = SyncCursorContext(cursor)
-    conn.commit = AsyncMock()
-    conn.close = MagicMock()
-
-    sql = "DELETE FROM users WHERE inactive = 1"
-    with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
-        result = await connector.execute_query(sql)
-
-    cursor.execute.assert_awaited_once_with(sql)
-    cursor.fetchmany.assert_not_called()
-    conn.commit.assert_awaited_once()
-    assert result["columns"] == []
-    assert result["rows"] == []
-    assert result["row_count"] == 4
-    assert result["truncated"] is False
-    assert result["message"] == "Query OK, 4 rows affected"
-    conn.close.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_oceanbase_select_exact_max_rows_is_not_truncated_without_extra_row():
-    connector = OceanBaseConnector(host="localhost", port=2881, username="tester", password="secret", database="dbclaw")
-    cursor = FakeAioMysqlCursor(
-        description=[("ID",), ("NAME",)],
-        fetch_rows=[(1, "alice"), (2, "bob")],
-        rowcount=2,
-    )
-    conn = MagicMock()
-    conn.cursor.return_value = SyncCursorContext(cursor)
-    conn.close = MagicMock()
-
-    sql = "SELECT id, name FROM users ORDER BY id"
-    with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
-        result = await connector.execute_query(sql, max_rows=2)
-
-    cursor.execute.assert_awaited_once_with(sql)
-    cursor.fetchmany.assert_awaited_once_with(3)
-    assert result["columns"] == ["ID", "NAME"]
-    assert result["rows"] == [[1, "alice"], [2, "bob"]]
-    assert result["row_count"] == 2
-    assert result["truncated"] is False
-    conn.close.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_oceanbase_select_more_than_max_rows_is_truncated_to_visible_rows():
-    connector = OceanBaseConnector(host="localhost", port=2881, username="tester", password="secret", database="dbclaw")
-    cursor = FakeAioMysqlCursor(
-        description=[("ID",)],
-        fetch_rows=[(1,), (2,), (3,)],
-        rowcount=3,
-    )
-    conn = MagicMock()
-    conn.cursor.return_value = SyncCursorContext(cursor)
-    conn.close = MagicMock()
-
-    sql = "SELECT id FROM users ORDER BY id"
-    with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
-        result = await connector.execute_query(sql, max_rows=2)
-
-    cursor.execute.assert_awaited_once_with(sql)
-    cursor.fetchmany.assert_awaited_once_with(3)
-    assert result["columns"] == ["ID"]
-    assert result["rows"] == [[1], [2]]
-    assert result["row_count"] == 2
-    assert result["truncated"] is True
-    conn.close.assert_called_once()
-
-
-@pytest.mark.asyncio
 async def test_sqlserver_update_returns_unified_no_result_set_contract():
     connector = SQLServerConnector(host="localhost", port=1433, username="tester", password="secret", database="dbclaw")
     cursor = FakeSyncCursor(description=None, rowcount=5)
@@ -834,81 +675,6 @@ async def test_sqlserver_select_more_than_max_rows_is_truncated_to_visible_rows(
     assert result["row_count"] == 2
     assert result["truncated"] is True
     assert isinstance(result["execution_time_ms"], float)
-    conn.close.assert_called_once_with()
-
-
-@pytest.mark.asyncio
-async def test_dm_plsql_returns_unified_no_result_set_contract_when_rowcount_unreliable_and_commits():
-    connector = DMConnector(host="localhost", port=5236, username="tester", password="secret", database="dbclaw")
-    cursor = FakeSyncCursor(description=None, rowcount=-1)
-    conn = MagicMock()
-    conn.cursor.return_value = cursor
-    conn.commit = MagicMock()
-    conn.close = MagicMock()
-
-    sql = "BEGIN NULL; END;"
-    with patch.object(connector, "_connect", MagicMock(return_value=conn)):
-        result = await connector.execute_query(sql)
-
-    cursor.execute.assert_called_once_with(sql)
-    cursor.fetchmany.assert_not_called()
-    conn.commit.assert_called_once_with()
-    assert result["columns"] == []
-    assert result["rows"] == []
-    assert result["row_count"] == 0
-    assert result["truncated"] is False
-    assert result["message"] == "Query OK, 0 rows affected"
-    assert isinstance(result["execution_time_ms"], float)
-    conn.close.assert_called_once_with()
-
-
-@pytest.mark.asyncio
-async def test_dm_select_exact_max_rows_is_not_truncated_without_extra_row():
-    connector = DMConnector(host="localhost", port=5236, username="tester", password="secret", database="dbclaw")
-    cursor = FakeSyncCursor(
-        description=[("ID",), ("NAME",)],
-        fetch_rows=[(1, "alice"), (2, "bob")],
-        rowcount=2,
-    )
-    conn = MagicMock()
-    conn.cursor.return_value = cursor
-    conn.close = MagicMock()
-
-    sql = "SELECT id, name FROM users ORDER BY id"
-    with patch.object(connector, "_connect", MagicMock(return_value=conn)):
-        result = await connector.execute_query(sql, max_rows=2)
-
-    cursor.execute.assert_called_once_with(sql)
-    cursor.fetchmany.assert_called_once_with(3)
-    assert result["columns"] == ["ID", "NAME"]
-    assert result["rows"] == [[1, "alice"], [2, "bob"]]
-    assert result["row_count"] == 2
-    assert result["truncated"] is False
-    conn.close.assert_called_once_with()
-
-
-@pytest.mark.asyncio
-async def test_dm_select_more_than_max_rows_is_truncated_to_visible_rows():
-    connector = DMConnector(host="localhost", port=5236, username="tester", password="secret", database="dbclaw")
-    cursor = FakeSyncCursor(
-        description=[("ID",)],
-        fetch_rows=[(1,), (2,), (3,)],
-        rowcount=3,
-    )
-    conn = MagicMock()
-    conn.cursor.return_value = cursor
-    conn.close = MagicMock()
-
-    sql = "SELECT id FROM users ORDER BY id"
-    with patch.object(connector, "_connect", MagicMock(return_value=conn)):
-        result = await connector.execute_query(sql, max_rows=2)
-
-    cursor.execute.assert_called_once_with(sql)
-    cursor.fetchmany.assert_called_once_with(3)
-    assert result["columns"] == ["ID"]
-    assert result["rows"] == [[1], [2]]
-    assert result["row_count"] == 2
-    assert result["truncated"] is True
     conn.close.assert_called_once_with()
 
 

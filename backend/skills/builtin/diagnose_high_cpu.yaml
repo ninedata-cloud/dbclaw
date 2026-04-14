@@ -115,7 +115,7 @@ code: |
 
       # 9. Get database process CPU usage specifically
       db_process_cpu = await context.execute_command(
-          "ps aux | grep -E '(postgres|mysql|oracle|sqlserver|mongod)' | grep -v grep",
+          "ps aux | grep -E '(postgres|mysql|oracle|sqlserver|gaussdb)' | grep -v grep",
           datasource_id
       )
       if db_process_cpu.get("success"):

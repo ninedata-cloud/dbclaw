@@ -30,7 +30,7 @@ async def test_bocha_api():
     test_cases = [
         {
             "name": "Search in Chinese",
-            "query": "oceanbase数据库",
+            "query": "openGauss数据库",
             "count": 3,
             "summary": True,
             "freshness": "noLimit"
