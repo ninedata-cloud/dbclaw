@@ -13,7 +13,8 @@ async def migrate():
     async with engine.begin() as conn:
         columns_result = await conn.execute(text(
             "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = 'chat_messages' "
+            "WHERE table_schema = current_schema() "
+            "AND table_name = 'chat_messages' "
             "AND column_name IN ('input_tokens', 'output_tokens', 'total_tokens')"
         ))
         existing_columns = {row[0] for row in columns_result.fetchall()}

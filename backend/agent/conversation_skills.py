@@ -2,11 +2,14 @@
 Updated conversation module to use dynamic skill system
 """
 import asyncio
+import copy
 import json
 import logging
 import re
 import uuid
 from typing import AsyncGenerator, List, Dict, Any, Optional
+
+from sqlalchemy import select
 
 from backend.agent.diagnosis_context import build_diagnostic_brief, render_diagnostic_brief_for_prompt
 from backend.agent.prompts import DIAGNOSTIC_PROMPT, INFORMATIONAL_PROMPT, ADMINISTRATIVE_PROMPT
@@ -18,6 +21,8 @@ from backend.agent.skill_authorization import (
 from backend.agent.skill_selector import get_available_skills_as_tools
 from backend.agent.tools import get_filtered_tools
 from backend.agent.context_builder import execute_tool
+from backend.models.diagnostic_session import DiagnosticSession
+from backend.services.knowledge_router import render_knowledge_plan_for_prompt, replan_with_evidence
 from backend.services.ai_agent import get_ai_client, stream_assistant_turn, request_text_response
 from backend.utils.command_safety import (
     DANGEROUS_COMMAND_PATTERNS,
@@ -51,6 +56,118 @@ ISSUE_CATEGORY_LABELS = {
     "error": "错误诊断",
     "general": "综合诊断",
 }
+
+
+def _compose_system_message(base_system_msg: str, knowledge_context: Optional[Dict[str, Any]]) -> str:
+    knowledge_prompt = render_knowledge_plan_for_prompt(knowledge_context or {})
+    if not knowledge_prompt:
+        return base_system_msg
+    return f"{base_system_msg}\n\n{knowledge_prompt}"
+
+
+def _knowledge_recommended_skills(knowledge_context: Optional[Dict[str, Any]]) -> list[str]:
+    if not knowledge_context:
+        return []
+    knowledge_plan = knowledge_context.get("knowledge_plan") or {}
+    return [str(skill_id) for skill_id in (knowledge_plan.get("recommended_skills") or []) if skill_id]
+
+
+def _prioritize_tools_by_knowledge_plan(
+    active_tools: list[dict[str, Any]],
+    knowledge_context: Optional[Dict[str, Any]],
+) -> list[dict[str, Any]]:
+    recommended = _knowledge_recommended_skills(knowledge_context)
+    if not recommended:
+        return active_tools
+
+    rank_map = {name: index for index, name in enumerate(recommended)}
+
+    def _tool_sort_key(tool: dict[str, Any]) -> tuple[int, int, str]:
+        tool_name = tool.get("function", {}).get("name") or ""
+        if tool_name in rank_map:
+            return (0, rank_map[tool_name], tool_name)
+        return (1, 999, tool_name)
+
+    return sorted(active_tools, key=_tool_sort_key)
+
+
+def _initial_knowledge_events(knowledge_context: Optional[Dict[str, Any]]) -> list[dict[str, Any]]:
+    if not knowledge_context:
+        return []
+    knowledge_plan = knowledge_context.get("knowledge_plan") or {}
+    events: list[dict[str, Any]] = []
+    if knowledge_plan:
+        events.append(
+            {
+                "type": "knowledge_plan_created",
+                "summary": "已根据当前问题自动生成诊断知识计划。",
+                "active_documents": knowledge_plan.get("active_documents") or [],
+                "active_units": knowledge_plan.get("active_units") or [],
+                "recommended_skills": knowledge_plan.get("recommended_skills") or [],
+                "active_document_count": len(knowledge_plan.get("active_documents") or []),
+                "active_unit_count": len(knowledge_plan.get("active_units") or []),
+                "citations": knowledge_plan.get("citations") or [],
+            }
+        )
+    for item in (knowledge_plan.get("active_units") or [])[:8]:
+        events.append(
+            {
+                "type": "knowledge_unit_activated",
+                "document_id": item.get("document_id"),
+                "document_title": item.get("document_title"),
+                "node_title": item.get("node_title"),
+                "title": item.get("citation"),
+                "citation": item.get("citation"),
+                "unit_id": item.get("unit_id"),
+                "unit_type": item.get("unit_type"),
+                "reason": "；".join(item.get("reasons") or []) or "匹配当前诊断路径",
+                "recommended_skills": item.get("recommended_skills") or [],
+            }
+        )
+    return events
+
+
+def _diff_knowledge_units(
+    previous_context: Optional[Dict[str, Any]],
+    current_context: Optional[Dict[str, Any]],
+) -> list[dict[str, Any]]:
+    previous_units = {
+        item.get("unit_id")
+        for item in ((previous_context or {}).get("knowledge_plan") or {}).get("active_units", [])
+        if item.get("unit_id")
+    }
+    events: list[dict[str, Any]] = []
+    current_plan = (current_context or {}).get("knowledge_plan") or {}
+    for item in current_plan.get("active_units", [])[:8]:
+        unit_id = item.get("unit_id")
+        if not unit_id or unit_id in previous_units:
+            continue
+        events.append(
+            {
+                "type": "knowledge_unit_activated",
+                "document_id": item.get("document_id"),
+                "document_title": item.get("document_title"),
+                "node_title": item.get("node_title"),
+                "title": item.get("citation"),
+                "citation": item.get("citation"),
+                "unit_id": unit_id,
+                "unit_type": item.get("unit_type"),
+                "reason": "；".join(item.get("reasons") or []) or "知识计划已切换到该节点",
+                "recommended_skills": item.get("recommended_skills") or [],
+            }
+        )
+    return events
+
+
+async def _persist_knowledge_snapshot(db, session_id: Optional[int], knowledge_context: Optional[Dict[str, Any]]) -> None:
+    if not db or not session_id or knowledge_context is None:
+        return
+    result = await db.execute(select(DiagnosticSession).where(DiagnosticSession.id == session_id))
+    session = result.scalar_one_or_none()
+    if not session:
+        return
+    session.knowledge_snapshot = knowledge_context
+    await db.commit()
 
 
 def _build_plan_summary(intent: str, issue_category: str | None, focus_areas: list[str]) -> str:
@@ -595,21 +712,23 @@ async def run_conversation_with_skills(
         )
         system_msg += f"\n\nThe user is currently working with datasource ID: {datasource_id}. Use this ID when calling tools unless they specify otherwise."
 
-    if knowledge_context and knowledge_context.get("knowledge_brief"):
-        system_msg += "\n\nAuto-selected knowledge brief for this diagnosis:"
-        for idx, item in enumerate(knowledge_context.get("knowledge_brief", [])[:5], start=1):
+    if knowledge_context and (knowledge_context.get("knowledge_plan") or knowledge_context.get("knowledge_brief")):
+        knowledge_plan = knowledge_context.get("knowledge_plan") or {}
+        active_documents = knowledge_plan.get("active_documents") or knowledge_context.get("knowledge_brief") or []
+        system_msg += "\n\nAuto-selected diagnostic knowledge overview:"
+        for idx, item in enumerate(active_documents[:5], start=1):
             system_msg += (
-                f"\n{idx}. [{item.get('scope')}/{item.get('doc_kind')}] {item.get('title')}"
+                f"\n{idx}. [{item.get('scope')}/{item.get('doc_kind')}/{item.get('quality_status') or 'draft'}] {item.get('title')}"
                 f"\n   summary: {item.get('summary') or '无摘要'}"
                 f"\n   reason: {item.get('reason') or '匹配当前上下文'}"
                 f"\n   document_id: {item.get('document_id')}"
             )
         if knowledge_retrieval_enabled:
-            system_msg += "\nUse read_document to open one of the recommended documents when you need detailed steps or commands. Prefer these recommended documents over browsing the full directory."
+            system_msg += "\nUse the knowledge plan first. Only call read_document when the active knowledge units are insufficient or you need to inspect raw Markdown details."
         else:
-            system_msg += "\nKnowledge retrieval is not authorized in this session. Rely on the brief above and do not attempt additional document browsing."
+            system_msg += "\nKnowledge retrieval is not authorized in this session. Rely on the active knowledge plan and do not attempt additional document browsing."
     elif kb_ids and knowledge_retrieval_enabled:
-        system_msg += f"\n\nLegacy knowledge base IDs are present ({kb_ids}), but diagnosis should rely on auto-selected documents. Use list_documents only if you truly need to browse beyond the recommended set."
+        system_msg += f"\n\nLegacy knowledge base IDs are present ({kb_ids}), but diagnosis should rely on the auto-built knowledge plan first. Use list_documents only as a fallback."
 
     if intent == "diagnostic" and datasource_id and db:
         diagnostic_brief = await build_diagnostic_brief(
@@ -676,7 +795,7 @@ async def run_conversation_with_skills(
         )
         if tool.get("function", {}).get("name") in KB_TOOL_NAMES
     ]
-    active_tools = active_tools + static_kb_tools
+    active_tools = _prioritize_tools_by_knowledge_plan(active_tools + static_kb_tools, knowledge_context)
     active_tool_names = {
         tool.get("function", {}).get("name")
         for tool in active_tools
@@ -695,10 +814,12 @@ async def run_conversation_with_skills(
     # 阶段4: 准备开始输出
     yield {"type": "thinking_complete", "message": "开始诊断..."}
 
-    full_messages = [{"role": "system", "content": system_msg}] + messages
+    base_system_msg = system_msg
+    full_messages = [{"role": "system", "content": _compose_system_message(base_system_msg, knowledge_context)}] + messages
     emitted_plan = False
     emitted_kb_hint = False
     emitted_kb_recommendations = False
+    emitted_knowledge_plan = False
 
     for round_num in range(MAX_TOOL_ROUNDS):
         try:
@@ -729,6 +850,10 @@ async def run_conversation_with_skills(
                                 "issue_category_label": ISSUE_CATEGORY_LABELS.get(issue_category or "general", "综合诊断"),
                                 "focus_areas": (diagnostic_brief or {}).get("focus_areas", []),
                             }
+                        if knowledge_context and not emitted_knowledge_plan and round_num == 0:
+                            emitted_knowledge_plan = True
+                            for knowledge_event in _initial_knowledge_events(knowledge_context):
+                                yield knowledge_event
                         if knowledge_context and knowledge_context.get("knowledge_brief") and not emitted_kb_recommendations and round_num == 0:
                             emitted_kb_recommendations = True
                             for item in knowledge_context.get("knowledge_brief", [])[:5]:
@@ -961,6 +1086,31 @@ async def run_conversation_with_skills(
                     "tool_call_id": tc["id"],
                     "content": ai_result,
                 })
+
+                if knowledge_context and intent == "diagnostic":
+                    previous_knowledge_context = copy.deepcopy(knowledge_context)
+                    updated_knowledge_context = replan_with_evidence(
+                        knowledge_context,
+                        tool_name=tool_name,
+                        tool_args=tool_args,
+                        tool_result=tool_result,
+                    )
+                    knowledge_context.clear()
+                    knowledge_context.update(updated_knowledge_context)
+                    await _persist_knowledge_snapshot(db, session_id, knowledge_context)
+                    full_messages[0]["content"] = _compose_system_message(base_system_msg, knowledge_context)
+                    active_tools = _prioritize_tools_by_knowledge_plan(active_tools, knowledge_context)
+                    for knowledge_event in _diff_knowledge_units(previous_knowledge_context, knowledge_context):
+                        yield knowledge_event
+                    yield {
+                        "type": "knowledge_replanned",
+                        "tool_name": tool_name,
+                        "summary": f"已根据 {tool_name} 的结果更新知识计划。",
+                        "active_documents": (knowledge_context.get("knowledge_plan") or {}).get("active_documents") or [],
+                        "active_units": (knowledge_context.get("knowledge_plan") or {}).get("active_units") or [],
+                        "recommended_skills": (knowledge_context.get("knowledge_plan") or {}).get("recommended_skills") or [],
+                        "citations": (knowledge_context.get("knowledge_plan") or {}).get("citations") or [],
+                    }
 
         except Exception as e:
             logger.error(f"Conversation error at round {round_num}: {e}")

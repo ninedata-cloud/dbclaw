@@ -20,7 +20,8 @@ async def migrate():
         # 检查字段是否已存在
         result = await conn.execute(text(
             "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = 'datasources' AND column_name = 'tags'"
+            "WHERE table_schema = current_schema() "
+            "AND table_name = 'datasources' AND column_name = 'tags'"
         ))
         if result.fetchone():
             logger.info("tags column already exists, skipping migration")

@@ -26,7 +26,7 @@ const DiagnosisPage = {
         const defaults = {
             platform_operations: false,
             high_privilege_operations: false,
-            knowledge_retrieval: false,
+            knowledge_retrieval: true,
         };
         const catalogGroups = this.skillAuthorizationCatalog?.groups || [];
         catalogGroups.forEach(group => {
@@ -70,17 +70,13 @@ const DiagnosisPage = {
             options.initialAsk ||
             options.initialAlertId ||
             options.initialEventId ||
-            options.initialReportId ||
-            options.initialActionRunId
+            options.initialReportId
         );
     },
 
     _buildInitialSessionTitle(options = this._renderOptions || {}) {
         if (options.initialSessionTitle) {
             return options.initialSessionTitle;
-        }
-        if (options.initialActionRunId) {
-            return `动作执行诊断 #${options.initialActionRunId}`;
         }
         if (options.initialReportId) {
             return `巡检报告诊断 #${options.initialReportId}`;
@@ -212,10 +208,6 @@ const DiagnosisPage = {
             } catch (error) {
                 console.warn('Failed to load inspection report detail:', error);
             }
-        }
-
-        if (Number.isFinite(options.initialActionRunId)) {
-            contextBlocks.push(`关联动作执行 #${options.initialActionRunId}`);
         }
 
         if (contextBlocks.length === 0) {
@@ -402,20 +394,17 @@ const DiagnosisPage = {
         const alertId = parseInt(params.get('alert'), 10);
         const eventId = parseInt(params.get('event'), 10);
         const reportId = parseInt(params.get('report'), 10);
-        const actionRunId = parseInt(params.get('action_run'), 10);
         return this.renderWithOptions({
             initialDatasourceId: Number.isFinite(datasourceId) ? datasourceId : null,
             initialAlertId: Number.isFinite(alertId) ? alertId : null,
             initialEventId: Number.isFinite(eventId) ? eventId : null,
             initialReportId: Number.isFinite(reportId) ? reportId : null,
-            initialActionRunId: Number.isFinite(actionRunId) ? actionRunId : null,
             initialAsk: params.get('ask') || null,
             preferFreshSession: Boolean(
                 params.get('ask') ||
                 Number.isFinite(alertId) ||
                 Number.isFinite(eventId) ||
-                Number.isFinite(reportId) ||
-                Number.isFinite(actionRunId)
+                Number.isFinite(reportId)
             ),
         });
     },
@@ -737,25 +726,24 @@ const DiagnosisPage = {
             const itemBadges = (group.items || []).map(item => `
                 <span
                     title="${Utils.escapeHtml(String(item.description || item.id || '')).replace(/"/g, '&quot;')}"
-                    style="display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;background:rgba(255,255,255,0.06);border:1px solid var(--border-color);font-size:12px;color:var(--text-secondary);"
+                    style="display:inline-flex;align-items:center;padding:3px 7px;border-radius:999px;background:rgba(255,255,255,0.06);border:1px solid var(--border-color);font-size:11px;color:var(--text-secondary);"
                 >
                     ${item.kind === 'tool' ? '内置 ' : ''}${Utils.escapeHtml(String(item.id || ''))}
                 </span>
             `).join('');
 
             return `
-                <label style="display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-radius:10px;cursor:pointer;background:var(--bg-secondary);margin-bottom:12px;border-left:3px solid ${borderColorByLevel[group.warning_level] || 'var(--accent-blue)'};">
+                <label style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:10px;cursor:pointer;background:var(--bg-secondary);margin-bottom:10px;border-left:3px solid ${borderColorByLevel[group.warning_level] || 'var(--accent-blue)'};">
                     <input type="checkbox" class="skill-auth-toggle" data-group-id="${group.id}" ${isEnabled ? 'checked' : ''} style="margin-top:4px;">
                     <div style="flex:1;min-width:0;">
-                        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;">
-                            <div style="font-weight:600;font-size:15px;color:var(--text-primary);">${Utils.escapeHtml(String(group.label || ''))}</div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px;">
+                            <div style="font-weight:600;font-size:14px;color:var(--text-primary);">${Utils.escapeHtml(String(group.label || ''))}</div>
                             <span class="badge ${isEnabled ? 'badge-success' : 'badge-danger'}" id="skill-auth-badge-${group.id}">
                                 ${isEnabled ? '已允许' : '已禁止'}
                             </span>
                         </div>
-                        <div style="font-size:13px;line-height:1.6;color:var(--text-secondary);">${Utils.escapeHtml(String(group.description || ''))}</div>
-                        <div style="margin-top:8px;font-size:12px;color:var(--text-muted);">包含 ${group.item_count || 0} 个可调用项</div>
-                        <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;max-height:132px;overflow:auto;">
+                        <div style="font-size:12px;line-height:1.5;color:var(--text-secondary);">${Utils.escapeHtml(String(group.description || ''))}</div>
+                        <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:5px;max-height:112px;overflow:auto;">
                             ${itemBadges || '<span style="font-size:12px;color:var(--text-muted);">当前暂无可展示项</span>'}
                         </div>
                     </div>
@@ -765,8 +753,9 @@ const DiagnosisPage = {
 
         Modal.show({
             title: 'Skill 授权',
+            width: 'min(1120px, 94vw)',
             content: `
-                <p style="margin-bottom:16px;font-size:13px;color:var(--text-secondary);line-height:1.7;">
+                <p style="margin-bottom:12px;font-size:12px;color:var(--text-secondary);line-height:1.6;">
                     控制 AI 在诊断过程中是否允许调用特定分类下的 skill。修改后的授权仅对新建会话生效，已存在会话会继续使用它创建时保存的授权配置。
                 </p>
                 <div id="skill-authorization-list">
@@ -1408,6 +1397,13 @@ const DiagnosisPage = {
                 break;
             case 'plan_created':
                 ChatWidget.updateDiagnosisPlan(data);
+                break;
+            case 'knowledge_plan_created':
+            case 'knowledge_replanned':
+                ChatWidget.updateDiagnosisPlan(data);
+                break;
+            case 'knowledge_unit_activated':
+                ChatWidget.addKnowledgeReference(data);
                 break;
             case 'kb_document_selected':
             case 'kb_document_read':

@@ -300,8 +300,8 @@ const SkillsPage = {
                 size: 'large'
             });
 
-            document.getElementById('test-skill-form').onsubmit = async (e) => {
-                e.preventDefault();
+            const testSkillForm = document.getElementById('test-skill-form');
+            DOM.bindAsyncSubmit(testSkillForm, async () => {
                 const params = {};
                 skill.parameters.forEach(p => {
                     const element = document.getElementById(`param-${p.name}`);
@@ -351,7 +351,7 @@ const SkillsPage = {
                 } catch (error) {
                     resultDiv.innerHTML = `<p class="error">Error: ${error.message}</p>`;
                 }
-            };
+            });
         } catch (error) {
             Toast.error('加载失败 skill');
         }
@@ -396,8 +396,8 @@ const SkillsPage = {
             `
         });
 
-        document.getElementById('import-skill-form').onsubmit = async (e) => {
-            e.preventDefault();
+        const importSkillForm = document.getElementById('import-skill-form');
+        DOM.bindAsyncSubmit(importSkillForm, async () => {
             const file = document.getElementById('skill-file').files[0];
 
             const formData = new FormData();
@@ -421,7 +421,7 @@ const SkillsPage = {
             } catch (error) {
                 Toast.error('Failed to import skill: ' + error.message);
             }
-        };
+        });
     },
 
     async createSkill() {
@@ -515,9 +515,8 @@ const SkillsPage = {
             size: 'large'
         });
 
-        document.getElementById('create-skill-form').onsubmit = async (e) => {
-            e.preventDefault();
-
+        const createSkillForm = document.getElementById('create-skill-form');
+        DOM.bindAsyncSubmit(createSkillForm, async () => {
             try {
                 // Collect form data
                 const id = document.getElementById('skill-id').value.trim();
@@ -579,7 +578,7 @@ const SkillsPage = {
             } catch (error) {
                 Toast.error('Failed to create skill: ' + error.message);
             }
-        };
+        });
     },
 
     async editSkill(skillId) {
@@ -641,9 +640,8 @@ const SkillsPage = {
                 size: 'large'
             });
 
-            document.getElementById('edit-skill-form').onsubmit = async (e) => {
-                e.preventDefault();
-
+            const editSkillForm = document.getElementById('edit-skill-form');
+            DOM.bindAsyncSubmit(editSkillForm, async () => {
                 try {
                     const name = document.getElementById('edit-skill-name').value.trim();
                     const description = document.getElementById('edit-skill-description').value.trim();
@@ -681,7 +679,7 @@ const SkillsPage = {
                 } catch (error) {
                     Toast.error('Failed to update skill: ' + error.message);
                 }
-            };
+            });
         } catch (error) {
             Toast.error('Failed to load skill: ' + error.message);
         }

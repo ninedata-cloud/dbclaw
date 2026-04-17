@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+from urllib.parse import quote
 
 
 class Settings(BaseSettings):
@@ -50,6 +51,15 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         extra = "ignore"
+
+    @property
+    def frontend_asset_version(self) -> str:
+        raw_version = self.build_commit.strip()
+        if not raw_version:
+            app_version = self.app_version.strip() or "dev"
+            build_time = self.build_time.strip()
+            raw_version = f"{app_version}-{build_time}" if build_time else app_version
+        return quote(raw_version, safe="-._~")
 
 
 @lru_cache

@@ -29,6 +29,24 @@ def _make_datasource() -> Datasource:
     )
 
 
+def test_query_request_keeps_schema_request_alias():
+    execute_req = QueryExecuteRequest(
+        datasource_id=1,
+        sql="SELECT * FROM metrics",
+        schema="analytics",
+    )
+    explain_req = QueryExplainRequest(
+        datasource_id=1,
+        sql="SELECT * FROM metrics",
+        schema="analytics",
+    )
+
+    assert execute_req.schema_name == "analytics"
+    assert execute_req.model_dump(by_alias=True)["schema"] == "analytics"
+    assert explain_req.schema_name == "analytics"
+    assert explain_req.model_dump(by_alias=True)["schema"] == "analytics"
+
+
 @pytest.mark.asyncio
 async def test_db_connector_returns_non_empty_error_for_blank_exception_message():
     class FakeConnector:

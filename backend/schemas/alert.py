@@ -36,14 +36,6 @@ class AlertLinkedReport(BaseModel):
     summary: Optional[str] = None
 
 
-class AlertRecommendedActionPreview(BaseModel):
-    id: str
-    title: str
-    summary: Optional[str] = None
-    risk_level: str = "safe"
-    latest_run: Optional[Dict[str, Any]] = None
-
-
 class AlertDatasourceInfo(BaseModel):
     id: int
     name: str
@@ -77,8 +69,6 @@ class AlertDiagnosisContext(BaseModel):
     diagnosis_summary: Optional[str] = None
     root_cause: Optional[str] = None
     recommended_action: Optional[str] = None
-    recommended_actions_preview: List[AlertRecommendedActionPreview] = Field(default_factory=list)
-    latest_action_run: Optional[Dict[str, Any]] = None
     latest_trigger_type: Optional[str] = None
     linked_report: Optional[AlertLinkedReport] = None
     diagnosis_entry_hash: Optional[str] = None

@@ -8,7 +8,6 @@ from backend.models.report import Report
 from backend.models.soft_delete import alive_filter
 from backend.agent.prompts import REPORT_GENERATION_PROMPT
 from backend.agent.conversation_skills import generate_report_with_skills
-from backend.services.action_run_service import ensure_report_recommended_actions
 from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
@@ -256,13 +255,6 @@ class ReportGenerator:
 """
             else:
                 report.content_html = None
-
-            # P1: structured action recommendations (only for completed)
-            try:
-                if report.status == "completed":
-                    await ensure_report_recommended_actions(self.db, report)
-            except Exception as e:
-                logger.warning(f"Failed to generate recommended_actions for report {report.id}: {e}")
 
         except Exception as e:
             logger.error(f"Error generating inspection report: {e}", exc_info=True)

@@ -97,6 +97,14 @@ async def update_document(
     return await document_service.update_document(db, doc_id, data)
 
 
+@router.post("/{doc_id}/recompile", response_model=DocDocumentResponse)
+async def recompile_document(
+    doc_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    return await document_service.recompile_document(db, doc_id)
+
+
 @router.delete("/{doc_id}")
 async def delete_document(
     doc_id: int,

@@ -34,6 +34,3 @@ class Report(SoftDeleteMixin, Base):
     # AI inspection columns
     skill_executions = Column(JSON, nullable=True)  # Audit trail of skills called
     ai_conversation_id = Column(Integer, nullable=True)  # Link to diagnostic_session
-
-    # P1: structured action recommendations (list of action specs)
-    recommended_actions = Column(JSON, nullable=True)

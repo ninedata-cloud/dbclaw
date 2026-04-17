@@ -9,15 +9,15 @@ from backend.skills.schema import SkillDefinition
 
 
 BUILTIN_SKILL_CATEGORY_ORDER: list[str] = [
-    "数据库通用",
+    "通用诊断",
     "MySQL",
     "PostgreSQL",
     "SQL Server",
     "Oracle",
     "openGauss",
-    "平台运维",
+    "平台操作",
     "知识检索",
-    "高危操作",
+    "高权限操作",
 ]
 
 PRIVILEGED_SKILL_IDS = {
@@ -121,9 +121,9 @@ def dedupe_preserve_order(items: Iterable[str]) -> list[str]:
 
 def classify_builtin_skill(skill_id: str) -> str:
     if skill_id in PRIVILEGED_SKILL_IDS:
-        return "高危操作"
-    if skill_id in DATABASE_GENERAL_SKILL_IDS:
-        return "数据库通用"
+        return "高权限操作"
+    if (skill_id in DATABASE_GENERAL_SKILL_IDS or skill_id in HOST_DIAGNOSTIC_SKILL_IDS):
+        return "通用诊断"
     for prefix, category in DB_CATEGORY_BY_PREFIX:
         if skill_id.startswith(prefix):
             return category
@@ -134,12 +134,12 @@ def classify_builtin_skill(skill_id: str) -> str:
         or skill_id in INSPECTION_SKILL_IDS
         or skill_id in SYSTEM_MANAGEMENT_SKILL_IDS
         or skill_id in SYSTEM_QUERY_SKILL_IDS
-        or skill_id in HOST_DIAGNOSTIC_SKILL_IDS
     ):
-        return "平台运维"
+        return "平台操作"
+    
     if any(keyword in skill_id for keyword in DATABASE_KEYWORD_FALLBACK):
-        return "数据库通用"
-    return "平台运维"
+        return "通用诊断"
+    return "通用诊断"
 
 
 def normalize_builtin_permissions(skill_id: str, permissions: list[str]) -> list[str]:

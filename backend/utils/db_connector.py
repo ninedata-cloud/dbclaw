@@ -122,6 +122,7 @@ async def execute_query(datasource: Datasource, query: str, allow_write: bool = 
                 username=datasource.username,
                 password=password,
                 database=datasource.database,
+                **(datasource.extra_params or {}),
             )
         elif datasource.db_type == "oracle":
             service = OracleConnector(

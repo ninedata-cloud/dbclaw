@@ -13,10 +13,13 @@ logger = logging.getLogger(__name__)
 async def migrate():
     async with engine.begin() as conn:
         result = await conn.execute(text(
-            "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = 'reports' AND column_name = 'alert_id'"
+            "SELECT EXISTS ("
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_schema = current_schema() "
+            "AND table_name = 'reports' AND column_name = 'alert_id'"
+            ")"
         ))
-        if result.scalar_one_or_none():
+        if result.scalar_one():
             logger.info("Column alert_id already exists in reports")
             return
 

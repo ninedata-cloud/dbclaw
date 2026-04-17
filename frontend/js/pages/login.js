@@ -39,10 +39,9 @@ const LoginPage = {
 
         // Wire up form
         const form = DOM.$('#login-form');
-        form.addEventListener('submit', (e) => {
-            e.preventDefault();
-            this._handleLogin();
-        });
+        DOM.bindAsyncSubmit(form, async () => {
+            await this._handleLogin();
+        }, { submitControls: [DOM.$('#login-btn')] });
 
         // Focus username field
         DOM.$('#login-username').focus();

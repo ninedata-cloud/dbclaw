@@ -4,7 +4,7 @@ import json
 import logging
 import re
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, AsyncGenerator, Awaitable, Callable, Optional
 
 from sqlalchemy import desc, select
@@ -29,6 +29,9 @@ TRACKED_DIAGNOSIS_EVENTS = {
     "thinking_complete",
     "diagnosis_state",
     "plan_created",
+    "knowledge_plan_created",
+    "knowledge_unit_activated",
+    "knowledge_replanned",
     "plan_step_status",
     "tool_call",
     "tool_result",
@@ -767,7 +770,7 @@ async def _accumulate_usage(db: AsyncSession, session_id: int, user_id: int | No
         session.input_tokens += int(usage.get("input_tokens") or 0)
         session.output_tokens += int(usage.get("output_tokens") or 0)
         session.total_tokens += int(usage.get("total_tokens") or 0)
-        session.updated_at = datetime.utcnow()
+        session.updated_at = datetime.now(UTC).replace(tzinfo=None)
         await db.commit()
 
 
@@ -842,23 +845,27 @@ async def _upsert_diagnosis_conclusion(
             .where(
                 DiagnosisEvent.session_id == session_id,
                 DiagnosisEvent.run_id == run_id,
-                DiagnosisEvent.event_type.in_(["kb_document_selected", "kb_document_read"]),
+                DiagnosisEvent.event_type.in_(["kb_document_selected", "kb_document_read", "knowledge_unit_activated"]),
             )
             .order_by(DiagnosisEvent.sequence_no)
         )
         seen_refs: set[tuple[Any, Any]] = set()
         for event in event_result.scalars().all():
             payload = event.payload or {}
-            key = (payload.get("document_id"), payload.get("title") or payload.get("document_title"))
+            key = (
+                payload.get("document_id"),
+                payload.get("citation") or payload.get("title") or payload.get("document_title"),
+            )
             if key in seen_refs:
                 continue
             seen_refs.add(key)
             knowledge_refs.append({
                 "document_id": payload.get("document_id"),
-                "title": payload.get("title") or payload.get("document_title") or "未命名文档",
+                "title": payload.get("citation") or payload.get("title") or payload.get("document_title") or "未命名文档",
                 "reason": payload.get("reason"),
                 "scope": payload.get("scope"),
                 "document_kind": payload.get("document_kind"),
+                "node_title": payload.get("node_title"),
             })
 
     result = await db.execute(
@@ -959,19 +966,27 @@ async def get_session_insights(
         events = events_result.scalars().all()
 
     latest_state = next((event.payload for event in reversed(events) if event.event_type == "diagnosis_state"), None)
-    latest_plan = next((event.payload for event in reversed(events) if event.event_type == "plan_created"), None)
+    latest_plan = next(
+        (
+            event.payload
+            for event in reversed(events)
+            if event.event_type in {"knowledge_plan_created", "knowledge_replanned", "plan_created"}
+        ),
+        None,
+    )
     knowledge_refs = []
     if latest_conclusion and latest_conclusion.knowledge_refs:
         knowledge_refs.extend(latest_conclusion.knowledge_refs)
     for event in events:
-        if event.event_type in {"kb_document_selected", "kb_document_read"}:
+        if event.event_type in {"kb_document_selected", "kb_document_read", "knowledge_unit_activated"}:
             payload = event.payload or {}
             knowledge_refs.append({
                 "document_id": payload.get("document_id"),
-                "title": payload.get("title") or payload.get("document_title"),
+                "title": payload.get("citation") or payload.get("title") or payload.get("document_title"),
                 "reason": payload.get("reason"),
                 "scope": payload.get("scope"),
                 "document_kind": payload.get("document_kind"),
+                "node_title": payload.get("node_title"),
             })
 
     seen_refs: set[tuple[Any, Any]] = set()
@@ -1158,7 +1173,15 @@ async def process_stream_events(
                 elif event_type in ("thinking_start", "thinking_phase", "thinking_complete"):
                     logger.info(f"[THINKING] Emitting thinking event: {event}")
                     await _emit(event, on_event)
-                elif event_type in ("diagnosis_state", "plan_created", "kb_document_selected", "kb_document_read"):
+                elif event_type in (
+                    "diagnosis_state",
+                    "plan_created",
+                    "knowledge_plan_created",
+                    "knowledge_unit_activated",
+                    "knowledge_replanned",
+                    "kb_document_selected",
+                    "kb_document_read",
+                ):
                     await _emit(event, on_event)
                 elif event_type == "plan_step_status":
                     await _emit(event, on_event)
@@ -1285,7 +1308,7 @@ async def prepare_user_turn(
         if model_id is not None and model_id != session.ai_model_id:
             session.ai_model_id = model_id
         effective_model_id = session.ai_model_id
-        session.updated_at = datetime.utcnow()
+        session.updated_at = datetime.now(UTC).replace(tzinfo=None)
         kb_ids = session.kb_ids
         intent_analysis = analyze_query_intent(user_message or "")
         knowledge_context = await build_knowledge_context(

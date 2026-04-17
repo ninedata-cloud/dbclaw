@@ -12,16 +12,16 @@ SKILL_AUTHORIZATION_GROUPS: list[dict[str, Any]] = [
     {
         "id": GROUP_PLATFORM_OPERATIONS,
         "label": "平台操作",
-        "description": "允许 AI 调用平台运维类 skill，例如监控查询、主机诊断、告警配置等。",
+        "description": "允许 AI 调用平台操作类 skill，例如数据源管理、主机管理、技能管理、告警配置等。",
         "warning_level": "medium",
-        "categories": {"平台运维"},
+        "categories": {"平台操作"},
     },
     {
         "id": GROUP_HIGH_PRIVILEGE_OPERATIONS,
         "label": "高权限操作",
         "description": "允许 AI 调用高危变更类 skill，例如任意 SQL、任意 OS 命令等。",
         "warning_level": "high",
-        "categories": {"高危操作"},
+        "categories": {"高权限操作"},
     },
     {
         "id": GROUP_KNOWLEDGE_RETRIEVAL,
@@ -43,7 +43,8 @@ SKILL_AUTHORIZATION_GROUP_BY_CATEGORY = {
 }
 
 DEFAULT_SKILL_AUTHORIZATIONS: dict[str, bool] = {
-    item["id"]: False for item in SKILL_AUTHORIZATION_GROUPS
+    item["id"]: (item["id"] == GROUP_KNOWLEDGE_RETRIEVAL)
+    for item in SKILL_AUTHORIZATION_GROUPS
 }
 
 STATIC_GROUP_ITEMS: dict[str, list[dict[str, str]]] = {

@@ -6,6 +6,9 @@ RUNTIME_ENV_FILE="${RUNTIME_ENV_FILE:-/app/data/bootstrap/runtime.env}"
 BOOTSTRAP_DIR="$(dirname "$RUNTIME_ENV_FILE")"
 DEFAULT_ADMIN_PASSWORD="${DEFAULT_ADMIN_PASSWORD:-admin1234}"
 LOG_DIR="${LOG_DIR:-/app/data/logs}"
+UPLOAD_DIR="${UPLOAD_DIR:-/app/uploads}"
+CHAT_ATTACHMENTS_DIR="${CHAT_ATTACHMENTS_DIR:-$UPLOAD_DIR/chat_attachments}"
+DBCLAW_FIX_UPLOAD_PERMISSIONS="${DBCLAW_FIX_UPLOAD_PERMISSIONS:-true}"
 
 generate_fernet_key() {
     python - <<'PY'
@@ -41,6 +44,17 @@ touch "$LOG_DIR/app/app.log" "$LOG_DIR/app/error.log" "$LOG_DIR/postgresql/postg
 chown dbclaw:dbclaw "$LOG_DIR/app/app.log" "$LOG_DIR/app/error.log"
 chown postgres:postgres "$LOG_DIR/postgresql/postgresql.log"
 chmod 664 "$LOG_DIR/app/app.log" "$LOG_DIR/app/error.log" "$LOG_DIR/postgresql/postgresql.log"
+
+if [ "$DBCLAW_FIX_UPLOAD_PERMISSIONS" = "true" ]; then
+    install -d -m 775 "$UPLOAD_DIR"
+    chown dbclaw:dbclaw "$UPLOAD_DIR"
+    chmod 775 "$UPLOAD_DIR"
+    install -d -m 775 -o dbclaw -g dbclaw "$CHAT_ATTACHMENTS_DIR"
+    chown dbclaw:dbclaw "$CHAT_ATTACHMENTS_DIR"
+    chmod 775 "$CHAT_ATTACHMENTS_DIR"
+else
+    install -d -m 775 "$CHAT_ATTACHMENTS_DIR"
+fi
 
 if [ -f "$RUNTIME_ENV_FILE" ]; then
     set -a

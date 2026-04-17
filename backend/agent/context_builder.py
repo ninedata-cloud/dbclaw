@@ -286,4 +286,7 @@ async def _tool_read_document(args):
             "title": doc.title,
             "category_name": cat_name,
             "content": doc.content,
+            "quality_status": doc.quality_status,
+            "compiled_snapshot_summary": doc.compiled_snapshot_summary,
+            "diagnosis_profile": doc.diagnosis_profile or {},
         }

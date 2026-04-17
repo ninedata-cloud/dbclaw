@@ -11,7 +11,8 @@ logger = logging.getLogger(__name__)
 async def migrate():
     async with engine.begin() as conn:
         binding_exists_result = await conn.execute(text(
-            "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'chat_channel_bindings')"
+            "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
+            "WHERE table_schema = current_schema() AND table_name = 'chat_channel_bindings')"
         ))
         binding_exists = bool(binding_exists_result.scalar())
         if not binding_exists:

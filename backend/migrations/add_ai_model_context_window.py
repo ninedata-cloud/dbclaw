@@ -13,7 +13,8 @@ async def migrate():
     async with engine.begin() as conn:
         result = await conn.execute(text(
             "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = 'ai_models' AND column_name = 'context_window'"
+            "WHERE table_schema = current_schema() "
+            "AND table_name = 'ai_models' AND column_name = 'context_window'"
         ))
         if result.fetchone():
             logger.info("context_window column already exists on ai_models, skipping migration")

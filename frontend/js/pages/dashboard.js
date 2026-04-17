@@ -59,6 +59,17 @@ const DashboardPage = {
         }, 0);
     },
 
+    openDatasourceFromDashboard(datasourceId) {
+        const datasource = this._datasources.find(item => item.id === datasourceId);
+        if (datasource) {
+            Store.set('currentConnection', datasource);
+            Store.set('currentDatasource', datasource);
+            Store.set('currentInstance', datasource);
+            Store.set('currentInstanceId', datasource.id);
+        }
+        Router.navigate(`instance-detail?datasource=${datasourceId}&tab=monitor`);
+    },
+
     // ── Main render ──────────────────────────────────────────
     async render() {
         const content = DOM.$('#page-content');
@@ -209,18 +220,42 @@ const DashboardPage = {
         const total   = datasources.length;
         const healthy = datasources.filter(d => (healthStatuses[d.id] || 'unknown') === 'healthy').length;
         const donutSvg = this._donut(healthy, total, 52);
-
-        // DB type distribution
-        const typeCounts = {};
-        datasources.forEach(d => { typeCounts[d.db_type] = (typeCounts[d.db_type] || 0) + 1; });
-        const typeHtml = Object.entries(typeCounts).map(([t, n]) =>
-            `<div class="db-type-item"><span class="db-type-dot ${this._dbDotClass(t)}"></span>${t} <strong style="color:rgba(255,255,255,0.7)">${n}</strong></div>`
-        ).join('');
+        const unhealthy = datasources
+            .filter(d => (healthStatuses[d.id] || 'unknown') !== 'healthy')
+            .sort((a, b) => {
+                const rank = { critical: 0, error: 0, warning: 1, unknown: 2, healthy: 3 };
+                return (rank[healthStatuses[a.id] || 'unknown'] ?? 9) - (rank[healthStatuses[b.id] || 'unknown'] ?? 9);
+            });
+        const visibleItems = (unhealthy.length > 0 ? unhealthy : datasources).slice(0, 4);
+        const hiddenCount = (unhealthy.length > 0 ? unhealthy.length : datasources.length) - visibleItems.length;
+        const listTitle = unhealthy.length > 0 ? '异常数据源' : '健康数据源';
+        const listHtml = visibleItems.length === 0
+            ? `<div class="all-healthy-text">暂无数据源</div>`
+            : `<div class="db-health-list">
+                <div class="db-health-list-title">${listTitle}</div>
+                ${visibleItems.map(d => {
+                    const status = healthStatuses[d.id] || 'unknown';
+                    const statusCls = this._statusClass(status);
+                    const name = Utils.escapeHtml(d.name || d.host || `数据源 #${d.id}`);
+                    const type = Utils.escapeHtml(d.db_type || '-');
+                    const host = Utils.escapeHtml(`${d.host || '-'}:${d.port || '-'}`);
+                    const statusLabel = Utils.escapeHtml(this._healthLabelShort(status, this._healthReasons[d.id]));
+                    return `
+                        <div class="db-health-item" title="${name} · ${host}" onclick="DashboardPage.openDatasourceFromDashboard(${d.id})">
+                            <span class="status-dot ${statusCls}"></span>
+                            <span class="db-health-name">${name}</span>
+                            <span class="db-health-type">${type}</span>
+                            <span class="db-health-status health-badge-${statusCls}">${statusLabel}</span>
+                        </div>
+                    `;
+                }).join('')}
+                ${hiddenCount > 0 ? `<div class="db-health-more">+${hiddenCount} 个${unhealthy.length > 0 ? '异常' : '数据源'}</div>` : ''}
+            </div>`;
 
         const panel = DOM.$('#panel-dbs');
         if (!panel) return;
         panel.innerHTML = `
-            <div class="overview-panel-title">数据库健康</div>
+            <div class="overview-panel-title">数据源健康</div>
             <div class="donut-container">
                 ${donutSvg}
                 <div class="donut-legend">
@@ -228,7 +263,7 @@ const DashboardPage = {
                     <div class="donut-legend-item"><span class="donut-legend-dot" style="background:#f85149"></span>异常 ${total - healthy}</div>
                 </div>
             </div>
-            <div class="db-type-list">${typeHtml}</div>`;
+            ${listHtml}`;
     },
 
     _buildOverviewSkeleton() {
@@ -238,7 +273,7 @@ const DashboardPage = {
             <div class="donut-container"><div style="width:120px;height:120px;background:rgba(255,255,255,0.04);border-radius:50%;"></div></div>
         </div>
         <div class="overview-panel" id="panel-dbs">
-            <div class="overview-panel-title">数据库健康</div>
+            <div class="overview-panel-title">数据源健康</div>
             <div class="donut-container"><div style="width:120px;height:120px;background:rgba(255,255,255,0.04);border-radius:50%;"></div></div>
         </div>
         <div class="overview-panel panel-alerts" id="panel-alerts">

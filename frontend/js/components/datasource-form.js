@@ -89,6 +89,33 @@ const DatasourceForm = {
                 </select>
                 <small class="text-muted">以 SYSDBA/SYSOPER 身份连接（需要对应权限）</small>
             </div>
+            <div class="form-group" id="sqlserver-advanced-group" style="display: ${datasource?.db_type === 'sqlserver' ? 'block' : 'none'};">
+                <label>SQL Server 高级参数</label>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>ODBC 驱动</label>
+                        <select class="form-select" name="sqlserver_odbc_driver">
+                            <option value="" ${!this._getExtraParam(datasource, 'odbc_driver', '') ? 'selected' : ''}>自动选择</option>
+                            <option value="ODBC Driver 18 for SQL Server" ${this._getExtraParam(datasource, 'odbc_driver', '') === 'ODBC Driver 18 for SQL Server' ? 'selected' : ''}>ODBC Driver 18</option>
+                            <option value="ODBC Driver 17 for SQL Server" ${this._getExtraParam(datasource, 'odbc_driver', '') === 'ODBC Driver 17 for SQL Server' ? 'selected' : ''}>ODBC Driver 17</option>
+                            <option value="FreeTDS" ${this._getExtraParam(datasource, 'odbc_driver', '') === 'FreeTDS' ? 'selected' : ''}>FreeTDS</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>连接超时（秒）</label>
+                        <input type="number" class="form-input" name="sqlserver_connection_timeout" min="1" value="${this._getExtraParam(datasource, 'connection_timeout', 5)}">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><input type="checkbox" name="sqlserver_encrypt" ${this._getExtraParam(datasource, 'encrypt', false) ? 'checked' : ''}> 启用 TLS 加密</label>
+                    </div>
+                    <div class="form-group">
+                        <label><input type="checkbox" name="sqlserver_trust_server_certificate" ${this._getExtraParam(datasource, 'trust_server_certificate', true) ? 'checked' : ''}> 信任服务端证书</label>
+                    </div>
+                </div>
+                <small class="text-muted">默认按 SQL Server 2008/2012 兼容模式连接：优先 ODBC Driver 17，默认关闭 TLS 加密。</small>
+            </div>
             <div class="form-group">
                 <label>Host (可选)</label>
                 <select class="form-select" name="host_id">
@@ -139,9 +166,11 @@ const DatasourceForm = {
         const dbTypeSelect = form.querySelector('[name="db_type"]');
         const portInput = form.querySelector('[name="port"]');
         const oracleConnModeGroup = form.querySelector('#oracle-conn-mode-group');
+        const sqlserverAdvancedGroup = form.querySelector('#sqlserver-advanced-group');
         dbTypeSelect.addEventListener('change', () => {
             if (!datasource) portInput.value = this._defaultPort(dbTypeSelect.value);
             oracleConnModeGroup.style.display = dbTypeSelect.value === 'oracle' ? 'block' : 'none';
+            sqlserverAdvancedGroup.style.display = dbTypeSelect.value === 'sqlserver' ? 'block' : 'none';
         });
 
         const metricSourceSelect = form.querySelector('#metric-source-select');
@@ -230,8 +259,14 @@ const DatasourceForm = {
             });
         })();
 
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
+        const submitBtn = DOM.el('button', {
+            className: 'btn btn-primary',
+            textContent: isEdit ? 'Update' : 'Create',
+            type: 'button',
+            onClick: () => form.requestSubmit()
+        });
+
+        DOM.bindAsyncSubmit(form, async () => {
             const formData = new FormData(form);
             const data = Object.fromEntries(formData.entries());
             data.port = parseInt(data.port);
@@ -246,8 +281,22 @@ const DatasourceForm = {
             if (data.db_type === 'oracle' && data.oracle_conn_mode && data.oracle_conn_mode !== 'default') {
                 extraParams.oracle_conn_mode = data.oracle_conn_mode;
             }
+            if (data.db_type === 'sqlserver') {
+                if (data.sqlserver_odbc_driver) {
+                    extraParams.odbc_driver = data.sqlserver_odbc_driver;
+                }
+                extraParams.encrypt = formData.get('sqlserver_encrypt') === 'on';
+                extraParams.trust_server_certificate = formData.get('sqlserver_trust_server_certificate') === 'on';
+                if (data.sqlserver_connection_timeout) {
+                    extraParams.connection_timeout = parseInt(data.sqlserver_connection_timeout, 10) || 5;
+                }
+            }
             data.extra_params = Object.keys(extraParams).length > 0 ? extraParams : null;
             delete data.oracle_conn_mode;
+            delete data.sqlserver_odbc_driver;
+            delete data.sqlserver_connection_timeout;
+            delete data.sqlserver_encrypt;
+            delete data.sqlserver_trust_server_certificate;
 
             if (data.metric_source === 'system') {
                 data.inbound_source = null;
@@ -297,7 +346,7 @@ const DatasourceForm = {
             } catch (err) {
                 Toast.error(err.message);
             }
-        });
+        }, { submitControls: [submitBtn] });
 
         const footer = DOM.el('div');
         footer.appendChild(DOM.el('button', {
@@ -331,6 +380,15 @@ const DatasourceForm = {
                         if (connMode && connMode !== 'default') {
                             data.extra_params = { oracle_conn_mode: connMode };
                         }
+                    } else if (data.db_type === 'sqlserver') {
+                        data.extra_params = {
+                            encrypt: formData.get('sqlserver_encrypt') === 'on',
+                            trust_server_certificate: formData.get('sqlserver_trust_server_certificate') === 'on',
+                            connection_timeout: parseInt(formData.get('sqlserver_connection_timeout') || '5', 10) || 5,
+                        };
+                        if (formData.get('sqlserver_odbc_driver')) {
+                            data.extra_params.odbc_driver = formData.get('sqlserver_odbc_driver');
+                        }
                     }
 
                     if (isEdit) {
@@ -350,12 +408,7 @@ const DatasourceForm = {
             }
         }));
 
-        footer.appendChild(DOM.el('button', {
-            className: 'btn btn-primary',
-            textContent: isEdit ? 'Update' : 'Create',
-            type: 'button',
-            onClick: () => form.requestSubmit()
-        }));
+        footer.appendChild(submitBtn);
 
         Modal.show({
             title: isEdit ? 'Edit Datasource' : 'New Datasource',

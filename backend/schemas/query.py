@@ -3,18 +3,22 @@ from typing import Optional, List, Any
 
 
 class QueryExecuteRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     datasource_id: int
     sql: str = Field(..., min_length=1)
     max_rows: int = Field(1000, gt=0, le=10000)
     database: Optional[str] = None
-    schema: Optional[str] = None
+    schema_name: Optional[str] = Field(None, alias="schema")
 
 
 class QueryExplainRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     datasource_id: int
     sql: str = Field(..., min_length=1)
     database: Optional[str] = None
-    schema: Optional[str] = None
+    schema_name: Optional[str] = Field(None, alias="schema")
 
 
 class QueryResult(BaseModel):

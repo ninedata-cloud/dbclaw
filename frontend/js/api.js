@@ -262,6 +262,9 @@ const API = {
     updateDocument(docId, data) {
         return this.put(`/api/docs/${docId}`, data);
     },
+    recompileDocument(docId) {
+        return this.post(`/api/docs/${docId}/recompile`, {});
+    },
     deleteDocument(docId) {
         return this.delete(`/api/docs/${docId}`);
     },
@@ -323,18 +326,6 @@ const API = {
     deleteSubscription(id) { return this.delete(`/api/alerts/subscriptions/${id}`); },
     testNotification(subscriptionId) { return this.post(`/api/alerts/subscriptions/${subscriptionId}/test`, {}); },
     getInspectionReportDetail(id) { return this.get(`/api/inspections/reports/detail/${id}`); },
-
-    // P1 Action Runs (under inspections router for now)
-    getReportActions(reportId) { return this.get(`/api/inspections/reports/${reportId}/actions`); },
-    createActionRun(data) { return this.post('/api/inspections/actions/runs', data); },
-    getActionRun(runId) { return this.get(`/api/inspections/actions/runs/${runId}`); },
-    listActionRuns(params = null) {
-        const qs = params ? `?${new URLSearchParams(params).toString()}` : '';
-        return this.get(`/api/inspections/actions/runs${qs}`);
-    },
-    approveActionRun(runId, comment = '') { return this.post(`/api/inspections/actions/runs/${runId}/approve`, { action: 'approved', comment }); },
-    rejectActionRun(runId, comment = '') { return this.post(`/api/inspections/actions/runs/${runId}/reject`, { action: 'rejected', comment }); },
-    verifyActionRun(runId) { return this.post(`/api/inspections/actions/runs/${runId}/verify`, {}); },
 
     // Weixin Bot
     getWeixinBotBindings() { return this.get('/api/integration-bots'); },

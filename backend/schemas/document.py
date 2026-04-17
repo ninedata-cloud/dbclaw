@@ -1,7 +1,16 @@
 # backend/schemas/document.py
-from typing import Optional, List
+from typing import Optional, List, Any, Dict
 from datetime import datetime
 from pydantic import BaseModel
+
+
+class DocDiagnosisProfile(BaseModel):
+    symptom_tags: List[str] = []
+    signal_tags: List[str] = []
+    recommended_skills: List[str] = []
+    applicability_rules: List[Dict[str, Any]] = []
+    evidence_requirements: List[Dict[str, Any]] = []
+    related_doc_ids: List[int] = []
 
 
 class DocCategoryResponse(BaseModel):
@@ -44,6 +53,7 @@ class DocDocumentCreate(BaseModel):
     priority: int = 0
     freshness_level: Optional[str] = None
     enabled_in_diagnosis: bool = True
+    diagnosis_profile: Optional[DocDiagnosisProfile] = None
     sort_order: int = 0
 
 
@@ -62,6 +72,7 @@ class DocDocumentUpdate(BaseModel):
     priority: Optional[int] = None
     freshness_level: Optional[str] = None
     enabled_in_diagnosis: Optional[bool] = None
+    diagnosis_profile: Optional[DocDiagnosisProfile] = None
     sort_order: Optional[int] = None
     is_active: Optional[bool] = None
 
@@ -84,6 +95,11 @@ class DocDocumentListItem(BaseModel):
     priority: int = 0
     freshness_level: Optional[str] = None
     enabled_in_diagnosis: bool = True
+    diagnosis_profile: Optional[DocDiagnosisProfile] = None
+    quality_status: Optional[str] = None
+    compiled_at: Optional[datetime] = None
+    compile_warnings: List[str] = []
+    compiled_snapshot_summary: Optional[Dict[str, Any]] = None
     sort_order: int
     created_at: datetime
     updated_at: datetime

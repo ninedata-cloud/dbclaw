@@ -203,7 +203,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "list_documents",
-            "description": "列出知识库中的诊断文档目录（含摘要），AI 根据目录决定需要读取哪些文档。可按数据库类型过滤。",
+            "description": "列出知识库中的诊断文档目录（含摘要）。该工具仅作为知识计划不足时的兜底浏览入口，可按数据库类型过滤。",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -219,7 +219,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "read_document",
-            "description": "读取指定文档的完整 Markdown 内容。根据 list_documents 返回的文档目录选择合适的文档 id 后调用。",
+            "description": "读取指定文档的完整 Markdown 内容。当系统提供的知识计划不足或需要核对原始步骤/命令时再调用。",
             "parameters": {
                 "type": "object",
                 "properties": {

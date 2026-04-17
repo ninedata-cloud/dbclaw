@@ -506,60 +506,6 @@
     border-left: 4px solid rgba(88,166,255,0.7);
 }
 
-.inspection-report-actions-list {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-}
-
-.inspection-report-action-card {
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 14px;
-    padding: 16px;
-    background: rgba(255,255,255,0.03);
-}
-
-.inspection-report-action-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 12px;
-    flex-wrap: wrap;
-}
-
-.inspection-report-action-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--text-primary);
-}
-
-.inspection-report-action-summary {
-    margin-top: 6px;
-    font-size: 13px;
-    line-height: 1.7;
-    color: var(--text-secondary);
-    white-space: pre-wrap;
-}
-
-.inspection-report-action-meta {
-    margin-top: 8px;
-    font-size: 12px;
-    line-height: 1.6;
-    color: var(--text-secondary);
-}
-
-.inspection-report-action-badges,
-.inspection-report-action-buttons {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    align-items: center;
-}
-
-.inspection-report-action-buttons {
-    margin-top: 14px;
-}
-
 .inspection-report-body {
     padding: 22px 24px;
 }

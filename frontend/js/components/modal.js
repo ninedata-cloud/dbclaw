@@ -63,7 +63,42 @@ const Modal = {
                 const button = DOM.el('button', {
                     className: `btn btn-${btn.variant || 'secondary'}`,
                     textContent: btn.text,
-                    onClick: btn.onClick
+                    onClick: async (event) => {
+                        if (button.dataset.modalBusy === '1') {
+                            return;
+                        }
+
+                        const result = btn.onClick?.(event);
+                        if (!result || typeof result.then !== 'function') {
+                            return result;
+                        }
+
+                        button.dataset.modalBusy = '1';
+                        DOM._setControlBusy(button, true);
+                        const footerButtons = Array.from(footerEl.querySelectorAll('button'));
+                        footerButtons.forEach((item) => {
+                            if (item === button) return;
+                            item.dataset.modalOriginalDisabled = item.disabled ? '1' : '0';
+                            item.disabled = true;
+                        });
+
+                        try {
+                            await result;
+                        } finally {
+                            delete button.dataset.modalBusy;
+                            if (button.isConnected) {
+                                DOM._setControlBusy(button, false);
+                            }
+                            footerButtons.forEach((item) => {
+                                if (item === button) return;
+                                const originalDisabled = item.dataset.modalOriginalDisabled === '1';
+                                delete item.dataset.modalOriginalDisabled;
+                                if (item.isConnected) {
+                                    item.disabled = originalDisabled;
+                                }
+                            });
+                        }
+                    }
                 });
                 footerEl.appendChild(button);
             });

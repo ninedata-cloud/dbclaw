@@ -929,7 +929,7 @@ const AlertsPage = {
         container.appendChild(alertCard);
 
         // ========== 3. AI 诊断分析区块 ==========
-        const hasDiagnosis = diagCtx.case_summary || diagCtx.diagnosis_summary || diagCtx.root_cause || (diagCtx.recommended_actions_preview && diagCtx.recommended_actions_preview.length > 0);
+        const hasDiagnosis = diagCtx.case_summary || diagCtx.diagnosis_summary || diagCtx.root_cause || diagCtx.recommended_action;
 
         if (hasDiagnosis) {
             const diagCard = DOM.el('div', { className: 'detail-card diagnosis-card' });
@@ -969,24 +969,13 @@ const AlertsPage = {
                 `;
             }
 
-            // Recommended actions with execute buttons
-            if (diagCtx.recommended_actions_preview && diagCtx.recommended_actions_preview.length > 0) {
-                diagHTML += `<div class="diagnosis-section"><div class="diagnosis-label">🛠 推荐操作</div>`;
-                for (const action of diagCtx.recommended_actions_preview) {
-                    const riskClass = action.risk_level === 'safe' || action.risk_level === 'low' ? 'risk-safe' : action.risk_level === 'medium' ? 'risk-medium' : 'risk-high';
-                    const riskLabel = action.risk_level === 'safe' ? '低风险' : action.risk_level === 'low' ? '低风险' : action.risk_level === 'medium' ? '中风险' : '高风险';
-                    diagHTML += `
-                        <div class="action-item">
-                            <div class="action-info">
-                                <span class="action-title">${this._escapeHtml(action.title || action.id)}</span>
-                                ${action.summary ? `<span class="action-summary">${this._escapeHtml(action.summary)}</span>` : ''}
-                                <span class="action-risk ${riskClass}">${riskLabel}</span>
-                            </div>
-                            <button class="btn btn-sm btn-primary" onclick="AlertsPage.executeAction(${alert.id}, '${String(action.id).replace(/'/g, "\\'")}', ${linkedReport.report_id || 0})">执行</button>
-                        </div>
-                    `;
-                }
-                diagHTML += `</div>`;
+            if (diagCtx.recommended_action) {
+                diagHTML += `
+                    <div class="diagnosis-section">
+                        <div class="diagnosis-label">🛠 建议措施</div>
+                        <div class="diagnosis-content">${this._escapeHtml(diagCtx.recommended_action)}</div>
+                    </div>
+                `;
             }
 
             diagHTML += `</div>`;
@@ -1030,25 +1019,6 @@ const AlertsPage = {
         container.appendChild(contentCard);
 
         return container;
-    },
-
-    // Helper: Execute recommended action
-    async executeAction(alertId, actionId, reportId) {
-        if (!reportId) {
-            Toast.show('无关联报告，无法执行操作', 'error');
-            return;
-        }
-        try {
-            const res = await API.createActionRun({ report_id: reportId, recommendation_id: actionId });
-            const run = res?.run;
-            if (!run?.run_id) {
-                Toast.show('创建动作执行记录失败', 'error');
-                return;
-            }
-            Toast.show('动作已提交执行', 'success');
-        } catch (e) {
-            Toast.show('执行失败: ' + e.message, 'error');
-        }
     },
 
     // Helper: View report

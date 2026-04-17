@@ -12,10 +12,13 @@ logger = logging.getLogger(__name__)
 
 async def _add_column_if_missing(conn, table_name: str, column_name: str, ddl: str):
     result = await conn.execute(text(
-        "SELECT column_name FROM information_schema.columns "
-        f"WHERE table_name = '{table_name}' AND column_name = '{column_name}'"
+        "SELECT EXISTS ("
+        "SELECT 1 FROM information_schema.columns "
+        "WHERE table_schema = current_schema() "
+        f"AND table_name = '{table_name}' AND column_name = '{column_name}'"
+        ")"
     ))
-    if result.scalar_one_or_none():
+    if result.scalar_one():
         return
     await conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {ddl}"))
 

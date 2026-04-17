@@ -6,7 +6,7 @@ from datetime import datetime
 class SkillAuthorizationSettings(BaseModel):
     platform_operations: bool = False
     high_privilege_operations: bool = False
-    knowledge_retrieval: bool = False
+    knowledge_retrieval: bool = True
 
 
 class ChatSessionCreate(BaseModel):

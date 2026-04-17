@@ -68,6 +68,7 @@
 .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 .status-dot.healthy { background: #3fb950; }
 .status-dot.warning { background: #d29922; }
+.status-dot.critical { background: #f85149; }
 .status-dot.error   { background: #f85149; }
 .status-dot.offline { background: #f85149; }
 .status-dot.unknown { background: rgba(255,255,255,0.3); }
@@ -132,16 +133,67 @@
 }
 .alert-view-all-link:hover { color: #58a6ff; }
 
-/* DB type distribution */
-.db-type-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; margin-top: 4px; }
-
-.db-type-item {
-    display: flex; align-items: center; gap: 6px;
-    font-size: 12px; color: rgba(255,255,255,0.55);
-    font-variant-numeric: tabular-nums;
+/* Datasource health list */
+.db-health-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 4px;
 }
 
-.db-type-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+.db-health-list-title {
+    font-size: 11px;
+    color: rgba(255,255,255,0.35);
+    letter-spacing: 0.04em;
+    margin-bottom: 2px;
+}
+
+.db-health-item {
+    display: grid;
+    grid-template-columns: 8px minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 8px;
+    min-height: 24px;
+    padding: 3px 6px;
+    margin-left: -6px;
+    border-radius: 6px;
+    color: rgba(255,255,255,0.62);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.db-health-item:hover {
+    background: rgba(88,166,255,0.10);
+    color: rgba(255,255,255,0.9);
+}
+
+.db-health-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.db-health-type {
+    font-size: 10px;
+    color: rgba(255,255,255,0.34);
+    text-transform: uppercase;
+}
+
+.db-health-status {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 4px;
+}
+
+.db-health-more {
+    font-size: 12px;
+    color: rgba(255,255,255,0.35);
+    padding-top: 2px;
+}
 
 /* Live indicator */
 .live-indicator {

@@ -142,8 +142,14 @@ const AIModelsPage = {
         protocolEl.addEventListener('change', syncProtocolHints);
         syncProtocolHints();
 
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
+        const submitBtn = DOM.el('button', {
+            className: 'btn btn-primary',
+            textContent: isEdit ? '保存' : '创建',
+            type: 'button',
+            onClick: () => form.requestSubmit()
+        });
+
+        DOM.bindAsyncSubmit(form, async () => {
             const data = Object.fromEntries(new FormData(form).entries());
             data.context_window = data.context_window ? parseInt(data.context_window, 10) : null;
             try {
@@ -160,14 +166,11 @@ const AIModelsPage = {
             } catch (err) {
                 Toast.error(err.message);
             }
-        });
+        }, { submitControls: [submitBtn] });
 
         const footer = DOM.el('div');
         footer.appendChild(DOM.el('button', { className: 'btn btn-secondary', textContent: '取消', type: 'button', onClick: () => Modal.hide() }));
-        footer.appendChild(DOM.el('button', {
-            className: 'btn btn-primary', textContent: isEdit ? '保存' : '创建', type: 'button',
-            onClick: () => form.requestSubmit()
-        }));
+        footer.appendChild(submitBtn);
 
         Modal.show({ title: isEdit ? '编辑模型' : '新建 AI 模型', content: form, footer, width: '520px' });
     },

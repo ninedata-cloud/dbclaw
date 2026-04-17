@@ -17,7 +17,8 @@ async def migrate():
         # 检查字段是否已存在
         result = await conn.execute(text(
             "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = 'datasources' AND column_name = 'connection_status'"
+            "WHERE table_schema = current_schema() "
+            "AND table_name = 'datasources' AND column_name = 'connection_status'"
         ))
         if result.fetchone():
             logger.info("connection_status column already exists, skipping migration")

@@ -1,13 +1,20 @@
 # DBClaw - 单容器部署（内置 PostgreSQL + FastAPI + 静态前端）
 FROM python:3.11-slim
 
+ARG APP_VERSION=dev
+ARG BUILD_COMMIT=
+ARG BUILD_TIME=
+ARG TARGETARCH
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
+    APP_VERSION=${APP_VERSION} \
+    BUILD_COMMIT=${BUILD_COMMIT} \
+    BUILD_TIME=${BUILD_TIME} \
     APP_HOST=0.0.0.0 \
     APP_PORT=9939 \
-    DEBUG=false \
-    SQLSERVER_ODBC_DRIVER="ODBC Driver 18 for SQL Server"
+    DEBUG=false
 
 WORKDIR /app
 
@@ -43,7 +50,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get update && apt-get install -y --no-install-recommends \
     postgresql-18 \
     postgresql-client-18 \
-    && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 \
+    && if [ "$TARGETARCH" = "amd64" ]; then \
+        ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql17; \
+       else \
+        echo "Skipping msodbcsql17 on $TARGETARCH; Microsoft does not publish Debian 12 arm64 builds for ODBC 17, using FreeTDS fallback."; \
+       fi \
     && rm -rf /var/lib/apt/lists/*
 
 # 先安装 Python 依赖，提升缓存命中率

@@ -1,10 +1,14 @@
 import logging
 import asyncio
+import json
+import re
+from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import HTMLResponse
 from fastapi.responses import JSONResponse
+from urllib.parse import parse_qs, parse_qsl, urlencode, urlsplit, urlunsplit
 
 from backend.config import get_settings
 from backend.dependencies import get_current_admin
@@ -23,6 +27,64 @@ from backend.services.monitoring_scheduler_service import (
 
 logger = logging.getLogger(__name__)
 
+FRONTEND_INDEX_PATH = Path("frontend/index.html")
+STATIC_ASSET_PATTERN = re.compile(r'(?P<prefix>\b(?:href|src)=["\'])(?P<url>/(?:css|js|lib|assets)/[^"\']+)(?P<suffix>["\'])')
+
+
+class VersionedStaticFiles(StaticFiles):
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        query = parse_qs(scope.get("query_string", b"").decode("latin-1"))
+        if "build" in query:
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            response.headers["Cache-Control"] = "no-cache, max-age=0, must-revalidate"
+        return response
+
+
+def get_app_info_payload(settings):
+    return {
+        "app_name": settings.app_name,
+        "app_version": settings.app_version,
+        "build_commit": settings.build_commit,
+        "build_time": settings.build_time,
+        "frontend_asset_version": settings.frontend_asset_version,
+    }
+
+
+def add_asset_version_to_url(url: str, asset_version: str) -> str:
+    parts = urlsplit(url)
+    query_params = [
+        (key, value)
+        for key, value in parse_qsl(parts.query, keep_blank_values=True)
+        if key != "build"
+    ]
+    query = urlencode(query_params)
+    version_query = f"build={asset_version}"
+    query = f"{query}&{version_query}" if query else version_query
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
+
+
+def render_frontend_index(settings) -> str:
+    app_info = get_app_info_payload(settings)
+    html = FRONTEND_INDEX_PATH.read_text(encoding="utf-8")
+
+    def replace_static_asset(match):
+        return (
+            f"{match.group('prefix')}"
+            f"{add_asset_version_to_url(match.group('url'), settings.frontend_asset_version)}"
+            f"{match.group('suffix')}"
+        )
+
+    html = STATIC_ASSET_PATTERN.sub(replace_static_asset, html)
+    app_info_script = (
+        "<script>\n"
+        f"        window.DBCLAW_APP_INFO = {json.dumps(app_info, ensure_ascii=False)};\n"
+        f"        window.DBCLAW_ASSET_VERSION = {json.dumps(settings.frontend_asset_version)};\n"
+        "    </script>\n"
+    )
+    return html.replace("    <!-- App JS -->", f"    {app_info_script}\n    <!-- App JS -->")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -40,298 +102,6 @@ async def lifespan(app: FastAPI):
     # Initialize database
     await init_db()
     logger.info("Database initialized")
-
-    # Run migrations for new columns
-    try:
-        from backend.migrations.add_datasource_connection_status import migrate as migrate_conn_status
-        await migrate_conn_status()
-    except Exception as e:
-        logger.warning(f"Connection status migration: {e}")
-
-    try:
-        from backend.migrations.add_datasource_tags import migrate as migrate_datasource_tags
-        await migrate_datasource_tags()
-    except Exception as e:
-        logger.warning(f"Datasource tags migration: {e}")
-
-    try:
-        from backend.migrations.add_alert_notified_at import migrate as migrate_alert_notified
-        await migrate_alert_notified()
-    except Exception as e:
-        logger.warning(f"Alert notified_at migration: {e}")
-
-    try:
-        from backend.migrations.rename_legacy_log_tables_to_plural import migrate as rename_legacy_log_tables_to_plural
-        await rename_legacy_log_tables_to_plural()
-    except Exception as e:
-        logger.warning(f"Rename legacy log tables migration: {e}")
-
-    try:
-        from backend.migrations.replace_knowledge_base_with_documents import migrate as migrate_docs
-        await migrate_docs()
-    except Exception as e:
-        logger.warning(f"Document migration: {e}")
-
-    try:
-        from backend.migrations.add_ai_model_context_window import migrate as migrate_ai_model_context_window
-        await migrate_ai_model_context_window()
-    except Exception as e:
-        logger.warning(f"AI model context_window migration: {e}")
-
-    try:
-        from backend.migrations.normalize_ai_model_timestamps import migrate as normalize_ai_model_timestamps
-        await normalize_ai_model_timestamps()
-    except Exception as e:
-        logger.warning(f"AI model timestamp normalization migration: {e}")
-
-    try:
-        from backend.migrations.add_diagnostic_session_token_usage import migrate as migrate_diagnostic_session_token_usage
-        await migrate_diagnostic_session_token_usage()
-    except Exception as e:
-        logger.warning(f"Diagnostic session token usage migration: {e}")
-
-    try:
-        from backend.migrations.add_chat_message_token_usage import migrate as migrate_chat_message_token_usage
-        await migrate_chat_message_token_usage()
-    except Exception as e:
-        logger.warning(f"Chat message token usage migration: {e}")
-
-    try:
-        from backend.migrations.add_chat_message_render_segments import migrate as migrate_chat_message_render_segments
-        await migrate_chat_message_render_segments()
-    except Exception as e:
-        logger.warning(f"Chat message render segment migration: {e}")
-
-    try:
-        from backend.migrations.add_report_alert_link import migrate as migrate_report_alert_link
-        await migrate_report_alert_link()
-    except Exception as e:
-        logger.warning(f"Report alert link migration: {e}")
-
-    try:
-        from backend.migrations.add_trigger_alert_link import migrate as migrate_trigger_alert_link
-        await migrate_trigger_alert_link()
-    except Exception as e:
-        logger.warning(f"Trigger alert link migration: {e}")
-
-    try:
-        from backend.migrations.add_user_session_security import migrate as migrate_user_session_security
-        await migrate_user_session_security()
-    except Exception as e:
-        logger.warning(f"User session security migration: {e}")
-
-    try:
-        from backend.migrations.add_feishu_chat_tables import migrate as migrate_feishu_chat_tables
-        await migrate_feishu_chat_tables()
-    except Exception as e:
-        logger.warning(f"Feishu chat tables migration: {e}")
-
-    try:
-        from backend.migrations.fix_feishu_chat_event_dedups_duplicates import migrate as fix_feishu_chat_event_dedups_duplicates
-        await fix_feishu_chat_event_dedups_duplicates()
-    except Exception as e:
-        logger.warning(f"Feishu chat event dedup fix migration: {e}")
-
-    # P1 migrations: structured recommended actions + action run audit
-    try:
-        from backend.migrations.add_report_recommended_actions import migrate as migrate_report_recommended_actions
-        await migrate_report_recommended_actions()
-    except Exception as e:
-        logger.warning(f"Report recommended_actions migration: {e}")
-
-    try:
-        from backend.migrations.create_action_runs import migrate as migrate_action_runs
-        await migrate_action_runs()
-    except Exception as e:
-        logger.warning(f"Action runs migration: {e}")
-
-    try:
-        from backend.migrations.create_diagnosis_events import migrate as create_diagnosis_events
-        await create_diagnosis_events()
-    except Exception as e:
-        logger.warning(f"Diagnosis events migration: {e}")
-
-    try:
-        from backend.migrations.create_diagnosis_conclusions import migrate as create_diagnosis_conclusions
-        await create_diagnosis_conclusions()
-    except Exception as e:
-        logger.warning(f"Diagnosis conclusions migration: {e}")
-
-    try:
-        from backend.migrations.add_subscription_integration_targets import migrate as migrate_subscription_integration_targets
-        await migrate_subscription_integration_targets()
-    except Exception as e:
-        logger.warning(f"Subscription integration_targets migration: {e}")
-
-    try:
-        from backend.migrations.add_datasource_inbound_source import migrate as migrate_datasource_inbound_source
-        await migrate_datasource_inbound_source()
-    except Exception as e:
-        logger.warning(f"Datasource inbound_source migration: {e}")
-
-    try:
-        from backend.migrations.add_diagnostic_session_hidden_and_alert_diagnosis import migrate as migrate_diagnostic_session_hidden_and_alert_diagnosis
-        await migrate_diagnostic_session_hidden_and_alert_diagnosis()
-    except Exception as e:
-        logger.warning(f"Diagnostic session hidden + alert diagnosis migration: {e}")
-
-    try:
-        from backend.migrations.add_diagnostic_session_skill_authorizations import migrate as migrate_diagnostic_session_skill_authorizations
-        await migrate_diagnostic_session_skill_authorizations()
-    except Exception as e:
-        logger.warning(f"Diagnostic session skill_authorizations migration: {e}")
-
-    try:
-        from backend.migrations.add_bot_bindings import migrate as migrate_bot_bindings
-        await migrate_bot_bindings()
-    except Exception as e:
-        logger.warning(f"Bot bindings migration: {e}")
-
-    try:
-        from backend.migrations.extend_integration_execution_logs_for_targets import migrate as migrate_integration_execution_log_targets
-        await migrate_integration_execution_log_targets()
-    except Exception as e:
-        logger.warning(f"Integration execution log targets migration: {e}")
-
-    try:
-        from backend.migrations.extend_alert_delivery_logs_targets import migrate as migrate_alert_delivery_logs_targets
-        await migrate_alert_delivery_logs_targets()
-    except Exception as e:
-        logger.warning(f"Alert delivery log targets migration: {e}")
-
-    try:
-        from backend.migrations.add_alert_ai_diagnosis_summary import migrate as migrate_alert_ai_diagnosis_summary
-        await migrate_alert_ai_diagnosis_summary()
-    except Exception as e:
-        logger.warning(f"Alert AI diagnosis summary migration: {e}")
-
-    try:
-        from backend.migrations.add_alert_event_diagnosis_fields import migrate as migrate_alert_event_diagnosis_fields
-        await migrate_alert_event_diagnosis_fields()
-    except Exception as e:
-        logger.warning(f"Alert event diagnosis fields migration: {e}")
-
-    try:
-        from backend.migrations.add_knowledge_routing_fields import migrate as migrate_knowledge_routing_fields
-        await migrate_knowledge_routing_fields()
-    except Exception as e:
-        logger.warning(f"Knowledge routing migration: {e}")
-
-    try:
-        from backend.migrations.add_alert_event_diagnosis_timestamps import migrate as migrate_alert_event_diagnosis_timestamps
-        await migrate_alert_event_diagnosis_timestamps()
-    except Exception as e:
-        logger.warning(f"Alert event diagnosis timestamps migration: {e}")
-
-    try:
-        from backend.migrations.add_alert_ai_engine import migrate as migrate_alert_ai_engine
-        await migrate_alert_ai_engine()
-    except Exception as e:
-        logger.warning(f"Alert AI engine migration: {e}")
-
-    try:
-        from backend.migrations.add_alert_templates import migrate as migrate_alert_templates
-        await migrate_alert_templates()
-    except Exception as e:
-        logger.warning(f"Alert template migration: {e}")
-
-    try:
-        from backend.migrations.rebind_inspection_configs_to_default_template import migrate as migrate_rebind_inspection_configs
-        await migrate_rebind_inspection_configs()
-    except Exception as e:
-        logger.warning(f"Rebind inspection configs to default template migration: {e}")
-
-    try:
-        from backend.migrations.add_alert_ai_candidate_gating import migrate as migrate_alert_ai_candidate_gating
-        await migrate_alert_ai_candidate_gating()
-    except Exception as e:
-        logger.warning(f"Alert AI candidate gating migration: {e}")
-
-    try:
-        from backend.migrations.add_baseline_and_event_strategy import migrate as migrate_baseline_and_event_strategy
-        await migrate_baseline_and_event_strategy()
-    except Exception as e:
-        logger.warning(f"Baseline and event strategy migration: {e}")
-
-    try:
-        from backend.migrations.add_metric_composite_index import add_composite_index as add_metric_composite_index
-        await add_metric_composite_index()
-    except Exception as e:
-        logger.warning(f"Metric snapshot composite index migration: {e}")
-
-    try:
-        from backend.migrations.add_reports_indexes import migrate as add_reports_indexes
-        await add_reports_indexes()
-    except Exception as e:
-        logger.warning(f"Reports indexes migration: {e}")
-
-    try:
-        from backend.migrations.archive_and_drop_deprecated_report_columns import migrate as archive_and_drop_deprecated_report_columns
-        await archive_and_drop_deprecated_report_columns()
-    except Exception as e:
-        logger.warning(f"Archive/drop deprecated report columns migration: {e}")
-
-    try:
-        from backend.migrations.add_schema_hardening_indexes import migrate as add_schema_hardening_indexes
-        await add_schema_hardening_indexes()
-    except Exception as e:
-        logger.warning(f"Schema hardening indexes migration: {e}")
-
-    try:
-        from backend.migrations.normalize_core_foreign_keys import migrate as normalize_core_foreign_keys
-        await normalize_core_foreign_keys()
-    except Exception as e:
-        logger.warning(f"Core foreign key normalization migration: {e}")
-
-
-    try:
-        from backend.migrations.migrate_alert_channels_to_subscription_targets import migrate as migrate_alert_channels_to_subscription_targets
-        await migrate_alert_channels_to_subscription_targets()
-    except Exception as e:
-        logger.warning(f"Alert channel to subscription target migration: {e}")
-
-    try:
-        from backend.migrations.migrate_inbound_integrations_to_datasource_sources import migrate as migrate_inbound_integrations_to_datasource_sources
-        await migrate_inbound_integrations_to_datasource_sources()
-    except Exception as e:
-        logger.warning(f"Inbound integration to datasource source migration: {e}")
-
-    try:
-        from backend.migrations.migrate_datasource_extra_params_to_jsonb import migrate as migrate_datasource_extra_params_to_jsonb
-        await migrate_datasource_extra_params_to_jsonb()
-    except Exception as e:
-        logger.warning(f"Datasource extra_params to jsonb migration: {e}")
-
-    try:
-        from backend.migrations.migrate_feishu_bot_channel_to_bot_binding import migrate as migrate_feishu_bot_channel_to_bot_binding
-        await migrate_feishu_bot_channel_to_bot_binding()
-    except Exception as e:
-        logger.warning(f"Feishu bot channel to bot binding migration: {e}")
-
-    try:
-        from backend.migrations.migrate_integration_metric_snapshots_to_db_status import migrate as migrate_integration_metric_snapshots_to_db_status
-        await migrate_integration_metric_snapshots_to_db_status()
-    except Exception as e:
-        logger.warning(f"Integration metric snapshot migration: {e}")
-
-    try:
-        from backend.migrations.drop_legacy_alert_channel_schema import migrate as drop_legacy_alert_channel_schema
-        await drop_legacy_alert_channel_schema()
-    except Exception as e:
-        logger.warning(f"Drop legacy alert channel schema migration: {e}")
-
-    try:
-        from backend.migrations.archive_legacy_adapter_schema import migrate as archive_legacy_adapter_schema
-        await archive_legacy_adapter_schema()
-    except Exception as e:
-        logger.warning(f"Archive legacy adapter schema migration: {e}")
-
-    try:
-        from backend.migrations.remove_datasource_monitoring_intervals import migrate as remove_datasource_monitoring_intervals
-        await remove_datasource_monitoring_intervals()
-    except Exception as e:
-        logger.warning(f"Remove datasource monitoring intervals migration: {e}")
-
 
     # Seed default system configs
     from backend.database import async_session as _async_session
@@ -607,12 +377,13 @@ def create_app() -> FastAPI:
 
     @app.get("/api/app/info")
     async def app_info():
-        return {
-            "app_name": settings.app_name,
-            "app_version": settings.app_version,
-            "build_commit": settings.build_commit,
-            "build_time": settings.build_time,
-        }
+        return JSONResponse(
+            content=get_app_info_payload(settings),
+            headers={
+                "Cache-Control": "no-store",
+                "X-DBClaw-Asset-Version": settings.frontend_asset_version,
+            },
+        )
 
     # Register routers
     from backend.routers import datasources, hosts, metrics, monitor_ws, chat, query, ai_models, auth, users, inspections, system_configs, alerts, integrations, documents, feishu_bot, integration_bots, weixin_bot, instances
@@ -637,22 +408,40 @@ def create_app() -> FastAPI:
     app.include_router(feishu_bot.router)
     app.include_router(weixin_bot.router)
     # Serve frontend static files
-    app.mount("/css", StaticFiles(directory="frontend/css"), name="css")
-    app.mount("/js", StaticFiles(directory="frontend/js"), name="js")
-    app.mount("/assets", StaticFiles(directory="frontend/assets"), name="assets")
-    app.mount("/lib", StaticFiles(directory="frontend/lib"), name="lib")
+    app.mount("/css", VersionedStaticFiles(directory="frontend/css"), name="css")
+    app.mount("/js", VersionedStaticFiles(directory="frontend/js"), name="js")
+    app.mount("/assets", VersionedStaticFiles(directory="frontend/assets"), name="assets")
+    app.mount("/lib", VersionedStaticFiles(directory="frontend/lib"), name="lib")
 
     @app.get("/")
     async def serve_index():
-        return FileResponse("frontend/index.html")
+        return HTMLResponse(
+            content=render_frontend_index(settings),
+            headers={
+                "Cache-Control": "no-store",
+                "X-DBClaw-Asset-Version": settings.frontend_asset_version,
+            },
+        )
 
     @app.get("/public/alerts/{alert_id}")
     async def serve_public_alert_entry(alert_id: int):
-        return FileResponse("frontend/index.html")
+        return HTMLResponse(
+            content=render_frontend_index(settings),
+            headers={
+                "Cache-Control": "no-store",
+                "X-DBClaw-Asset-Version": settings.frontend_asset_version,
+            },
+        )
 
     @app.get("/public/reports/{report_id}")
     async def serve_public_report_entry(report_id: int):
-        return FileResponse("frontend/index.html")
+        return HTMLResponse(
+            content=render_frontend_index(settings),
+            headers={
+                "Cache-Control": "no-store",
+                "X-DBClaw-Asset-Version": settings.frontend_asset_version,
+            },
+        )
 
     return app
 

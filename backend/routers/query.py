@@ -185,7 +185,7 @@ async def execute_query(
 
     history = _query_history_by_user[current_user.id]
     selected_database = _normalize_optional_text(req.database)
-    selected_schema = _normalize_optional_text(req.schema)
+    selected_schema = _normalize_optional_text(req.schema_name)
     connector, datasource = await _get_connector_for(req.datasource_id, db, selected_database)
     try:
         if datasource.db_type == "postgresql":
@@ -225,7 +225,7 @@ async def explain_query(req: QueryExplainRequest, db: AsyncSession = Depends(get
         raise HTTPException(status_code=400, detail="Only read-only queries can be explained.")
 
     selected_database = _normalize_optional_text(req.database)
-    selected_schema = _normalize_optional_text(req.schema)
+    selected_schema = _normalize_optional_text(req.schema_name)
     connector, datasource = await _get_connector_for(req.datasource_id, db, selected_database)
     try:
         if datasource.db_type == "postgresql":

@@ -72,36 +72,16 @@ async def init_db():
     import backend.models  # noqa: F401
     import backend.skills.models  # noqa: F401
 
-    from backend.migrations.rename_legacy_log_tables_to_plural import migrate as rename_legacy_log_tables_to_plural
+    from backend.migrations.runner import run_post_create_migrations, run_pre_create_migrations
 
-    await rename_legacy_log_tables_to_plural()
+    await run_pre_create_migrations()
 
     async with get_engine().begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    await run_post_create_migrations()
+
     settings = get_settings()
-
-    if settings.database_url.startswith("postgresql"):
-        from backend.migrations.add_soft_delete_columns import migrate as migrate_soft_delete_columns
-        await migrate_soft_delete_columns()
-
-        try:
-            from backend.migrations.add_user_session_security import migrate as migrate_user_session_security
-            await migrate_user_session_security()
-        except Exception as exc:
-            logger.warning("User session security migration failed during init_db: %s", exc)
-
-        try:
-            from backend.migrations.add_knowledge_routing_fields import migrate as migrate_knowledge_routing_fields
-            await migrate_knowledge_routing_fields()
-        except Exception as exc:
-            logger.warning("Knowledge routing migration failed during init_db: %s", exc)
-
-        try:
-            from backend.migrations.add_diagnostic_session_skill_authorizations import migrate as migrate_diagnostic_session_skill_authorizations
-            await migrate_diagnostic_session_skill_authorizations()
-        except Exception as exc:
-            logger.warning("Diagnostic session skill_authorizations migration failed during init_db: %s", exc)
 
     # Seed default admin user if no users exist
     from backend.models.user import User
@@ -139,3 +119,9 @@ async def init_db():
     from backend.services.builtin_docs.seeder import seed_builtin_docs
     async with async_session() as session:
         await seed_builtin_docs(session)
+
+    from backend.services.document_service import backfill_document_compilation
+    async with async_session() as session:
+        updated = await backfill_document_compilation(session)
+        if updated:
+            logger.info("Backfilled knowledge compilation for %s documents", updated)

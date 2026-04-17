@@ -454,37 +454,6 @@ const InspectionPage = {
                 </section>
             ` : '';
 
-            const actions = Array.isArray(report.actions) ? report.actions : [];
-            const actionsHtml = actions.length ? `
-                <section class="inspection-report-section inspection-report-actions">
-                    <div class="inspection-report-section-title">动作建议</div>
-                    <div class="inspection-report-actions-list">
-                        ${actions.map(action => `
-                            <div class="inspection-report-action-card">
-                                <div class="inspection-report-action-header">
-                                    <div>
-                                        <div class="inspection-report-action-title">${safe(action.title || '未命名动作')}</div>
-                                        <div class="inspection-report-action-summary">${safe(action.summary || '')}</div>
-                                        ${action.precheck ? `<div class="inspection-report-action-meta">前置检查：${safe(action.precheck)}</div>` : ''}
-                                        ${action.verification?.success_criteria ? `<div class="inspection-report-action-meta">验证：${safe(action.verification.success_criteria)}</div>` : ''}
-                                    </div>
-                                    <div class="inspection-report-action-badges">
-                                        <span class="badge badge-${action.risk_level === 'destructive' ? 'danger' : action.risk_level === 'high' ? 'warning' : 'success'}">${safe(action.risk_level || 'safe')}</span>
-                                        ${action.latest_run ? `<span class="badge badge-info">${safe(InspectionPage.formatActionRunStatus(action.latest_run.status))}</span>` : ''}
-                                    </div>
-                                </div>
-                                <div class="inspection-report-action-buttons">
-                                    <button class="btn btn-sm btn-primary" onclick="InspectionPage.executeRecommendedAction(${report.id}, '${String(action.id).replace(/'/g, "\\'")}')">审批并执行</button>
-                                    ${action.latest_run ? `<button class="btn btn-sm btn-secondary" onclick="InspectionPage.verifyActionRun(${action.latest_run.run_id})">执行后验证</button>` : ''}
-                                    ${action.latest_run ? `<button class="btn btn-sm btn-secondary" onclick="InspectionPage.showActionRunDetail(${action.latest_run.run_id})">查看执行记录</button>` : ''}
-                                    ${action.latest_run ? `<button class="btn btn-sm btn-secondary" onclick="InspectionPage.openDiagnosisFromActionRun(${action.latest_run.run_id}, ${report.datasource_id}, ${report.alert_id || 'null'}, ${report.id})">进入 AI 诊断</button>` : ''}
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                </section>
-            ` : '';
-
             const diagnosisPrompt = `基于巡检/诊断报告，给出【现象-证据-根因-建议动作-验证方式】的处置建议。\n\n数据源：${datasourceLabel}\n报告标题：${report.title}\n触发类型：${report.trigger_type || '-'}\n触发原因：${report.trigger_reason || '-'}\n诊断摘要：${report.summary || '-'}\n\n如果需要，请调用技能进一步确认（Top SQL/EXPLAIN/连接情况/OS 指标）。`;
 
             content.innerHTML = `
@@ -534,7 +503,6 @@ const InspectionPage = {
                     <div class="inspection-report-overview">
                         ${summaryHtml}
                         ${triggerDetailsHtml}
-                        ${actionsHtml}
                     </div>
 
                     <section class="inspection-report-section inspection-report-body">
@@ -581,20 +549,6 @@ const InspectionPage = {
         if (datasourceId) params.set('datasource', datasourceId);
         if (alertId) params.set('alert', alertId);
         if (prompt) params.set('ask', prompt);
-        if (this._renderOptions?.embedded) {
-            params.set('tab', 'ai');
-            Router.navigate(`instance-detail?${params.toString()}`);
-        } else {
-            Router.navigate(`diagnosis?${params.toString()}`);
-        }
-    },
-
-    openDiagnosisFromActionRun(runId, datasourceId, alertId, reportId) {
-        const params = new URLSearchParams();
-        if (datasourceId) params.set('datasource', datasourceId);
-        if (alertId) params.set('alert', alertId);
-        if (reportId) params.set('report', reportId);
-        if (runId) params.set('action_run', runId);
         if (this._renderOptions?.embedded) {
             params.set('tab', 'ai');
             Router.navigate(`instance-detail?${params.toString()}`);
@@ -755,98 +709,6 @@ const InspectionPage = {
         } catch (error) {
             Toast.show(`删除失败: ${error.message}`, 'error');
         }
-    },
-
-    async executeRecommendedAction(reportId, recommendationId) {
-        try {
-            const res = await API.createActionRun({ report_id: reportId, recommendation_id: recommendationId });
-            const run = res?.run;
-            if (!run?.run_id) {
-                Toast.show('创建动作执行记录失败', 'error');
-                return;
-            }
-
-            Toast.show('动作已执行', 'success');
-            await this.viewReport(reportId);
-        } catch (e) {
-            Toast.show('执行失败: ' + e.message, 'error');
-        }
-    },
-
-    async verifyActionRun(runId) {
-        try {
-            await API.verifyActionRun(runId);
-            Toast.show('验证已触发', 'success');
-            if (this.currentReportDetail?.id) {
-                await this.viewReport(this.currentReportDetail.id);
-            }
-        } catch (e) {
-            Toast.show('验证失败: ' + e.message, 'error');
-        }
-    },
-
-    async showActionRunDetail(runId) {
-        try {
-            const res = await API.getActionRun(runId);
-            const run = res?.run;
-            if (!run) {
-                Toast.show('未找到执行记录', 'error');
-                return;
-            }
-            const safe = (v) => String(v ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            Modal.show({
-                title: '执行记录',
-                content: `
-                    <div class="inspection-run-detail">
-                        <div><strong>动作：</strong>${safe(run.title)}</div>
-                        <div><strong>状态：</strong>${safe(this.formatActionRunStatus(run.status))}</div>
-                        <div><strong>执行：</strong>${safe(this.formatExecutionStatus(run.execution_status))} ${run.skill_execution_id ? `(skill_execution_id=${safe(run.skill_execution_id)})` : ''}</div>
-                        ${run.execution_result_summary ? `<pre class="inspection-inline-code">${safe(run.execution_result_summary)}</pre>` : ''}
-                        <div><strong>验证：</strong>${safe(this.formatVerificationStatus(run.verification_status))} ${run.verification_skill_execution_id ? `(skill_execution_id=${safe(run.verification_skill_execution_id)})` : ''}</div>
-                        ${run.verification_summary ? `<pre class="inspection-inline-code">${safe(run.verification_summary)}</pre>` : ''}
-                    </div>
-                `,
-                buttons: [
-                    { text: '关闭', variant: 'secondary', onClick: () => Modal.hide() }
-                ]
-            });
-        } catch (e) {
-            Toast.show('加载执行记录失败: ' + e.message, 'error');
-        }
-    },
-
-    formatActionRunStatus(status) {
-        const map = {
-            rejected: '已拒绝',
-            executing: '执行中',
-            execution_succeeded: '执行成功',
-            execution_failed: '执行失败',
-            verifying: '验证中',
-            verified_passed: '验证通过',
-            verified_failed: '验证失败',
-            closed: '已关闭'
-        };
-        return map[status] || status || '-';
-    },
-
-    formatExecutionStatus(status) {
-        const map = {
-            pending: '待执行',
-            running: '执行中',
-            succeeded: '执行成功',
-            failed: '执行失败'
-        };
-        return map[status] || status || '-';
-    },
-
-    formatVerificationStatus(status) {
-        const map = {
-            not_requested: '未验证',
-            running: '验证中',
-            passed: '验证通过',
-            failed: '验证失败'
-        };
-        return map[status] || status || '-';
     },
 
     cleanup() {

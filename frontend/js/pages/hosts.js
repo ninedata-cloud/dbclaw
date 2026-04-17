@@ -296,8 +296,14 @@ const HostsPage = {
         authSelect.addEventListener('change', toggleAuth);
         if (host?.auth_type === 'key') toggleAuth();
 
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
+        const submitBtn = DOM.el('button', {
+            className: 'btn btn-primary',
+            textContent: isEdit ? '更新' : '创建',
+            type: 'button',
+            onClick: () => form.requestSubmit()
+        });
+
+        DOM.bindAsyncSubmit(form, async () => {
             const data = Object.fromEntries(new FormData(form).entries());
             data.port = parseInt(data.port);
             if (!data.password) delete data.password;
@@ -315,7 +321,7 @@ const HostsPage = {
             } catch (err) {
                 Toast.error(err.message);
             }
-        });
+        }, { submitControls: [submitBtn] });
 
         const footer = DOM.el('div');
         footer.appendChild(DOM.el('button', { className: 'btn btn-secondary', textContent: '取消', type: 'button', onClick: () => Modal.hide() }));
@@ -346,10 +352,7 @@ const HostsPage = {
             }));
         }
         
-        footer.appendChild(DOM.el('button', {
-            className: 'btn btn-primary', textContent: isEdit ? '更新' : '创建', type: 'button',
-            onClick: () => form.requestSubmit()
-        }));
+        footer.appendChild(submitBtn);
         Modal.show({ title: isEdit ? '编辑主机' : '新建主机', content: form, footer });
     },
 };

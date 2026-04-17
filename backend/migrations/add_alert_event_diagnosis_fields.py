@@ -1,41 +1,52 @@
 """Add root_cause, recommended_actions, diagnosis_status to alert_events table"""
 import asyncio
+import logging
+
 from sqlalchemy import text
+
 from backend.database import engine
+
+logger = logging.getLogger(__name__)
+
+
+async def _column_exists(conn, column_name: str) -> bool:
+    result = await conn.execute(
+        text(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                  AND table_name = 'alert_events'
+                  AND column_name = :column_name
+            )
+            """
+        ),
+        {"column_name": column_name},
+    )
+    return bool(result.scalar_one())
 
 
 async def migrate():
     """Add diagnosis fields to alert_events"""
     async with engine.begin() as conn:
-        # Check if root_cause column already exists
-        result = await conn.execute(text(
-            "SELECT column_name FROM information_schema.columns WHERE table_name='alert_events' AND column_name='root_cause'"
-        ))
-        if not result.scalar_one_or_none():
+        if not await _column_exists(conn, "root_cause"):
             await conn.execute(text("ALTER TABLE alert_events ADD COLUMN root_cause TEXT"))
-            print("Added root_cause column to alert_events")
+            logger.info("Added root_cause column to alert_events")
         else:
-            print("Column root_cause already exists, skipping")
+            logger.info("Column root_cause already exists, skipping")
 
-        # Check if recommended_actions column already exists
-        result = await conn.execute(text(
-            "SELECT column_name FROM information_schema.columns WHERE table_name='alert_events' AND column_name='recommended_actions'"
-        ))
-        if not result.scalar_one_or_none():
+        if not await _column_exists(conn, "recommended_actions"):
             await conn.execute(text("ALTER TABLE alert_events ADD COLUMN recommended_actions TEXT"))
-            print("Added recommended_actions column to alert_events")
+            logger.info("Added recommended_actions column to alert_events")
         else:
-            print("Column recommended_actions already exists, skipping")
+            logger.info("Column recommended_actions already exists, skipping")
 
-        # Check if diagnosis_status column already exists
-        result = await conn.execute(text(
-            "SELECT column_name FROM information_schema.columns WHERE table_name='alert_events' AND column_name='diagnosis_status'"
-        ))
-        if not result.scalar_one_or_none():
+        if not await _column_exists(conn, "diagnosis_status"):
             await conn.execute(text("ALTER TABLE alert_events ADD COLUMN diagnosis_status VARCHAR(20)"))
-            print("Added diagnosis_status column to alert_events")
+            logger.info("Added diagnosis_status column to alert_events")
         else:
-            print("Column diagnosis_status already exists, skipping")
+            logger.info("Column diagnosis_status already exists, skipping")
 
 
 if __name__ == "__main__":

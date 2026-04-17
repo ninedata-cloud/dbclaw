@@ -297,8 +297,14 @@ const AlertTemplatesPage = {
             await this._validateTemplateExpression(form);
         });
 
-        form.addEventListener('submit', async (event) => {
-            event.preventDefault();
+        const submitBtn = DOM.el('button', {
+            className: 'btn btn-primary',
+            type: 'button',
+            textContent: isEdit ? '保存' : '创建',
+            onClick: () => form.requestSubmit(),
+        });
+
+        DOM.bindAsyncSubmit(form, async () => {
             const formData = new FormData(form);
             const alertEngineMode = String(formData.get('alert_engine_mode') || 'threshold');
             const nextConfig = JSON.parse(JSON.stringify(config || this._defaultTemplateConfig()));
@@ -358,7 +364,7 @@ const AlertTemplatesPage = {
             } catch (err) {
                 Toast.error(err.message);
             }
-        });
+        }, { submitControls: [submitBtn] });
 
         const footer = DOM.el('div');
         footer.appendChild(DOM.el('button', {
@@ -367,12 +373,7 @@ const AlertTemplatesPage = {
             textContent: '取消',
             onClick: () => Modal.hide(),
         }));
-        footer.appendChild(DOM.el('button', {
-            className: 'btn btn-primary',
-            type: 'button',
-            textContent: isEdit ? '保存' : '创建',
-            onClick: () => form.requestSubmit(),
-        }));
+        footer.appendChild(submitBtn);
 
         Modal.show({
             title: isEdit ? '编辑告警模板' : '新建告警模板',

@@ -94,6 +94,7 @@ async def _rename_sequence_if_exists(conn, old_name: str, new_name: str) -> None
 
 
 async def migrate():
+    renamed_any = False
     async with get_engine().begin() as conn:
         for spec in TABLE_RENAMES:
             old_table = spec["old_table"]
@@ -110,6 +111,7 @@ async def migrate():
             await _rename_sequence_if_exists(conn, *spec["sequence"])
             for old_index, new_index in spec["indexes"]:
                 await _rename_index_if_exists(conn, old_index, new_index)
+            renamed_any = True
 
-    logger.info("Legacy log tables renamed to plural form")
-
+    if renamed_any:
+        logger.info("Legacy log tables renamed to plural form")

@@ -348,6 +348,19 @@ def test_compile_policy_profile_locally_extracts_trigger_and_recovery_profiles()
     assert profile["recovery_conditions"][0]["threshold"] == 20.0
 
 
+def test_compile_policy_profile_locally_keeps_all_focus_metrics_for_natural_language_policy():
+    profile, complete, error = _compile_policy_profile_locally(
+        "请结合 CPU、磁盘使用率、活跃连接数及最近 15 分钟趋势判断该实例是否处于明显异常状态。"
+        "只有在异常持续、影响扩大或风险较高时才触发告警；若只是短时抖动或接近阈值但证据不足，则不触发告警。"
+    )
+
+    assert complete is False
+    assert error is not None
+    assert profile["focus_metrics"] == ["cpu_usage", "disk_usage", "connections_active"]
+    assert profile["trigger_conditions"] == []
+    assert profile["fallback_mode"] == "threshold_rules"
+
+
 def test_decide_alert_ai_candidate_uses_near_threshold_rising_signal():
     collected_at = datetime(2026, 4, 11, 18, 39, 17)
     snapshots_desc = [

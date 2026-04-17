@@ -169,7 +169,6 @@ const InstanceDetailPage = {
             alert: params.get('alert') || null,
             event: params.get('event') || null,
             report: params.get('report') || null,
-            actionRun: params.get('action_run') || null,
             ask: params.get('ask') || null,
         };
     },
@@ -337,7 +336,6 @@ const InstanceDetailPage = {
             alert: this.currentRoute.alert,
             event: this.currentRoute.event,
             report: this.currentRoute.report,
-            action_run: this.currentRoute.actionRun,
             ask: this.currentRoute.ask,
         };
         const expectedHash = `#${this._buildUrl(this.currentInstance.id, this.currentTab, extraParams)}`;
@@ -591,21 +589,18 @@ const InstanceDetailPage = {
                 initialAlertId: this.currentRoute.alert ? parseInt(this.currentRoute.alert, 10) : null,
                 initialEventId: this.currentRoute.event ? parseInt(this.currentRoute.event, 10) : null,
                 initialReportId: this.currentRoute.report ? parseInt(this.currentRoute.report, 10) : null,
-                initialActionRunId: this.currentRoute.actionRun ? parseInt(this.currentRoute.actionRun, 10) : null,
                 initialAsk: ask,
                 preferFreshSession: Boolean(
                     ask ||
                     this.currentRoute.alert ||
                     this.currentRoute.event ||
-                    this.currentRoute.report ||
-                    this.currentRoute.actionRun
+                    this.currentRoute.report
                 ),
             });
             this.currentRoute.ask = null;
             this.currentRoute.alert = null;
             this.currentRoute.event = null;
             this.currentRoute.report = null;
-            this.currentRoute.actionRun = null;
             return;
         }
 

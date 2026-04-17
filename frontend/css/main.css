@@ -96,6 +96,7 @@ a:hover { color: var(--accent-blue-hover); }
 .btn {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
     padding: 8px 16px;
     border: 1px solid transparent;
@@ -141,6 +142,19 @@ a:hover { color: var(--accent-blue-hover); }
 .btn-sm { padding: 5px 10px; font-size: 12px; }
 .btn-icon { padding: 6px; border: none; background: transparent; color: var(--text-secondary); cursor: pointer; border-radius: var(--radius-sm); }
 .btn-icon:hover { background: var(--bg-hover); color: var(--text-primary); }
+.btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+.btn.is-loading {
+    pointer-events: none;
+}
+.btn.is-loading .spinner {
+    width: 14px;
+    height: 14px;
+    border-width: 2px;
+    flex: 0 0 auto;
+}
 
 /* === Forms === */
 .form-group { margin-bottom: 16px; }

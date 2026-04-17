@@ -12,7 +12,8 @@ async def migrate():
     async with engine.begin() as conn:
         user_columns_result = await conn.execute(text(
             "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = 'users' "
+            "WHERE table_schema = current_schema() "
+            "AND table_name = 'users' "
             "AND column_name IN ('session_version', 'password_changed_at')"
         ))
         user_columns = {row[0] for row in user_columns_result.fetchall()}
@@ -28,7 +29,8 @@ async def migrate():
             await conn.execute(text("ALTER TABLE users ADD COLUMN password_changed_at TIMESTAMP NULL"))
 
         session_table_result = await conn.execute(text(
-            "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'user_sessions')"
+            "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
+            "WHERE table_schema = current_schema() AND table_name = 'user_sessions')"
         ))
         session_table_exists = bool(session_table_result.scalar())
         if not session_table_exists:
@@ -55,7 +57,8 @@ async def migrate():
 
         session_columns_result = await conn.execute(text(
             "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = 'user_sessions' AND column_name IN ('session_version')"
+            "WHERE table_schema = current_schema() "
+            "AND table_name = 'user_sessions' AND column_name IN ('session_version')"
         ))
         session_columns = {row[0] for row in session_columns_result.fetchall()}
         if session_table_exists and 'session_version' not in session_columns:
@@ -66,7 +69,8 @@ async def migrate():
 
         chat_columns_result = await conn.execute(text(
             "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = 'diagnostic_sessions' AND column_name IN ('user_id')"
+            "WHERE table_schema = current_schema() "
+            "AND table_name = 'diagnostic_sessions' AND column_name IN ('user_id')"
         ))
         chat_columns = {row[0] for row in chat_columns_result.fetchall()}
         if 'user_id' not in chat_columns:

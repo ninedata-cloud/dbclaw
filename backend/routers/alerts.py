@@ -23,7 +23,6 @@ from backend.models.datasource import Datasource
 from backend.models.inspection_trigger import InspectionTrigger
 from backend.models.metric_snapshot import MetricSnapshot
 from backend.models.alert_message import AlertMessage
-from backend.services.action_run_service import get_report_actions_with_runs
 from backend.services.alert_event_service import hydrate_event_strategy_fields
 from backend.services.baseline_service import (
     compute_upper_bound,
@@ -223,8 +222,6 @@ async def _build_alert_response(db: AsyncSession, alert) -> AlertMessageResponse
     diagnosis_entry_hash = None
 
     linked_report = None
-    recommended_actions_preview = []
-    latest_action_run = None
     if report:
         linked_report = AlertLinkedReport(
             report_id=report.id,
@@ -235,25 +232,6 @@ async def _build_alert_response(db: AsyncSession, alert) -> AlertMessageResponse
             summary=report.summary,
         )
         diagnosis_entry_hash = hashlib.md5(f"alert:{alert.id}:report:{report.id}".encode("utf-8")).hexdigest()[:12]
-
-        try:
-            report_actions = await get_report_actions_with_runs(db, report)
-            recommended_actions_preview = [
-                {
-                    "id": action.get("id"),
-                    "title": action.get("title"),
-                    "summary": action.get("summary"),
-                    "risk_level": action.get("risk_level") or "safe",
-                    "latest_run": action.get("latest_run"),
-                }
-                for action in report_actions[:3]
-            ]
-            latest_candidates = [item.get("latest_run") for item in report_actions if item.get("latest_run")]
-            latest_action_run = latest_candidates[0] if latest_candidates else None
-        except Exception:
-            logger.exception("Failed to build alert action preview for alert_id=%s report_id=%s", alert.id, report.id)
-            recommended_actions_preview = []
-            latest_action_run = None
 
     datasource_info = _build_datasource_info(datasource)
 
@@ -277,8 +255,6 @@ async def _build_alert_response(db: AsyncSession, alert) -> AlertMessageResponse
         diagnosis_summary=diagnosis_summary,
         root_cause=root_cause,
         recommended_action=recommended_action,
-        recommended_actions_preview=recommended_actions_preview,
-        latest_action_run=latest_action_run,
         latest_trigger_type=(trigger.trigger_type if trigger else (report.trigger_type if report else None)),
         linked_report=linked_report,
         diagnosis_entry_hash=diagnosis_entry_hash,

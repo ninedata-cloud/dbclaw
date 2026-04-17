@@ -743,8 +743,12 @@ def _compile_policy_profile_locally(
     trigger_conditions: list[dict[str, Any]] = []
     recovery_conditions: list[dict[str, Any]] = []
     focus_metrics: list[str] = []
+    full_text_focus_metrics = _extract_focus_metric_names(rule_text, {})
 
     for line in lines:
+        for metric_name in _extract_focus_metric_names(line, {}):
+            if metric_name not in focus_metrics:
+                focus_metrics.append(metric_name)
         metric = _detect_metric_from_text(line)
         operator, threshold = _extract_operator_threshold_from_text(line)
         duration_seconds = _extract_duration_seconds_from_text(line) or 0
@@ -770,14 +774,18 @@ def _compile_policy_profile_locally(
             trigger_conditions.append(condition)
 
     if not focus_metrics:
-        focus_metrics = _extract_focus_metric_names(rule_text, {})
+        focus_metrics = list(full_text_focus_metrics)
+    else:
+        for metric_name in full_text_focus_metrics:
+            if metric_name not in focus_metrics:
+                focus_metrics.append(metric_name)
 
     trigger_conditions = _sort_conditions_by_severity(trigger_conditions)
     escalation_rules = [item for item in trigger_conditions if item.get("severity")]
     if not recovery_conditions and trigger_conditions:
         recovery_conditions = _build_derived_recovery_conditions(trigger_conditions, config)
 
-    fallback_mode = "threshold_rules" if trigger_conditions else "trend_heuristic"
+    fallback_mode = "threshold_rules" if (trigger_conditions or focus_metrics) else "trend_heuristic"
     profile = {
         "focus_metrics": focus_metrics,
         "trigger_conditions": trigger_conditions,

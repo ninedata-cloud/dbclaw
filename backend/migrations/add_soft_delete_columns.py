@@ -32,7 +32,9 @@ async def _column_exists(db, table_name: str, column_name: str) -> bool:
     result = await db.execute(text("""
         SELECT column_name
         FROM information_schema.columns
-        WHERE table_name = :table_name AND column_name = :column_name
+        WHERE table_schema = current_schema()
+          AND table_name = :table_name
+          AND column_name = :column_name
     """), {"table_name": table_name, "column_name": column_name})
     return result.first() is not None
 

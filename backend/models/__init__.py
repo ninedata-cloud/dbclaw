@@ -11,7 +11,6 @@ from backend.models.diagnostic_session import DiagnosticSession, ChatMessage
 from backend.models.diagnosis_event import DiagnosisEvent
 from backend.models.diagnosis_conclusion import DiagnosisConclusion
 from backend.models.report import Report
-from backend.models.action_run import ActionRun
 from backend.models.metric_snapshot import MetricSnapshot
 from backend.models.metric_baseline_profile import MetricBaselineProfile
 from backend.models.host_metric import HostMetric
@@ -45,7 +44,6 @@ __all__ = [
     "DiagnosisEvent",
     "DiagnosisConclusion",
     "Report",
-    "ActionRun",
     "MetricSnapshot",
     "MetricBaselineProfile",
     "HostMetric",

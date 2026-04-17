@@ -17,7 +17,6 @@ from backend.models.datasource import Datasource
 from backend.models.soft_delete import alive_filter, get_alive_by_id
 from backend.services.inspection_service import InspectionService
 from backend.services.public_share_service import PublicShareService
-from backend.services.action_run_service import get_report_actions_with_runs
 from backend.services.baseline_service import (
     DEFAULT_BASELINE_CONFIG,
     list_baseline_profiles_for_datasource,
@@ -64,18 +63,9 @@ async def _ensure_report_completed_at(db: AsyncSession, report: Report) -> bool:
 async def _build_report_detail_payload(
     db: AsyncSession,
     report: Report,
-    *,
-    include_actions: bool = True,
 ) -> dict:
     completed_at_inferred = await _ensure_report_completed_at(db, report)
     datasource = await get_alive_by_id(db, Datasource, report.datasource_id)
-
-    actions = []
-    if include_actions and report.status in {"completed", "partial"} and (report.recommended_actions or report.content_md):
-        try:
-            actions = await get_report_actions_with_runs(db, report)
-        except Exception as exc:
-            logger.warning("Failed to load report actions for report_id=%s: %s", report.id, exc)
 
     duration_seconds = None
     if report.created_at and report.completed_at and not completed_at_inferred:
@@ -95,7 +85,7 @@ async def _build_report_detail_payload(
         "status": report.status,
         "error_message": report.error_message,
         "alert_id": report.alert_id,
-        "actions": actions,
+        "actions": [],
         "created_at": report.created_at.isoformat() if report.created_at else None,
         "completed_at": report.completed_at.isoformat() if report.completed_at else None,
         "completed_at_inferred": completed_at_inferred,
@@ -663,7 +653,7 @@ async def get_public_report_detail(
     """Get report details with public share token"""
     PublicShareService.verify_report_share_token(token, report_id)
     report = await PublicShareService.get_report_or_404(db, report_id)
-    return await _build_report_detail_payload(db, report, include_actions=False)
+    return await _build_report_detail_payload(db, report)
 
 
 @router.get("/reports/public/{report_id}/page", response_class=HTMLResponse)

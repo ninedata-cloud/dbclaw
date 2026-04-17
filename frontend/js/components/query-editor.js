@@ -37,7 +37,11 @@ const QueryEditor = {
         }
 
         // Configure Monaco loader
-        require.config({ paths: { vs: '/lib/monaco-editor/min/vs' } });
+        const monacoConfig = { paths: { vs: '/lib/monaco-editor/min/vs' } };
+        if (window.DBCLAW_ASSET_VERSION) {
+            monacoConfig.urlArgs = `build=${window.DBCLAW_ASSET_VERSION}`;
+        }
+        require.config(monacoConfig);
 
         require(['vs/editor/editor.main'], () => {
             // Create editor instance
