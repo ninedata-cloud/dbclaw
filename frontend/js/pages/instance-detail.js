@@ -30,7 +30,7 @@ const InstanceDetailPage = {
     collapsedInstanceGroups: {},
     sessionAiDialogCleanup: null,
 
-    validTabs: ['config', 'monitor', 'traffic', 'sessions', 'ai', 'query', 'alerts', 'inspections', 'parameters'],
+    validTabs: ['config', 'monitor', 'traffic', 'sessions', 'ai', 'sqlConsole', 'alerts', 'inspections', 'parameters'],
 
     async render(routeParam = '') {
         this._rememberInstanceListScroll();
@@ -508,7 +508,7 @@ const InstanceDetailPage = {
             { id: 'traffic', label: '流量拓扑' },
             { id: 'sessions', label: '实时会话' },
             { id: 'ai', label: 'AI 对话诊断' },
-            { id: 'query', label: 'SQL 查询' },
+            { id: 'sqlConsole', label: 'SQL 窗口' },
             { id: 'alerts', label: '告警管理' },
             { id: 'inspections', label: '巡检管理' },
             { id: 'parameters', label: '实例参数配置' },
@@ -604,8 +604,8 @@ const InstanceDetailPage = {
             return;
         }
 
-        if (this.currentTab === 'query') {
-            this.tabCleanup = await QueryPage.renderWithOptions({
+        if (this.currentTab === 'sqlConsole') {
+            this.tabCleanup = await SqlConsolePage.renderWithOptions({
                 container,
                 embedded: true,
                 fixedDatasourceId: datasourceId,

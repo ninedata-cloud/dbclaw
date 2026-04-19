@@ -1,5 +1,5 @@
-/* Query execution page */
-const QueryPage = {
+/* SQL Console page */
+const SqlConsolePage = {
     currentAbortController: null,
     datasourceSelector: null,
     _renderOptions: null,
@@ -39,7 +39,7 @@ const QueryPage = {
                 datasources = await API.getDatasources();
                 Store.set('datasources', datasources);
             } catch (e) {
-                console.error('[Query] Failed to load datasources:', e);
+                console.error('[SqlConsole] Failed to load datasources:', e);
             }
         }
 
@@ -92,32 +92,12 @@ const QueryPage = {
         }
 
         content.innerHTML = '';
-        if (options.embedded) {
-            const embeddedToolbar = DOM.el('div', {
-                className: 'instance-embedded-toolbar',
-                style: {
-                    display: 'flex',
-                    gap: '12px',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginBottom: '16px',
-                    flexWrap: 'wrap'
-                }
-            });
-            embeddedToolbar.appendChild(DOM.el('div', {
-                className: 'instance-embedded-title',
-                textContent: 'SQL 查询'
-            }));
-            if (headerActions.childNodes.length > 0) {
-                embeddedToolbar.appendChild(headerActions);
-            }
-            content.appendChild(embeddedToolbar);
-        } else {
-            Header.render('SQL 查询', headerActions);
+        if (!options.embedded) {
+            Header.render('SQL 窗口', headerActions);
         }
-        const container = DOM.el('div', { className: 'query-container' });
-        const toolbar = DOM.el('div', { className: 'query-toolbar' });
-        const toolbarActions = DOM.el('div', { className: 'query-toolbar-main-actions' });
+        const container = DOM.el('div', { className: 'sql-console-container' });
+        const toolbar = DOM.el('div', { className: 'sql-console-toolbar' });
+        const toolbarActions = DOM.el('div', { className: 'sql-console-toolbar-main-actions' });
         const executeBtn = DOM.el('button', {
             className: 'btn btn-primary',
             id: 'execute-btn',
@@ -136,6 +116,11 @@ const QueryPage = {
             innerHTML: '<i data-lucide="search"></i> 执行计划',
             onClick: () => this._explainQuery()
         });
+        const diagnoseBtn = DOM.el('button', {
+            className: 'btn btn-secondary',
+            innerHTML: '<i data-lucide="sparkles"></i> 诊断优化',
+            onClick: () => this._diagnoseSql()
+        });
         const historyBtn = DOM.el('button', {
             className: 'btn btn-secondary',
             innerHTML: '<i data-lucide="history"></i> 历史记录',
@@ -149,21 +134,22 @@ const QueryPage = {
         toolbarActions.appendChild(executeBtn);
         toolbarActions.appendChild(cancelBtn);
         toolbarActions.appendChild(explainBtn);
+        toolbarActions.appendChild(diagnoseBtn);
         toolbarActions.appendChild(historyBtn);
         toolbarActions.appendChild(refreshSchemaBtn);
         toolbar.appendChild(toolbarActions);
 
-        const contextToolbar = DOM.el('div', { className: 'query-toolbar-context', id: 'query-context-toolbar' });
+        const contextToolbar = DOM.el('div', { className: 'sql-console-toolbar-context', id: 'sql-console-context-toolbar' });
         contextToolbar.innerHTML = `
-            <div class="query-context-group" id="query-database-group">
-                <label for="query-database-select">数据库</label>
-                <select id="query-database-select" class="form-select">
+            <div class="sql-console-context-group" id="sql-console-database-group">
+                <label for="sql-console-database-select">数据库</label>
+                <select id="sql-console-database-select" class="form-select">
                     <option value="">加载中...</option>
                 </select>
             </div>
-            <div class="query-context-group" id="query-schema-group" style="display:none;">
-                <label for="query-schema-select">Schema</label>
-                <select id="query-schema-select" class="form-select">
+            <div class="sql-console-context-group" id="sql-console-schema-group" style="display:none;">
+                <label for="sql-console-schema-select">Schema</label>
+                <select id="sql-console-schema-select" class="form-select">
                     <option value="">默认</option>
                 </select>
             </div>
@@ -172,7 +158,7 @@ const QueryPage = {
         container.appendChild(toolbar);
 
         // Resizer between editor and results (appended at end, positioned via CSS order)
-        const resizer = DOM.el('div', { className: 'query-resizer', id: 'query-resizer' });
+        const resizer = DOM.el('div', { className: 'sql-console-resizer', id: 'sql-console-resizer' });
         resizer.addEventListener('mousedown', (e) => this._startResize(e));
 
         QueryEditor.create(container, 'SELECT 1;');
@@ -185,11 +171,11 @@ const QueryPage = {
             }
         }, 500);
 
-        const statusBar = DOM.el('div', { className: 'query-status-bar', id: 'query-status' });
+        const statusBar = DOM.el('div', { className: 'sql-console-status-bar', id: 'sql-console-status' });
         statusBar.innerHTML = '<div class="status-info"><span class="text-muted">就绪</span></div>';
         container.appendChild(statusBar);
 
-        const results = DOM.el('div', { className: 'query-results', id: 'query-results' });
+        const results = DOM.el('div', { className: 'sql-console-results', id: 'sql-console-results' });
         results.innerHTML = `
             <div class="empty-state" style="padding:40px">
                 <i data-lucide="table"></i>
@@ -222,8 +208,8 @@ const QueryPage = {
     },
 
     _getCurrentExecutionContext() {
-        const databaseSelect = DOM.$('#query-database-select');
-        const schemaSelect = DOM.$('#query-schema-select');
+        const databaseSelect = DOM.$('#sql-console-database-select');
+        const schemaSelect = DOM.$('#sql-console-schema-select');
 
         if (databaseSelect) {
             this.currentDatabase = this._normalizeContextValue(databaseSelect.value);
@@ -289,11 +275,11 @@ const QueryPage = {
     },
 
     _renderQueryContextSelectors() {
-        const contextToolbar = DOM.$('#query-context-toolbar');
-        const databaseGroup = DOM.$('#query-database-group');
-        const databaseSelect = DOM.$('#query-database-select');
-        const schemaSelect = DOM.$('#query-schema-select');
-        const schemaGroup = DOM.$('#query-schema-group');
+        const contextToolbar = DOM.$('#sql-console-context-toolbar');
+        const databaseGroup = DOM.$('#sql-console-database-group');
+        const databaseSelect = DOM.$('#sql-console-database-select');
+        const schemaSelect = DOM.$('#sql-console-schema-select');
+        const schemaGroup = DOM.$('#sql-console-schema-group');
 
         if (contextToolbar) {
             contextToolbar.style.display = (this.supportsDatabase || this.supportsSchema) ? 'flex' : 'none';
@@ -362,7 +348,7 @@ const QueryPage = {
                 )
                 : null;
         } catch (error) {
-            console.error('[Query] Failed to load query context:', error);
+            console.error('[SqlConsole] Failed to load query context:', error);
             this.currentDbType = null;
             this.supportsDatabase = false;
             this.databaseOptions = [];
@@ -404,7 +390,7 @@ const QueryPage = {
             this.currentAbortController.abort();
             this.currentAbortController = null;
 
-            const status = DOM.$('#query-status');
+            const status = DOM.$('#sql-console-status');
             const executeBtn = DOM.$('#execute-btn');
             const cancelBtn = DOM.$('#cancel-btn');
 
@@ -425,7 +411,7 @@ const QueryPage = {
         const sql = (selectedSql || QueryEditor.getValue()).trim();
 
         if (!sql) {
-            Toast.warning('请输入 SQL 查询');
+            Toast.warning('请输入 SQL 语句');
             return;
         }
 
@@ -435,8 +421,8 @@ const QueryPage = {
             return;
         }
 
-        const status = DOM.$('#query-status');
-        const results = DOM.$('#query-results');
+        const status = DOM.$('#sql-console-status');
+        const results = DOM.$('#sql-console-results');
         const executeBtn = DOM.$('#execute-btn');
         const cancelBtn = DOM.$('#cancel-btn');
 
@@ -456,18 +442,18 @@ const QueryPage = {
             );
 
             if (result.columns && result.columns.length > 0) {
-                const freshResults = DOM.$('#query-results');
+                const freshResults = DOM.$('#sql-console-results');
                 if (freshResults) {
                     freshResults.innerHTML = '';
                     try {
                         freshResults.appendChild(DataTable.create(result.columns, result.rows));
                     } catch (err) {
-                        console.error('[Query] DataTable.create failed:', err);
+                        console.error('[SqlConsole] DataTable.create failed:', err);
                         freshResults.innerHTML = `<div style="padding:20px;color:var(--accent-red)">表格渲染失败</div>`;
                     }
                 }
             } else if (result.message) {
-                const freshResults = DOM.$('#query-results');
+                const freshResults = DOM.$('#sql-console-results');
                 if (freshResults) freshResults.innerHTML = `<div class="empty-state" style="padding:20px"><p>${result.message}</p></div>`;
             }
 
@@ -479,11 +465,11 @@ const QueryPage = {
             if (err.name === 'AbortError') {
                 return;
             }
-            const errResults = DOM.$('#query-results');
+            const errResults = DOM.$('#sql-console-results');
             if (errResults) {
                 errResults.innerHTML = `<div style="padding:20px;color:var(--accent-red);font-family:var(--font-mono);font-size:13px;white-space:pre-wrap">${err.message}</div>`;
             }
-            const errStatus = DOM.$('#query-status');
+            const errStatus = DOM.$('#sql-console-status');
             if (errStatus) {
                 errStatus.innerHTML = '<div class="status-info"><span style="color:var(--accent-red)">错误</span></div>';
             }
@@ -499,7 +485,7 @@ const QueryPage = {
         const sql = (selectedSql || QueryEditor.getValue()).trim();
 
         if (!sql) {
-            Toast.warning('请输入 SQL 查询');
+            Toast.warning('请输入 SQL 语句');
             return;
         }
 
@@ -509,13 +495,13 @@ const QueryPage = {
             return;
         }
 
-        const results = DOM.$('#query-results');
+        const results = DOM.$('#sql-console-results');
         if (!results) return;
         results.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
         try {
             const result = await API.explainQuery({ datasource_id: connId, sql, ...this._getCurrentExecutionContext() });
-            const freshResults = DOM.$('#query-results');
+            const freshResults = DOM.$('#sql-console-results');
             if (!freshResults) return;
             freshResults.innerHTML = '';
 
@@ -523,7 +509,7 @@ const QueryPage = {
                 try {
                     freshResults.appendChild(DataTable.create(result.columns, result.rows));
                 } catch (err) {
-                    console.error('[Query] DataTable.create failed:', err);
+                    console.error('[SqlConsole] DataTable.create failed:', err);
                     freshResults.innerHTML = `<div style="padding:20px;color:var(--accent-red)">表格渲染失败</div>`;
                 }
             } else if (result.plan) {
@@ -539,27 +525,35 @@ const QueryPage = {
     },
 
     _startResize(e) {
+        e.preventDefault();
         this.isResizing = true;
         this.startY = e.clientY;
-        const wrapper = DOM.$('.query-editor-wrapper');
+        const wrapper = DOM.$('.sql-console-editor-wrapper');
         this.startHeight = wrapper ? wrapper.offsetHeight : 400;
+
         document.body.style.cursor = 'row-resize';
         document.body.style.userSelect = 'none';
-        const resizer = DOM.$('#query-resizer');
+        const resizer = DOM.$('#sql-console-resizer');
         if (resizer) resizer.classList.add('dragging');
 
         const onMouseMove = (e) => {
             if (!this.isResizing) return;
+            e.preventDefault();
             const delta = e.clientY - this.startY;
-            const newHeight = Math.max(100, Math.min(this.startHeight + delta, window.innerHeight - 200));
-            QueryEditor.setHeight(newHeight);
+            const newHeight = Math.max(150, Math.min(this.startHeight + delta, window.innerHeight - 400));
+
+            const wrapper = DOM.$('.sql-console-editor-wrapper');
+            if (wrapper) {
+                wrapper.style.height = `${newHeight}px`;
+                this.editorHeight = newHeight;
+            }
         };
 
         const onMouseUp = () => {
             this.isResizing = false;
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
-            const resizer = DOM.$('#query-resizer');
+            const resizer = DOM.$('#sql-console-resizer');
             if (resizer) resizer.classList.remove('dragging');
             document.removeEventListener('mousemove', onMouseMove);
             document.removeEventListener('mouseup', onMouseUp);
@@ -602,6 +596,130 @@ const QueryPage = {
             });
         } catch (err) {
             Toast.error('加载历史记录失败');
+        }
+    },
+
+    _buildSqlDiagnosisPrompt(sql, datasource) {
+        const dbTypeLabel = this._getDbTypeLabel(datasource?.db_type) || datasource?.db_type || '未知';
+        const hostText = datasource?.host ? `${datasource.host}:${datasource.port || '-'}` : '-';
+        const versionText = datasource?.db_version || '-';
+        const databaseText = this.currentDatabase || datasource?.database || '-';
+        const schemaText = this.currentSchema || '-';
+
+        return [
+            '请你作为资深数据库性能优化专家，针对下面这条 SQL 语句进行诊断和优化分析，并支持后续多轮追问。',
+            '',
+            '【分析目标】',
+            '1. 分析 SQL 语句的性能瓶颈和潜在问题',
+            '2. 评估索引使用情况和优化建议',
+            '3. 提供改写建议和最佳实践',
+            '4. 给出具体的优化方案和预期效果',
+            '',
+            '【数据库信息】',
+            `- 实例名称：${datasource?.name || '-'}`,
+            `- 数据库类型：${dbTypeLabel}`,
+            `- 主机：${hostText}`,
+            `- 数据库：${databaseText}`,
+            this.supportsSchema && schemaText !== '-' ? `- Schema：${schemaText}` : null,
+            versionText !== '-' ? `- 版本：${versionText}` : null,
+            '',
+            '【待优化 SQL】',
+            '```sql',
+            sql,
+            '```',
+            '',
+            '请从以下几个方面进行分析：',
+            '1. SQL 语句结构分析（JOIN、子查询、聚合等）',
+            '2. 可能的性能问题点',
+            '3. 索引优化建议',
+            '4. SQL 改写建议',
+            '5. 其他优化建议',
+        ].filter(line => line !== null).join('\n');
+    },
+
+    _getDbTypeLabel(dbType) {
+        const labels = {
+            'mysql': 'MySQL',
+            'postgresql': 'PostgreSQL',
+            'oracle': 'Oracle',
+            'sqlserver': 'SQL Server',
+            'mongodb': 'MongoDB',
+            'redis': 'Redis',
+            'clickhouse': 'ClickHouse',
+            'tidb': 'TiDB',
+            'oceanbase': 'OceanBase',
+            'dameng': '达梦',
+            'kingbase': '人大金仓',
+            'gbase': 'GBase',
+            'hana': 'SAP HANA'
+        };
+        return labels[dbType] || null;
+    },
+
+    async _diagnoseSql() {
+        const selectedSql = QueryEditor.getSelectedText();
+        const sql = (selectedSql || QueryEditor.getValue()).trim();
+
+        if (!sql) {
+            Toast.warning('请输入或选择要诊断的 SQL 语句');
+            return;
+        }
+
+        const datasource = this._getSelectedDatasource();
+        if (!datasource) {
+            Toast.warning('请先选择数据源');
+            return;
+        }
+
+        let dialogCleanup = null;
+        const content = DOM.el('div', { className: 'instance-session-ai-shell' });
+        content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
+
+        const title = `SQL 诊断优化 · ${datasource.name || '实例'}`;
+
+        Modal.show({
+            title,
+            content,
+            width: '1280px',
+            maxHeight: '92vh',
+            containerClassName: 'instance-session-ai-modal',
+            bodyClassName: 'instance-session-ai-modal-body',
+            onHide: () => {
+                if (typeof dialogCleanup === 'function') {
+                    try {
+                        dialogCleanup();
+                    } catch (error) {
+                        console.error('SQL diagnosis dialog cleanup failed:', error);
+                    }
+                }
+            }
+        });
+
+        try {
+            dialogCleanup = await DiagnosisPage.renderWithOptions({
+                container: content,
+                embedded: true,
+                hideEmbeddedTitle: true,
+                compactEmbeddedToolbar: true,
+                fixedDatasourceId: datasource.id,
+                hideSessionSidebar: true,
+                autoCreateSession: true,
+                autoSendInitialAsk: true,
+                hideInitialAskMessage: true,
+                initialAsk: this._buildSqlDiagnosisPrompt(sql, datasource),
+                initialSessionTitle: `SQL 诊断优化 ${datasource.name || datasource.id || ''}`.trim(),
+                hideToolSafetyButton: true,
+                hideClearSessionButton: true,
+            });
+        } catch (error) {
+            content.innerHTML = `
+                <div class="empty-state" style="padding:40px;">
+                    <i data-lucide="alert-circle"></i>
+                    <h3>SQL 诊断优化打开失败</h3>
+                    <p>${error.message || '未知错误'}</p>
+                </div>
+            `;
+            DOM.createIcons();
         }
     }
 };

@@ -28,7 +28,7 @@ const Router = {
             return;
         }
 
-        if (page === 'query') {
+        if (page === 'sqlConsole') {
             const currentDatasource =
                 Store.get('currentConnection') ||
                 Store.get('currentDatasource') ||
@@ -36,7 +36,7 @@ const Router = {
                 null;
 
             if (currentDatasource?.id) {
-                window.location.hash = `instance-detail?datasource=${currentDatasource.id}&tab=query`;
+                window.location.hash = `instance-detail?datasource=${currentDatasource.id}&tab=sqlConsole`;
             } else {
                 window.location.hash = 'datasources';
             }

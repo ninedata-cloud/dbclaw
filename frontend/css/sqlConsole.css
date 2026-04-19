@@ -1,5 +1,5 @@
 /* === Query Editor === */
-.query-container {
+.sql-console-container {
     display: flex;
     flex-direction: column;
     height: calc(100vh - var(--header-height) - 48px);
@@ -7,7 +7,7 @@
     overflow-x: hidden;
 }
 
-.query-toolbar {
+.sql-console-toolbar {
     display: flex;
     align-items: center;
     gap: 12px;
@@ -18,7 +18,7 @@
     min-width: 0;
 }
 
-.query-toolbar-main-actions {
+.sql-console-toolbar-main-actions {
     display: flex;
     align-items: center;
     gap: 12px;
@@ -26,7 +26,7 @@
     min-width: 0;
 }
 
-.query-toolbar-context {
+.sql-console-toolbar-context {
     display: flex;
     align-items: center;
     gap: 12px;
@@ -36,27 +36,27 @@
     justify-content: flex-end;
 }
 
-.query-context-group {
+.sql-console-context-group {
     display: flex;
     align-items: center;
     gap: 8px;
     min-width: 0;
 }
 
-.query-context-group label {
+.sql-console-context-group label {
     font-size: 12px;
     font-weight: 600;
     color: var(--text-secondary);
     white-space: nowrap;
 }
 
-.query-context-group .form-select {
+.sql-console-context-group .form-select {
     min-width: 0;
     width: 240px;
     max-width: 100%;
 }
 
-.query-toolbar select {
+.sql-console-toolbar select {
     padding: 7px 12px;
     background: var(--bg-input);
     border: 1px solid var(--border-color);
@@ -66,23 +66,25 @@
     min-width: 0;
 }
 
-.query-editor-wrapper {
-    flex: 0 0 400px;
+.sql-console-editor-wrapper {
+    flex: 0 0 auto;
+    height: 400px;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     overflow: hidden;
     margin: 12px 0 0 0;
     min-width: 0;
+    order: 1;
 }
 
-.query-editor-wrapper .CodeMirror {
-    height: 200px;
+.sql-console-editor-wrapper .CodeMirror {
+    height: 100%;
     font-family: var(--font-mono);
     font-size: 14px;
     background: var(--bg-input);
 }
 
-.query-editor-wrapper .CodeMirror-gutters {
+.sql-console-editor-wrapper .CodeMirror-gutters {
     background: var(--bg-tertiary);
     border-right: 1px solid var(--border-color);
 }
@@ -291,49 +293,54 @@
 }
 
 /* === Explain Plan === */
-.query-resizer {
-    height: 6px;
-    background: var(--bg-secondary);
-    border-left: 1px solid var(--border-color);
-    border-right: 1px solid var(--border-color);
-    cursor: row-resize;
-    flex-shrink: 0;
-    position: relative;
-    user-select: none;
-    order: 2;
-}
-
-.query-resizer:hover,
-.query-resizer.dragging {
-    background: var(--accent-primary);
-}
-
-.query-resizer.dragging {
-    opacity: 0.7;
-}
-
-.query-results {
-    flex: 1;
-    overflow: auto;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    margin: 12px 0 0 0;
-    min-height: 100px;
-    min-width: 0;
-    order: 3;
-}
-
-.query-status-bar {
+.sql-console-status-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 8px 0;
     font-size: 12px;
     color: var(--text-muted);
+    order: 2;
+}
+
+.sql-console-resizer {
+    height: 8px;
+    background: transparent;
+    cursor: row-resize;
+    flex-shrink: 0;
+    position: relative;
+    user-select: none;
+    order: 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sql-console-resizer::before {
+    content: '';
+    width: 100%;
+    height: 2px;
+    background: var(--border-color);
+    transition: all 0.2s;
+}
+
+.sql-console-resizer:hover::before,
+.sql-console-resizer.dragging::before {
+    height: 3px;
+    background: var(--accent-primary);
+}
+
+.sql-console-results {
+    flex: 1;
+    overflow: auto;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    min-height: 200px;
+    min-width: 0;
     order: 4;
 }
 
-.query-status-bar .status-info {
+.sql-console-status-bar .status-info {
     display: flex;
     gap: 16px;
 }
@@ -352,11 +359,11 @@
 }
 
 @media (max-width: 1440px) {
-    .query-toolbar {
+    .sql-console-toolbar {
         align-items: flex-start;
     }
 
-    .query-toolbar-context {
+    .sql-console-toolbar-context {
         margin-left: 0;
         width: 100%;
         justify-content: flex-start;

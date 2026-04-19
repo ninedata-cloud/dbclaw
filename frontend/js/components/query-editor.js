@@ -5,10 +5,10 @@ const QueryEditor = {
     disposables: [],
 
     create(container, defaultValue = '') {
-        const wrapper = DOM.el('div', { className: 'query-editor-wrapper' });
+        const wrapper = DOM.el('div', { className: 'sql-console-editor-wrapper' });
         const editorDiv = DOM.el('div', {
             id: 'monaco-editor',
-            style: 'width: 100%; height: 400px;'
+            style: 'width: 100%; height: 100%;'
         });
         wrapper.appendChild(editorDiv);
         container.appendChild(wrapper);
@@ -20,10 +20,12 @@ const QueryEditor = {
     },
 
     setHeight(height) {
-        const wrapper = DOM.$('.query-editor-wrapper');
+        const wrapper = DOM.$('.sql-console-editor-wrapper');
         if (wrapper) {
             wrapper.style.height = height + 'px';
-            wrapper.style.flex = '0 0 ' + height + 'px';
+        }
+        if (this.editor) {
+            this.editor.layout();
         }
     },
 

@@ -130,8 +130,8 @@ python backend/migrations/<migration_name>.py
 - `frontend/js/api.js` 是集中式 API 客户端
 
 `frontend/js/pages/instance-detail.js` 是当前单实例工作台主入口：
-- 串联监控、流量、会话、AI 对话、SQL 查询、告警、巡检、参数等视图
-- `Router.navigate('query')` 会重定向到 `instance-detail?datasource=<id>&tab=query`
+- 串联监控、流量、会话、AI 对话、SQL 窗口、告警、巡检、参数等视图
+- `Router.navigate('sqlConsole')` 会重定向到 `instance-detail?datasource=<id>&tab=sqlConsole`
 
 ## 关键约定
 
