@@ -168,17 +168,31 @@ class OracleConnector(DBConnector):
         try:
             cursor = conn.cursor()
             await cursor.execute(
-                "SELECT sid, serial#, username, status, osuser, "
-                "machine, program, sql_id, logon_time "
+                "SELECT s.sid, s.serial#, s.username, s.status, s.osuser, "
+                "s.machine, s.program, s.sql_id, s.logon_time, "
+                "s.last_call_et, s.event, s.wait_class, "
+                "SUBSTR(q.sql_text, 1, 500) as sql_text "
                 "FROM v$session s "
+                "LEFT JOIN v$sql q ON s.sql_id = q.sql_id AND s.sql_child_number = q.child_number "
                 "WHERE s.type = 'USER' "
                 "ORDER BY s.logon_time DESC"
             )
             rows = await cursor.fetchall()
-            columns = [desc[0] for desc in cursor.description]
+            columns = [desc[0].lower() for desc in cursor.description]
             cursor.close()
 
-            return [dict(zip(columns, row)) for row in rows]
+            result = []
+            for row in rows:
+                session_dict = dict(zip(columns, row))
+                # 将 last_call_et 映射为 duration_seconds
+                if session_dict.get('last_call_et') is not None:
+                    session_dict['duration_seconds'] = session_dict['last_call_et']
+                # 将 event 映射为 wait_event（如果不是 Idle 类）
+                if session_dict.get('wait_class') and session_dict['wait_class'] != 'Idle':
+                    session_dict['wait_event'] = session_dict.get('event')
+                result.append(session_dict)
+
+            return result
         finally:
             await conn.close()
 

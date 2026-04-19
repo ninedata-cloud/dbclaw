@@ -893,9 +893,9 @@ const InstanceDetailPage = {
                 const matchesSearch = !this.sessionFilters.search || haystack.includes(this.sessionFilters.search);
                 const matchesUser = !this.sessionFilters.user || user.includes(this.sessionFilters.user);
                 const matchesStatus = this.sessionFilters.status === 'all'
-                    || (this.sessionFilters.status === 'active' && /(active|running|query|execute)/.test(status))
-                    || (this.sessionFilters.status === 'idle' && /idle/.test(status))
-                    || (this.sessionFilters.status === 'sleep' && /(sleep|sleeping)/.test(status));
+                    || (this.sessionFilters.status === 'active' && /^(active|running|query|execute)$/i.test(status))
+                    || (this.sessionFilters.status === 'idle' && /^(idle|inactive)$/i.test(status))
+                    || (this.sessionFilters.status === 'sleep' && /^(sleep|sleeping)$/i.test(status));
                 return matchesSearch && matchesUser && matchesStatus;
             });
             const sorted = [...filtered].sort((left, right) => this._compareSessions(left, right));
