@@ -274,7 +274,7 @@ async def _load_latest_alert_trigger_reasons(db: AsyncSession, events) -> dict[i
     return {int(alert_id): trigger_reason for alert_id, trigger_reason in result.all()}
 
 
-def _build_event_response(event, latest_trigger_reason: Optional[str] = None) -> AlertEventResponse:
+def _build_event_response(event, datasource=None, latest_trigger_reason: Optional[str] = None) -> AlertEventResponse:
     payload = AlertEventResponse.model_validate(event)
     payload.title = build_alert_display_title(
         alert_type=payload.alert_type,
@@ -289,6 +289,10 @@ def _build_event_response(event, latest_trigger_reason: Optional[str] = None) ->
         trigger_reason=latest_trigger_reason,
         fault_domain=payload.fault_domain,
     )
+    # Add datasource silence information
+    if datasource:
+        payload.datasource_silence_until = datasource.silence_until
+        payload.datasource_silence_reason = datasource.silence_reason
     return payload
 
 
@@ -390,7 +394,7 @@ async def list_alert_events(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid datasource_ids format")
 
-    events, total = await AlertEventService.get_events(
+    events_with_datasources, total = await AlertEventService.get_events(
         db=db,
         datasource_ids=datasource_id_list,
         start_time=start_time,
@@ -401,12 +405,15 @@ async def list_alert_events(
         limit=limit,
         offset=offset
     )
+
+    # Extract events for loading trigger reasons
+    events = [event for event, _ in events_with_datasources]
     latest_trigger_reason_map = await _load_latest_alert_trigger_reasons(db, events)
 
     return {
         "events": [
-            _build_event_response(event, latest_trigger_reason_map.get(getattr(event, "latest_alert_id", 0)))
-            for event in events
+            _build_event_response(event, datasource, latest_trigger_reason_map.get(getattr(event, "latest_alert_id", 0)))
+            for event, datasource in events_with_datasources
         ],
         "total": total,
         "limit": limit,

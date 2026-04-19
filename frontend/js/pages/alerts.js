@@ -95,6 +95,16 @@ const AlertsPage = {
             const response = await API.get(`/api/alerts/events?${params.toString()}`);
             this.events = response.events || [];
             this.totalCount.events = response.total || 0;
+
+            // Debug: log silence info
+            console.log('[Alerts] Loaded events:', this.events.length);
+            const silencedEvents = this.events.filter(e => e.datasource_silence_until);
+            console.log('[Alerts] Events with silence info:', silencedEvents.length);
+            if (silencedEvents.length > 0) {
+                console.log('[Alerts] Sample silenced event:', JSON.stringify(silencedEvents[0], null, 2));
+                console.log('[Alerts] datasource_silence_until:', silencedEvents[0].datasource_silence_until);
+                console.log('[Alerts] datasource_silence_reason:', silencedEvents[0].datasource_silence_reason);
+            }
         } catch (error) {
             console.error('Failed to load events:', error);
             this.events = [];
@@ -481,7 +491,34 @@ const AlertsPage = {
 
             if (showDatasourceColumn) {
                 const datasource = this.datasources.find(ds => ds.id === event.datasource_id);
-                row.appendChild(DOM.el('td', { textContent: datasource ? datasource.name : `ID: ${event.datasource_id}` }));
+                const datasourceName = datasource ? datasource.name : `ID: ${event.datasource_id}`;
+                const datasourceCell = DOM.el('td');
+
+                // Add datasource name
+                const nameSpan = DOM.el('span', { textContent: datasourceName });
+                datasourceCell.appendChild(nameSpan);
+
+                // Add silence badge if silenced
+                const silenceState = this._getSilenceState(event);
+                if (silenceState.isSilenced) {
+                    const badgeDiv = DOM.el('div', { style: 'margin-top:6px;' });
+                    const titleParts = [
+                        `静默至：${Format.datetime(event.datasource_silence_until)}`,
+                        `剩余：${this._formatHourValue(silenceState.remainingHours)} 小时`,
+                    ];
+                    if (silenceState.reason) {
+                        titleParts.push(`原因：${silenceState.reason}`);
+                    }
+                    const badge = DOM.el('span', {
+                        className: 'badge badge-warning',
+                        textContent: `告警静默中 ${this._formatHourValue(silenceState.remainingHours)}h`,
+                        title: titleParts.join('\n')
+                    });
+                    badgeDiv.appendChild(badge);
+                    datasourceCell.appendChild(badgeDiv);
+                }
+
+                row.appendChild(datasourceCell);
             }
             row.appendChild(DOM.el('td', {
                 innerHTML: `<span class="event-pill fault-domain-${this._escapeHtml(event.fault_domain || 'general')}">${this._escapeHtml(this.getFaultDomainLabel(event.fault_domain))}</span>`
@@ -538,6 +575,18 @@ const AlertsPage = {
                     }
                 }));
             }
+            // Add silence button
+            const datasource = this.datasources.find(ds => ds.id === event.datasource_id);
+            const datasourceName = datasource ? datasource.name : `ID: ${event.datasource_id}`;
+            actionsWrap.appendChild(DOM.el('button', {
+                className: 'btn btn-sm btn-warning',
+                textContent: '🔕',
+                title: '静默',
+                onClick: (e) => {
+                    e.stopPropagation();
+                    this._showSilenceModal(event.datasource_id, datasourceName);
+                }
+            }));
             if (!actionsWrap.childNodes.length) {
                 actionsWrap.appendChild(DOM.el('span', {
                     className: 'text-muted',
@@ -1493,5 +1542,127 @@ const AlertsPage = {
 
     resetPagination() {
         this.currentPage.events = 1;
+    },
+
+    // Silence-related methods
+    _getSilenceState(event) {
+        if (!event?.datasource_silence_until) {
+            return {
+                isSilenced: false,
+                remainingHours: null,
+                silenceUntil: null,
+                reason: event?.datasource_silence_reason || null,
+            };
+        }
+
+        const silenceUntil = new Date(event.datasource_silence_until);
+        if (Number.isNaN(silenceUntil.getTime())) {
+            return {
+                isSilenced: false,
+                remainingHours: null,
+                silenceUntil: null,
+                reason: event?.datasource_silence_reason || null,
+            };
+        }
+
+        const remainingMs = silenceUntil.getTime() - Date.now();
+        if (remainingMs <= 0) {
+            return {
+                isSilenced: false,
+                remainingHours: null,
+                silenceUntil,
+                reason: event?.datasource_silence_reason || null,
+            };
+        }
+
+        return {
+            isSilenced: true,
+            remainingHours: Math.round((remainingMs / 3600000) * 100) / 100,
+            silenceUntil,
+            reason: event?.datasource_silence_reason || null,
+        };
+    },
+
+    _formatHourValue(hours) {
+        if (hours == null || !Number.isFinite(hours)) return '0';
+        return hours.toFixed(1);
+    },
+
+    _escapeAttr(text) {
+        if (text == null) return '';
+        return String(text).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    },
+
+    async _showSilenceModal(datasourceId, datasourceName) {
+        // Find the event to get current silence state
+        const event = this.events.find(e => e.datasource_id === datasourceId);
+        const state = event ? this._getSilenceState(event) : { isSilenced: false, remainingHours: null, reason: null };
+
+        const defaultHours = state.isSilenced ? this._formatHourValue(state.remainingHours) : '1';
+        const currentStatusHtml = state.isSilenced ? `
+            <div style="margin-bottom:12px;padding:10px 12px;border-radius:8px;background:rgba(217,119,6,0.12);color:var(--text-primary);">
+                <div style="font-weight:600;margin-bottom:4px;">当前处于告警静默中</div>
+                <div style="font-size:12px;color:var(--text-secondary);">截止时间：${this._escapeHtml(Format.datetime(event.datasource_silence_until))}</div>
+                <div style="font-size:12px;color:var(--text-secondary);">剩余时长：${this._escapeHtml(this._formatHourValue(state.remainingHours))} 小时</div>
+                ${state.reason ? `<div style="font-size:12px;color:var(--text-secondary);">静默原因：${this._escapeHtml(state.reason)}</div>` : ''}
+            </div>
+        ` : '';
+
+        Modal.show({
+            title: '设置告警静默',
+            content: `
+                <div style="padding:6px 0;">
+                    <div style="margin-bottom:12px;color:var(--text-secondary);line-height:1.6;">
+                        为数据源 <strong>${this._escapeHtml(datasourceName)}</strong> 设置告警静默。静默期间将暂停该数据源的告警触发与通知。
+                    </div>
+                    ${currentStatusHtml}
+                    <div class="form-group">
+                        <label for="alert-silence-hours">静默时长（小时）</label>
+                        <input id="alert-silence-hours" type="number" class="form-input" min="0.5" max="240" step="0.5" value="${this._escapeAttr(defaultHours)}" placeholder="1">
+                        <small class="text-muted">默认 1 小时，可设置范围 0.5 ~ 240 小时</small>
+                    </div>
+                    <div class="form-group" style="margin-top:12px;">
+                        <label for="alert-silence-reason">静默原因（可选）</label>
+                        <textarea id="alert-silence-reason" class="form-input" rows="3" maxlength="500" placeholder="例如：计划变更窗口、已知故障处理中">${this._escapeHtml(state.reason || '')}</textarea>
+                    </div>
+                </div>
+            `,
+            buttons: [
+                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
+                {
+                    text: state.isSilenced ? '更新静默' : '开始静默',
+                    variant: 'primary',
+                    onClick: () => this._setDatasourceSilence(datasourceId)
+                }
+            ]
+        });
+    },
+
+    async _setDatasourceSilence(datasourceId) {
+        const hoursValue = DOM.$('#alert-silence-hours')?.value;
+        const reasonValue = DOM.$('#alert-silence-reason')?.value?.trim() || '';
+        const hours = parseFloat(hoursValue);
+
+        if (!Number.isFinite(hours)) {
+            Toast.error('请输入有效的静默时长');
+            return;
+        }
+        if (hours < 0.5 || hours > 240) {
+            Toast.error('静默时长必须在 0.5 到 240 小时之间');
+            return;
+        }
+
+        try {
+            const result = await API.setDatasourceSilence(datasourceId, {
+                hours,
+                reason: reasonValue || null,
+            });
+            Modal.hide();
+            Toast.success(`已设置告警静默 ${this._formatHourValue(result.remaining_hours ?? hours)} 小时`);
+            await this.loadEvents();
+            this.updateAlertsList();
+        } catch (err) {
+            Toast.error('设置告警静默失败: ' + err.message);
+        }
     }
 };

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_serializer
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -245,6 +245,51 @@ class AlertEventResponse(AlertEventBase):
     root_cause: Optional[str] = None
     recommended_actions: Optional[str] = None
     diagnosis_status: Optional[str] = None
+    datasource_silence_until: Optional[datetime] = None
+    datasource_silence_reason: Optional[str] = None
+
+    @model_serializer
+    def serialize_model(self):
+        """Custom serializer to ensure UTC timezone in datetime fields"""
+        from datetime import timezone
+        data = {
+            'id': self.id,
+            'datasource_id': self.datasource_id,
+            'aggregation_key': self.aggregation_key,
+            'aggregation_type': self.aggregation_type,
+            'alert_count': self.alert_count,
+            'event_start_time': self.event_start_time.isoformat() if self.event_start_time else None,
+            'event_end_time': self.event_end_time.isoformat() if self.event_end_time else None,
+            'status': self.status,
+            'severity': self.severity,
+            'title': self.title,
+            'alert_type': self.alert_type,
+            'metric_name': self.metric_name,
+            'event_category': self.event_category,
+            'fault_domain': self.fault_domain,
+            'lifecycle_stage': self.lifecycle_stage,
+            'diagnosis_refresh_needed': self.diagnosis_refresh_needed,
+            'diagnosis_trigger_reason': self.diagnosis_trigger_reason,
+            'ai_diagnosis_summary': self.ai_diagnosis_summary,
+            'root_cause': self.root_cause,
+            'recommended_actions': self.recommended_actions,
+            'diagnosis_status': self.diagnosis_status,
+            'first_alert_id': self.first_alert_id,
+            'latest_alert_id': self.latest_alert_id,
+            'last_updated': self.last_updated.isoformat() if self.last_updated else None,
+            'datasource_silence_reason': self.datasource_silence_reason,
+        }
+
+        # Handle datasource_silence_until with UTC timezone
+        if self.datasource_silence_until:
+            dt = self.datasource_silence_until
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            data['datasource_silence_until'] = dt.isoformat()
+        else:
+            data['datasource_silence_until'] = None
+
+        return data
 
     class Config:
         from_attributes = True

@@ -8,9 +8,11 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 from sqlalchemy import select, func, and_, or_, case
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from backend.models.alert_event import AlertEvent
 from backend.models.alert_message import AlertMessage
+from backend.models.datasource import Datasource
 from backend.config import ALERT_AGGREGATION_TIME_WINDOW_MINUTES
 from backend.utils.datetime_helper import now
 
@@ -237,10 +239,12 @@ class AlertEventService:
         search: Optional[str] = None,
         limit: int = 100,
         offset: int = 0
-    ) -> Tuple[List[AlertEvent], int]:
-        """Query events with filters"""
-        # Build query
-        query = select(AlertEvent)
+    ) -> Tuple[List[Tuple[AlertEvent, Optional[Datasource]]], int]:
+        """Query events with filters, returns list of (event, datasource) tuples"""
+        # Build query with left join to datasource
+        query = select(AlertEvent, Datasource).outerjoin(
+            Datasource, AlertEvent.datasource_id == Datasource.id
+        )
         count_query = select(func.count(AlertEvent.id))
 
         # Apply filters
@@ -289,9 +293,12 @@ class AlertEventService:
 
         # Execute query
         result = await db.execute(query)
-        events = [hydrate_event_strategy_fields(event) for event in result.scalars().all()]
+        events_with_datasources = [
+            (hydrate_event_strategy_fields(event), datasource)
+            for event, datasource in result.all()
+        ]
 
-        return events, total
+        return events_with_datasources, total
 
     @staticmethod
     async def get_alerts_in_event(
