@@ -127,7 +127,7 @@ const MonitorPage = {
             String(date.getHours()).padStart(2, '0'),
             String(date.getMinutes()).padStart(2, '0')
         ].join(':');
-        return [dateLabel, timeLabel];
+        return `${dateLabel} ${timeLabel}`;
     },
 
     _calculateRateFromCounters(currentRx, currentTx, timestamp, state) {
@@ -858,8 +858,23 @@ const MonitorPage = {
                 return;
             }
 
-            const reversed = [...metrics].reverse();
-            this._setChartMaxPoints(metrics.length);
+            // Filter metrics to only include those within the selected time range
+            const now = Date.now();
+            const rangeMs = this.currentTimeRange * 60 * 1000;
+            const cutoffTime = now - rangeMs;
+            const filtered = metrics.filter(m => {
+                const timestamp = new Date(m.collected_at).getTime();
+                return timestamp >= cutoffTime;
+            });
+
+            console.log('[Monitor] Filtered metrics:', filtered.length, 'records within range');
+            if (filtered.length === 0) {
+                console.warn('[Monitor] No metrics found within selected time range');
+                return;
+            }
+
+            const reversed = [...filtered].reverse();
+            this._setChartMaxPoints(filtered.length);
 
             this._resetNetworkStates();
 
