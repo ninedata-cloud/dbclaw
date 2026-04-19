@@ -312,6 +312,51 @@
     margin-bottom: 6px;
 }
 
+.alert-template-threshold-levels {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.threshold-level-row {
+    display: grid;
+    grid-template-columns: 80px 40px 1fr 1fr;
+    gap: 8px;
+    align-items: center;
+}
+
+.threshold-level-row input[type="number"] {
+    min-width: 0;
+}
+
+.severity-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+    text-align: center;
+}
+
+.badge-low {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+.badge-medium {
+    background: #fff3e0;
+    color: #f57c00;
+}
+
+.badge-high {
+    background: #fce4ec;
+    color: #c2185b;
+}
+
+.badge-critical {
+    background: #ffebee;
+    color: #d32f2f;
+}
+
 .alert-ai-evaluations-section {
     margin-top: 0;
 }
@@ -1616,3 +1661,16 @@
         align-items: flex-start;
     }
 }
+
+/* Silence button style */
+.btn-warning {
+    background: rgba(251, 140, 0, 0.15);
+    color: #fb8c00;
+    border-color: rgba(251, 140, 0, 0.3);
+}
+
+.btn-warning:hover {
+    background: rgba(251, 140, 0, 0.25);
+    border-color: rgba(251, 140, 0, 0.4);
+}
+

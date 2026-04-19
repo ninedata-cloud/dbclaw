@@ -10,6 +10,14 @@ from backend.utils.datetime_helper import now as get_now
 
 logger = logging.getLogger(__name__)
 
+# Severity order for multi-level threshold checking (highest to lowest)
+SEVERITY_ORDER = {
+    "critical": 4,
+    "high": 3,
+    "medium": 2,
+    "low": 1
+}
+
 
 class ThresholdChecker:
     """
@@ -18,11 +26,12 @@ class ThresholdChecker:
     """
 
     def __init__(self):
-        # Track violation start times: {datasource_id: {metric_name: start_time}}
+        # Track violation start times: {datasource_id: {metric_key: start_time}}
+        # metric_key format: "metric_name" or "metric_name:severity" for multi-level
         self._violation_start_times: Dict[int, Dict[str, datetime]] = defaultdict(dict)
-        # Track last trigger times to avoid duplicate triggers: {datasource_id: {metric_name: trigger_time}}
+        # Track last trigger times to avoid duplicate triggers: {datasource_id: {metric_key: trigger_time}}
         self._last_trigger_times: Dict[int, Dict[str, datetime]] = defaultdict(dict)
-        # Track consecutive confirmation counts: {datasource_id: {metric_name: count}}
+        # Track consecutive confirmation counts: {datasource_id: {metric_key: count}}
         self._violation_counts: Dict[int, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
         # Cooldown period after triggering (seconds) - avoid repeated triggers
         self._trigger_cooldown = 3600  # 1 hour
@@ -40,9 +49,14 @@ class ThresholdChecker:
             datasource_id: Database datasource ID
             metrics: Current metric values (normalized)
             threshold_rules: Threshold configuration from InspectionConfig
-                Example (simple rules): {
-                    "cpu_usage": {"threshold": 80, "duration": 60},
-                    "memory_usage": {"threshold": 85, "duration": 60}
+                Example (multi-level): {
+                    "cpu_usage": {
+                        "levels": [
+                            {"severity": "medium", "threshold": 70, "duration": 300},
+                            {"severity": "high", "threshold": 85, "duration": 180},
+                            {"severity": "critical", "threshold": 95, "duration": 60}
+                        ]
+                    }
                 }
                 Example (custom expression): {
                     "custom_expression": {
@@ -56,10 +70,11 @@ class ThresholdChecker:
             [
                 {
                     "metric_name": "cpu_usage",
+                    "severity": "high",
                     "current_value": 95.5,
-                    "threshold": 80,
-                    "duration": 60,
-                    "violation_duration": 120
+                    "threshold": 85,
+                    "duration": 180,
+                    "violation_duration": 200
                 }
             ]
         """
@@ -73,96 +88,152 @@ class ThresholdChecker:
         if "custom_expression" in threshold_rules:
             return self._check_custom_expression(datasource_id, metrics, threshold_rules["custom_expression"], now)
 
-        # Otherwise use simple threshold rules
+        # Check multi-level threshold rules
         for metric_name, rule in threshold_rules.items():
-            threshold = rule.get("threshold")
-            required_duration = rule.get("duration", 60)  # Default 60 seconds
-
-            if threshold is None:
-                continue
-
-            # Get current metric value
-            current_value = self._extract_metric_value(metrics, metric_name)
-            if current_value is None:
-                # Metric not available, clear violation tracking
-                if metric_name in self._violation_start_times[datasource_id]:
-                    del self._violation_start_times[datasource_id][metric_name]
-                continue
-
-            # Check if threshold is exceeded
-            is_violated = current_value > threshold
-
-            if is_violated:
-                # Track violation start time
-                if metric_name not in self._violation_start_times[datasource_id]:
-                    self._violation_start_times[datasource_id][metric_name] = now
-                    logger.info(
-                        f"Threshold violation started for datasource {datasource_id}: "
-                        f"{metric_name}={current_value:.2f} > {threshold}"
-                    )
-
-                # Calculate violation duration
-                violation_start = self._violation_start_times[datasource_id][metric_name]
-                violation_duration = (now - violation_start).total_seconds()
-
-                # Check if violation duration exceeds required duration
-                if violation_duration >= required_duration:
-                    # Check cooldown period
-                    last_trigger = self._last_trigger_times[datasource_id].get(metric_name)
-                    if last_trigger:
-                        time_since_last_trigger = (now - last_trigger).total_seconds()
-                        if time_since_last_trigger < self._trigger_cooldown:
-                            logger.debug(
-                                f"Skipping trigger for {metric_name} on datasource {datasource_id}: "
-                                f"in cooldown period ({time_since_last_trigger:.0f}s < {self._trigger_cooldown}s)"
-                            )
-                            continue
-
-                    # Check confirmation count
-                    required_confirmations = rule.get("confirmations", 2)
-                    self._violation_counts[datasource_id][metric_name] += 1
-                    current_count = self._violation_counts[datasource_id][metric_name]
-
-                    if current_count < required_confirmations:
-                        logger.debug(
-                            f"Confirmation {current_count}/{required_confirmations} for "
-                            f"{metric_name} on datasource {datasource_id}"
-                        )
-                        continue
-
-                    # Trigger inspection
-                    violations_to_trigger.append({
-                        "metric_name": metric_name,
-                        "current_value": current_value,
-                        "threshold": threshold,
-                        "duration": required_duration,
-                        "violation_duration": violation_duration
-                    })
-
-                    # Reset confirmation count and update last trigger time
-                    self._violation_counts[datasource_id][metric_name] = 0
-                    self._last_trigger_times[datasource_id][metric_name] = now
-
-                    logger.warning(
-                        f"Threshold violation trigger for datasource {datasource_id}: "
-                        f"{metric_name}={current_value:.2f} > {threshold} for {violation_duration:.0f}s"
-                    )
-
-            else:
-                # Threshold not exceeded, clear violation tracking
-                if metric_name in self._violation_start_times[datasource_id]:
-                    violation_start = self._violation_start_times[datasource_id][metric_name]
-                    violation_duration = (now - violation_start).total_seconds()
-                    logger.info(
-                        f"Threshold violation ended for datasource {datasource_id}: "
-                        f"{metric_name}={current_value:.2f} <= {threshold} "
-                        f"(was violated for {violation_duration:.0f}s)"
-                    )
-                    del self._violation_start_times[datasource_id][metric_name]
-                    self._violation_counts[datasource_id][metric_name] = 0
-                    self._last_trigger_times[datasource_id].pop(metric_name, None)
+            if "levels" in rule and isinstance(rule["levels"], list):
+                violations = self._check_multi_level_threshold(
+                    datasource_id, metric_name, metrics, rule["levels"], now
+                )
+                violations_to_trigger.extend(violations)
 
         return violations_to_trigger
+
+    def _check_multi_level_threshold(
+        self,
+        datasource_id: int,
+        metric_name: str,
+        metrics: Dict[str, Any],
+        levels: List[Dict[str, Any]],
+        now: datetime
+    ) -> List[Dict[str, Any]]:
+        """
+        Check multi-level threshold configuration.
+
+        Args:
+            datasource_id: Database datasource ID
+            metric_name: Metric name (e.g., "cpu_usage")
+            metrics: Current metric values
+            levels: List of level configurations, each with:
+                {
+                    "severity": "critical|high|medium|low",
+                    "threshold": 95,
+                    "duration": 60,
+                    "confirmations": 1
+                }
+            now: Current timestamp
+
+        Returns:
+            List of violations (at most one per metric, matching the highest severity level)
+        """
+        current_value = self._extract_metric_value(metrics, metric_name)
+        if current_value is None:
+            # Metric not available, clear all level tracking for this metric
+            keys_to_remove = [k for k in self._violation_start_times[datasource_id].keys()
+                            if k == metric_name or k.startswith(f"{metric_name}:")]
+            for key in keys_to_remove:
+                del self._violation_start_times[datasource_id][key]
+                self._violation_counts[datasource_id][key] = 0
+                self._last_trigger_times[datasource_id].pop(key, None)
+            return []
+
+        # Sort levels by severity (highest first)
+        sorted_levels = sorted(
+            levels,
+            key=lambda x: SEVERITY_ORDER.get(x.get("severity", "low"), 1),
+            reverse=True
+        )
+
+        # Find the highest severity level that is violated
+        matched_level = None
+        for level in sorted_levels:
+            threshold = level.get("threshold")
+            if threshold is not None and current_value > threshold:
+                matched_level = level
+                break
+
+        if matched_level:
+            severity = matched_level.get("severity", "medium")
+            threshold = matched_level["threshold"]
+            required_duration = matched_level.get("duration", 60)
+
+            # Use metric_key to track this specific level
+            metric_key = f"{metric_name}:{severity}"
+
+            # Track violation start time
+            if metric_key not in self._violation_start_times[datasource_id]:
+                self._violation_start_times[datasource_id][metric_key] = now
+                logger.info(
+                    f"Multi-level threshold violation started for datasource {datasource_id}: "
+                    f"{metric_name}={current_value:.2f} > {threshold} (severity={severity})"
+                )
+
+            # Calculate violation duration
+            violation_start = self._violation_start_times[datasource_id][metric_key]
+            violation_duration = (now - violation_start).total_seconds()
+
+            # Check if violation duration exceeds required duration
+            if violation_duration >= required_duration:
+                # Check cooldown period
+                last_trigger = self._last_trigger_times[datasource_id].get(metric_key)
+                if last_trigger:
+                    time_since_last_trigger = (now - last_trigger).total_seconds()
+                    if time_since_last_trigger < self._trigger_cooldown:
+                        logger.debug(
+                            f"Skipping trigger for {metric_key} on datasource {datasource_id}: "
+                            f"in cooldown period ({time_since_last_trigger:.0f}s < {self._trigger_cooldown}s)"
+                        )
+                        return []
+
+                # Increment violation count
+                self._violation_counts[datasource_id][metric_key] += 1
+
+                # Trigger inspection
+                violation = {
+                    "metric_name": metric_name,
+                    "severity": severity,
+                    "current_value": current_value,
+                    "threshold": threshold,
+                    "duration": required_duration,
+                    "violation_duration": violation_duration
+                }
+
+                # Reset confirmation count and update last trigger time
+                self._violation_counts[datasource_id][metric_key] = 0
+                self._last_trigger_times[datasource_id][metric_key] = now
+
+                logger.warning(
+                    f"Multi-level threshold violation trigger for datasource {datasource_id}: "
+                    f"{metric_name}={current_value:.2f} > {threshold} (severity={severity}) "
+                    f"for {violation_duration:.0f}s"
+                )
+
+                # Clear tracking for lower severity levels of the same metric
+                for level in sorted_levels:
+                    if level != matched_level:
+                        lower_key = f"{metric_name}:{level.get('severity', 'low')}"
+                        if lower_key in self._violation_start_times[datasource_id]:
+                            del self._violation_start_times[datasource_id][lower_key]
+                        self._violation_counts[datasource_id][lower_key] = 0
+
+                return [violation]
+
+        else:
+            # No level violated, clear all tracking for this metric
+            keys_to_remove = [k for k in self._violation_start_times[datasource_id].keys()
+                            if k.startswith(f"{metric_name}:")]
+            if keys_to_remove:
+                for key in keys_to_remove:
+                    violation_start = self._violation_start_times[datasource_id][key]
+                    violation_duration = (now - violation_start).total_seconds()
+                    logger.info(
+                        f"Multi-level threshold violation ended for datasource {datasource_id}: "
+                        f"{key} (was violated for {violation_duration:.0f}s)"
+                    )
+                    del self._violation_start_times[datasource_id][key]
+                    self._violation_counts[datasource_id][key] = 0
+                    self._last_trigger_times[datasource_id].pop(key, None)
+
+        return []
 
     def _check_custom_expression(
         self,
@@ -222,17 +293,8 @@ class ThresholdChecker:
                         )
                         return []
 
-                # Check confirmation count
-                required_confirmations = custom_rule.get("confirmations", 2)
+                # Increment violation count
                 self._violation_counts[datasource_id][metric_name] += 1
-                current_count = self._violation_counts[datasource_id][metric_name]
-
-                if current_count < required_confirmations:
-                    logger.debug(
-                        f"Confirmation {current_count}/{required_confirmations} for "
-                        f"custom expression on datasource {datasource_id}"
-                    )
-                    return []
 
                 # Trigger inspection
                 violation = {

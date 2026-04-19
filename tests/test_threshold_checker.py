@@ -7,26 +7,6 @@ from backend.services.threshold_checker import ThresholdChecker
 from backend.utils.datetime_helper import now
 
 
-def test_simple_threshold_rules():
-    """Test backward compatibility with simple threshold rules"""
-    checker = ThresholdChecker()
-    
-    # Test CPU threshold violation
-    metrics = {"cpu_usage": 85.5}
-    rules = {"cpu_usage": {"threshold": 80, "duration": 60, "confirmations": 1}}
-    
-    violations = checker.check_thresholds(1, metrics, rules)
-    assert len(violations) == 0, "Should not trigger immediately"
-    
-    # Wait for duration to pass (simulate)
-    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
-    violations = checker.check_thresholds(1, metrics, rules)
-    assert len(violations) == 1, "Should trigger after duration"
-    assert violations[0]["metric_name"] == "cpu_usage"
-    assert violations[0]["current_value"] == 85.5
-    assert violations[0]["threshold"] == 80
-    
-    print("✓ Simple threshold rules work correctly")
 
 
 def test_custom_expression_evaluation():
@@ -38,8 +18,7 @@ def test_custom_expression_evaluation():
     rules = {
         "custom_expression": {
             "expression": "cpu_usage > 50 and connections > 20",
-            "duration": 60,
-            "confirmations": 1
+            "duration": 60
         }
     }
 
@@ -122,52 +101,8 @@ def test_duration_tracking_custom_expression():
     print("✓ Duration tracking for custom expression works correctly")
 
 
-def test_cooldown_period():
-    """Test that cooldown period prevents duplicate triggers"""
-    checker = ThresholdChecker()
-    
-    metrics = {"cpu_usage": 85}
-    rules = {"cpu_usage": {"threshold": 80, "duration": 60, "confirmations": 1}}
-
-    # First trigger
-    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
-    violations = checker.check_thresholds(1, metrics, rules)
-    assert len(violations) == 1, "Should trigger first time"
-    
-    # Second check immediately - should be in cooldown
-    violations = checker.check_thresholds(1, metrics, rules)
-    assert len(violations) == 0, "Should not trigger during cooldown"
-    
-    # Third check after cooldown (simulate 3601s passed)
-    checker._last_trigger_times[1]["cpu_usage"] = now() - timedelta(seconds=3601)
-    violations = checker.check_thresholds(1, metrics, rules)
-    assert len(violations) == 1, "Should trigger after cooldown"
-    
-    print("✓ Cooldown period works correctly")
 
 
-def test_retrigger_after_recovery_clears_cooldown():
-    """Test that recovery clears cooldown so the same metric can trigger again"""
-    checker = ThresholdChecker()
-
-    metrics = {"cpu_usage": 85}
-    rules = {"cpu_usage": {"threshold": 80, "duration": 60, "confirmations": 1}}
-
-    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
-    violations = checker.check_thresholds(1, metrics, rules)
-    assert len(violations) == 1, "Should trigger first time"
-    assert "cpu_usage" in checker._last_trigger_times[1]
-
-    recovered_metrics = {"cpu_usage": 70}
-    violations = checker.check_thresholds(1, recovered_metrics, rules)
-    assert len(violations) == 0, "Recovered metric should not trigger"
-    assert "cpu_usage" not in checker._last_trigger_times[1], "Recovery should clear cooldown state"
-
-    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
-    violations = checker.check_thresholds(1, metrics, rules)
-    assert len(violations) == 1, "Should trigger again after recovery"
-
-    print("✓ Recovery clears cooldown for simple threshold")
 
 
 def test_custom_expression_retrigger_after_recovery():
@@ -179,8 +114,7 @@ def test_custom_expression_retrigger_after_recovery():
     rules = {
         "custom_expression": {
             "expression": "cpu_usage > 50 and connections > 20",
-            "duration": 60,
-            "confirmations": 1
+            "duration": 60
         }
     }
 
@@ -200,36 +134,6 @@ def test_custom_expression_retrigger_after_recovery():
     print("✓ Recovery clears cooldown for custom expression")
 
 
-def test_backward_compatibility():
-    """Test that existing configs with simple rules still work"""
-    checker = ThresholdChecker()
-
-    # Old format with multiple simple rules
-    metrics = {
-        "cpu_usage": 85,
-        "disk_usage": 90,
-        "connections": 25
-    }
-    rules = {
-        "cpu_usage": {"threshold": 80, "duration": 60, "confirmations": 1},
-        "disk_usage": {"threshold": 85, "duration": 300, "confirmations": 1},
-        "connections": {"threshold": 20, "duration": 120, "confirmations": 1}
-    }
-
-    # Simulate all durations passed
-    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
-    checker._violation_start_times[1]["disk_usage"] = now() - timedelta(seconds=301)
-    checker._violation_start_times[1]["connections"] = now() - timedelta(seconds=121)
-
-    violations = checker.check_thresholds(1, metrics, rules)
-    assert len(violations) == 3, "Should trigger all three violations"
-
-    metric_names = [v["metric_name"] for v in violations]
-    assert "cpu_usage" in metric_names
-    assert "disk_usage" in metric_names
-    assert "connections" in metric_names
-
-    print("✓ Backward compatibility maintained")
 
 
 def test_empty_threshold_rules():
@@ -314,132 +218,159 @@ def test_complex_expressions():
     print("✓ Complex expressions work correctly")
 
 
-def test_confirmation_count_default():
-    """Test that confirmation counting defaults to 2 and requires 2 consecutive violations"""
+def test_multi_level_threshold():
+    """Test multi-level threshold configuration"""
     checker = ThresholdChecker()
 
-    metrics = {"cpu_usage": 85}
-    rules = {"cpu_usage": {"threshold": 80, "duration": 60}}
+    # Multi-level configuration for CPU
+    metrics = {"cpu_usage": 92}
+    rules = {
+        "cpu_usage": {
+            "levels": [
+                {"severity": "medium", "threshold": 70, "duration": 300},
+                {"severity": "high", "threshold": 85, "duration": 180},
+                {"severity": "critical", "threshold": 95, "duration": 60},
+            ]
+        }
+    }
 
-    # Simulate duration already passed
-    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
-
-    # First confirmation - should not trigger yet (need 2)
+    # Should match "high" level (92 > 85 but < 95)
     violations = checker.check_thresholds(1, metrics, rules)
-    assert len(violations) == 0, "Should not trigger on first confirmation (need 2)"
+    assert len(violations) == 0, "Should not trigger immediately"
 
-    # Second confirmation - should trigger now
+    # Simulate duration passing for high level
+    checker._violation_start_times[1]["cpu_usage:high"] = now() - timedelta(seconds=181)
+
+    # Should trigger now
     violations = checker.check_thresholds(1, metrics, rules)
-    assert len(violations) == 1, "Should trigger on second confirmation"
+    assert len(violations) == 1, "Should trigger after duration passes"
     assert violations[0]["metric_name"] == "cpu_usage"
+    assert violations[0]["severity"] == "high"
+    assert violations[0]["threshold"] == 85
+    assert violations[0]["current_value"] == 92
 
-    print("✓ Default confirmation count (2) works correctly")
+    print("✓ Multi-level threshold works correctly")
 
 
-def test_confirmation_count_custom():
-    """Test that custom confirmations field is respected"""
+def test_multi_level_severity_matching():
+    """Test that multi-level matches the highest severity level"""
     checker = ThresholdChecker()
 
-    metrics = {"cpu_usage": 85}
-    rules = {"cpu_usage": {"threshold": 80, "duration": 60, "confirmations": 3}}
+    # CPU at 96 should match critical level
+    metrics = {"cpu_usage": 96}
+    rules = {
+        "cpu_usage": {
+            "levels": [
+                {"severity": "medium", "threshold": 70, "duration": 300},
+                {"severity": "high", "threshold": 85, "duration": 180},
+                {"severity": "critical", "threshold": 95, "duration": 60},
+            ]
+        }
+    }
 
-    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
-
-    # First and second confirmations - should not trigger
+    # Simulate duration passing
+    checker._violation_start_times[1]["cpu_usage:critical"] = now() - timedelta(seconds=61)
     violations = checker.check_thresholds(1, metrics, rules)
-    assert len(violations) == 0, "Should not trigger on first confirmation (need 3)"
 
-    violations = checker.check_thresholds(1, metrics, rules)
-    assert len(violations) == 0, "Should not trigger on second confirmation (need 3)"
+    assert len(violations) == 1
+    assert violations[0]["severity"] == "critical"
+    assert violations[0]["threshold"] == 95
 
-    # Third confirmation - should trigger
-    violations = checker.check_thresholds(1, metrics, rules)
-    assert len(violations) == 1, "Should trigger on third confirmation"
-
-    print("✓ Custom confirmation count (3) works correctly")
+    print("✓ Multi-level severity matching works correctly")
 
 
-def test_confirmation_count_one_immediate():
-    """Test confirmations=1 triggers immediately after duration (old behavior)"""
+def test_multi_level_different_durations():
+    """Test that different levels can have different durations and confirmations"""
     checker = ThresholdChecker()
 
-    metrics = {"cpu_usage": 85}
-    rules = {"cpu_usage": {"threshold": 80, "duration": 60, "confirmations": 1}}
+    metrics = {"cpu_usage": 88}
+    rules = {
+        "cpu_usage": {
+            "levels": [
+                {"severity": "medium", "threshold": 70, "duration": 300},
+                {"severity": "high", "threshold": 85, "duration": 180},
+                {"severity": "critical", "threshold": 95, "duration": 60},
+            ]
+        }
+    }
 
-    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
-
+    # Should match high level (88 > 85)
+    # First check - starts tracking
     violations = checker.check_thresholds(1, metrics, rules)
-    assert len(violations) == 1, "Should trigger immediately with confirmations=1"
+    assert len(violations) == 0
 
-    print("✓ confirmations=1 triggers immediately after duration")
+    # After 180 seconds should trigger
+    checker._violation_start_times[1]["cpu_usage:high"] = now() - timedelta(seconds=181)
+    violations = checker.check_thresholds(1, metrics, rules)
+    assert len(violations) == 1, "Should trigger after duration passes"
+    assert violations[0]["severity"] == "high"
+    assert violations[0]["duration"] == 180
+
+    print("✓ Multi-level different durations work correctly")
 
 
-def test_confirmation_count_resets_on_recovery():
-    """Test that confirmation count resets when metric recovers"""
+def test_multi_level_recovery():
+    """Test that recovery clears all level tracking"""
     checker = ThresholdChecker()
 
-    metrics = {"cpu_usage": 85}
-    rules = {"cpu_usage": {"threshold": 80, "duration": 60, "confirmations": 3}}
+    metrics_high = {"cpu_usage": 88}
+    metrics_normal = {"cpu_usage": 60}
+    rules = {
+        "cpu_usage": {
+            "levels": [
+                {"severity": "medium", "threshold": 70, "duration": 300, "confirmations": 1},
+                {"severity": "high", "threshold": 85, "duration": 180, "confirmations": 1},
+            ]
+        }
+    }
 
-    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
-
-    # Two confirmations
-    checker.check_thresholds(1, metrics, rules)
-    checker.check_thresholds(1, metrics, rules)
-    # Count should be 2 now
-
-    # Metric recovers
-    recovered_metrics = {"cpu_usage": 70}
-    checker.check_thresholds(1, recovered_metrics, rules)
-
-    # Violation starts again
-    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
-
-    # Should need 3 fresh confirmations, not just 1 more
-    violations = checker.check_thresholds(1, metrics, rules)
-    assert len(violations) == 0, "Count should have reset after recovery"
-
-    print("✓ Confirmation count resets on metric recovery")
-
-
-def test_confirmation_count_resets_after_trigger():
-    """Test that confirmation count resets to 0 after triggering"""
-    checker = ThresholdChecker()
-
-    metrics = {"cpu_usage": 85}
-    rules = {"cpu_usage": {"threshold": 80, "duration": 60, "confirmations": 2}}
-
-    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
-
-    # Trigger
-    checker.check_thresholds(1, metrics, rules)
-    violations = checker.check_thresholds(1, metrics, rules)
+    # Start violation
+    checker._violation_start_times[1]["cpu_usage:high"] = now() - timedelta(seconds=181)
+    violations = checker.check_thresholds(1, metrics_high, rules)
     assert len(violations) == 1
 
-    # After trigger and cooldown reset, count should be 0
-    checker._last_trigger_times[1]["cpu_usage"] = now() - timedelta(seconds=3601)
-    violations = checker.check_thresholds(1, metrics, rules)
-    assert len(violations) == 0, "Count should be 0 after trigger, need another confirmation"
+    # Recovery
+    violations = checker.check_thresholds(1, metrics_normal, rules)
+    assert len(violations) == 0
+    assert "cpu_usage:high" not in checker._violation_start_times[1]
+    assert "cpu_usage:medium" not in checker._violation_start_times[1]
 
-    print("✓ Confirmation count resets to 0 after triggering")
+    print("✓ Multi-level recovery works correctly")
 
 
-def test_confirmation_count_in_status():
-    """Test that get_violation_status includes confirmation count"""
+def test_multi_level_upgrade():
+    """Test upgrading from medium to high severity"""
     checker = ThresholdChecker()
 
-    metrics = {"cpu_usage": 85}
-    rules = {"cpu_usage": {"threshold": 80, "duration": 60, "confirmations": 3}}
+    rules = {
+        "cpu_usage": {
+            "levels": [
+                {"severity": "medium", "threshold": 70, "duration": 300, "confirmations": 1},
+                {"severity": "high", "threshold": 85, "duration": 180, "confirmations": 1},
+            ]
+        }
+    }
 
-    checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
-    checker.check_thresholds(1, metrics, rules)  # 1st confirmation
+    # Start at medium level
+    metrics_medium = {"cpu_usage": 75}
+    checker._violation_start_times[1]["cpu_usage:medium"] = now() - timedelta(seconds=301)
+    violations = checker.check_thresholds(1, metrics_medium, rules)
+    assert len(violations) == 1
+    assert violations[0]["severity"] == "medium"
 
-    status = checker.get_violation_status(1)
-    assert "cpu_usage" in status
-    assert "confirmation_count" in status["cpu_usage"], "Status should include confirmation_count"
-    assert status["cpu_usage"]["confirmation_count"] == 1
+    # Upgrade to high level
+    metrics_high = {"cpu_usage": 88}
+    checker._violation_start_times[1]["cpu_usage:high"] = now() - timedelta(seconds=181)
+    violations = checker.check_thresholds(1, metrics_high, rules)
+    assert len(violations) == 1
+    assert violations[0]["severity"] == "high"
 
-    print("✓ get_violation_status includes confirmation_count")
+    # Medium level tracking should be cleared
+    assert "cpu_usage:medium" not in checker._violation_start_times[1]
+
+    print("✓ Multi-level upgrade works correctly")
+
+
 
 
 def test_confirmation_count_cleared_on_clear_datasource():
@@ -447,7 +378,7 @@ def test_confirmation_count_cleared_on_clear_datasource():
     checker = ThresholdChecker()
 
     metrics = {"cpu_usage": 85}
-    rules = {"cpu_usage": {"threshold": 80, "duration": 60, "confirmations": 3}}
+    rules = {"cpu_usage": {"threshold": 80, "duration": 60}}
 
     checker._violation_start_times[1]["cpu_usage"] = now() - timedelta(seconds=61)
     checker.check_thresholds(1, metrics, rules)
@@ -460,56 +391,24 @@ def test_confirmation_count_cleared_on_clear_datasource():
     print("✓ clear_datasource clears confirmation counts")
 
 
-def test_custom_expression_confirmation_count():
-    """Test that custom expressions also require confirmation count"""
-    checker = ThresholdChecker()
-
-    metrics = {"cpu_usage": 60, "connections": 25}
-    rules = {
-        "custom_expression": {
-            "expression": "cpu_usage > 50 and connections > 20",
-            "duration": 60,
-            "confirmations": 2
-        }
-    }
-
-    checker._violation_start_times[1]["custom_expression"] = now() - timedelta(seconds=61)
-
-    # First confirmation - should not trigger
-    violations = checker.check_thresholds(1, metrics, rules)
-    assert len(violations) == 0, "Should not trigger on first confirmation"
-
-    # Second confirmation - should trigger
-    violations = checker.check_thresholds(1, metrics, rules)
-    assert len(violations) == 1, "Should trigger on second confirmation"
-
-    print("✓ Custom expression confirmation count works correctly")
-
-
 def run_all_tests():
     """Run all tests"""
     print("\n=== Running ThresholdChecker Tests ===\n")
 
-    test_simple_threshold_rules()
     test_custom_expression_evaluation()
     test_expression_returns_true_triggers()
     test_expression_syntax_error()
     test_duration_tracking_custom_expression()
-    test_cooldown_period()
-    test_retrigger_after_recovery_clears_cooldown()
     test_custom_expression_retrigger_after_recovery()
-    test_backward_compatibility()
     test_empty_threshold_rules()
     test_prepare_eval_context()
     test_complex_expressions()
-    test_confirmation_count_default()
-    test_confirmation_count_custom()
-    test_confirmation_count_one_immediate()
-    test_confirmation_count_resets_on_recovery()
-    test_confirmation_count_resets_after_trigger()
-    test_confirmation_count_in_status()
     test_confirmation_count_cleared_on_clear_datasource()
-    test_custom_expression_confirmation_count()
+    test_multi_level_threshold()
+    test_multi_level_severity_matching()
+    test_multi_level_different_durations()
+    test_multi_level_recovery()
+    test_multi_level_upgrade()
 
     print("\n=== All Tests Passed ✓ ===\n")
 

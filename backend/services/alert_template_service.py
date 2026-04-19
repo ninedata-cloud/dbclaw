@@ -13,16 +13,134 @@ from backend.services.alert_service import DEFAULT_EVENT_AI_CONFIG, normalize_ev
 
 
 DEFAULT_THRESHOLD_RULES = {
-    "cpu_usage": {"threshold": 80, "duration": 300},
-    "disk_usage": {"threshold": 85, "duration": 600},
-    "connections": {"threshold": 80, "duration": 300},
+    "cpu_usage": {
+        "levels": [
+            {"severity": "low", "threshold": 60, "duration": 300},
+            {"severity": "medium", "threshold": 80, "duration": 60},
+            {"severity": "high", "threshold": 85, "duration": 60},
+            {"severity": "critical", "threshold": 90, "duration": 60},
+        ]
+    },
+    "disk_usage": {
+        "levels": [
+            {"severity": "low", "threshold": 80, "duration": 0},
+            {"severity": "medium", "threshold": 85, "duration": 0},
+            {"severity": "high", "threshold": 90, "duration": 0},
+            {"severity": "critical", "threshold": 95, "duration": 0},
+        ]
+    },
+    "connections": {
+        "levels": [
+            {"severity": "low", "threshold": 20, "duration": 60},
+            {"severity": "medium", "threshold": 30, "duration": 60},
+            {"severity": "high", "threshold": 40, "duration": 60},
+            {"severity": "critical", "threshold": 50, "duration": 60},
+        ]
+    },
 }
+
+VALID_SEVERITIES = {"critical", "high", "medium", "low"}
+
+
+def _validate_multi_level_threshold(metric_name: str, rule: dict) -> dict:
+    """
+    Validate and normalize multi-level threshold configuration.
+
+    Args:
+        metric_name: Name of the metric
+        rule: Rule configuration with "levels" array
+
+    Returns:
+        Normalized rule configuration
+
+    Raises:
+        ValueError: If validation fails
+    """
+    if "levels" not in rule or not isinstance(rule["levels"], list):
+        return rule
+
+    levels = rule["levels"]
+    if not levels:
+        raise ValueError(f"Metric '{metric_name}': levels array cannot be empty")
+
+    seen_severities = set()
+    normalized_levels = []
+
+    for idx, level in enumerate(levels):
+        if not isinstance(level, dict):
+            raise ValueError(f"Metric '{metric_name}': level {idx} must be a dictionary")
+
+        severity = level.get("severity")
+        if not severity:
+            raise ValueError(f"Metric '{metric_name}': level {idx} missing 'severity' field")
+
+        if severity not in VALID_SEVERITIES:
+            raise ValueError(
+                f"Metric '{metric_name}': invalid severity '{severity}'. "
+                f"Must be one of: {', '.join(VALID_SEVERITIES)}"
+            )
+
+        if severity in seen_severities:
+            raise ValueError(f"Metric '{metric_name}': duplicate severity '{severity}'")
+        seen_severities.add(severity)
+
+        threshold = level.get("threshold")
+        if threshold is None:
+            raise ValueError(f"Metric '{metric_name}': level {idx} missing 'threshold' field")
+
+        try:
+            threshold = float(threshold)
+            if threshold <= 0:
+                raise ValueError(f"Metric '{metric_name}': threshold must be positive")
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"Metric '{metric_name}': invalid threshold value: {e}")
+
+        duration = level.get("duration", 60)
+
+        normalized_levels.append({
+            "severity": severity,
+            "threshold": threshold,
+            "duration": int(duration)
+        })
+
+    # Validate threshold ordering (lower severity should have lower threshold)
+    severity_order = {"low": 1, "medium": 2, "high": 3, "critical": 4}
+    sorted_by_severity = sorted(normalized_levels, key=lambda x: severity_order[x["severity"]])
+
+    for i in range(len(sorted_by_severity) - 1):
+        current = sorted_by_severity[i]
+        next_level = sorted_by_severity[i + 1]
+        if current["threshold"] >= next_level["threshold"]:
+            raise ValueError(
+                f"Metric '{metric_name}': threshold for '{current['severity']}' "
+                f"({current['threshold']}) must be less than '{next_level['severity']}' "
+                f"({next_level['threshold']})"
+            )
+
+    return {"levels": normalized_levels}
 
 
 def normalize_alert_template_config(config: Optional[dict[str, Any]]) -> dict[str, Any]:
     payload = config if isinstance(config, dict) else {}
     threshold_rules = payload.get("threshold_rules")
-    normalized_threshold_rules = threshold_rules if isinstance(threshold_rules, dict) else dict(DEFAULT_THRESHOLD_RULES)
+
+    # Validate and normalize threshold rules (including multi-level)
+    normalized_threshold_rules = {}
+    if isinstance(threshold_rules, dict):
+        for metric_name, rule in threshold_rules.items():
+            if isinstance(rule, dict):
+                try:
+                    normalized_threshold_rules[metric_name] = _validate_multi_level_threshold(metric_name, rule)
+                except ValueError as e:
+                    # Log validation error but don't fail - use default instead
+                    import logging
+                    logging.getLogger(__name__).warning(f"Threshold validation failed: {e}")
+                    normalized_threshold_rules[metric_name] = rule
+            else:
+                normalized_threshold_rules[metric_name] = rule
+    else:
+        normalized_threshold_rules = dict(DEFAULT_THRESHOLD_RULES)
+
     alert_engine_mode = normalize_alert_engine_mode(payload.get("alert_engine_mode"))
     ai_policy_text = (payload.get("ai_policy_text") or "").strip() or None
     alert_ai_model_id = payload.get("alert_ai_model_id")
@@ -54,9 +172,27 @@ DEFAULT_ALERT_TEMPLATES: list[dict[str, Any]] = [
         "template_config": {
             "alert_engine_mode": "threshold",
             "threshold_rules": {
-                "cpu_usage": {"threshold": 80, "duration": 300},
-                "disk_usage": {"threshold": 85, "duration": 600},
-                "connections": {"threshold": 80, "duration": 300},
+                "cpu_usage": {
+                    "levels": [
+                        {"severity": "medium", "threshold": 70, "duration": 60},
+                        {"severity": "high", "threshold": 70, "duration": 180},
+                        {"severity": "critical", "threshold": 80, "duration": 60},
+                    ]
+                },
+                "disk_usage": {
+                    "levels": [
+                        {"severity": "medium", "threshold": 85, "duration": 0},
+                        {"severity": "high", "threshold": 90, "duration": 0},
+                        {"severity": "critical", "threshold": 95, "duration": 0},
+                    ]
+                },
+                "connections": {
+                    "levels": [
+                        {"severity": "medium", "threshold": 20, "duration": 60},
+                        {"severity": "high", "threshold": 30, "duration": 60},
+                        {"severity": "critical", "threshold": 40, "duration": 60},
+                    ]
+                },
             },
             "baseline_config": {
                 "enabled": True,
@@ -87,9 +223,9 @@ DEFAULT_ALERT_TEMPLATES: list[dict[str, Any]] = [
         "template_config": {
             "alert_engine_mode": "ai",
             "threshold_rules": {
-                "cpu_usage": {"threshold": 85, "duration": 300},
-                "disk_usage": {"threshold": 90, "duration": 600},
-                "connections": {"threshold": 100, "duration": 300},
+                "cpu_usage": {"threshold": 80, "duration": 60},
+                "disk_usage": {"threshold": 90, "duration": 0},
+                "connections": {"threshold": 20, "duration": 60},
             },
             "baseline_config": {
                 "enabled": True,
@@ -121,9 +257,9 @@ DEFAULT_ALERT_TEMPLATES: list[dict[str, Any]] = [
         "template_config": {
             "alert_engine_mode": "threshold",
             "threshold_rules": {
-                "cpu_usage": {"threshold": 90, "duration": 300},
-                "disk_usage": {"threshold": 90, "duration": 900},
-                "connections": {"threshold": 120, "duration": 300},
+                "cpu_usage": {"threshold": 90, "duration": 60},
+                "disk_usage": {"threshold": 90, "duration": 0},
+                "connections": {"threshold": 30, "duration": 60},
             },
             "baseline_config": {"enabled": False},
             "event_ai_config": {
@@ -241,8 +377,13 @@ def summarize_alert_template_config(config: Optional[dict[str, Any]]) -> str:
             short_rules = []
             for metric_name in ("cpu_usage", "disk_usage", "connections"):
                 rule = threshold_rules.get(metric_name)
-                if isinstance(rule, dict) and rule.get("threshold") is not None:
-                    short_rules.append(f"{metric_name}:{rule.get('threshold')}")
+                if isinstance(rule, dict):
+                    # Check if multi-level configuration
+                    if "levels" in rule and isinstance(rule["levels"], list):
+                        level_count = len(rule["levels"])
+                        short_rules.append(f"{metric_name}({level_count}级)")
+                    elif rule.get("threshold") is not None:
+                        short_rules.append(f"{metric_name}:{rule.get('threshold')}")
             if short_rules:
                 parts.append("阈值 " + " / ".join(short_rules))
     if mode == "ai" and normalized.get("ai_policy_text"):

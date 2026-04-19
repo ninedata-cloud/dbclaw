@@ -174,56 +174,11 @@ const AlertTemplatesPage = {
                 </div>
                 <div id="templatePresetThresholdSection" style="display:${thresholdState.useCustomExpression ? 'none' : 'block'};">
                     <div class="alert-template-threshold-list">
-                        <div class="alert-template-threshold-item">
-                            <label class="checkbox-label alert-template-threshold-toggle">
-                                <input type="checkbox" name="cpu_enabled" ${thresholdState.cpu.enabled ? 'checked' : ''}>
-                                CPU 使用率
-                            </label>
-                            <div class="alert-template-threshold-fields">
-                                <div class="alert-template-threshold-field">
-                                    <label class="text-muted text-sm">CPU 使用率阈值（%）</label>
-                                    <input type="number" name="cpu_threshold" class="form-input" min="1" max="100" value="${this._escapeAttr(thresholdState.cpu.threshold)}">
-                                </div>
-                                <div class="alert-template-threshold-field">
-                                    <label class="text-muted text-sm">CPU 持续时长（秒）</label>
-                                    <input type="number" name="cpu_duration" class="form-input" min="1" value="${this._escapeAttr(thresholdState.cpu.duration)}">
-                                </div>
-                            </div>
-                        </div>
-                        <div class="alert-template-threshold-item">
-                            <label class="checkbox-label alert-template-threshold-toggle">
-                                <input type="checkbox" name="disk_enabled" ${thresholdState.disk.enabled ? 'checked' : ''}>
-                                磁盘使用率
-                            </label>
-                            <div class="alert-template-threshold-fields">
-                                <div class="alert-template-threshold-field">
-                                    <label class="text-muted text-sm">磁盘使用率阈值（%）</label>
-                                    <input type="number" name="disk_threshold" class="form-input" min="1" max="100" value="${this._escapeAttr(thresholdState.disk.threshold)}">
-                                </div>
-                                <div class="alert-template-threshold-field">
-                                    <label class="text-muted text-sm">磁盘持续时长（秒）</label>
-                                    <input type="number" name="disk_duration" class="form-input" min="1" value="${this._escapeAttr(thresholdState.disk.duration)}">
-                                </div>
-                            </div>
-                        </div>
-                        <div class="alert-template-threshold-item">
-                            <label class="checkbox-label alert-template-threshold-toggle">
-                                <input type="checkbox" name="connections_enabled" ${thresholdState.connections.enabled ? 'checked' : ''}>
-                                活跃连接数
-                            </label>
-                            <div class="alert-template-threshold-fields">
-                                <div class="alert-template-threshold-field">
-                                    <label class="text-muted text-sm">活跃连接阈值</label>
-                                    <input type="number" name="connections_threshold" class="form-input" min="1" value="${this._escapeAttr(thresholdState.connections.threshold)}">
-                                </div>
-                                <div class="alert-template-threshold-field">
-                                    <label class="text-muted text-sm">连接持续时长（秒）</label>
-                                    <input type="number" name="connections_duration" class="form-input" min="1" value="${this._escapeAttr(thresholdState.connections.duration)}">
-                                </div>
-                            </div>
-                        </div>
+                        ${this._renderMetricLevelEditor('cpu', 'CPU 使用率', '%', thresholdState.cpu)}
+                        ${this._renderMetricLevelEditor('disk', '磁盘使用率', '%', thresholdState.disk)}
+                        ${this._renderMetricLevelEditor('connections', '活跃连接数', '', thresholdState.connections)}
                     </div>
-                    <div class="text-muted text-sm" style="margin-top:6px;">适合大多数常规监控场景，可以分别控制 CPU、磁盘、连接数的阈值与持续时长。</div>
+                    <div class="text-muted text-sm" style="margin-top:6px;">为每个指标配置多个告警等级，不同等级可设置不同的阈值、持续时长和确认次数。</div>
                 </div>
                 <div id="templateCustomExpressionSection" style="display:${thresholdState.useCustomExpression ? 'block' : 'none'};">
                     <label class="text-muted text-sm">表达式</label>
@@ -232,10 +187,6 @@ const AlertTemplatesPage = {
                         <div>
                             <label class="text-muted text-sm">持续时长（秒）</label>
                             <input type="number" name="custom_expression_duration" class="form-input" min="1" value="${this._escapeAttr(thresholdState.customExpression.duration)}">
-                        </div>
-                        <div>
-                            <label class="text-muted text-sm">确认次数</label>
-                            <input type="number" name="custom_expression_confirmations" class="form-input" min="1" value="${this._escapeAttr(thresholdState.customExpression.confirmations)}">
                         </div>
                     </div>
                     <div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap;">
@@ -428,9 +379,30 @@ const AlertTemplatesPage = {
         return {
             alert_engine_mode: 'threshold',
             threshold_rules: {
-                cpu_usage: { threshold: 80, duration: 300 },
-                disk_usage: { threshold: 85, duration: 600 },
-                connections: { threshold: 80, duration: 300 },
+                cpu_usage: {
+                    levels: [
+                        { severity: 'low', threshold: 60, duration: 300 },
+                        { severity: 'medium', threshold: 80, duration: 60 },
+                        { severity: 'high', threshold: 85, duration: 60 },
+                        { severity: 'critical', threshold: 90, duration: 60 },
+                    ]
+                },
+                disk_usage: {
+                    levels: [
+                        { severity: 'low', threshold: 80, duration: 0 },
+                        { severity: 'medium', threshold: 85, duration: 0 },
+                        { severity: 'high', threshold: 90, duration: 0 },
+                        { severity: 'critical', threshold: 95, duration: 0 },
+                    ]
+                },
+                connections: {
+                    levels: [
+                        { severity: 'low', threshold: 20, duration: 60 },
+                        { severity: 'medium', threshold: 30, duration: 60 },
+                        { severity: 'high', threshold: 40, duration: 60 },
+                        { severity: 'critical', threshold: 50, duration: 60 },
+                    ]
+                },
             },
             baseline_config: { enabled: true },
             event_ai_config: { enabled: true, trigger_on_create: true, trigger_on_severity_upgrade: true, trigger_on_recovery: false, stale_recheck_minutes: 30 },
@@ -457,6 +429,10 @@ const AlertTemplatesPage = {
         ];
         const parts = labels.map(([key, label]) => {
             const rule = rules?.[key];
+            // Check if multi-level configuration
+            if (rule?.levels && Array.isArray(rule.levels)) {
+                return `${label}(${rule.levels.length}级)`;
+            }
             return rule?.threshold != null ? `${label}>${rule.threshold}/${rule.duration || '-'}秒` : null;
         }).filter(Boolean);
         return parts.length ? parts.join(' / ') : '未配置阈值';
@@ -471,21 +447,25 @@ const AlertTemplatesPage = {
                 custom_expression: {
                     expression: String(rules.custom_expression.expression || '').trim(),
                     duration: parseInt(String(rules.custom_expression.duration || '60'), 10) || 60,
-                    confirmations: parseInt(String(rules.custom_expression.confirmations || '1'), 10) || 1,
                 },
             };
         }
         const normalized = {};
         ['cpu_usage', 'disk_usage', 'connections'].forEach((key) => {
             const rule = rules[key];
-            if (!rule || typeof rule !== 'object' || rule.threshold == null) {
+            if (!rule || typeof rule !== 'object') {
                 return;
             }
-            normalized[key] = {
-                threshold: parseInt(String(rule.threshold), 10),
-                duration: parseInt(String(rule.duration || '60'), 10) || 60,
-                confirmations: parseInt(String(rule.confirmations || '1'), 10) || 1,
-            };
+            // Check if multi-level configuration
+            if (rule.levels && Array.isArray(rule.levels)) {
+                normalized[key] = {
+                    levels: rule.levels.map(level => ({
+                        severity: level.severity,
+                        threshold: parseInt(String(level.threshold), 10),
+                        duration: parseInt(String(level.duration || '60'), 10) || 60,
+                    }))
+                };
+            }
         });
         return normalized;
     },
@@ -498,20 +478,77 @@ const AlertTemplatesPage = {
             customExpression: {
                 expression: customRule?.expression || '',
                 duration: customRule?.duration || 60,
-                confirmations: customRule?.confirmations || 1,
             },
-            cpu: this._metricRuleState(normalized.cpu_usage, { threshold: 80, duration: 300 }),
-            disk: this._metricRuleState(normalized.disk_usage, { threshold: 85, duration: 600 }),
-            connections: this._metricRuleState(normalized.connections, { threshold: 80, duration: 300 }),
+            cpu: this._metricRuleState(normalized.cpu_usage, 'cpu_usage'),
+            disk: this._metricRuleState(normalized.disk_usage, 'disk_usage'),
+            connections: this._metricRuleState(normalized.connections, 'connections'),
         };
     },
 
-    _metricRuleState(rule, defaults) {
+    _metricRuleState(rule, metricName) {
+        const defaults = {
+            cpu_usage: {
+                levels: [
+                    { severity: 'low', threshold: 60, duration: 300 },
+                    { severity: 'medium', threshold: 80, duration: 60 },
+                    { severity: 'high', threshold: 85, duration: 60 },
+                    { severity: 'critical', threshold: 90, duration: 60 },
+                ]
+            },
+            disk_usage: {
+                levels: [
+                    { severity: 'low', threshold: 80, duration: 0 },
+                    { severity: 'medium', threshold: 85, duration: 0 },
+                    { severity: 'high', threshold: 90, duration: 0 },
+                    { severity: 'critical', threshold: 95, duration: 0 },
+                ]
+            },
+            connections: {
+                levels: [
+                    { severity: 'low', threshold: 20, duration: 60 },
+                    { severity: 'medium', threshold: 30, duration: 60 },
+                    { severity: 'high', threshold: 40, duration: 60 },
+                    { severity: 'critical', threshold: 50, duration: 60 },
+                ]
+            },
+        };
+        const defaultRule = defaults[metricName] || {
+            levels: [
+                { severity: 'low', threshold: 60, duration: 300 },
+                { severity: 'medium', threshold: 80, duration: 60 },
+                { severity: 'high', threshold: 85, duration: 60 },
+                { severity: 'critical', threshold: 90, duration: 60 },
+            ]
+        };
+
+        // Check if multi-level configuration
+        if (rule?.levels && Array.isArray(rule.levels)) {
+            const levelsBySeverity = {};
+            rule.levels.forEach(level => {
+                levelsBySeverity[level.severity] = level;
+            });
+            return {
+                enabled: true,
+                isMultiLevel: true,
+                levels: {
+                    low: levelsBySeverity.low || { threshold: 80, duration: 60 },
+                    medium: levelsBySeverity.medium || { threshold: 80, duration: 60 },
+                    high: levelsBySeverity.high || { threshold: 90, duration: 60 },
+                    critical: levelsBySeverity.critical || { threshold: 95, duration: 60 },
+                }
+            };
+        }
+
+        // No rule configured
         return {
-            enabled: Boolean(rule && rule.threshold != null),
-            threshold: rule?.threshold ?? defaults.threshold,
-            duration: rule?.duration ?? defaults.duration,
-            confirmations: rule?.confirmations ?? 1,
+            enabled: false,
+            isMultiLevel: true,
+            levels: {
+                low: { threshold: 80, duration: 60 },
+                medium: { threshold: 80, duration: 120 },
+                high: { threshold: 85, duration: 60 },
+                critical: { threshold: 90, duration: 120 },
+            }
         };
     },
 
@@ -554,7 +591,6 @@ const AlertTemplatesPage = {
         if (useCustom) {
             const expression = String(form.querySelector('[name="custom_expression_text"]')?.value || '').trim();
             const duration = parseInt(String(form.querySelector('[name="custom_expression_duration"]')?.value || '60'), 10) || 60;
-            const confirmations = parseInt(String(form.querySelector('[name="custom_expression_confirmations"]')?.value || '1'), 10) || 1;
             if (!expression) {
                 Toast.error('请填写自定义表达式');
                 return null;
@@ -563,7 +599,6 @@ const AlertTemplatesPage = {
                 custom_expression: {
                     expression,
                     duration,
-                    confirmations,
                 },
             };
         }
@@ -574,18 +609,48 @@ const AlertTemplatesPage = {
             ['disk_usage', 'disk', 100],
             ['connections', 'connections', null],
         ];
+
         metricFields.forEach(([metricName, fieldName, max]) => {
             const enabled = Boolean(form.querySelector(`[name="${fieldName}_enabled"]`)?.checked);
             if (!enabled) return;
-            const threshold = parseInt(String(form.querySelector(`[name="${fieldName}_threshold"]`)?.value || ''), 10);
-            const duration = parseInt(String(form.querySelector(`[name="${fieldName}_duration"]`)?.value || ''), 10);
-            if (!Number.isFinite(threshold) || threshold <= 0) return;
-            if (max && threshold > max) return;
-            thresholdRules[metricName] = {
-                threshold,
-                duration: Number.isFinite(duration) && duration > 0 ? duration : 60,
-                confirmations: 1,
-            };
+
+            // Collect all enabled levels for this metric
+            const levels = [];
+            const severities = ['low', 'medium', 'high', 'critical'];
+
+            severities.forEach(severity => {
+                const levelEnabled = Boolean(form.querySelector(`[name="${fieldName}_${severity}_enabled"]`)?.checked);
+                if (!levelEnabled) return;
+
+                const threshold = parseInt(String(form.querySelector(`[name="${fieldName}_${severity}_threshold"]`)?.value || ''), 10);
+                const duration = parseInt(String(form.querySelector(`[name="${fieldName}_${severity}_duration"]`)?.value || ''), 10);
+
+                if (!Number.isFinite(threshold) || threshold <= 0) return;
+                if (max && threshold > max) return;
+
+                levels.push({
+                    severity,
+                    threshold,
+                    duration: Number.isFinite(duration) && duration > 0 ? duration : 60,
+                });
+            });
+
+            if (levels.length > 0) {
+                // Validate threshold ordering
+                const sortedLevels = [...levels].sort((a, b) => {
+                    const order = { low: 1, medium: 2, high: 3, critical: 4 };
+                    return order[a.severity] - order[b.severity];
+                });
+
+                for (let i = 0; i < sortedLevels.length - 1; i++) {
+                    if (sortedLevels[i].threshold >= sortedLevels[i + 1].threshold) {
+                        Toast.error(`${fieldName === 'cpu' ? 'CPU' : fieldName === 'disk' ? '磁盘' : '连接数'}：${sortedLevels[i].severity} 的阈值必须小于 ${sortedLevels[i + 1].severity}`);
+                        return null;
+                    }
+                }
+
+                thresholdRules[metricName] = { levels };
+            }
         });
 
         if (!Object.keys(thresholdRules).length) {
@@ -593,6 +658,43 @@ const AlertTemplatesPage = {
             return null;
         }
         return thresholdRules;
+    },
+
+    _renderMetricLevelEditor(fieldName, label, unit, state) {
+        const severities = [
+            { key: 'low', label: 'Low', badge: 'badge-low' },
+            { key: 'medium', label: 'Medium', badge: 'badge-medium' },
+            { key: 'high', label: 'High', badge: 'badge-high' },
+            { key: 'critical', label: 'Critical', badge: 'badge-critical' },
+        ];
+
+        const levelsHtml = severities.map(({ key, label: severityLabel, badge }) => {
+            const level = state.isMultiLevel ? state.levels[key] : null;
+            const enabled = level && level.threshold !== '';
+            const threshold = enabled ? level.threshold : '';
+            const duration = level ? level.duration : (key === 'critical' ? 60 : key === 'high' ? 180 : 300);
+
+            return `
+                <div class="threshold-level-row">
+                    <span class="severity-badge ${badge}">${severityLabel}</span>
+                    <input type="checkbox" name="${fieldName}_${key}_enabled" ${enabled ? 'checked' : ''}>
+                    <input type="number" name="${fieldName}_${key}_threshold" class="form-input" min="1" ${unit === '%' ? 'max="100"' : ''} placeholder="阈值${unit}" value="${this._escapeAttr(threshold)}">
+                    <input type="number" name="${fieldName}_${key}_duration" class="form-input" min="0" placeholder="持续秒" value="${this._escapeAttr(duration)}">
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div class="alert-template-threshold-item">
+                <label class="checkbox-label alert-template-threshold-toggle">
+                    <input type="checkbox" name="${fieldName}_enabled" ${state.enabled ? 'checked' : ''}>
+                    ${label}
+                </label>
+                <div class="alert-template-threshold-levels">
+                    ${levelsHtml}
+                </div>
+            </div>
+        `;
     },
 
     _compactRuleText(text) {

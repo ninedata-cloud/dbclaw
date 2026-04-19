@@ -525,9 +525,13 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
             # Create alert for the violation
             from backend.services.alert_service import AlertService
 
-            # Calculate severity based on percentage over threshold
-            percent_over = ((violation['current_value'] - violation['threshold']) / violation['threshold']) * 100
-            severity = AlertService.calculate_severity(percent_over)
+            # Use severity from violation if provided (multi-level threshold)
+            # Otherwise calculate based on percentage over threshold (legacy)
+            if 'severity' in violation:
+                severity = violation['severity']
+            else:
+                percent_over = ((violation['current_value'] - violation['threshold']) / violation['threshold']) * 100
+                severity = AlertService.calculate_severity(percent_over)
 
             alert = await AlertService.create_alert(
                 db=db,
