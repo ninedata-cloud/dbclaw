@@ -15,6 +15,7 @@ BUILTIN_SKILL_CATEGORY_ORDER: list[str] = [
     "SQL Server",
     "Oracle",
     "openGauss",
+    "SAP HANA",
     "平台操作",
     "知识检索",
     "高权限操作",
@@ -90,6 +91,7 @@ DB_CATEGORY_BY_PREFIX: list[tuple[str, str]] = [
     ("mssql_", "SQL Server"),
     ("oracle_", "Oracle"),
     ("opengauss_", "openGauss"),
+    ("hana_", "SAP HANA"),
 ]
 
 BUILTIN_PERMISSION_OVERRIDES: dict[str, list[str]] = {

@@ -350,12 +350,16 @@
 .type-oracle     { background: rgba(0,129,194,0.15);  color: #4db8ff; }
 .type-sqlserver  { background: rgba(0,129,194,0.15);  color: #4db8ff; }
 .type-opengauss  { background: rgba(100,60,200,0.15); color: #9977ee; }
+.type-hana       { background: rgba(0,180,240,0.15);  color: #00b4f0; }
+.type-tdsql-c-mysql { background: rgba(0,129,194,0.15); color: #4db8ff; }
 
 /* DB dot colors for distribution */
 .db-dot-mysql      { background: #4db8ff; }
 .db-dot-postgresql { background: #7bbfed; }
 .db-dot-oracle     { background: #f08060; }
 .db-dot-sqlserver  { background: #ff6b6b; }
+.db-dot-hana       { background: #00b4f0; }
+.db-dot-tdsql-c-mysql { background: #4db8ff; }
 .db-dot-other      { background: rgba(255,255,255,0.3); }
 
 /* Filters */

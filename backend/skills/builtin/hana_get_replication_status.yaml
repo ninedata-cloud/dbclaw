@@ -1,0 +1,52 @@
+id: hana_get_replication_status
+name: HANA Replication Status
+version: 1.0.0
+author: DBClaw
+category: hana
+description: Get SAP HANA system replication status including mode, status, and secondary server information
+tags: [hana, replication, ha, disaster-recovery]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      query = """
+      SELECT
+          SITE_NAME, HOST, PORT, REPLICATION_MODE,
+          REPLICATION_STATUS, SECONDARY_ACTIVE_STATUS,
+          SHIPPED_LOG_POSITION_TIME, LAST_LOG_POSITION_TIME
+      FROM SYS.M_SERVICE_REPLICATION
+      """
+
+      result = await context.execute_query(query, datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get replication status")}
+
+      replicas = []
+      for row in result.get("data", []):
+          replicas.append({
+              "site": row[0],
+              "host": row[1],
+              "port": row[2],
+              "mode": row[3],
+              "status": row[4],
+              "active": row[5],
+              "shipped_time": str(row[6]) if row[6] else None,
+              "last_time": str(row[7]) if row[7] else None,
+          })
+
+      return {
+          "success": True,
+          "replication_status": replicas,
+          "count": len(replicas)
+      }

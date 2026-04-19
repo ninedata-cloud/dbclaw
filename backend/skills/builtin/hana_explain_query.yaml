@@ -1,0 +1,54 @@
+id: hana_explain_query
+name: HANA Explain Query
+version: 1.0.0
+author: DBClaw
+category: hana
+description: Get execution plan for a SAP HANA SQL query to analyze query performance and optimization opportunities
+tags: [hana, explain, query-plan, optimization]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+  - name: sql
+    type: string
+    required: true
+    description: The SQL query to explain
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+      sql = params['sql']
+
+      # HANA uses EXPLAIN PLAN SET STATEMENT_NAME = 'name' FOR query
+      # Then query from EXPLAIN_PLAN_TABLE
+      import time
+      statement_name = f"plan_{int(time.time() * 1000)}"
+
+      explain_query = f"EXPLAIN PLAN SET STATEMENT_NAME = '{statement_name}' FOR {sql}"
+
+      # Execute EXPLAIN (no result set)
+      result = await context.execute_query(explain_query, datasource_id)
+
+      # Query the plan table
+      plan_query = f"""
+      SELECT OPERATOR_NAME, OPERATOR_DETAILS, SUBTREE_COST, OUTPUT_SIZE
+      FROM SYS.EXPLAIN_PLAN_TABLE
+      WHERE STATEMENT_NAME = '{statement_name}'
+      ORDER BY OPERATOR_ID
+      """
+
+      plan_result = await context.execute_query(plan_query, datasource_id)
+
+      if not plan_result.get("success"):
+          return {"success": False, "error": plan_result.get("error", "Failed to get execution plan")}
+
+      return {
+          "success": True,
+          "plan": plan_result.get("data", []),
+          "count": len(plan_result.get("data", []))
+      }

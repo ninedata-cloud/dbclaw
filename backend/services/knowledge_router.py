@@ -40,6 +40,7 @@ DB_TYPE_COMPATIBILITY = {
     "oracle": ["oracle", "general"],
     "sqlserver": ["sqlserver", "general"],
     "opengauss": ["opengauss", "postgresql", "general"],
+    "hana": ["hana", "general"],
 }
 
 

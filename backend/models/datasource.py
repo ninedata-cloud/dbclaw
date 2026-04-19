@@ -10,7 +10,7 @@ class Datasource(SoftDeleteMixin, Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), nullable=False)
-    db_type = Column(String(20), nullable=False)  # mysql, postgresql, sqlserver, oracle, tdsql-c-mysql, opengauss
+    db_type = Column(String(20), nullable=False)  # mysql, postgresql, sqlserver, oracle, tdsql-c-mysql, opengauss, hana
     host = Column(String(255), nullable=False)
     port = Column(Integer, nullable=False)
     username = Column(String(100), nullable=True)

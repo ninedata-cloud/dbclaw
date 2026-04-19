@@ -52,6 +52,7 @@ class DatasourceSelector {
             oracle: 'Oracle',
             'tdsql-c-mysql': 'TDSQL-C MySQL',
             opengauss: 'openGauss',
+            hana: 'SAP HANA',
         };
         return labels[dbType] || dbType || 'unknown';
     }

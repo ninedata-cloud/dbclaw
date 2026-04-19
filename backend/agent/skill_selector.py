@@ -74,6 +74,11 @@ DB_TOOL_FAMILY_MAP: dict[str, dict[str, Set[str]]] = {
         "categories": {"opengauss"},
         "tags": {"opengauss"},
     },
+    "hana": {
+        "prefixes": {"hana_"},
+        "categories": {"hana", "sap hana"},
+        "tags": {"hana", "sap"},
+    },
 }
 
 

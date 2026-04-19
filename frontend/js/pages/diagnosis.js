@@ -1304,16 +1304,12 @@ const DiagnosisPage = {
                 break;
             case 'thinking_complete':
                 this._rememberResumeState({
-                    thinking_phase: 'llm_thinking',
-                    thinking_message: '正在思考分析...',
+                    thinking_phase: null,
+                    thinking_message: '',
                     run_id: data.run_id || this._pendingResumeState?.run_id || null,
                 });
-                // Model is about to be called — show "thinking" status instead of hiding
-                if (!document.getElementById('thinking-indicator')) {
-                    ChatWidget.showThinkingIndicator('llm_thinking', '正在思考分析...');
-                } else {
-                    ChatWidget.updateThinkingIndicator('llm_thinking', '正在思考分析...');
-                }
+                // Thinking phase complete, hide indicator and wait for actual content/tool calls
+                ChatWidget.hideThinkingIndicator();
                 break;
             case 'plan_step_status':
                 if (data.status === 'running') {

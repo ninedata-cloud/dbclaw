@@ -10,6 +10,7 @@ from backend.services.postgres_service import PostgreSQLConnector
 from backend.services.sqlserver_service import SQLServerConnector
 from backend.services.oracle_service import OracleConnector
 from backend.services.opengauss_service import OpenGaussConnector
+from backend.services.hana_service import HANAConnector
 from backend.utils.encryption import decrypt_value
 
 logger = logging.getLogger(__name__)
@@ -139,6 +140,15 @@ async def execute_query(datasource: Datasource, query: str, allow_write: bool = 
                 username=datasource.username,
                 password=password,
                 database=datasource.database,
+            )
+        elif datasource.db_type == "hana":
+            service = HANAConnector(
+                host=datasource.host,
+                port=datasource.port,
+                username=datasource.username,
+                password=password,
+                database=datasource.database,
+                **(datasource.extra_params or {}),
             )
         else:
             return {"success": False, "error": f"Unsupported database type: {datasource.db_type}"}

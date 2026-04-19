@@ -109,6 +109,7 @@ def get_connector(db_type: str, host: str, port: int, username: str = None,
         "sqlserver": "backend.services.sqlserver_service.SQLServerConnector",
         "oracle": "backend.services.oracle_service.OracleConnector",
         "opengauss": "backend.services.opengauss_service.OpenGaussConnector",
+        "hana": "backend.services.hana_service.HANAConnector",
     }
 
     if db_type not in connectors:

@@ -38,6 +38,8 @@ class MetricNormalizer:
             normalized.update(cls._normalize_sqlserver(datasource_id, raw_metrics))
         elif db_type == 'oracle':
             normalized.update(cls._normalize_oracle(datasource_id, raw_metrics))
+        elif db_type == 'hana':
+            normalized.update(cls._normalize_hana(datasource_id, raw_metrics))
 
         return cls._convert_decimals(normalized)
 
@@ -294,6 +296,28 @@ class MetricNormalizer:
             )
             if net_rx is not None:
                 normalized['network_rx_rate'] = net_rx
+
+        return normalized
+
+    @classmethod
+    def _normalize_hana(cls, datasource_id: int, metrics: Dict[str, Any]) -> Dict[str, Any]:
+        """SAP HANA 指标标准化"""
+        normalized = {}
+
+        # HANA 的 cache_hit_rate 已经是百分比，直接使用
+        if 'cache_hit_rate' in metrics:
+            normalized['cache_hit_rate'] = metrics['cache_hit_rate']
+
+        # 计算 TPS（基于 xact_commit + xact_rollback 累积值）
+        xact_commit = metrics.get('xact_commit', 0)
+        xact_rollback = metrics.get('xact_rollback', 0)
+        total_xact = xact_commit + xact_rollback
+        if total_xact > 0:
+            tps = cls._calculate_rate(
+                datasource_id, 'hana_total_xact', total_xact
+            )
+            if tps is not None:
+                normalized['tps'] = tps
 
         return normalized
 

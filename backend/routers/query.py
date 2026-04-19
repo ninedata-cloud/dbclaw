@@ -27,10 +27,11 @@ router = APIRouter(prefix="/api/query", tags=["query"], dependencies=[Depends(ge
 # Keep a small per-user in-memory history to avoid cross-user data leakage.
 _query_history_by_user: dict[int, deque] = defaultdict(lambda: deque(maxlen=100))
 _DB_TYPES_WITH_DATABASE_LIST_FROM_SCHEMAS = {"mysql", "tdsql-c-mysql"}
-_DB_TYPES_WITH_SCHEMA_SELECTOR = {"postgresql", "sqlserver"}
+_DB_TYPES_WITH_SCHEMA_SELECTOR = {"postgresql", "sqlserver", "hana"}
 _DEFAULT_SCHEMA_BY_DB_TYPE = {
     "postgresql": "public",
     "sqlserver": "dbo",
+    "hana": "SYS",
 }
 
 

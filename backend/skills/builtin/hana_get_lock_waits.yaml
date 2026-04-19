@@ -1,0 +1,55 @@
+id: hana_get_lock_waits
+name: HANA Lock Waits
+version: 1.0.0
+author: DBClaw
+category: hana
+description: Get SAP HANA blocked transactions and lock wait information to diagnose blocking issues
+tags: [hana, locks, blocking, transactions]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      query = """
+      SELECT
+          BLOCKED_CONNECTION_ID,
+          BLOCKED_TRANSACTION_ID,
+          LOCK_OWNER_CONNECTION_ID,
+          LOCK_OWNER_TRANSACTION_ID,
+          LOCK_TYPE,
+          LOCK_MODE,
+          BLOCKED_TIME
+      FROM SYS.M_BLOCKED_TRANSACTIONS
+      """
+
+      result = await context.execute_query(query, datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get lock waits")}
+
+      lock_waits = []
+      for row in result.get("data", []):
+          lock_waits.append({
+              "blocked_connection": row[0],
+              "blocked_transaction": row[1],
+              "blocking_connection": row[2],
+              "blocking_transaction": row[3],
+              "lock_type": row[4],
+              "lock_mode": row[5],
+              "wait_time": row[6],
+          })
+
+      return {
+          "success": True,
+          "lock_waits": lock_waits,
+          "count": len(lock_waits)
+      }

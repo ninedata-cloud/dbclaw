@@ -65,6 +65,7 @@ const DatasourcesPage = {
             oracle: 'Oracle',
             'tdsql-c-mysql': 'TDSQL-C MySQL',
             opengauss: 'openGauss',
+            hana: 'SAP HANA',
         };
         return labels[dbType] || dbType || '-';
     },
@@ -156,6 +157,7 @@ const DatasourcesPage = {
                 <option value="sqlserver">SQL Server</option>
                 <option value="tdsql-c-mysql">TDSQL-C MySQL</option>
                 <option value="opengauss">openGauss</option>
+                <option value="hana">SAP HANA</option>
             </select>
         `;
 

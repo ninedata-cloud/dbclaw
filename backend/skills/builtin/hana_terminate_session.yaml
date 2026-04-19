@@ -1,0 +1,38 @@
+id: hana_terminate_session
+name: HANA Terminate Session
+version: 1.0.0
+author: DBClaw
+category: hana
+description: Terminate a specific SAP HANA database session/connection by session ID
+tags: [hana, session, kill, terminate]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+  - name: session_id
+    type: integer
+    required: true
+    description: The session ID to terminate
+
+permissions:
+  - execute_query
+  - admin
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+      session_id = params['session_id']
+
+      query = f"ALTER SYSTEM DISCONNECT SESSION '{session_id}'"
+
+      result = await context.execute_query(query, datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to terminate session")}
+
+      return {
+          "success": True,
+          "message": f"Session {session_id} terminated successfully"
+      }

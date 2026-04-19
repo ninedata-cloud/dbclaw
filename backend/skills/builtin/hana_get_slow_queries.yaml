@@ -1,0 +1,51 @@
+id: hana_get_slow_queries
+name: HANA Slow Queries
+version: 1.0.0
+author: DBClaw
+category: hana
+description: Get list of expensive/slow queries from SAP HANA M_EXPENSIVE_STATEMENTS view to identify performance bottlenecks
+tags: [hana, slow, queries, performance]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      query = """
+      SELECT
+          STATEMENT_STRING,
+          DURATION_MICROSEC / 1000000.0 as duration_sec,
+          START_TIME, DB_USER, CONNECTION_ID
+      FROM SYS.M_EXPENSIVE_STATEMENTS
+      ORDER BY DURATION_MICROSEC DESC
+      LIMIT 100
+      """
+
+      result = await context.execute_query(query, datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get slow queries")}
+
+      slow_queries = []
+      for row in result.get("data", []):
+          slow_queries.append({
+              "query": row[0],
+              "duration": row[1],
+              "start_time": str(row[2]) if row[2] else None,
+              "user": row[3],
+              "connection_id": row[4],
+          })
+
+      return {
+          "success": True,
+          "slow_queries": slow_queries,
+          "count": len(slow_queries)
+      }

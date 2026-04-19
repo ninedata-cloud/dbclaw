@@ -35,8 +35,16 @@ const DashboardPage = {
     },
 
     _dbDotClass(type) {
-        const known = ['mysql', 'postgresql', 'oracle', 'sqlserver'];
-        return known.includes(type) ? `db-dot-${type}` : 'db-dot-other';
+        const map = {
+            mysql: 'db-dot-mysql',
+            postgresql: 'db-dot-postgresql',
+            oracle: 'db-dot-oracle',
+            sqlserver: 'db-dot-sqlserver',
+            'tdsql-c-mysql': 'db-dot-tdsql-c-mysql',
+            opengauss: 'db-dot-postgresql',
+            hana: 'db-dot-hana'
+        };
+        return map[type] || 'db-dot-other';
     },
 
     _isConnectionFailureHealth(health) {
