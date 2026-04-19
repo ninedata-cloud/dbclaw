@@ -386,12 +386,14 @@ def create_app() -> FastAPI:
         )
 
     # Register routers
-    from backend.routers import datasources, hosts, metrics, monitor_ws, chat, query, ai_models, auth, users, inspections, system_configs, alerts, integrations, documents, feishu_bot, integration_bots, weixin_bot, instances
+    from backend.routers import datasources, hosts, metrics, monitor_ws, chat, query, ai_models, auth, users, inspections, system_configs, alerts, integrations, documents, feishu_bot, integration_bots, weixin_bot, instances, host_detail, terminal_ws
     from backend.api import skills
     app.include_router(auth.router)
     app.include_router(users.router)
     app.include_router(datasources.router)
     app.include_router(hosts.router)
+    app.include_router(host_detail.router)
+    app.include_router(terminal_ws.router)
     app.include_router(metrics.router)
     app.include_router(monitor_ws.router)
     app.include_router(chat.router)

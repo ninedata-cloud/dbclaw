@@ -22,6 +22,7 @@
     });
     Router.register('integrations', () => integrationsPage.init());
     Router.register('instance-detail', (routeParam) => InstanceDetailPage.render(routeParam));
+    Router.register('host-detail', (routeParam) => HostDetailPage.render(routeParam));
 
     try {
         const currentUser = await API.getMe();

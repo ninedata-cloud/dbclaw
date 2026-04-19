@@ -592,15 +592,68 @@ def replan_with_evidence(
 def render_knowledge_plan_for_prompt(knowledge_context: dict[str, Any]) -> str:
     if not knowledge_context:
         return ""
+
+    lines = []
+
+    # 渲染主机上下文（如果存在）
+    host_context = knowledge_context.get("host_context")
+    if host_context:
+        lines.append("=== 主机上下文信息 ===")
+
+        # 主机基本信息
+        host_info = host_context.get("host_info", {})
+        if host_info:
+            lines.append(f"主机名称: {host_info.get('name')}")
+            lines.append(f"主机地址: {host_info.get('host')}:{host_info.get('port')}")
+            if host_info.get('os_version'):
+                lines.append(f"操作系统: {host_info.get('os_version')}")
+
+        # 最新指标
+        latest_metrics = host_context.get("latest_metrics")
+        if latest_metrics:
+            lines.append(f"当前资源使用率:")
+            if latest_metrics.get("cpu_usage") is not None:
+                lines.append(f"  - CPU: {latest_metrics.get('cpu_usage'):.1f}%")
+            if latest_metrics.get("memory_usage") is not None:
+                lines.append(f"  - 内存: {latest_metrics.get('memory_usage'):.1f}%")
+            if latest_metrics.get("disk_usage") is not None:
+                lines.append(f"  - 磁盘: {latest_metrics.get('disk_usage'):.1f}%")
+
+        # TOP 进程
+        top_processes = host_context.get("top_processes", [])
+        if top_processes:
+            lines.append(f"TOP 进程 (共 {len(top_processes)} 个):")
+            for proc in top_processes[:5]:
+                lines.append(f"  - PID {proc.get('pid')}: {proc.get('command')} (CPU: {proc.get('cpu_percent')}%, MEM: {proc.get('memory_percent')}%)")
+
+        # 网络连接摘要
+        network_summary = host_context.get("network_summary", {})
+        if network_summary.get("total_connections"):
+            lines.append(f"网络连接: 共 {network_summary.get('total_connections')} 个连接")
+            top_remotes = network_summary.get("top_remotes", [])
+            if top_remotes:
+                lines.append("  主要连接目标:")
+                for remote in top_remotes[:3]:
+                    lines.append(f"    - {remote.get('remote_address')} ({remote.get('count')} 个连接)")
+
+        # 关联数据源
+        related_datasources = host_context.get("related_datasources", [])
+        if related_datasources:
+            lines.append(f"关联数据源 (共 {len(related_datasources)} 个):")
+            for ds in related_datasources:
+                lines.append(f"  - {ds.get('name')} ({ds.get('db_type')}) - 状态: {ds.get('connection_status')}")
+
+        lines.append("")
+
     knowledge_plan = knowledge_context.get("knowledge_plan") or {}
     active_documents = knowledge_plan.get("active_documents") or []
     active_units = knowledge_plan.get("active_units") or []
-    lines = [
+    lines.extend([
         "Knowledge orchestration plan (must be followed before fallback browsing):",
         "- Use the active knowledge units as the primary diagnostic guidance.",
         "- Prefer the recommended skills from the knowledge plan; only deviate when new evidence justifies it.",
         "- Do not cite a knowledge source unless it appears in the active units or evidence ledger.",
-    ]
+    ])
     if active_documents:
         lines.append("- Active documents:")
         for index, item in enumerate(active_documents[:5], start=1):
@@ -640,6 +693,7 @@ async def build_knowledge_context(
     db: AsyncSession,
     *,
     datasource_id: Optional[int],
+    host_id: Optional[int] = None,
     user_message: str,
     issue_category: Optional[str] = None,
     diagnostic_brief: Optional[dict[str, Any]] = None,
@@ -647,7 +701,6 @@ async def build_knowledge_context(
     unit_limit: int = 15,
 ) -> dict[str, Any]:
     datasource = None
-    host_id = None
     db_type = None
     host_configured = False
 
@@ -657,9 +710,12 @@ async def build_knowledge_context(
         )
         datasource = result.scalar_one_or_none()
         if datasource:
-            host_id = datasource.host_id
+            if host_id is None:
+                host_id = datasource.host_id
             db_type = datasource.db_type
             host_configured = host_id is not None
+    elif host_id is not None:
+        host_configured = True
 
     if issue_category is None:
         intent = analyze_query_intent(user_message or "")

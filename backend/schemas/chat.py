@@ -11,6 +11,7 @@ class SkillAuthorizationSettings(BaseModel):
 
 class ChatSessionCreate(BaseModel):
     datasource_id: Optional[int] = None
+    host_id: Optional[int] = None
     title: Optional[str] = "New Session"
     ai_model_id: Optional[int] = None
     kb_ids: Optional[List[int]] = None
@@ -21,6 +22,7 @@ class ChatSessionCreate(BaseModel):
 class ChatSessionResponse(BaseModel):
     id: int
     datasource_id: Optional[int] = None
+    host_id: Optional[int] = None
     ai_model_id: Optional[int] = None
     title: str
     kb_ids: Optional[List[int]] = None

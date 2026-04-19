@@ -615,6 +615,13 @@ async def run_conversation_with_skills(
     host_configured_for_tools = None
     datasource_name = None
     diagnostic_brief = None
+    host_id = None
+
+    # 尝试从 knowledge_context 中提取 host_id（用于纯主机诊断场景）
+    if knowledge_context and knowledge_context.get("host_context"):
+        host_context = knowledge_context["host_context"]
+        if host_context.get("host_info"):
+            host_id = host_context["host_info"].get("id")
 
     if datasource_id and db:
         from backend.models.datasource import Datasource
@@ -688,9 +695,9 @@ async def run_conversation_with_skills(
                 if host and host.port:
                     host_info_parts.append(f"SSH端口: {host.port}")
                 host_detail = "，".join(host_info_parts)
-                system_msg += f"\n\n**主机连接已配置**：该数据源已关联主机（{host_detail}），host_id={host_id}。你可以使用 OS 层面的诊断技能（get_os_metrics、diagnose_high_cpu、diagnose_high_memory、diagnose_disk_space、diagnose_disk_io、diagnose_network）进行操作系统级别的深度分析。遇到性能问题时，应同时从数据库和操作系统两个层面进行诊断。"
+                system_msg += f"\n\n**主机连接已配置**：该数据源已关联主机（{host_detail}），host_id={host_id}。你可以使用 OS 层面的诊断技能（get_os_metrics、diagnose_high_cpu、diagnose_high_memory、diagnose_disk_space、diagnose_disk_io、diagnose_network）进行操作系统级别的深度分析。\n\n**重要**：调用这些 OS 诊断技能时，可以使用两种方式：\n1. 传入 datasource_id（数据源场景）：`{{\"datasource_id\": {datasource_id}}}`\n2. 传入 host_id（主机场景）：`{{\"host_id\": {host_id}}}`\n\n当前上下文中，如果是针对该数据源的诊断，使用 datasource_id；如果是纯主机层面的诊断，可以直接使用 host_id。遇到性能问题时，应同时从数据库和操作系统两个层面进行诊断。"
             elif host_id:
-                system_msg += f"\n\n**主机连接已配置**：该数据源已关联主机，host_id={host_id}。你可以使用 OS 层面的诊断技能（get_os_metrics、diagnose_high_cpu、diagnose_high_memory、diagnose_disk_space、diagnose_disk_io、diagnose_network）进行操作系统级别的深度分析。遇到性能问题时，应同时从数据库和操作系统两个层面进行诊断。"
+                system_msg += f"\n\n**主机连接已配置**：该数据源已关联主机，host_id={host_id}。你可以使用 OS 层面的诊断技能（get_os_metrics、diagnose_high_cpu、diagnose_high_memory、diagnose_disk_space、diagnose_disk_io、diagnose_network）进行操作系统级别的深度分析。\n\n**重要**：调用这些 OS 诊断技能时，可以使用两种方式：\n1. 传入 datasource_id（数据源场景）：`{{\"datasource_id\": {datasource_id}}}`\n2. 传入 host_id（主机场景）：`{{\"host_id\": {host_id}}}`\n\n当前上下文中，如果是针对该数据源的诊断，使用 datasource_id；如果是纯主机层面的诊断，可以直接使用 host_id。遇到性能问题时，应同时从数据库和操作系统两个层面进行诊断。"
             else:
                 system_msg += "\n\n**注意**：该数据源未配置主机连接，host_id=None，无法进行操作系统层面的诊断（如 CPU、内存、磁盘、网络分析）。如需 OS 级别诊断，请建议用户在数据源配置中关联主机。"
         else:
@@ -711,6 +718,39 @@ async def run_conversation_with_skills(
             f"\n- host_configured: unknown"
         )
         system_msg += f"\n\nThe user is currently working with datasource ID: {datasource_id}. Use this ID when calling tools unless they specify otherwise."
+    elif host_id and db:
+        # 纯主机诊断场景（没有关联数据源）
+        from backend.models.host import Host
+        from sqlalchemy import select
+        host_result = await db.execute(select(Host).filter(Host.id == host_id))
+        host = host_result.scalar_one_or_none()
+        if host:
+            host_configured_for_tools = True
+            host_name_for_display = host.name or host.host
+            host_os_info = ""
+            host_ssh_port = ""
+            if host.os_version:
+                host_os_info = f"\n- host_os_version: {host.os_version}"
+            if host.port:
+                host_ssh_port = f"\n- host_ssh_port: {host.port}"
+
+            system_msg += (
+                "\n\nCurrent conversation host context (stable unless the user explicitly asks to switch):"
+                f"\n- host_id: {host_id}"
+                f"\n- host_name: {host_name_for_display}"
+                f"\n- host_address: {host.host}"
+                f"{host_os_info}"
+                f"{host_ssh_port}"
+            )
+            system_msg += f"\n\nThe user is currently working with host ID: {host_id} (Name: {host_name_for_display}). Use this ID when calling tools."
+            system_msg += f"\n\n**主机诊断场景**：当前会话聚焦于主机 {host_name_for_display}（host_id={host_id}）的操作系统层面诊断。你可以使用以下技能进行深度分析：\n- get_os_metrics：获取 OS 指标（CPU、内存、磁盘、网络等）\n- diagnose_high_cpu：诊断 CPU 高负载\n- diagnose_high_memory：诊断内存高负载\n- diagnose_disk_space：诊断磁盘空间\n- diagnose_disk_io：诊断磁盘 I/O 性能\n- diagnose_network：诊断网络状态\n- execute_os_command：执行只读 OS 命令\n- execute_any_os_command：执行任意 OS 命令（需要管理员权限）\n\n**重要**：调用这些技能时，直接传入 host_id 参数：`{{\"host_id\": {host_id}}}`"
+        else:
+            system_msg += (
+                f"\n\nCurrent conversation host context:"
+                f"\n- host_id: {host_id}"
+                f"\n- host_name: unknown"
+            )
+            system_msg += f"\n\nThe user is currently working with host ID: {host_id}. Use this ID when calling tools."
 
     if knowledge_context and (knowledge_context.get("knowledge_plan") or knowledge_context.get("knowledge_brief")):
         knowledge_plan = knowledge_context.get("knowledge_plan") or {}

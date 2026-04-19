@@ -1266,11 +1266,13 @@ async def prepare_user_turn(
     user_message: str,
     attachments: Optional[list[dict[str, Any]]] = None,
     payload_datasource_id: int | None = None,
+    payload_host_id: int | None = None,
     model_id: int | None = None,
     history_window_hours: int | None = None,
-) -> tuple[list[dict[str, Any]], int | None, int | None, Any, Any, Any]:
+) -> tuple[list[dict[str, Any]], int | None, int | None, int | None, Any, Any, Any]:
     attachments = attachments or []
     effective_datasource_id = payload_datasource_id
+    effective_host_id = payload_host_id
     effective_model_id = model_id
     kb_ids = None
     knowledge_context = None
@@ -1303,6 +1305,19 @@ async def prepare_user_turn(
             session.datasource_id = payload_datasource_id
             effective_datasource_id = payload_datasource_id
 
+        if session.host_id is not None:
+            effective_host_id = session.host_id
+            if payload_host_id is not None and payload_host_id != session.host_id:
+                logger.warning(
+                    "Ignoring mismatched host_id %s for chat session %s; using bound host_id %s",
+                    payload_host_id,
+                    session_id,
+                    session.host_id,
+                )
+        elif payload_host_id is not None:
+            session.host_id = payload_host_id
+            effective_host_id = payload_host_id
+
         if session.title in ("New Session", "新建会话"):
             session.title = user_message[:80] if user_message else "[Attachment]"
         if model_id is not None and model_id != session.ai_model_id:
@@ -1314,9 +1329,20 @@ async def prepare_user_turn(
         knowledge_context = await build_knowledge_context(
             db,
             datasource_id=effective_datasource_id,
+            host_id=effective_host_id,
             user_message=user_message or "",
             issue_category=intent_analysis.issue_category,
         )
+
+        # 如果有主机上下文，合并主机知识
+        if effective_host_id:
+            from backend.services.host_knowledge_service import build_host_knowledge_context
+            host_context = await build_host_knowledge_context(db, effective_host_id)
+            if host_context:
+                if knowledge_context is None:
+                    knowledge_context = {}
+                knowledge_context["host_context"] = host_context
+
         session.knowledge_snapshot = knowledge_context
         skill_authorizations = normalize_skill_authorizations(
             getattr(session, "skill_authorizations", None),
@@ -1331,7 +1357,7 @@ async def prepare_user_turn(
         history_window_hours=history_window_hours,
     )
     messages = await rebuild_llm_messages(all_msgs)
-    return messages, effective_datasource_id, effective_model_id, kb_ids, knowledge_context, skill_authorizations
+    return messages, effective_datasource_id, effective_host_id, effective_model_id, kb_ids, knowledge_context, skill_authorizations
 
 
 async def continue_conversation_after_tool(

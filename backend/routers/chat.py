@@ -48,6 +48,7 @@ def _serialize_chat_session(session: DiagnosticSession) -> ChatSessionResponse:
         {
             "id": session.id,
             "datasource_id": session.datasource_id,
+            "host_id": session.host_id,
             "ai_model_id": session.ai_model_id,
             "title": session.title,
             "kb_ids": session.kb_ids,
@@ -261,6 +262,7 @@ async def get_skill_authorization_catalog(
 @router.get("/api/chat/sessions", response_model=List[ChatSessionResponse])
 async def list_sessions(
     datasource_id: int | None = Query(None),
+    host_id: int | None = Query(None),
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
@@ -274,6 +276,8 @@ async def list_sessions(
     )
     if datasource_id is not None:
         query = query.where(DiagnosticSession.datasource_id == datasource_id)
+    if host_id is not None:
+        query = query.where(DiagnosticSession.host_id == host_id)
 
     result = await db.execute(query)
     return [_serialize_chat_session(session) for session in result.scalars().all()]
@@ -288,6 +292,7 @@ async def create_session(data: ChatSessionCreate, db: AsyncSession = Depends(get
     session = DiagnosticSession(
         user_id=user.id,
         datasource_id=data.datasource_id,
+        host_id=data.host_id,
         title=data.title or "New Session",
         ai_model_id=data.ai_model_id,
         disabled_tools=data.disabled_tools,
@@ -469,6 +474,7 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
             user = refreshed_user
             user_message = data.get("message", "")
             payload_datasource_id = data.get("datasource_id")
+            payload_host_id = data.get("host_id")
             model_id = data.get("model_id")
             attachments = data.get("attachments", [])  # List of attachment IDs
 
@@ -493,18 +499,20 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
                 msg=user_message,
                 atts=attachments,
                 ds_id=payload_datasource_id,
+                h_id=payload_host_id,
                 m_id=model_id,
             ):
                 _start_stream_state(sid)
                 try:
                     async with async_session() as db:
-                        messages, effective_datasource_id, m_id_resolved, kb_ids, knowledge_context, skill_authorizations = await prepare_user_turn(
+                        messages, effective_datasource_id, effective_host_id, m_id_resolved, kb_ids, knowledge_context, skill_authorizations = await prepare_user_turn(
                             db,
                             session_id=sid,
                             user_id=uid,
                             user_message=msg,
                             attachments=atts,
                             payload_datasource_id=ds_id,
+                            payload_host_id=h_id,
                             model_id=m_id,
                         )
 

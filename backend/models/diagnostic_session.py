@@ -10,6 +10,7 @@ class DiagnosticSession(SoftDeleteMixin, Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, nullable=True, index=True)
     datasource_id = Column(Integer, nullable=True)
+    host_id = Column(Integer, nullable=True, index=True)
     ai_model_id = Column(Integer, nullable=True)
     title = Column(String(200), default="New Session")
     kb_ids = Column(JSON, nullable=True)

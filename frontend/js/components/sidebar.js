@@ -13,6 +13,7 @@ const Sidebar = {
     navItems: [
         { id: 'dashboard', icon: 'layout-dashboard', label: '资源大盘' },
         { id: 'instance-detail', icon: 'panel-left', label: '实例详情' },
+        { id: 'host-detail', icon: 'server', label: '主机详情' },
         { id: 'inspection', icon: 'search-check', label: '智能巡检' },
         { id: 'alerts', icon: 'bell', label: '告警管理' },
         { section: 'AI 智能体配置', items: [

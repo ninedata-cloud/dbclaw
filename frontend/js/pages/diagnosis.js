@@ -440,6 +440,9 @@ const DiagnosisPage = {
                 if (fixedDatasource) {
                     Store.set('currentDatasource', fixedDatasource);
                 }
+            } else if (options.fixedHostId) {
+                // 主机模式：不设置固定数据源，允许用户选择
+                Store.set('currentDatasource', null);
             } else if (options.initialDatasourceId) {
                 const initialDatasource = datasources.find(item => item.id === options.initialDatasourceId) || null;
                 if (initialDatasource) {
@@ -451,7 +454,7 @@ const DiagnosisPage = {
         await this._hydrateInitialContextOptions();
 
         this.datasourceSelector?.destroy();
-        if (options.fixedDatasourceId) {
+        if (options.fixedDatasourceId || options.fixedHostId) {
             this.datasourceSelector = {
                 destroy() {},
                 getValue: () => Store.get('currentDatasource') || null,
@@ -811,8 +814,12 @@ const DiagnosisPage = {
 
             const sessionParams = {};
             const fixedDatasourceId = this._renderOptions?.sessionFilterDatasourceId || this._renderOptions?.fixedDatasourceId;
+            const fixedHostId = this._renderOptions?.sessionFilterHostId || this._renderOptions?.fixedHostId;
             if (fixedDatasourceId) {
                 sessionParams.datasource_id = fixedDatasourceId;
+            }
+            if (fixedHostId) {
+                sessionParams.host_id = fixedHostId;
             }
             const sessions = await API.getChatSessions(Object.keys(sessionParams).length ? sessionParams : null);
             Store.set('chatSessions', sessions);
@@ -924,6 +931,7 @@ const DiagnosisPage = {
         try {
             const session = await API.createChatSession({
                 datasource_id: conn?.id || null,
+                host_id: this._renderOptions?.fixedHostId || null,
                 title: this._renderOptions?.initialSessionTitle || '新建会话',
                 ai_model_id: this.selectedModelId,
                 skill_authorizations: this._normalizeSkillAuthorizations(this.skillAuthorizations)
@@ -1146,6 +1154,7 @@ const DiagnosisPage = {
         this.ws.send({
             message: text,
             datasource_id: conn?.id || null,
+            host_id: this._renderOptions?.fixedHostId || null,
             model_id: this.selectedModelId,
             attachments: resolvedAttachments
         });

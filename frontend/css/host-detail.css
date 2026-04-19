@@ -1,0 +1,529 @@
+/* Host Detail Page Styles - 复用 instance-detail 布局 */
+
+.host-detail-page {
+    display: grid;
+    grid-template-columns: 280px minmax(0, 1fr);
+    gap: 10px;
+    height: calc(100vh - var(--header-height) - 24px);
+    min-height: calc(100vh - var(--header-height) - 24px);
+    transition: grid-template-columns 0.2s ease;
+}
+
+.host-detail-page.sidebar-collapsed {
+    grid-template-columns: 52px minmax(0, 1fr);
+}
+
+.host-detail-sidebar,
+.host-panel,
+.host-tab-content,
+.host-header-card {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+}
+
+.host-detail-sidebar {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+    min-height: 0;
+}
+
+.host-sidebar-header,
+.host-sidebar-search {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.host-sidebar-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.host-sidebar-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.host-sidebar-subtitle {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.host-sidebar-toggle {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+.host-sidebar-toggle:hover {
+    color: var(--text-primary);
+    border-color: rgba(47, 129, 247, 0.24);
+}
+
+.host-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+}
+
+.host-list-group {
+    margin-bottom: 12px;
+}
+
+.host-list-group-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+}
+
+.host-list-group-header:hover {
+    color: var(--text-primary);
+}
+
+.host-list-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    margin-bottom: 4px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: 1px solid transparent;
+}
+
+.host-list-item:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-color);
+}
+
+.host-list-item.active {
+    background: rgba(47, 129, 247, 0.08);
+    border-color: rgba(47, 129, 247, 0.24);
+}
+
+.host-list-item-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.host-list-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.host-list-item-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.host-list-item-meta {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+.host-detail-main {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* 主机头部卡片 */
+.host-header-card {
+    padding: 16px 20px;
+    margin-bottom: 10px;
+}
+
+.host-header-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.host-header-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex: 1;
+    min-width: 0;
+}
+
+.host-header-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(47, 129, 247, 0.1) 0%, rgba(47, 129, 247, 0.05) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.host-header-icon i {
+    width: 24px;
+    height: 24px;
+    color: var(--primary-color);
+}
+
+.host-header-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.host-header-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.host-header-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.host-header-separator {
+    color: var(--border-color);
+}
+
+.host-header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.host-header-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.host-header-status i {
+    width: 16px;
+    height: 16px;
+}
+
+.host-status-normal {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+}
+
+.host-status-warning {
+    background: rgba(245, 158, 11, 0.1);
+    color: #f59e0b;
+}
+
+.host-status-critical {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+.host-status-offline,
+.host-status-unknown {
+    background: rgba(107, 114, 128, 0.1);
+    color: #6b7280;
+}
+
+.host-tab-nav {
+    display: flex;
+    gap: 4px;
+    padding: 8px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    margin-bottom: 10px;
+}
+
+.host-tab-button {
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.host-tab-button:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.host-tab-button.active {
+    background: rgba(47, 129, 247, 0.1);
+    color: var(--primary-color);
+}
+
+.host-tab-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0px;
+}
+
+/* 进程表格 */
+.host-process-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.host-process-table th,
+.host-process-table td {
+    padding: 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.host-process-table th {
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 12px;
+    text-transform: uppercase;
+    cursor: pointer;
+    user-select: none;
+}
+
+.host-process-table th:hover {
+    color: var(--text-primary);
+}
+
+.host-process-table td {
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.host-process-command {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+    max-width: 400px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Terminal 容器 */
+.host-terminal-container {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: #1e1e1e;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.host-terminal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: #2d2d2d;
+    border-bottom: 1px solid #3d3d3d;
+    flex-shrink: 0;
+}
+
+.host-terminal-wrapper {
+    flex: 1;
+    padding: 10px;
+    overflow: hidden;
+    min-height: 0;
+}
+
+.host-terminal-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #e0e0e0;
+}
+
+.host-terminal-actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* 网络拓扑 */
+.host-network-topology {
+    position: relative;
+    width: 100%;
+    height: 600px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.host-network-canvas {
+    width: 100%;
+    height: 100%;
+}
+
+.host-network-legend {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 12px;
+}
+
+.host-network-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.host-network-legend-color {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+}
+
+/* 基本信息卡片 */
+.host-info-section {
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.host-info-section:last-child {
+    margin-bottom: 0;
+}
+
+.host-info-section-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.host-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 16px;
+}
+
+.host-info-card {
+    padding: 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+}
+
+.host-info-card-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+}
+
+.host-info-card-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.host-info-card-meta {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+    .host-detail-page {
+        grid-template-columns: 1fr;
+    }
+
+    .host-detail-sidebar {
+        display: none;
+    }
+
+    .host-info-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* 性能监控 */
+.host-monitor-container {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.host-monitor-controls {
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.host-monitor-charts {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+    overflow-y: auto;
+}
+
+.host-monitor-chart {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+    height: 300px;
+}
+
+.host-monitor-chart h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+}
+
+.host-monitor-chart canvas {
+    height: calc(100% - 40px) !important;
+}

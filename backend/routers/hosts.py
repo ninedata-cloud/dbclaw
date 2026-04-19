@@ -253,6 +253,143 @@ async def delete_host(
     return {"message": "SSH host deleted"}
 
 
+@router.get("/{host_id}/summary")
+async def get_host_summary(host_id: int, db: AsyncSession = Depends(get_db)):
+    """获取主机摘要信息，包括基本信息和最新指标"""
+    from backend.models.host_metric import HostMetric
+    from sqlalchemy import desc
+
+    host = await get_alive_by_id(db, Host, host_id)
+    if not host:
+        raise HTTPException(status_code=404, detail="SSH host not found")
+
+    # 获取最新指标
+    metric_result = await db.execute(
+        select(HostMetric)
+        .where(HostMetric.host_id == host_id)
+        .order_by(desc(HostMetric.collected_at))
+        .limit(1)
+    )
+    metric = metric_result.scalar_one_or_none()
+
+    # 从 metric.data 中提取 uptime_seconds
+    uptime_seconds = None
+    if metric and metric.data:
+        uptime_seconds = metric.data.get("uptime_seconds")
+
+    return {
+        "host": {
+            "id": host.id,
+            "name": host.name,
+            "host": host.host,
+            "port": host.port,
+            "username": host.username,
+            "auth_type": host.auth_type,
+            "os_version": host.os_version,
+            "created_at": host.created_at,
+            "updated_at": host.updated_at,
+        },
+        "latest_metric": {
+            "cpu_usage": metric.cpu_usage,
+            "memory_usage": metric.memory_usage,
+            "disk_usage": metric.disk_usage,
+            "collected_at": metric.collected_at,
+        } if metric else None,
+        "uptime_seconds": uptime_seconds,
+    }
+
+
+@router.get("/{host_id}/metrics")
+async def get_host_metrics(
+    host_id: int,
+    hours: int = 24,
+    db: AsyncSession = Depends(get_db)
+):
+    """获取主机历史指标数据"""
+    from backend.models.host_metric import HostMetric
+    from sqlalchemy import desc
+    from datetime import datetime, timedelta
+
+    host = await get_alive_by_id(db, Host, host_id)
+    if not host:
+        raise HTTPException(status_code=404, detail="SSH host not found")
+
+    # 查询指定时间范围内的指标
+    start_time = datetime.utcnow() - timedelta(hours=hours)
+    result = await db.execute(
+        select(HostMetric)
+        .where(
+            HostMetric.host_id == host_id,
+            HostMetric.collected_at >= start_time
+        )
+        .order_by(HostMetric.collected_at)
+    )
+    metrics = result.scalars().all()
+
+    return {
+        "host_id": host_id,
+        "metrics": [
+            {
+                "collected_at": m.collected_at.isoformat(),
+                "cpu_usage": m.cpu_usage,
+                "memory_usage": m.memory_usage,
+                "disk_usage": m.disk_usage,
+            }
+            for m in metrics
+        ]
+    }
+
+
+@router.get("/{host_id}/network-topology")
+async def get_host_network_topology(host_id: int, db: AsyncSession = Depends(get_db)):
+    """获取主机网络拓扑数据"""
+    from backend.services.ssh_connection_pool import get_ssh_pool
+    from backend.services.host_network_service import HostNetworkService
+
+    host = await get_alive_by_id(db, Host, host_id)
+    if not host:
+        raise HTTPException(status_code=404, detail="SSH host not found")
+
+    try:
+        ssh_pool = get_ssh_pool()
+        async with ssh_pool.get_connection(db, host_id) as ssh_client:
+            connections = await HostNetworkService.get_connections(ssh_client)
+            aggregated = HostNetworkService.aggregate_connections(connections)
+
+            return {
+                "host": {
+                    "id": host.id,
+                    "name": host.name,
+                    "host": host.host,
+                },
+                "connections": aggregated,
+                "total_count": len(connections)
+            }
+    except Exception as e:
+        logger.error(f"Failed to get network topology for host {host_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get network topology: {str(e)}")
+
+
+@router.get("/{host_id}/processes")
+async def get_host_processes(host_id: int, db: AsyncSession = Depends(get_db)):
+    """获取主机进程列表"""
+    from backend.services.ssh_connection_pool import get_ssh_pool
+    from backend.services.host_process_service import HostProcessService
+
+    host = await get_alive_by_id(db, Host, host_id)
+    if not host:
+        raise HTTPException(status_code=404, detail="SSH host not found")
+
+    try:
+        ssh_pool = get_ssh_pool()
+        async with ssh_pool.get_connection(db, host_id) as ssh_client:
+            processes = await HostProcessService.get_processes(ssh_client)
+            return processes
+    except Exception as e:
+        logger.error(f"Failed to get processes for host {host_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get processes: {str(e)}")
+
+
 @router.post("/{host_id}/test", response_model=SSHTestResult)
 async def test_host(host_id: int, db: AsyncSession = Depends(get_db)):
     host = await get_alive_by_id(db, Host, host_id)

@@ -141,6 +141,14 @@ const API = {
     deleteHost(id) { return this.delete(`/api/hosts/${id}`); },
     testHost(id) { return this.post(`/api/hosts/${id}/test`); },
 
+    // Host detail endpoints
+    getHostSummary(hostId) { return this.get(`/api/hosts/${hostId}/summary`); },
+    getHostMetrics(hostId, params = '') { return this.get(`/api/hosts/${hostId}/metrics${params ? '?' + params : ''}`); },
+    getHostProcesses(hostId) { return this.get(`/api/hosts/${hostId}/processes`); },
+    killHostProcess(hostId, pid) { return this.post(`/api/hosts/${hostId}/processes/${pid}/kill`); },
+    getHostConnections(hostId) { return this.get(`/api/hosts/${hostId}/connections`); },
+    getHostNetworkTopology(hostId) { return this.get(`/api/hosts/${hostId}/network-topology`); },
+
     // Metrics endpoints
     getMetrics(connId, params = '') { return this.get(`/api/metrics/${connId}${params ? '?' + params : ''}`); },
     getLatestMetric(connId, type = 'db_status') { return this.get(`/api/metrics/${connId}/latest?metric_type=${type}`); },
