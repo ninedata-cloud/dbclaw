@@ -390,6 +390,26 @@ async def get_host_processes(host_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to get processes: {str(e)}")
 
 
+@router.get("/{host_id}/processes/{pid}")
+async def get_process_detail(host_id: int, pid: int, db: AsyncSession = Depends(get_db)):
+    """获取进程详细信息"""
+    from backend.services.ssh_connection_pool import get_ssh_pool
+    from backend.services.host_process_service import HostProcessService
+
+    host = await get_alive_by_id(db, Host, host_id)
+    if not host:
+        raise HTTPException(status_code=404, detail="SSH host not found")
+
+    try:
+        ssh_pool = get_ssh_pool()
+        async with ssh_pool.get_connection(db, host_id) as ssh_client:
+            detail = await HostProcessService.get_process_detail(ssh_client, pid)
+            return detail
+    except Exception as e:
+        logger.error(f"Failed to get process detail for host {host_id}, pid {pid}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get process detail: {str(e)}")
+
+
 @router.post("/{host_id}/test", response_model=SSHTestResult)
 async def test_host(host_id: int, db: AsyncSession = Depends(get_db)):
     host = await get_alive_by_id(db, Host, host_id)

@@ -37,11 +37,21 @@
     border-bottom: 1px solid var(--border-color);
 }
 
+/* 收拢状态下隐藏搜索框 */
+.host-detail-page.sidebar-collapsed .host-sidebar-search {
+    display: none;
+}
+
 .host-sidebar-header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 10px;
+}
+
+/* 收拢状态下居中按钮 */
+.host-detail-page.sidebar-collapsed .host-sidebar-header {
+    justify-content: center;
 }
 
 .host-sidebar-title {
@@ -54,6 +64,12 @@
     margin-top: 6px;
     font-size: 12px;
     color: var(--text-secondary);
+}
+
+/* 收拢状态下隐藏文字内容 */
+.host-detail-page.sidebar-collapsed .host-sidebar-title,
+.host-detail-page.sidebar-collapsed .host-sidebar-subtitle {
+    display: none;
 }
 
 .host-sidebar-toggle {
@@ -82,6 +98,11 @@
     padding: 8px;
 }
 
+/* 收拢状态下隐藏主机列表 */
+.host-detail-page.sidebar-collapsed .host-list {
+    display: none;
+}
+
 .host-list-group {
     margin-bottom: 12px;
 }
@@ -106,12 +127,18 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 10px 12px;
+    padding: 4px 4px;
     margin-bottom: 4px;
     border-radius: 8px;
     cursor: pointer;
     transition: all 0.15s ease;
     border: 1px solid transparent;
+}
+
+/* 收拢状态下调整主机列表项样式 */
+.host-detail-page.sidebar-collapsed .host-list-item {
+    justify-content: center;
+    padding: 8px;
 }
 
 .host-list-item:hover {
@@ -137,6 +164,16 @@
 .host-list-item-info {
     flex: 1;
     min-width: 0;
+}
+
+/* 收拢状态下隐藏主机列表文字信息 */
+.host-detail-page.sidebar-collapsed .host-list-item-info {
+    display: none;
+}
+
+/* 收拢状态下隐藏分组标题 */
+.host-detail-page.sidebar-collapsed .host-list-group-header {
+    display: none;
 }
 
 .host-list-item-name {
@@ -769,4 +806,291 @@
     .host-config-value {
         text-align: left;
     }
+}
+
+/* 抽屉样式 */
+.drawer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9999;
+    pointer-events: none;
+    visibility: hidden;
+}
+
+.drawer.open {
+    pointer-events: auto;
+    visibility: visible;
+}
+
+.drawer-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.drawer.open .drawer-overlay {
+    opacity: 1;
+}
+
+.drawer-content {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 600px;
+    max-width: 90vw;
+    background: var(--bg-primary);
+    border-left: 1px solid var(--border-color);
+    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.3);
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    display: flex;
+    flex-direction: column;
+}
+
+.drawer.open .drawer-content {
+    transform: translateX(0);
+}
+
+.drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+}
+
+.drawer-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.drawer-close {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.drawer-close:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.drawer-close i {
+    width: 20px;
+    height: 20px;
+}
+
+.drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+}
+
+/* 进程详情容器样式 */
+.process-detail-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.process-detail-section {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.process-detail-section h4 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.process-detail-section h4 i {
+    width: 16px;
+    height: 16px;
+    color: var(--primary-color);
+}
+
+.process-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.process-detail-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.process-detail-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.process-detail-value {
+    font-size: 13px;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.process-detail-code {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 12px;
+}
+
+.process-detail-code pre {
+    margin: 0;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.process-detail-code strong {
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.process-row:hover {
+    background: var(--bg-hover) !important;
+}
+
+.process-row {
+    transition: background 0.15s ease;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+    .drawer-content {
+        width: 100vw;
+        max-width: 100vw;
+    }
+
+    .process-detail-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* 网络连接表格样式 */
+.process-network-table-container {
+    overflow-x: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+}
+
+.process-network-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.process-network-table thead {
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.process-network-table th {
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.process-network-table tbody tr {
+    border-bottom: 1px solid var(--border-color);
+    transition: background 0.15s ease;
+}
+
+.process-network-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.process-network-table tbody tr:hover {
+    background: var(--bg-hover);
+}
+
+.process-network-table td {
+    padding: 10px 12px;
+    color: var(--text-primary);
+}
+
+.process-network-table code {
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 11px;
+    background: var(--bg-primary);
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--text-primary);
+}
+
+.network-state {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.network-state-estab,
+.network-state-established {
+    background: #10b98122;
+    color: #10b981;
+}
+
+.network-state-listen {
+    background: #3b82f622;
+    color: #3b82f6;
+}
+
+.network-state-time-wait,
+.network-state-time_wait {
+    background: #f59e0b22;
+    color: #f59e0b;
+}
+
+.network-state-close-wait,
+.network-state-close_wait {
+    background: #ef444422;
+    color: #ef4444;
+}
+
+.network-state-syn-sent,
+.network-state-syn_sent,
+.network-state-syn-recv,
+.network-state-syn_recv {
+    background: #8b5cf622;
+    color: #8b5cf6;
 }

@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, Text
 from sqlalchemy.sql import func
+from sqlalchemy.dialects.postgresql import JSONB
 from backend.database import Base
 from backend.models.soft_delete import SoftDeleteMixin
 
@@ -16,5 +17,7 @@ class Host(SoftDeleteMixin, Base):
     password_encrypted = Column(Text, nullable=True)
     private_key_encrypted = Column(Text, nullable=True)
     os_version = Column(String(255), nullable=True)  # 操作系统版本信息
+    config_data = Column(JSONB, nullable=True)  # 主机配置信息缓存
+    config_collected_at = Column(DateTime, nullable=True)  # 配置采集时间
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

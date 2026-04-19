@@ -244,12 +244,32 @@ async def get_host_network_topology(host_id: int, db: AsyncSession = Depends(get
 
 
 @router.get("/{host_id}/config", response_model=HostConfigResponse)
-async def get_host_config(host_id: int, db: AsyncSession = Depends(get_db)):
-    """获取主机系统配置信息"""
+async def get_host_config(
+    host_id: int,
+    force_refresh: bool = False,
+    db: AsyncSession = Depends(get_db)
+):
+    """获取主机系统配置信息
+
+    Args:
+        host_id: 主机ID
+        force_refresh: 是否强制刷新（忽略缓存）
+    """
     host = await get_alive_by_id(db, Host, host_id)
     if not host:
         raise HTTPException(status_code=404, detail="主机不存在")
 
+    # 如果有缓存且未过期（24小时内），直接返回
+    if not force_refresh and host.config_data and host.config_collected_at:
+        cache_age = (datetime.utcnow() - host.config_collected_at).total_seconds()
+        if cache_age < 86400:  # 24小时
+            logger.info(f"返回主机 {host_id} 的缓存配置（{cache_age:.0f}秒前采集）")
+            return HostConfigResponse(
+                **host.config_data,
+                collected_at=host.config_collected_at
+            )
+
+    # 实时采集配置
     try:
         ssh_pool = get_ssh_pool()
         async with ssh_pool.get_connection(db, host_id) as ssh_client:
@@ -375,7 +395,7 @@ async def get_host_config(host_id: int, db: AsyncSession = Depends(get_db)):
                 "load_avg_15": load_avg_parts[2] if len(load_avg_parts) > 2 else "0",
             }
 
-            return HostConfigResponse(
+            config_response = HostConfigResponse(
                 cpu=cpu_info,
                 memory=memory_info,
                 disk=disk_info,
@@ -384,6 +404,20 @@ async def get_host_config(host_id: int, db: AsyncSession = Depends(get_db)):
                 collected_at=datetime.utcnow()
             )
 
+            # 自动保存到数据库
+            host.config_data = config_response.model_dump(exclude={'collected_at'})
+            host.config_collected_at = config_response.collected_at
+            await db.commit()
+            logger.info(f"已保存主机 {host_id} 的配置到数据库")
+
+            return config_response
+
     except Exception as e:
         logger.error(f"Failed to get host config for {host_id}: {e}")
         raise HTTPException(status_code=500, detail=f"获取主机配置失败: {str(e)}")
+
+
+@router.post("/{host_id}/config/refresh", response_model=HostConfigResponse)
+async def refresh_host_config(host_id: int, db: AsyncSession = Depends(get_db)):
+    """强制刷新主机配置（重新采集并保存）"""
+    return await get_host_config(host_id, force_refresh=True, db=db)

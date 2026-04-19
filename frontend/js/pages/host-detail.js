@@ -57,7 +57,7 @@ const HostDetailPage = {
                                 <div class="host-sidebar-subtitle">主机运维工作台</div>
                             </div>
                             <button id="host-sidebar-toggle" class="host-sidebar-toggle" type="button">
-                                <i data-lucide="${this.sidebarCollapsed ? 'panel-left-open' : 'panel-left-close'}"></i>
+                                <i data-lucide="${this.sidebarCollapsed ? 'panel-right-open' : 'panel-left-close'}"></i>
                             </button>
                         </div>
                         <div class="host-sidebar-search">
@@ -146,10 +146,10 @@ const HostDetailPage = {
 
         let html = '';
         const groupConfigs = [
-            { key: 'normal', label: '正常', icon: 'check-circle', color: '#10b981' },
-            { key: 'warning', label: '警告', icon: 'alert-triangle', color: '#f59e0b' },
             { key: 'critical', label: '严重', icon: 'alert-octagon', color: '#ef4444' },
-            { key: 'offline', label: '离线', icon: 'x-circle', color: '#6b7280' }
+            { key: 'warning', label: '警告', icon: 'alert-triangle', color: '#f59e0b' },
+            { key: 'offline', label: '离线', icon: 'x-circle', color: '#6b7280' },
+            { key: 'normal', label: '正常', icon: 'check-circle', color: '#10b981' }
         ];
 
         groupConfigs.forEach(({ key, label, icon, color }) => {
@@ -529,8 +529,21 @@ const HostDetailPage = {
 
             // 绑定刷新按钮
             DOM.$('#refresh-config-btn')?.addEventListener('click', async () => {
-                await this._renderInfoTab(container);
-                Toast.success('配置已刷新');
+                const btn = DOM.$('#refresh-config-btn');
+                btn.disabled = true;
+                btn.innerHTML = '<i data-lucide="loader" class="spin"></i> 刷新中...';
+                DOM.createIcons();
+
+                try {
+                    await API.refreshHostConfig(this.currentHost.id);
+                    await this._renderInfoTab(container);
+                    Toast.success('配置已刷新');
+                } catch (error) {
+                    Toast.error('刷新失败: ' + error.message);
+                    btn.disabled = false;
+                    btn.innerHTML = '<i data-lucide="refresh-cw"></i> 刷新配置';
+                    DOM.createIcons();
+                }
             });
 
         } catch (error) {
@@ -730,7 +743,7 @@ const HostDetailPage = {
                         data,
                         borderColor: color,
                         backgroundColor: color + '20',
-                        borderWidth: 2,
+                        borderWidth: 1,
                         fill: true,
                         tension: 0.4,
                         pointRadius: 0,
@@ -783,7 +796,7 @@ const HostDetailPage = {
                         data: ds.data,
                         borderColor: ds.color,
                         backgroundColor: ds.color + '20',
-                        borderWidth: 2,
+                        borderWidth: 1,
                         fill: true,
                         tension: 0.4,
                         pointRadius: 0,
@@ -923,7 +936,7 @@ const HostDetailPage = {
 
     async _renderProcessesTab(container) {
         const processes = await API.getHostProcesses(this.currentHost.id);
-        
+
         container.innerHTML = `
             <div style="margin-bottom:16px">
                 <input type="text" class="filter-input" id="process-search" placeholder="搜索进程..." style="max-width:300px">
@@ -941,15 +954,44 @@ const HostDetailPage = {
                 </thead>
                 <tbody id="process-table-body"></tbody>
             </table>
+
+            <!-- 进程详情抽屉 -->
+            <div id="process-detail-drawer" class="drawer">
+                <div class="drawer-overlay"></div>
+                <div class="drawer-content">
+                    <div class="drawer-header">
+                        <h3>进程详情</h3>
+                        <button class="drawer-close" id="close-process-drawer">
+                            <i data-lucide="x"></i>
+                        </button>
+                    </div>
+                    <div class="drawer-body" id="process-detail-content">
+                        <div class="loading-overlay"><div class="spinner"></div></div>
+                    </div>
+                </div>
+            </div>
         `;
 
         this._renderProcessTable(processes);
-        
+
         // 定时刷新
         this.processPollTimer = setInterval(async () => {
             const updated = await API.getHostProcesses(this.currentHost.id);
             this._renderProcessTable(updated);
         }, 5000);
+
+        // 绑定抽屉关闭事件
+        const drawer = DOM.$('#process-detail-drawer');
+        const closeBtn = DOM.$('#close-process-drawer');
+        const overlay = drawer?.querySelector('.drawer-overlay');
+
+        closeBtn?.addEventListener('click', () => {
+            drawer.classList.remove('open');
+        });
+
+        overlay?.addEventListener('click', () => {
+            drawer.classList.remove('open');
+        });
 
         this.tabCleanup = () => {
             if (this.processPollTimer) {
@@ -980,7 +1022,7 @@ const HostDetailPage = {
         });
 
         tbody.innerHTML = filtered.map(p => `
-            <tr>
+            <tr class="process-row" data-pid="${p.pid}" style="cursor:pointer">
                 <td>${p.pid}</td>
                 <td>${Utils.escapeHtml(p.user)}</td>
                 <td>${p.cpu_percent.toFixed(1)}%</td>
@@ -989,6 +1031,190 @@ const HostDetailPage = {
                 <td class="host-process-command" title="${Utils.escapeHtml(p.command)}">${Utils.escapeHtml(p.command)}</td>
             </tr>
         `).join('');
+
+        // 绑定点击事件
+        tbody.querySelectorAll('.process-row').forEach(row => {
+            row.addEventListener('click', async () => {
+                const pid = parseInt(row.dataset.pid);
+                await this._showProcessDetail(pid);
+            });
+        });
+    },
+
+    async _showProcessDetail(pid) {
+        const drawer = DOM.$('#process-detail-drawer');
+        const content = DOM.$('#process-detail-content');
+
+        if (!drawer || !content) return;
+
+        drawer.classList.add('open');
+        content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
+
+        try {
+            const detail = await API.getProcessDetail(this.currentHost.id, pid);
+
+            // 格式化字节数
+            const formatBytes = (bytes) => {
+                if (!bytes || bytes === 0) return '0 B';
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
+            };
+
+            content.innerHTML = `
+                <div class="process-detail-container">
+                    <!-- 基本信息 -->
+                    <div class="process-detail-section">
+                        <h4><i data-lucide="info"></i> 基本信息</h4>
+                        <div class="process-detail-grid">
+                            <div class="process-detail-item">
+                                <span class="process-detail-label">PID</span>
+                                <span class="process-detail-value">${detail.pid}</span>
+                            </div>
+                            <div class="process-detail-item">
+                                <span class="process-detail-label">用户</span>
+                                <span class="process-detail-value">${Utils.escapeHtml(detail.user || '-')}</span>
+                            </div>
+                            <div class="process-detail-item">
+                                <span class="process-detail-label">状态</span>
+                                <span class="process-detail-value">${Utils.escapeHtml(detail.state || '-')}</span>
+                            </div>
+                            <div class="process-detail-item">
+                                <span class="process-detail-label">启动时间</span>
+                                <span class="process-detail-value">${Utils.escapeHtml(detail.start_time || '-')}</span>
+                            </div>
+                            <div class="process-detail-item">
+                                <span class="process-detail-label">CPU 使用率</span>
+                                <span class="process-detail-value">${detail.cpu_percent?.toFixed(1) || 0}%</span>
+                            </div>
+                            <div class="process-detail-item">
+                                <span class="process-detail-label">内存使用率</span>
+                                <span class="process-detail-value">${detail.memory_percent?.toFixed(1) || 0}%</span>
+                            </div>
+                            <div class="process-detail-item">
+                                <span class="process-detail-label">虚拟内存</span>
+                                <span class="process-detail-value">${formatBytes(detail.vsz * 1024)}</span>
+                            </div>
+                            <div class="process-detail-item">
+                                <span class="process-detail-label">物理内存</span>
+                                <span class="process-detail-value">${formatBytes(detail.rss * 1024)}</span>
+                            </div>
+                            <div class="process-detail-item">
+                                <span class="process-detail-label">CPU 时间</span>
+                                <span class="process-detail-value">${Utils.escapeHtml(detail.cpu_time || '-')}</span>
+                            </div>
+                            <div class="process-detail-item">
+                                <span class="process-detail-label">工作目录</span>
+                                <span class="process-detail-value" style="word-break:break-all">${Utils.escapeHtml(detail.cwd || '-')}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 命令详情 -->
+                    <div class="process-detail-section">
+                        <h4><i data-lucide="terminal"></i> 命令详情</h4>
+                        <div class="process-detail-code">
+                            <div><strong>命令:</strong></div>
+                            <pre>${Utils.escapeHtml(detail.command || '-')}</pre>
+                            ${detail.cmdline ? `
+                                <div style="margin-top:12px"><strong>完整命令行:</strong></div>
+                                <pre>${Utils.escapeHtml(detail.cmdline)}</pre>
+                            ` : ''}
+                        </div>
+                    </div>
+
+                    <!-- 磁盘 IO -->
+                    <div class="process-detail-section">
+                        <h4><i data-lucide="hard-drive"></i> 磁盘 I/O</h4>
+                        <div class="process-detail-grid">
+                            <div class="process-detail-item">
+                                <span class="process-detail-label">读取字节数</span>
+                                <span class="process-detail-value">${formatBytes(detail.io?.read_bytes || 0)}</span>
+                            </div>
+                            <div class="process-detail-item">
+                                <span class="process-detail-label">写入字节数</span>
+                                <span class="process-detail-value">${formatBytes(detail.io?.write_bytes || 0)}</span>
+                            </div>
+                            <div class="process-detail-item">
+                                <span class="process-detail-label">读取字符数</span>
+                                <span class="process-detail-value">${formatBytes(detail.io?.read_chars || 0)}</span>
+                            </div>
+                            <div class="process-detail-item">
+                                <span class="process-detail-label">写入字符数</span>
+                                <span class="process-detail-value">${formatBytes(detail.io?.write_chars || 0)}</span>
+                            </div>
+                            <div class="process-detail-item">
+                                <span class="process-detail-label">读取系统调用</span>
+                                <span class="process-detail-value">${detail.io?.read_syscalls || 0}</span>
+                            </div>
+                            <div class="process-detail-item">
+                                <span class="process-detail-label">写入系统调用</span>
+                                <span class="process-detail-value">${detail.io?.write_syscalls || 0}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 网络连接 -->
+                    <div class="process-detail-section">
+                        <h4><i data-lucide="network"></i> 网络连接</h4>
+                        ${detail.network_connections && detail.network_connections.length > 0 ? `
+                            <div class="process-network-table-container">
+                                <table class="process-network-table">
+                                    <thead>
+                                        <tr>
+                                            <th>状态</th>
+                                            <th>本地地址</th>
+                                            <th>本地端口</th>
+                                            <th>远程地址</th>
+                                            <th>远程端口</th>
+                                            <th>接收队列</th>
+                                            <th>发送队列</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${detail.network_connections.map(conn => `
+                                            <tr>
+                                                <td><span class="network-state network-state-${conn.state.toLowerCase()}">${Utils.escapeHtml(conn.state)}</span></td>
+                                                <td><code>${Utils.escapeHtml(conn.local_address)}</code></td>
+                                                <td><code>${Utils.escapeHtml(conn.local_port)}</code></td>
+                                                <td><code>${Utils.escapeHtml(conn.remote_address)}</code></td>
+                                                <td><code>${Utils.escapeHtml(conn.remote_port)}</code></td>
+                                                <td>${conn.recv_bytes || 0} bytes</td>
+                                                <td>${conn.send_bytes || 0} bytes</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ` : '<p style="color:var(--text-secondary);padding:12px">无活动网络连接</p>'}
+                    </div>
+
+                    <!-- 环境变量 -->
+                    ${detail.environment && Object.keys(detail.environment).length > 0 ? `
+                        <div class="process-detail-section">
+                            <h4><i data-lucide="settings"></i> 环境变量 (前20个)</h4>
+                            <div class="process-detail-code">
+                                <pre>${Object.entries(detail.environment).map(([k, v]) =>
+                                    `${Utils.escapeHtml(k)}=${Utils.escapeHtml(v)}`
+                                ).join('\n')}</pre>
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+
+            DOM.createIcons();
+        } catch (error) {
+            console.error('Failed to load process detail:', error);
+            content.innerHTML = `
+                <div class="empty-state">
+                    <i data-lucide="alert-circle"></i>
+                    <p>加载进程详情失败: ${error.message}</p>
+                </div>
+            `;
+            DOM.createIcons();
+        }
     },
 
     async _renderTerminalTab(container) {
@@ -1039,7 +1265,7 @@ const HostDetailPage = {
             this.sidebarCollapsed = !this.sidebarCollapsed;
             localStorage.setItem('hostDetailSidebarCollapsed', this.sidebarCollapsed);
             DOM.$('#host-detail-layout')?.classList.toggle('sidebar-collapsed');
-            DOM.$('#host-sidebar-toggle i')?.setAttribute('data-lucide', this.sidebarCollapsed ? 'panel-left-open' : 'panel-left-close');
+            DOM.$('#host-sidebar-toggle i')?.setAttribute('data-lucide', this.sidebarCollapsed ? 'panel-right-open' : 'panel-left-close');
             DOM.createIcons();
         });
 

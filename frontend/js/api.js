@@ -144,11 +144,13 @@ const API = {
     // Host detail endpoints
     getHostSummary(hostId) { return this.get(`/api/host-detail/${hostId}/summary`); },
     getHostMetrics(hostId, params = '') { return this.get(`/api/host-detail/${hostId}/metrics${params ? '?' + params : ''}`); },
-    getHostProcesses(hostId) { return this.get(`/api/host-detail/${hostId}/processes`); },
+    getHostProcesses(hostId) { return this.get(`/api/hosts/${hostId}/processes`); },
+    getProcessDetail(hostId, pid) { return this.get(`/api/hosts/${hostId}/processes/${pid}`); },
     killHostProcess(hostId, pid) { return this.post(`/api/host-detail/${hostId}/processes/${pid}/kill`); },
     getHostConnections(hostId) { return this.get(`/api/host-detail/${hostId}/connections`); },
     getHostNetworkTopology(hostId) { return this.get(`/api/host-detail/${hostId}/network-topology`); },
     getHostConfig(hostId) { return this.get(`/api/host-detail/${hostId}/config`); },
+    refreshHostConfig(hostId) { return this.post(`/api/host-detail/${hostId}/config/refresh`); },
 
     // Metrics endpoints
     getMetrics(connId, params = '') { return this.get(`/api/metrics/${connId}${params ? '?' + params : ''}`); },
