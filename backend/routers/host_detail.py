@@ -14,7 +14,8 @@ from backend.schemas.host_detail import (
     HostSummaryResponse,
     HostProcessItem,
     HostConnectionItem,
-    HostNetworkTopologyResponse
+    HostNetworkTopologyResponse,
+    HostConfigResponse
 )
 from backend.services.ssh_connection_pool import get_ssh_pool
 from backend.services.host_process_service import HostProcessService
@@ -240,3 +241,149 @@ async def get_host_network_topology(host_id: int, db: AsyncSession = Depends(get
     except Exception as e:
         logger.error(f"Failed to get network topology for host {host_id}: {e}")
         raise HTTPException(status_code=500, detail=f"获取网络拓扑失败: {str(e)}")
+
+
+@router.get("/{host_id}/config", response_model=HostConfigResponse)
+async def get_host_config(host_id: int, db: AsyncSession = Depends(get_db)):
+    """获取主机系统配置信息"""
+    host = await get_alive_by_id(db, Host, host_id)
+    if not host:
+        raise HTTPException(status_code=404, detail="主机不存在")
+
+    try:
+        ssh_pool = get_ssh_pool()
+        async with ssh_pool.get_connection(db, host_id) as ssh_client:
+            import asyncio
+            loop = asyncio.get_event_loop()
+
+            def _execute_commands():
+                """执行多个系统命令获取配置信息"""
+                commands = {
+                    # CPU 信息
+                    'cpu_model': "cat /proc/cpuinfo | grep 'model name' | head -1 | cut -d: -f2 | xargs",
+                    'cpu_cores': "nproc",
+                    'cpu_physical': "cat /proc/cpuinfo | grep 'physical id' | sort -u | wc -l",
+                    'cpu_mhz': "cat /proc/cpuinfo | grep 'cpu MHz' | head -1 | cut -d: -f2 | xargs",
+
+                    # 内存信息
+                    'memory_info': "cat /proc/meminfo | grep -E '^(MemTotal|MemFree|MemAvailable|Buffers|Cached|SwapTotal|SwapFree):'",
+
+                    # 磁盘信息
+                    'disk_info': "df -h | grep -v tmpfs | grep -v devtmpfs",
+                    'disk_io': "cat /proc/diskstats | awk '{print $3, $4, $8}'",
+
+                    # 网络接口信息
+                    'network_interfaces': "ip -o addr show | awk '{print $2, $3, $4}'",
+                    'network_stats': "cat /proc/net/dev | tail -n +3",
+
+                    # 系统信息
+                    'kernel': "uname -r",
+                    'os_release': "cat /etc/os-release 2>/dev/null || echo 'NAME=Unknown'",
+                    'hostname': "hostname",
+                    'uptime': "cat /proc/uptime | awk '{print $1}'",
+                    'load_avg': "cat /proc/loadavg",
+                }
+
+                results = {}
+                for key, cmd in commands.items():
+                    try:
+                        stdin, stdout, stderr = ssh_client.exec_command(cmd, timeout=10)
+                        output = stdout.read().decode('utf-8', errors='replace').strip()
+                        results[key] = output
+                    except Exception as e:
+                        logger.warning(f"Failed to execute {key}: {e}")
+                        results[key] = ""
+
+                return results
+
+            raw_data = await loop.run_in_executor(None, _execute_commands)
+
+            # 解析 CPU 信息
+            cpu_info = {
+                "model": raw_data.get('cpu_model', 'Unknown'),
+                "cores": int(raw_data.get('cpu_cores', '0') or '0'),
+                "physical_cpus": int(raw_data.get('cpu_physical', '0') or '0'),
+                "mhz": raw_data.get('cpu_mhz', 'Unknown'),
+            }
+
+            # 解析内存信息
+            memory_lines = raw_data.get('memory_info', '').split('\n')
+            memory_info = {}
+            for line in memory_lines:
+                if ':' in line:
+                    key, value = line.split(':', 1)
+                    memory_info[key.strip()] = value.strip()
+
+            # 解析磁盘信息
+            disk_lines = raw_data.get('disk_info', '').split('\n')
+            disk_info = []
+            for i, line in enumerate(disk_lines):
+                if i == 0:  # 跳过表头
+                    continue
+                parts = line.split()
+                if len(parts) >= 6:
+                    disk_info.append({
+                        "filesystem": parts[0],
+                        "size": parts[1],
+                        "used": parts[2],
+                        "available": parts[3],
+                        "use_percent": parts[4],
+                        "mounted_on": parts[5]
+                    })
+
+            # 解析网络接口信息
+            network_lines = raw_data.get('network_interfaces', '').split('\n')
+            network_info = []
+            seen_interfaces = set()
+            for line in network_lines:
+                parts = line.split()
+                if len(parts) >= 3:
+                    iface = parts[0]
+                    if iface not in seen_interfaces:
+                        network_info.append({
+                            "interface": iface,
+                            "family": parts[1],
+                            "address": parts[2]
+                        })
+                        seen_interfaces.add(iface)
+
+            # 解析系统信息
+            os_release_lines = raw_data.get('os_release', '').split('\n')
+            os_name = "Unknown"
+            os_version = ""
+            for line in os_release_lines:
+                if line.startswith('NAME='):
+                    os_name = line.split('=', 1)[1].strip('"')
+                elif line.startswith('VERSION='):
+                    os_version = line.split('=', 1)[1].strip('"')
+
+            uptime_seconds = 0
+            try:
+                uptime_seconds = int(float(raw_data.get('uptime', '0')))
+            except:
+                pass
+
+            load_avg_parts = raw_data.get('load_avg', '').split()
+            system_info = {
+                "kernel": raw_data.get('kernel', 'Unknown'),
+                "os_name": os_name,
+                "os_version": os_version,
+                "hostname": raw_data.get('hostname', 'Unknown'),
+                "uptime_seconds": uptime_seconds,
+                "load_avg_1": load_avg_parts[0] if len(load_avg_parts) > 0 else "0",
+                "load_avg_5": load_avg_parts[1] if len(load_avg_parts) > 1 else "0",
+                "load_avg_15": load_avg_parts[2] if len(load_avg_parts) > 2 else "0",
+            }
+
+            return HostConfigResponse(
+                cpu=cpu_info,
+                memory=memory_info,
+                disk=disk_info,
+                network=network_info,
+                system=system_info,
+                collected_at=datetime.utcnow()
+            )
+
+    except Exception as e:
+        logger.error(f"Failed to get host config for {host_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"获取主机配置失败: {str(e)}")

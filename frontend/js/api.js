@@ -142,12 +142,13 @@ const API = {
     testHost(id) { return this.post(`/api/hosts/${id}/test`); },
 
     // Host detail endpoints
-    getHostSummary(hostId) { return this.get(`/api/hosts/${hostId}/summary`); },
-    getHostMetrics(hostId, params = '') { return this.get(`/api/hosts/${hostId}/metrics${params ? '?' + params : ''}`); },
-    getHostProcesses(hostId) { return this.get(`/api/hosts/${hostId}/processes`); },
-    killHostProcess(hostId, pid) { return this.post(`/api/hosts/${hostId}/processes/${pid}/kill`); },
-    getHostConnections(hostId) { return this.get(`/api/hosts/${hostId}/connections`); },
-    getHostNetworkTopology(hostId) { return this.get(`/api/hosts/${hostId}/network-topology`); },
+    getHostSummary(hostId) { return this.get(`/api/host-detail/${hostId}/summary`); },
+    getHostMetrics(hostId, params = '') { return this.get(`/api/host-detail/${hostId}/metrics${params ? '?' + params : ''}`); },
+    getHostProcesses(hostId) { return this.get(`/api/host-detail/${hostId}/processes`); },
+    killHostProcess(hostId, pid) { return this.post(`/api/host-detail/${hostId}/processes/${pid}/kill`); },
+    getHostConnections(hostId) { return this.get(`/api/host-detail/${hostId}/connections`); },
+    getHostNetworkTopology(hostId) { return this.get(`/api/host-detail/${hostId}/network-topology`); },
+    getHostConfig(hostId) { return this.get(`/api/host-detail/${hostId}/config`); },
 
     // Metrics endpoints
     getMetrics(connId, params = '') { return this.get(`/api/metrics/${connId}${params ? '?' + params : ''}`); },

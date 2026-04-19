@@ -305,116 +305,363 @@ const HostDetailPage = {
     },
 
     async _renderInfoTab(container) {
-        const summary = await API.getHostSummary(this.currentHost.id);
-        const host = summary.host;
-        const metric = summary.latest_metric;
-        const data = metric?.data || {};
+        try {
+            const config = await API.getHostConfig(this.currentHost.id);
 
-        // 解析硬件配置
-        const cpuCores = data.cpu_count || '未知';
-        const memoryTotal = data.memory_total ? this._formatBytes(data.memory_total) : '未知';
-        const diskTotal = data.disk_total ? this._formatBytes(data.disk_total) : '未知';
-        const memoryUsed = data.memory_used ? this._formatBytes(data.memory_used) : '未知';
-        const diskUsed = data.disk_used ? this._formatBytes(data.disk_used) : '未知';
+            // 格式化运行时间
+            const uptimeDays = Math.floor(config.system.uptime_seconds / 86400);
+            const uptimeHours = Math.floor((config.system.uptime_seconds % 86400) / 3600);
+            const uptimeMinutes = Math.floor((config.system.uptime_seconds % 3600) / 60);
+            const uptimeText = `${uptimeDays}天 ${uptimeHours}小时 ${uptimeMinutes}分钟`;
 
-        container.innerHTML = `
-            <div class="host-info-section">
-                <h3 class="host-info-section-title">硬件配置</h3>
-                <div class="host-info-grid">
-                    <div class="host-info-card">
-                        <div class="host-info-card-title">CPU 核心数</div>
-                        <div class="host-info-card-value">${cpuCores}</div>
+            // 解析内存信息
+            const parseMemory = (str) => {
+                const match = str.match(/(\d+)\s*kB/);
+                return match ? parseInt(match[1]) * 1024 : 0;
+            };
+
+            const memTotal = parseMemory(config.memory.MemTotal || '0');
+            const memFree = parseMemory(config.memory.MemFree || '0');
+            const memAvailable = parseMemory(config.memory.MemAvailable || '0');
+            const memBuffers = parseMemory(config.memory.Buffers || '0');
+            const memCached = parseMemory(config.memory.Cached || '0');
+            const swapTotal = parseMemory(config.memory.SwapTotal || '0');
+            const swapFree = parseMemory(config.memory.SwapFree || '0');
+
+            const memUsed = memTotal - memAvailable;
+            const memUsedPercent = memTotal > 0 ? ((memUsed / memTotal) * 100).toFixed(1) : 0;
+            const swapUsed = swapTotal - swapFree;
+            const swapUsedPercent = swapTotal > 0 ? ((swapUsed / swapTotal) * 100).toFixed(1) : 0;
+
+            container.innerHTML = `
+                <div class="host-config-page">
+                    <div class="host-config-header">
+                        <div class="host-config-header-info">
+                            <h2>${Utils.escapeHtml(this.currentHost.name)}</h2>
+                            <p>${Utils.escapeHtml(config.system.hostname)} · ${Utils.escapeHtml(config.system.os_name)} ${Utils.escapeHtml(config.system.os_version)}</p>
+                        </div>
+                        <button class="btn btn-secondary btn-sm" id="refresh-config-btn">
+                            <i data-lucide="refresh-cw"></i> 刷新配置
+                        </button>
                     </div>
-                    <div class="host-info-card">
-                        <div class="host-info-card-title">内存总量</div>
-                        <div class="host-info-card-value">${memoryTotal}</div>
+
+                    <div class="host-config-grid">
+                        <!-- 系统信息 -->
+                        <div class="host-config-card">
+                            <div class="host-config-card-header">
+                                <i data-lucide="monitor"></i>
+                                <h3>系统信息</h3>
+                            </div>
+                            <div class="host-config-card-body">
+                                <div class="host-config-item">
+                                    <span class="host-config-label">主机名</span>
+                                    <span class="host-config-value">${Utils.escapeHtml(config.system.hostname)}</span>
+                                </div>
+                                <div class="host-config-item">
+                                    <span class="host-config-label">操作系统</span>
+                                    <span class="host-config-value">${Utils.escapeHtml(config.system.os_name)}</span>
+                                </div>
+                                <div class="host-config-item">
+                                    <span class="host-config-label">系统版本</span>
+                                    <span class="host-config-value">${Utils.escapeHtml(config.system.os_version || '-')}</span>
+                                </div>
+                                <div class="host-config-item">
+                                    <span class="host-config-label">内核版本</span>
+                                    <span class="host-config-value">${Utils.escapeHtml(config.system.kernel)}</span>
+                                </div>
+                                <div class="host-config-item">
+                                    <span class="host-config-label">运行时间</span>
+                                    <span class="host-config-value">${uptimeText}</span>
+                                </div>
+                                <div class="host-config-item">
+                                    <span class="host-config-label">负载均衡</span>
+                                    <span class="host-config-value">${config.system.load_avg_1} / ${config.system.load_avg_5} / ${config.system.load_avg_15}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- CPU 信息 -->
+                        <div class="host-config-card">
+                            <div class="host-config-card-header">
+                                <i data-lucide="cpu"></i>
+                                <h3>CPU 信息</h3>
+                            </div>
+                            <div class="host-config-card-body">
+                                <div class="host-config-item">
+                                    <span class="host-config-label">处理器型号</span>
+                                    <span class="host-config-value">${Utils.escapeHtml(config.cpu.model)}</span>
+                                </div>
+                                <div class="host-config-item">
+                                    <span class="host-config-label">物理 CPU 数</span>
+                                    <span class="host-config-value">${config.cpu.physical_cpus}</span>
+                                </div>
+                                <div class="host-config-item">
+                                    <span class="host-config-label">逻辑核心数</span>
+                                    <span class="host-config-value">${config.cpu.cores}</span>
+                                </div>
+                                <div class="host-config-item">
+                                    <span class="host-config-label">CPU 频率</span>
+                                    <span class="host-config-value">${config.cpu.mhz} MHz</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 内存信息 -->
+                        <div class="host-config-card">
+                            <div class="host-config-card-header">
+                                <i data-lucide="memory-stick"></i>
+                                <h3>内存信息</h3>
+                            </div>
+                            <div class="host-config-card-body">
+                                <div class="host-config-item">
+                                    <span class="host-config-label">总内存</span>
+                                    <span class="host-config-value">${this._formatBytes(memTotal)}</span>
+                                </div>
+                                <div class="host-config-item">
+                                    <span class="host-config-label">已用内存</span>
+                                    <span class="host-config-value">${this._formatBytes(memUsed)} (${memUsedPercent}%)</span>
+                                </div>
+                                <div class="host-config-item">
+                                    <span class="host-config-label">可用内存</span>
+                                    <span class="host-config-value">${this._formatBytes(memAvailable)}</span>
+                                </div>
+                                <div class="host-config-item">
+                                    <span class="host-config-label">缓冲区</span>
+                                    <span class="host-config-value">${this._formatBytes(memBuffers)}</span>
+                                </div>
+                                <div class="host-config-item">
+                                    <span class="host-config-label">缓存</span>
+                                    <span class="host-config-value">${this._formatBytes(memCached)}</span>
+                                </div>
+                                ${swapTotal > 0 ? `
+                                <div class="host-config-item">
+                                    <span class="host-config-label">交换分区</span>
+                                    <span class="host-config-value">${this._formatBytes(swapUsed)} / ${this._formatBytes(swapTotal)} (${swapUsedPercent}%)</span>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+
+                        <!-- 磁盘信息 -->
+                        <div class="host-config-card host-config-card-wide">
+                            <div class="host-config-card-header">
+                                <i data-lucide="hard-drive"></i>
+                                <h3>磁盘信息</h3>
+                            </div>
+                            <div class="host-config-card-body">
+                                ${config.disk.length > 0 ? `
+                                    <div class="host-config-table-container">
+                                        <table class="host-config-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>文件系统</th>
+                                                    <th>挂载点</th>
+                                                    <th>总容量</th>
+                                                    <th>已使用</th>
+                                                    <th>可用</th>
+                                                    <th>使用率</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                ${config.disk.map(disk => `
+                                                    <tr>
+                                                        <td><code>${Utils.escapeHtml(disk.filesystem)}</code></td>
+                                                        <td><code>${Utils.escapeHtml(disk.mounted_on)}</code></td>
+                                                        <td>${Utils.escapeHtml(disk.size)}</td>
+                                                        <td>${Utils.escapeHtml(disk.used)}</td>
+                                                        <td>${Utils.escapeHtml(disk.available)}</td>
+                                                        <td>
+                                                            <div class="host-config-progress">
+                                                                <div class="host-config-progress-bar" style="width: ${disk.use_percent}"></div>
+                                                                <span class="host-config-progress-text">${Utils.escapeHtml(disk.use_percent)}</span>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                `).join('')}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ` : '<p class="host-config-empty">暂无磁盘信息</p>'}
+                            </div>
+                        </div>
+
+                        <!-- 网络接口 -->
+                        <div class="host-config-card host-config-card-wide">
+                            <div class="host-config-card-header">
+                                <i data-lucide="network"></i>
+                                <h3>网络接口</h3>
+                            </div>
+                            <div class="host-config-card-body">
+                                ${config.network.length > 0 ? `
+                                    <div class="host-config-table-container">
+                                        <table class="host-config-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>接口名称</th>
+                                                    <th>地址类型</th>
+                                                    <th>IP 地址</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                ${config.network.map(net => `
+                                                    <tr>
+                                                        <td><code>${Utils.escapeHtml(net.interface)}</code></td>
+                                                        <td><span class="badge badge-secondary">${Utils.escapeHtml(net.family)}</span></td>
+                                                        <td><code>${Utils.escapeHtml(net.address)}</code></td>
+                                                    </tr>
+                                                `).join('')}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ` : '<p class="host-config-empty">暂无网络接口信息</p>'}
+                            </div>
+                        </div>
                     </div>
-                    <div class="host-info-card">
-                        <div class="host-info-card-title">磁盘总量</div>
-                        <div class="host-info-card-value">${diskTotal}</div>
-                    </div>
-                    <div class="host-info-card">
-                        <div class="host-info-card-title">操作系统</div>
-                        <div class="host-info-card-value" style="font-size:14px">${Utils.escapeHtml(host.os_version || '未知')}</div>
+
+                    <div class="host-config-footer">
+                        <i data-lucide="clock"></i>
+                        <span>采集时间: ${new Date(config.collected_at).toLocaleString()}</span>
                     </div>
                 </div>
-            </div>
+            `;
 
-            ${metric ? `
-            <div class="host-info-section">
-                <h3 class="host-info-section-title">实时状态</h3>
-                <div class="host-info-grid">
-                    <div class="host-info-card">
-                        <div class="host-info-card-title">CPU 使用率</div>
-                        <div class="host-info-card-value">${metric.cpu_usage?.toFixed(1) || 0}%</div>
-                        <div class="host-info-card-meta">最后更新: ${new Date(metric.collected_at).toLocaleString()}</div>
-                    </div>
-                    <div class="host-info-card">
-                        <div class="host-info-card-title">内存使用</div>
-                        <div class="host-info-card-value">${metric.memory_usage?.toFixed(1) || 0}%</div>
-                        <div class="host-info-card-meta">${memoryUsed} / ${memoryTotal}</div>
-                    </div>
-                    <div class="host-info-card">
-                        <div class="host-info-card-title">磁盘使用</div>
-                        <div class="host-info-card-value">${metric.disk_usage?.toFixed(1) || 0}%</div>
-                        <div class="host-info-card-meta">${diskUsed} / ${diskTotal}</div>
-                    </div>
-                    <div class="host-info-card">
-                        <div class="host-info-card-title">运行时间</div>
-                        <div class="host-info-card-value" style="font-size:16px">${summary.uptime_seconds ? this._formatUptime(summary.uptime_seconds) : '未知'}</div>
-                    </div>
-                </div>
-            </div>
+            DOM.createIcons();
 
-            <div class="host-info-section">
-                <h3 class="host-info-section-title">连接信息</h3>
-                <div class="host-info-grid">
-                    <div class="host-info-card">
-                        <div class="host-info-card-title">主机地址</div>
-                        <div class="host-info-card-value" style="font-size:16px">${Utils.escapeHtml(host.host)}:${host.port}</div>
-                    </div>
-                    <div class="host-info-card">
-                        <div class="host-info-card-title">用户名</div>
-                        <div class="host-info-card-value" style="font-size:16px">${Utils.escapeHtml(host.username)}</div>
-                    </div>
-                    <div class="host-info-card">
-                        <div class="host-info-card-title">认证方式</div>
-                        <div class="host-info-card-value" style="font-size:16px">${host.auth_type === 'password' ? '密码' : host.auth_type === 'key' ? '密钥' : 'Agent'}</div>
-                    </div>
-                    <div class="host-info-card">
-                        <div class="host-info-card-title">进程数</div>
-                        <div class="host-info-card-value">${summary.process_count || '未知'}</div>
-                    </div>
+            // 绑定刷新按钮
+            DOM.$('#refresh-config-btn')?.addEventListener('click', async () => {
+                await this._renderInfoTab(container);
+                Toast.success('配置已刷新');
+            });
+
+        } catch (error) {
+            console.error('Failed to load host config:', error);
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i data-lucide="alert-circle"></i>
+                    <h3>加载失败</h3>
+                    <p>${error.message}</p>
+                    <button class="btn btn-primary mt-16" onclick="HostDetailPage._renderInfoTab(DOM.$('#host-tab-content'))">重试</button>
                 </div>
-            </div>
-            ` : '<p style="padding:20px;color:var(--text-secondary)">暂无指标数据</p>'}
-        `;
+            `;
+            DOM.createIcons();
+        }
     },
 
     async _renderMonitorTab(container) {
+        // 获取实时状态数据
+        const summary = await API.getHostSummary(this.currentHost.id);
+        const metric = summary.latest_metric;
+        const data = metric?.data || {};
+
+        const memoryTotal = data.memory_total_kb ? this._formatBytes(data.memory_total_kb * 1024) : '未知';
+        const diskTotal = data.disk_total ? this._formatBytes(data.disk_total) : '未知';
+        const memoryUsed = data.memory_used_kb ? this._formatBytes(data.memory_used_kb * 1024) : '未知';
+        const diskUsed = data.disk_used ? this._formatBytes(data.disk_used) : '未知';
+
         container.innerHTML = `
-            <div class="host-monitor-container">
-                <div class="host-monitor-controls">
-                    <select id="monitor-time-range" class="filter-input" style="width:150px">
-                        <option value="1">最近 1 小时</option>
-                        <option value="6">最近 6 小时</option>
-                        <option value="24" selected>最近 24 小时</option>
-                        <option value="72">最近 3 天</option>
-                        <option value="168">最近 7 天</option>
-                    </select>
+            <div class="host-monitor-page">
+                <!-- 工具栏 -->
+                <div class="instance-embedded-toolbar">
+                    <div class="instance-embedded-title">性能监控</div>
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                        <select id="monitor-time-range" class="filter-select">
+                            <option value="1">最近 1 小时</option>
+                            <option value="6">最近 6 小时</option>
+                            <option value="24" selected>最近 24 小时</option>
+                            <option value="72">最近 3 天</option>
+                            <option value="168">最近 7 天</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="host-monitor-charts">
-                    <div class="host-monitor-chart">
-                        <h3>CPU 使用率</h3>
-                        <canvas id="cpu-chart"></canvas>
+
+                <!-- 指标卡片 -->
+                ${metric ? `
+                <div class="grid-4 mb-24">
+                    <div class="metric-card">
+                        <div class="metric-card-label">CPU 使用率</div>
+                        <div class="metric-card-value">${metric.cpu_usage?.toFixed(1) || 0}%</div>
                     </div>
-                    <div class="host-monitor-chart">
-                        <h3>内存使用率</h3>
-                        <canvas id="memory-chart"></canvas>
+                    <div class="metric-card">
+                        <div class="metric-card-label">内存使用</div>
+                        <div class="metric-card-value">${metric.memory_usage?.toFixed(1) || 0}%</div>
+                        <div class="metric-card-meta">${memoryUsed} / ${memoryTotal}</div>
                     </div>
-                    <div class="host-monitor-chart">
-                        <h3>磁盘使用率</h3>
-                        <canvas id="disk-chart"></canvas>
+                    <div class="metric-card">
+                        <div class="metric-card-label">磁盘使用</div>
+                        <div class="metric-card-value">${metric.disk_usage?.toFixed(1) || 0}%</div>
+                        <div class="metric-card-meta">${diskUsed} / ${diskTotal}</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-card-label">运行时间</div>
+                        <div class="metric-card-value" style="font-size:16px">${summary.uptime_seconds ? this._formatUptime(summary.uptime_seconds) : '未知'}</div>
+                        <div class="metric-card-meta">最后更新: ${new Date(metric.collected_at).toLocaleTimeString()}</div>
+                    </div>
+                </div>
+                ` : ''}
+
+                <!-- 基础指标图表 -->
+                <h3 class="mb-16">基础指标</h3>
+                <div class="chart-grid mb-24">
+                    <div class="chart-panel">
+                        <div class="chart-panel-header">
+                            <span class="chart-panel-title">CPU 使用率 (%)</span>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="cpu-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-panel">
+                        <div class="chart-panel-header">
+                            <span class="chart-panel-title">内存使用率 (%)</span>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="memory-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-panel">
+                        <div class="chart-panel-header">
+                            <span class="chart-panel-title">磁盘使用率 (%)</span>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="disk-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-panel">
+                        <div class="chart-panel-header">
+                            <span class="chart-panel-title">负载平均 (1分钟)</span>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="load-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 磁盘和网络 IO 图表 -->
+                <h3 class="mb-16 mt-24">磁盘与网络 I/O</h3>
+                <div class="chart-grid">
+                    <div class="chart-panel">
+                        <div class="chart-panel-header">
+                            <span class="chart-panel-title">磁盘 IOPS (读/写)</span>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="disk-iops-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-panel">
+                        <div class="chart-panel-header">
+                            <span class="chart-panel-title">磁盘 I/O 流量 (读/写 KB/s)</span>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="disk-io-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-panel">
+                        <div class="chart-panel-header">
+                            <span class="chart-panel-title">网络 I/O 流量 (接收/发送 KB/s)</span>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="network-io-chart"></canvas>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -438,8 +685,8 @@ const HostDetailPage = {
 
     async _loadMonitorData(hours) {
         try {
-            const data = await API.getHostMetrics(this.currentHost.id, `hours=${hours}`);
-            this._renderMonitorCharts(data.metrics);
+            const metrics = await API.getHostMetrics(this.currentHost.id, `minutes=${hours * 60}`);
+            this._renderMonitorCharts(metrics);
         } catch (error) {
             console.error('Failed to load monitor data:', error);
         }
@@ -458,74 +705,220 @@ const HostDetailPage = {
 
         window.hostMonitorCharts = {};
 
-        const labels = metrics.map(m => new Date(m.collected_at).toLocaleString('zh-CN', {
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit'
-        }));
+        const labels = metrics.map(m => {
+            const date = new Date(m.collected_at);
+            const now = new Date();
+            const isToday = date.toDateString() === now.toDateString();
 
-        const chartConfig = (label, data, color) => ({
-            type: 'line',
-            data: {
-                labels,
-                datasets: [{
-                    label,
-                    data,
-                    borderColor: color,
-                    backgroundColor: color + '20',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        max: 100,
-                        ticks: {
-                            callback: value => value + '%'
-                        }
-                    }
-                }
+            if (isToday) {
+                return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             }
+            return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
         });
 
+        // 通用单线图表配置
+        const createLineChart = (canvasId, label, data, color, yAxisConfig = {}) => {
+            const canvas = DOM.$(`#${canvasId}`);
+            if (!canvas) return null;
+
+            return new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label,
+                        data,
+                        borderColor: color,
+                        backgroundColor: color + '20',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        pointHitRadius: 10
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#9ca3af', maxRotation: 0 }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#9ca3af' },
+                            ...yAxisConfig
+                        }
+                    },
+                    interaction: {
+                        mode: 'nearest',
+                        axis: 'x',
+                        intersect: false
+                    }
+                }
+            });
+        };
+
+        // 通用多线图表配置
+        const createMultiLineChart = (canvasId, datasets, yAxisConfig = {}) => {
+            const canvas = DOM.$(`#${canvasId}`);
+            if (!canvas) return null;
+
+            return new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: datasets.map(ds => ({
+                        label: ds.label,
+                        data: ds.data,
+                        borderColor: ds.color,
+                        backgroundColor: ds.color + '20',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        pointHitRadius: 10
+                    }))
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                color: '#e6edf3',
+                                font: { size: 11 },
+                                usePointStyle: true,
+                                padding: 10
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#9ca3af', maxRotation: 0 }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#9ca3af' },
+                            ...yAxisConfig
+                        }
+                    },
+                    interaction: {
+                        mode: 'nearest',
+                        axis: 'x',
+                        intersect: false
+                    }
+                }
+            });
+        };
+
         // CPU 图表
-        const cpuCanvas = DOM.$('#cpu-chart');
-        if (cpuCanvas) {
-            window.hostMonitorCharts.cpu = new Chart(cpuCanvas, chartConfig(
-                'CPU 使用率',
-                metrics.map(m => m.cpu_usage || 0),
-                '#3b82f6'
-            ));
-        }
+        window.hostMonitorCharts.cpu = createLineChart(
+            'cpu-chart',
+            'CPU 使用率',
+            metrics.map(m => m.cpu_usage || 0),
+            '#2f81f7',
+            { max: 100, ticks: { callback: value => value + '%' } }
+        );
 
         // 内存图表
-        const memoryCanvas = DOM.$('#memory-chart');
-        if (memoryCanvas) {
-            window.hostMonitorCharts.memory = new Chart(memoryCanvas, chartConfig(
-                '内存使用率',
-                metrics.map(m => m.memory_usage || 0),
-                '#10b981'
-            ));
-        }
+        window.hostMonitorCharts.memory = createLineChart(
+            'memory-chart',
+            '内存使用率',
+            metrics.map(m => m.memory_usage || 0),
+            '#10b981',
+            { max: 100, ticks: { callback: value => value + '%' } }
+        );
 
-        // 磁盘图表
-        const diskCanvas = DOM.$('#disk-chart');
-        if (diskCanvas) {
-            window.hostMonitorCharts.disk = new Chart(diskCanvas, chartConfig(
-                '磁盘使用率',
-                metrics.map(m => m.disk_usage || 0),
-                '#f59e0b'
-            ));
-        }
+        // 磁盘使用率图表
+        window.hostMonitorCharts.disk = createLineChart(
+            'disk-chart',
+            '磁盘使用率',
+            metrics.map(m => m.disk_usage || 0),
+            '#f59e0b',
+            { max: 100, ticks: { callback: value => value + '%' } }
+        );
+
+        // 负载平均图表
+        window.hostMonitorCharts.load = createLineChart(
+            'load-chart',
+            '负载平均',
+            metrics.map(m => m.data?.load_avg_1min || 0),
+            '#8b5cf6'
+        );
+
+        // 磁盘 IOPS 图表
+        window.hostMonitorCharts.diskIops = createMultiLineChart(
+            'disk-iops-chart',
+            [
+                {
+                    label: '读',
+                    data: metrics.map(m => m.data?.disk_read_iops || 0),
+                    color: '#2f81f7'
+                },
+                {
+                    label: '写',
+                    data: metrics.map(m => m.data?.disk_write_iops || 0),
+                    color: '#f97316'
+                }
+            ],
+            { ticks: { callback: value => value.toFixed(0) } }
+        );
+
+        // 磁盘 IO 流量图表
+        window.hostMonitorCharts.diskIo = createMultiLineChart(
+            'disk-io-chart',
+            [
+                {
+                    label: '读',
+                    data: metrics.map(m => m.data?.disk_read_kb_per_sec || 0),
+                    color: '#2f81f7'
+                },
+                {
+                    label: '写',
+                    data: metrics.map(m => m.data?.disk_write_kb_per_sec || 0),
+                    color: '#f97316'
+                }
+            ],
+            { ticks: { callback: value => value.toFixed(0) + ' KB/s' } }
+        );
+
+        // 网络 IO 流量图表
+        window.hostMonitorCharts.networkIo = createMultiLineChart(
+            'network-io-chart',
+            [
+                {
+                    label: '接收',
+                    data: metrics.map(m => m.data?.network_rx_kb_per_sec || 0),
+                    color: '#10b981'
+                },
+                {
+                    label: '发送',
+                    data: metrics.map(m => m.data?.network_tx_kb_per_sec || 0),
+                    color: '#8b5cf6'
+                }
+            ],
+            { ticks: { callback: value => value.toFixed(0) + ' KB/s' } }
+        );
     },
 
     async _renderProcessesTab(container) {

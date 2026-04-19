@@ -225,18 +225,41 @@ class OSMetricsCollector:
 
     @staticmethod
     async def _get_linux_disk_io(ssh_client) -> Dict[str, float]:
-        """获取磁盘 IO 统计"""
+        """获取磁盘 IO 统计（IOPS 和流量）"""
         try:
+            # 使用 iostat 获取详细的磁盘 IO 指标
+            # r/s: 每秒读操作数, w/s: 每秒写操作数
+            # rkB/s: 每秒读取 KB, wkB/s: 每秒写入 KB
             output = await OSMetricsCollector._exec(
                 ssh_client,
-                "iostat -dx 1 2 | awk '/^[a-z]/ && NR>3 {reads+=$4; writes+=$5} END {print reads, writes}'"
+                "iostat -dx 1 2 | awk '/^[a-z]/ && NR>3 {r+=$4; w+=$5; rkb+=$6; wkb+=$7} END {print r, w, rkb, wkb}'"
             )
             if output:
                 parts = output.split()
-                if len(parts) == 2:
+                if len(parts) == 4:
                     return {
-                        'disk_reads_per_sec': round(float(parts[0]), 2),
-                        'disk_writes_per_sec': round(float(parts[1]), 2)
+                        'disk_read_iops': round(float(parts[0]), 2),
+                        'disk_write_iops': round(float(parts[1]), 2),
+                        'disk_read_kb_per_sec': round(float(parts[2]), 2),
+                        'disk_write_kb_per_sec': round(float(parts[3]), 2)
+                    }
+        except Exception:
+            pass
+
+        # 备用方法：从 /proc/diskstats 读取
+        try:
+            output = await OSMetricsCollector._exec(
+                ssh_client,
+                "cat /proc/diskstats | awk '{if($3 ~ /^[sv]d[a-z]$/ || $3 ~ /^nvme[0-9]+n[0-9]+$/) {reads+=$4; writes+=$8; read_sectors+=$6; write_sectors+=$10}} END {print reads, writes, read_sectors*512/1024, write_sectors*512/1024}'"
+            )
+            if output:
+                parts = output.split()
+                if len(parts) == 4:
+                    return {
+                        'disk_read_iops': round(float(parts[0]), 2),
+                        'disk_write_iops': round(float(parts[1]), 2),
+                        'disk_read_kb_per_sec': round(float(parts[2]), 2),
+                        'disk_write_kb_per_sec': round(float(parts[3]), 2)
                     }
         except Exception:
             pass
@@ -245,19 +268,58 @@ class OSMetricsCollector:
 
     @staticmethod
     async def _get_linux_network_io(ssh_client) -> Dict[str, float]:
-        """获取网络 IO 统计"""
+        """获取网络 IO 统计（累计字节数和速率）"""
         try:
-            output = await OSMetricsCollector._exec(
+            # 第一次采样
+            output1 = await OSMetricsCollector._exec(
                 ssh_client,
-                "cat /proc/net/dev | awk 'NR>2 {rx+=$2; tx+=$10} END {print rx, tx}'"
+                "cat /proc/net/dev | awk 'NR>2 && $1 !~ /^lo:/ {rx+=$2; tx+=$10} END {print rx, tx}'"
             )
-            if output:
-                parts = output.split()
-                if len(parts) == 2:
-                    return {
-                        'host_network_rx_bytes': int(parts[0]),
-                        'host_network_tx_bytes': int(parts[1])
-                    }
+            if not output1:
+                return {}
+
+            parts1 = output1.split()
+            if len(parts1) != 2:
+                return {}
+
+            rx1 = int(parts1[0])
+            tx1 = int(parts1[1])
+
+            # 等待 1 秒后第二次采样
+            await asyncio.sleep(1)
+
+            output2 = await OSMetricsCollector._exec(
+                ssh_client,
+                "cat /proc/net/dev | awk 'NR>2 && $1 !~ /^lo:/ {rx+=$2; tx+=$10} END {print rx, tx}'"
+            )
+            if not output2:
+                return {
+                    'network_rx_bytes_total': rx1,
+                    'network_tx_bytes_total': tx1
+                }
+
+            parts2 = output2.split()
+            if len(parts2) != 2:
+                return {
+                    'network_rx_bytes_total': rx1,
+                    'network_tx_bytes_total': tx1
+                }
+
+            rx2 = int(parts2[0])
+            tx2 = int(parts2[1])
+
+            # 计算速率（字节/秒）
+            rx_rate = max(0, rx2 - rx1)
+            tx_rate = max(0, tx2 - tx1)
+
+            return {
+                'network_rx_bytes_total': rx2,
+                'network_tx_bytes_total': tx2,
+                'network_rx_bytes_per_sec': rx_rate,
+                'network_tx_bytes_per_sec': tx_rate,
+                'network_rx_kb_per_sec': round(rx_rate / 1024, 2),
+                'network_tx_kb_per_sec': round(tx_rate / 1024, 2)
+            }
         except Exception:
             pass
 

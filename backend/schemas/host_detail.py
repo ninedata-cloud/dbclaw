@@ -39,3 +39,13 @@ class HostNetworkTopologyResponse(BaseModel):
     host: Dict[str, Any]
     connections: List[Dict[str, Any]]  # 聚合后的连接数据
     stats: Dict[str, int]  # 总连接数、各状态统计
+
+
+class HostConfigResponse(BaseModel):
+    """主机配置响应"""
+    cpu: Dict[str, Any]  # CPU 信息
+    memory: Dict[str, Any]  # 内存信息
+    disk: List[Dict[str, Any]]  # 磁盘信息
+    network: List[Dict[str, Any]]  # 网络接口信息
+    system: Dict[str, Any]  # 系统信息（内核、发行版等）
+    collected_at: datetime  # 采集时间

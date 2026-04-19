@@ -488,42 +488,285 @@
 }
 
 /* 性能监控 */
-.host-monitor-container {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
+.host-monitor-page {
+    padding: 0;
 }
 
-.host-monitor-controls {
-    margin-bottom: 20px;
+.host-monitor-page .instance-embedded-toolbar {
     display: flex;
     align-items: center;
-    gap: 12px;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-color);
 }
 
-.host-monitor-charts {
-    flex: 1;
+.host-monitor-page .instance-embedded-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.host-monitor-page h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* 主机配置页面 */
+.host-config-page {
+    padding: 24px;
+}
+
+.host-config-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.host-config-header-info h2 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+}
+
+.host-config-header-info p {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.host-config-grid {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
     gap: 20px;
-    overflow-y: auto;
+    margin-bottom: 24px;
 }
 
-.host-monitor-chart {
+.host-config-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.2s ease;
+}
+
+.host-config-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    border-color: rgba(47, 129, 247, 0.3);
+}
+
+.host-config-card-wide {
+    grid-column: 1 / -1;
+}
+
+.host-config-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 20px;
+    background: linear-gradient(135deg, rgba(47, 129, 247, 0.05) 0%, rgba(47, 129, 247, 0.02) 100%);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.host-config-card-header i {
+    width: 20px;
+    height: 20px;
+    color: var(--primary-color);
+}
+
+.host-config-card-header h3 {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.host-config-card-body {
+    padding: 20px;
+}
+
+.host-config-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.host-config-item:last-child {
+    border-bottom: none;
+}
+
+.host-config-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    min-width: 120px;
+}
+
+.host-config-value {
+    font-size: 14px;
+    color: var(--text-primary);
+    text-align: right;
+    word-break: break-word;
+}
+
+.host-config-value code {
+    background: rgba(47, 129, 247, 0.08);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--primary-color);
+}
+
+.host-config-table-container {
+    overflow-x: auto;
+}
+
+.host-config-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.host-config-table thead {
+    background: var(--bg-primary);
+}
+
+.host-config-table th {
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 12px;
+    text-transform: uppercase;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.host-config-table td {
+    padding: 12px;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.host-config-table tbody tr:hover {
+    background: var(--bg-hover);
+}
+
+.host-config-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.host-config-table code {
+    background: rgba(47, 129, 247, 0.08);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--primary-color);
+}
+
+.host-config-progress {
+    position: relative;
+    width: 100%;
+    height: 24px;
+    background: var(--bg-primary);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.host-config-progress-bar {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+    transition: width 0.3s ease;
+}
+
+.host-config-progress-bar[style*="width: 7"],
+.host-config-progress-bar[style*="width: 8"],
+.host-config-progress-bar[style*="width: 9"] {
+    background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+}
+
+.host-config-progress-bar[style*="width: 100%"] {
+    background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
+}
+
+.host-config-progress-text {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    z-index: 1;
+}
+
+.host-config-empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.host-config-footer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 8px;
-    padding: 16px;
-    height: 300px;
+    font-size: 13px;
+    color: var(--text-secondary);
 }
 
-.host-monitor-chart h3 {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 12px;
+.host-config-footer i {
+    width: 16px;
+    height: 16px;
 }
 
-.host-monitor-chart canvas {
-    height: calc(100% - 40px) !important;
+/* 响应式调整 */
+@media (max-width: 1200px) {
+    .host-config-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .host-config-page {
+        padding: 16px;
+    }
+
+    .host-config-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .host-config-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+
+    .host-config-label {
+        min-width: auto;
+    }
+
+    .host-config-value {
+        text-align: left;
+    }
 }
