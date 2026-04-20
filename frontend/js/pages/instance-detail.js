@@ -31,6 +31,7 @@ const InstanceDetailPage = {
     sessionAiDialogCleanup: null,
 
     validTabs: ['config', 'monitor', 'traffic', 'sessions', 'ai', 'sqlConsole', 'alerts', 'inspections', 'parameters', 'topSql'],
+    topSqlAiDialogCleanup: null,
 
     async render(routeParam = '') {
         this._rememberInstanceListScroll();
@@ -2071,36 +2072,133 @@ const InstanceDetailPage = {
     },
 
     async _aiDiagnoseTopSql(sql) {
-        const resultDiv = document.getElementById('aiDiagnosisResult');
-        const contentDiv = document.getElementById('aiDiagnosisContent');
-        if (!resultDiv || !contentDiv) return;
+        if (!sql) {
+            Toast.warning('未找到要分析的 SQL');
+            return;
+        }
 
-        resultDiv.style.display = 'block';
-        contentDiv.innerHTML = '<div class="loading-spinner"><i data-lucide="loader"></i> AI 正在分析...</div>';
-        DOM.createIcons();
+        if (this.topSqlAiDialogCleanup) {
+            try {
+                this.topSqlAiDialogCleanup();
+            } catch (error) {
+                console.error('Previous TopSQL AI dialog cleanup failed:', error);
+            }
+            this.topSqlAiDialogCleanup = null;
+        }
+
+        const datasource = this.currentInstance;
+        if (!datasource) {
+            Toast.error('无法获取数据源信息');
+            return;
+        }
+
+        const content = DOM.el('div', { className: 'instance-topsql-ai-shell' });
+        content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
+
+        let dialogCleanup = null;
+        const sqlPreview = sql.sql_text?.substring(0, 50) || 'SQL';
+        const title = `SQL AI 诊断 · ${datasource.name || '实例'} · ${sqlPreview}${sql.sql_text?.length > 50 ? '...' : ''}`;
+
+        Modal.show({
+            title,
+            content,
+            width: '1280px',
+            maxHeight: '92vh',
+            containerClassName: 'instance-topsql-ai-modal',
+            bodyClassName: 'instance-topsql-ai-modal-body',
+            onHide: () => {
+                if (typeof dialogCleanup === 'function') {
+                    try {
+                        dialogCleanup();
+                    } catch (error) {
+                        console.error('TopSQL AI dialog cleanup failed:', error);
+                    }
+                }
+                if (this.topSqlAiDialogCleanup === dialogCleanup) {
+                    this.topSqlAiDialogCleanup = null;
+                }
+            }
+        });
 
         try {
-            const sqlStats = {
-                exec_count: sql.exec_count,
-                total_time_sec: sql.total_time_sec,
-                avg_time_sec: sql.avg_time_sec,
-                total_rows_scanned: sql.total_rows_scanned,
-                avg_rows_scanned: sql.avg_rows_scanned,
-                total_wait_time_sec: sql.total_wait_time_sec,
-                avg_wait_time_sec: sql.avg_wait_time_sec,
-            };
-
-            const response = await API.diagnoseSql(this.topSqlData.datasourceId, sql.sql_text, sqlStats);
-
-            if (response.diagnosis) {
-                contentDiv.innerHTML = `<div class="ai-diagnosis-content">${this._formatAiResponse(response.diagnosis)}</div>`;
-            } else {
-                contentDiv.innerHTML = '<div class="error-message">AI 诊断失败</div>';
-            }
+            dialogCleanup = await DiagnosisPage.renderWithOptions({
+                container: content,
+                embedded: true,
+                hideEmbeddedTitle: true,
+                compactEmbeddedToolbar: true,
+                fixedDatasourceId: datasource.id,
+                hideSessionSidebar: true,
+                autoCreateSession: true,
+                autoSendInitialAsk: true,
+                hideInitialAskMessage: true,
+                initialAsk: this._buildTopSqlDiagnosisPrompt(sql),
+                initialSessionTitle: `SQL 性能分析 ${datasource.name || datasource.id || ''} ${sqlPreview}`.trim(),
+                hideToolSafetyButton: true,
+                hideClearSessionButton: true,
+            });
+            this.topSqlAiDialogCleanup = dialogCleanup;
         } catch (error) {
-            console.error('Failed to AI diagnose:', error);
-            contentDiv.innerHTML = `<div class="error-message">AI 诊断失败: ${this._escapeHtml(error.message)}</div>`;
+            content.innerHTML = `
+                <div class="empty-state" style="padding:40px;">
+                    <i data-lucide="alert-circle"></i>
+                    <h3>SQL AI 诊断打开失败</h3>
+                    <p>${this._escapeHtml(error.message || '未知错误')}</p>
+                </div>
+            `;
+            DOM.createIcons();
         }
+    },
+
+    _buildTopSqlDiagnosisPrompt(sql) {
+        const datasource = this.currentInstance || {};
+        const hostText = datasource.host
+            ? `${datasource.host}:${datasource.port || '-'}`
+            : '-';
+        const versionText = this._formatSessionAnalysisValue(datasource.db_version);
+        const datasourceDatabaseText = this._formatSessionAnalysisValue(datasource.database);
+
+        const sqlText = this._truncateSessionAnalysisBlock(sql.sql_text || '', 2400);
+
+        const statsParts = [];
+        if (sql.exec_count != null) statsParts.push(`执行次数 ${sql.exec_count}`);
+        if (sql.avg_time_sec != null) statsParts.push(`平均耗时 ${sql.avg_time_sec} 秒`);
+        if (sql.total_time_sec != null) statsParts.push(`总耗时 ${sql.total_time_sec} 秒`);
+
+        const scanParts = [];
+        if (sql.avg_rows_scanned != null) scanParts.push(`平均扫描 ${sql.avg_rows_scanned} 行`);
+        if (sql.total_rows_scanned != null) scanParts.push(`总扫描 ${sql.total_rows_scanned} 行`);
+
+        const waitParts = [];
+        if (sql.total_wait_time_sec != null) waitParts.push(`总等待时间 ${sql.total_wait_time_sec} 秒`);
+
+        return [
+            '请你作为资深数据库运维专家，针对下面这个 SQL 语句的性能问题做诊断分析，并支持后续多轮追问。',
+            '',
+            '【分析目标】',
+            '请判断该 SQL 是否存在性能问题、风险等级如何，并给出优化建议。',
+            '',
+            '【实例信息】',
+            `- 实例名称：${this._formatSessionAnalysisValue(datasource.name)}`,
+            `- 数据库类型：${this._formatSessionAnalysisValue(this._getDbTypeLabel(datasource.db_type) || datasource.db_type)}`,
+            `- 主机：${hostText}`,
+            `- 数据库：${datasourceDatabaseText}`,
+            versionText !== '-' ? `- 版本：${versionText}` : null,
+            '',
+            '【SQL 统计信息】',
+            statsParts.length > 0 ? `- ${statsParts.join('，')}` : null,
+            scanParts.length > 0 ? `- ${scanParts.join('，')}` : null,
+            waitParts.length > 0 ? `- ${waitParts.join('，')}` : null,
+            '',
+            '【SQL 文本】',
+            sqlText,
+            '',
+            '【输出要求】',
+            '1. SQL 性能状态判断（是否存在性能问题）',
+            '2. 主要性能瓶颈或风险点',
+            '3. 可能的根因分析',
+            '4. 具体的优化建议（索引、改写、配置等）',
+            '5. 如果信息不足，请明确指出需要补充哪些信息（如执行计划、表结构等）',
+        ].filter(Boolean).join('\n');
     },
 
     _formatAiResponse(text) {

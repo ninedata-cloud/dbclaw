@@ -1038,9 +1038,12 @@ const DiagnosisPage = {
             if (visibleMessages && visibleMessages.length > 0) {
                 ChatWidget.loadMessages(visibleMessages);
             } else {
-                // Empty session - show welcome message
-                const container = DOM.$('#chat-messages');
-                this._renderWelcomeState(container);
+                // Empty session - show welcome message (unless auto-sending initial ask)
+                const shouldShowWelcome = !this._renderOptions?.autoSendInitialAsk;
+                if (shouldShowWelcome) {
+                    const container = DOM.$('#chat-messages');
+                    this._renderWelcomeState(container);
+                }
             }
 
             if (!hasToolHistory) {

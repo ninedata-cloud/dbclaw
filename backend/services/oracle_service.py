@@ -264,13 +264,24 @@ class OracleConnector(DBConnector):
             await conn.close()
 
     async def explain_query(self, sql: str) -> Dict[str, Any]:
+        """Get execution plan for SQL query (used by /api/query/explain)."""
+        from backend.utils.sql_utils import extract_oracle_bind_variables
+
         conn = await self._connect()
         try:
             cursor = conn.cursor()
 
+            # 提取绑定变量
+            bind_vars = extract_oracle_bind_variables(sql)
+
             stmt_id = f"EXPLAIN_{int(time.time())}"
 
-            await cursor.execute(f"EXPLAIN PLAN SET STATEMENT_ID = '{stmt_id}' FOR {sql}")
+            # 为所有绑定变量提供 None 值
+            if bind_vars:
+                bind_params = {var: None for var in bind_vars}
+                await cursor.execute(f"EXPLAIN PLAN SET STATEMENT_ID = '{stmt_id}' FOR {sql}", bind_params)
+            else:
+                await cursor.execute(f"EXPLAIN PLAN SET STATEMENT_ID = '{stmt_id}' FOR {sql}")
 
             await cursor.execute(
                 f"SELECT plan_table_output FROM TABLE(DBMS_XPLAN.DISPLAY('PLAN_TABLE', '{stmt_id}', 'ALL'))"
@@ -496,15 +507,14 @@ class OracleConnector(DBConnector):
 
     async def explain_sql(self, sql_text: str) -> Dict[str, Any]:
         """Get execution plan for SQL statement."""
-        import re
+        from backend.utils.sql_utils import extract_oracle_bind_variables
+
         conn = await self._connect()
         try:
             cursor = conn.cursor()
 
-            # 提取绑定变量（排除字符串字面量中的冒号）
-            # 先移除所有字符串字面量，再查找绑定变量
-            sql_without_strings = re.sub(r"'[^']*'", '', sql_text)
-            bind_vars = re.findall(r':(\w+)', sql_without_strings)
+            # 提取绑定变量
+            bind_vars = extract_oracle_bind_variables(sql_text)
 
             # 使用 EXPLAIN PLAN FOR 生成执行计划
             statement_id = f"EXPLAIN_{id(sql_text)}"

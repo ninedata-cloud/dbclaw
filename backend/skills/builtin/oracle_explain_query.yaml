@@ -24,48 +24,44 @@ code: |
       datasource_id = params['datasource_id']
       sql = params['sql'].strip()
 
-      # Generate a unique statement ID
-      import time
-      statement_id = f"DBGUARD_{int(time.time())}"
+      # 使用 oracle_service 的 explain_sql 方法，它已经处理了绑定变量
+      from backend.database import get_db
+      from backend.models import Datasource
+      from backend.services.oracle_service import OracleConnector
+      from backend.utils.encryption import decrypt_value
+      from sqlalchemy import select
 
-      # First, explain the query
-      explain_sql = f"EXPLAIN PLAN SET STATEMENT_ID = '{statement_id}' FOR {sql}"
+      async for db in get_db():
+          stmt = select(Datasource).where(Datasource.id == datasource_id, Datasource.deleted_at.is_(None))
+          result = await db.execute(stmt)
+          datasource = result.scalar_one_or_none()
 
-      explain_result = await context.execute_query(explain_sql, datasource_id)
+          if not datasource:
+              return {"success": False, "error": f"Datasource {datasource_id} not found"}
 
-      if not explain_result.get("success"):
-          return {"success": False, "error": explain_result.get("error", "Failed to explain query")}
+          if datasource.db_type != "oracle":
+              return {"success": False, "error": f"This skill only supports Oracle databases, got {datasource.db_type}"}
 
-      # Get the execution plan
-      plan_query = f"""
-      SELECT
-          LPAD(' ', 2 * (level - 1)) || operation || ' ' || options as operation,
-          object_name,
-          cost,
-          cardinality,
-          bytes,
-          cpu_cost,
-          io_cost,
-          access_predicates,
-          filter_predicates
-      FROM plan_table
-      WHERE statement_id = '{statement_id}'
-      START WITH id = 0
-      CONNECT BY PRIOR id = parent_id AND statement_id = '{statement_id}'
-      ORDER SIBLINGS BY position
-      """
+          password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
 
-      plan_result = await context.execute_query(plan_query, datasource_id)
+          connector = OracleConnector(
+              host=datasource.host,
+              port=datasource.port,
+              username=datasource.username,
+              password=password,
+              database=datasource.database,
+          )
 
-      # Clean up
-      cleanup_sql = f"DELETE FROM plan_table WHERE statement_id = '{statement_id}'"
-      await context.execute_query(cleanup_sql, datasource_id)
+          try:
+              result = await connector.explain_sql(sql)
+              return {
+                  "success": True,
+                  "format": result.get("format", "table"),
+                  "plan": result.get("plan", [])
+              }
+          except Exception as e:
+              return {"success": False, "error": str(e)}
+          finally:
+              await connector.close()
 
-      if not plan_result.get("success"):
-          return {"success": False, "error": plan_result.get("error", "Failed to get execution plan")}
-
-      return {
-          "success": True,
-          "plan": plan_result.get("data", []),
-          "columns": plan_result.get("columns", [])
-      }
+          break
