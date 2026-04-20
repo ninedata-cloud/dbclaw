@@ -50,11 +50,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get update && apt-get install -y --no-install-recommends \
     postgresql-18 \
     postgresql-client-18 \
-    && if [ "$TARGETARCH" = "amd64" ]; then \
-        ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql17; \
-       else \
-        echo "Skipping msodbcsql17 on $TARGETARCH; Microsoft does not publish Debian 12 arm64 builds for ODBC 17, using FreeTDS fallback."; \
-       fi \
+    && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 \
     && rm -rf /var/lib/apt/lists/*
 
 # 先安装 Python 依赖，提升缓存命中率

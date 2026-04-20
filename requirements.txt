@@ -45,4 +45,5 @@ redis>=5.0.0
 pyodbc>=5.0.0
 pymssql>=2.2.0
 oracledb>=1.0.0
+hdbcli>=2.19.0
 # dmPython                # DM (Dameng) driver, install manually

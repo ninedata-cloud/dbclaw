@@ -48,105 +48,31 @@ class SQLServerConnector(DBConnector):
         username: str = None,
         password: str = None,
         database: str = None,
-        encrypt: Optional[Any] = None,
-        trust_server_certificate: Optional[Any] = None,
-        odbc_driver: Optional[str] = None,
-        connection_timeout: Optional[Any] = None,
+        connection_timeout: int = 5,
         **_: Any,
     ):
         super().__init__(host, port, username=username, password=password, database=database)
-        self.encrypt = self._normalize_encrypt_setting(encrypt)
-        self.trust_server_certificate = self._normalize_bool(
-            trust_server_certificate,
-            default=True,
-        )
-        self.odbc_driver = (str(odbc_driver).strip() if odbc_driver is not None else "") or None
-        self.connection_timeout = self._normalize_timeout(connection_timeout, default=5)
+        self.connection_timeout = connection_timeout if connection_timeout > 0 else 5
 
-    @staticmethod
-    def _normalize_bool(value: Optional[Any], *, default: bool) -> bool:
-        if value is None:
-            return default
-        if isinstance(value, bool):
-            return value
-        normalized = str(value).strip().lower()
-        if normalized in {"1", "true", "yes", "on"}:
-            return True
-        if normalized in {"0", "false", "no", "off"}:
-            return False
-        return default
-
-    @staticmethod
-    def _normalize_encrypt_setting(value: Optional[Any]) -> Optional[str]:
-        if value is None:
-            return "no"
-        if isinstance(value, bool):
-            return "yes" if value else "no"
-        normalized = str(value).strip().lower()
-        if normalized in {"1", "true", "yes", "on", "mandatory", "strict"}:
-            return "yes"
-        if normalized in {"0", "false", "no", "off", "optional"}:
-            return "no"
-        return None
-
-    @staticmethod
-    def _normalize_timeout(value: Optional[Any], *, default: int) -> int:
-        try:
-            parsed = int(value)
-            return parsed if parsed > 0 else default
-        except (TypeError, ValueError):
-            return default
-
-    def _resolve_driver_name(self, pyodbc_module=None) -> str:
-        if self.odbc_driver:
-            return self.odbc_driver.strip().strip("{}")
-        configured_driver = os.getenv("SQLSERVER_ODBC_DRIVER", "").strip().strip("{}")
-        if configured_driver:
-            return configured_driver
-
-        pyodbc_module = pyodbc_module or __import__("pyodbc")
-        available_drivers = set(pyodbc_module.drivers())
-        for driver_name in (
-            "ODBC Driver 17 for SQL Server",
-            "ODBC Driver 18 for SQL Server",
-            "FreeTDS",
-        ):
-            if driver_name in available_drivers:
-                return driver_name
-
-        return "ODBC Driver 17 for SQL Server"
-
-    def _get_conn_string(self, driver_name: Optional[str] = None):
-        driver_name = (driver_name or self._resolve_driver_name()).strip("{}")
-        driver = f"{{{driver_name}}}"
+    def _get_conn_string(self) -> str:
+        """构建连接字符串，默认使用 ODBC Driver 18 并兼容 SQL Server 2012"""
+        driver = os.getenv("SQLSERVER_ODBC_DRIVER", "ODBC Driver 18 for SQL Server").strip().strip("{}")
         parts = [
-            f"DRIVER={driver}",
+            f"DRIVER={{{driver}}}",
             f"SERVER={self.host},{self.port}",
             f"DATABASE={self.database or 'master'}",
             f"UID={self.username}",
             f"PWD={self.password}",
-            f"TrustServerCertificate={'yes' if self.trust_server_certificate else 'no'}",
+            "TrustServerCertificate=yes",
+            "Encrypt=no",
             f"Connection Timeout={self.connection_timeout}",
         ]
-        if self.encrypt is not None:
-            parts.append(f"Encrypt={self.encrypt}")
         return ";".join(parts)
-
-    @staticmethod
-    def _build_ssl_protocol_error_message(message: str, driver_name: str) -> str:
-        return (
-            "SQL Server SSL/TLS 握手失败：服务端很可能只支持较老 TLS 协议，而当前客户端驱动无法协商。"
-            f"当前驱动: {driver_name}。"
-            "如果是 SQL Server 2012，可先在数据源高级参数中设置 Encrypt=no；"
-            "若仍失败，请改用 ODBC Driver 17，或在服务端启用 TLS 1.2。"
-            f"原始错误: {message}"
-        )
 
     def _connect(self):
         import pyodbc
-        driver_name = self._resolve_driver_name(pyodbc)
         try:
-            conn = pyodbc.connect(self._get_conn_string(driver_name), autocommit=True)
+            conn = pyodbc.connect(self._get_conn_string(), autocommit=True)
 
             # Handle sql_variant columns such as sys.configurations.value consistently.
             def handle_sql_variant(value):
@@ -155,16 +81,15 @@ class SQLServerConnector(DBConnector):
             conn.add_output_converter(-16, handle_sql_variant)
             return conn
         except pyodbc.Error as exc:
-            available_drivers = ", ".join(pyodbc.drivers()) or "none"
             message = str(exc)
             lowered = message.lower()
             if "driver manager" in lowered or "data source name not found" in lowered:
+                available_drivers = ", ".join(pyodbc.drivers()) or "none"
+                driver = os.getenv("SQLSERVER_ODBC_DRIVER", "ODBC Driver 18 for SQL Server")
                 raise RuntimeError(
-                    f"SQL Server ODBC 驱动不可用，当前尝试: {driver_name}；已安装驱动: {available_drivers}。"
-                    "请在镜像中安装 msodbcsql17，或通过环境变量 SQLSERVER_ODBC_DRIVER 指定已安装驱动。"
+                    f"SQL Server ODBC 驱动不可用，当前尝试: {driver}；已安装驱动: {available_drivers}。"
+                    "请安装 ODBC Driver 18 for SQL Server，或通过环境变量 SQLSERVER_ODBC_DRIVER 指定已安装驱动。"
                 ) from exc
-            if "ssl provider" in lowered and "unsupported protocol" in lowered:
-                raise RuntimeError(self._build_ssl_protocol_error_message(message, driver_name)) from exc
             raise
 
     async def test_connection(self) -> str:

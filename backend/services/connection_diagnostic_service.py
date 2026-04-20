@@ -314,11 +314,10 @@ class ConnectionDiagnosticService:
             classification["category"] == "ssl_handshake_failed"
             and classification.get("code") == "DB_SSL_HANDSHAKE_FAILED"
         ):
-            probable_causes = ["SQL Server SSL/TLS 握手失败，常见于 SQL Server 2012 仅支持旧 TLS 协议"]
+            probable_causes = ["SQL Server SSL/TLS 握手失败"]
             recommendations = [
-                "在数据源高级参数中设置 Encrypt=no 后重试",
-                "若仍失败，切换到 ODBC Driver 17",
-                "从根因上修复请在 SQL Server/Windows 上启用 TLS 1.2",
+                "当前默认配置已兼容 SQL Server 2012（TrustServerCertificate=yes, Encrypt=no）",
+                "如仍失败，请检查网络或数据库服务端配置",
             ]
         return self._diagnosis(probable_causes, recommendations)
 
