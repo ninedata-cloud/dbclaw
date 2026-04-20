@@ -5,7 +5,7 @@ from typing import List
 import asyncio
 import logging
 
-from backend.database import get_db
+from backend.database import get_db, async_session
 from backend.models.datasource import Datasource
 from backend.models.integration import Integration
 from backend.models.soft_delete import alive_filter, alive_select, get_alive_by_id
@@ -695,7 +695,10 @@ async def diagnose_sql(
     db: AsyncSession = Depends(get_db)
 ):
     """AI 诊断 SQL 性能问题"""
-    from backend.services.ai_service import AIService
+    from backend.services.ai_agent import get_ai_client, request_text_response
+    from backend.models.ai_model import AIModel
+    from backend.routers.ai_models import decrypt_api_key
+    from sqlalchemy import select
 
     sql_text = request.get("sql_text")
     sql_stats = request.get("sql_stats", {})
@@ -758,9 +761,29 @@ async def diagnose_sql(
 
         prompt = "\n".join(prompt_parts)
 
-        # 调用 AI 服务
-        ai_service = AIService()
-        diagnosis_result = await ai_service.diagnose(prompt)
+        # 获取 AI 模型配置
+        result = await db.execute(
+            select(AIModel)
+            .filter(AIModel.is_active == True)
+            .order_by(AIModel.is_default.desc(), AIModel.id.asc())
+        )
+        model = result.scalars().first()
+        if not model:
+            raise HTTPException(status_code=500, detail="未配置可用的 AI 模型")
+
+        ai_client = get_ai_client(
+            api_key=decrypt_api_key(model.api_key_encrypted),
+            base_url=model.base_url,
+            model_name=model.model_name,
+            protocol=getattr(model, "protocol", "openai"),
+        )
+        if not ai_client:
+            raise HTTPException(status_code=500, detail="AI 客户端初始化失败")
+
+        diagnosis_result = await request_text_response(
+            ai_client=ai_client,
+            messages=[{"role": "user", "content": prompt}]
+        )
 
         return {
             "datasource_id": datasource_id,

@@ -50,7 +50,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get update && apt-get install -y --no-install-recommends \
     postgresql-18 \
     postgresql-client-18 \
-    && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 \
+    && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql17 msodbcsql18 \
     && rm -rf /var/lib/apt/lists/*
 
 # 先安装 Python 依赖，提升缓存命中率

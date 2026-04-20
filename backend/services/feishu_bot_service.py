@@ -243,6 +243,9 @@ def _build_reply_event_handler(
 
     async def on_event(event_obj: dict[str, Any]) -> None:
         event_type_local = event_obj.get("type")
+        # 忽略 thinking 相关事件
+        if event_type_local in ("thinking_start", "thinking_phase", "thinking_complete"):
+            return
         if event_type_local == "content":
             state["chunks"].append(event_obj.get("content", ""))
             return
@@ -490,7 +493,7 @@ class FeishuBotService:
         else:
             logger.warning("飞书机器人未配置 APP_ID/APP_SECRET，session_id=%s 无法发送回复", binding.session_id)
 
-        messages, effective_datasource_id, model_id, kb_ids, knowledge_context, skill_authorizations = await prepare_user_turn(
+        messages, effective_datasource_id, effective_host_id, model_id, kb_ids, knowledge_context, skill_authorizations = await prepare_user_turn(
             db,
             session_id=binding.session_id,
             user_id=None,

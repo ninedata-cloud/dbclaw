@@ -296,6 +296,9 @@ class DingTalkBotService:
 
         async def on_event(event_obj: dict[str, Any]) -> None:
             event_type_local = event_obj.get("type")
+            # 忽略 thinking 相关事件
+            if event_type_local in ("thinking_start", "thinking_phase", "thinking_complete"):
+                return
             if event_type_local == "content":
                 chunks.append(event_obj.get("content", ""))
             elif event_type_local == "approval_request":
@@ -390,7 +393,7 @@ class DingTalkBotService:
                 )
                 return {"ok": True, "session_id": binding.session_id, "approval": True}
 
-            messages, effective_datasource_id, model_id, kb_ids, knowledge_context, skill_authorizations = await prepare_user_turn(
+            messages, effective_datasource_id, effective_host_id, model_id, kb_ids, knowledge_context, skill_authorizations = await prepare_user_turn(
                 db,
                 session_id=binding.session_id,
                 user_id=None,
@@ -407,6 +410,9 @@ class DingTalkBotService:
 
             async def on_event(event_obj: dict[str, Any]) -> None:
                 event_type_local = event_obj.get("type")
+                # 忽略 thinking 相关事件
+                if event_type_local in ("thinking_start", "thinking_phase", "thinking_complete"):
+                    return
                 if event_type_local == "content":
                     chunks.append(event_obj.get("content", ""))
                 elif event_type_local == "approval_request":
