@@ -32,6 +32,7 @@ from backend.schemas.instance import (
 )
 from backend.services.db_connector import DBConnector, get_connector
 from backend.utils.encryption import decrypt_value
+from backend.utils.datetime_helper import to_utc_isoformat
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ def _now_utc() -> datetime:
 
 def _json_safe(value: Any) -> Any:
     if isinstance(value, datetime):
-        return value.isoformat()
+        return to_utc_isoformat(value)
     if isinstance(value, (IPv4Address, IPv6Address, IPv4Interface, IPv6Interface, IPv4Network, IPv6Network)):
         return str(value)
     if isinstance(value, dict):

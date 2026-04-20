@@ -12,6 +12,7 @@ from backend.schemas.host import (
 )
 from backend.utils.encryption import encrypt_value, decrypt_value
 from backend.dependencies import get_current_user
+from backend.utils.datetime_helper import to_utc_isoformat
 
 logger = logging.getLogger(__name__)
 
@@ -330,7 +331,7 @@ async def get_host_metrics(
         "host_id": host_id,
         "metrics": [
             {
-                "collected_at": m.collected_at.isoformat(),
+                "collected_at": to_utc_isoformat(m.collected_at),
                 "cpu_usage": m.cpu_usage,
                 "memory_usage": m.memory_usage,
                 "disk_usage": m.disk_usage,

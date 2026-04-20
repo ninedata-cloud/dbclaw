@@ -26,3 +26,17 @@ def format_datetime(dt: datetime, fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
     if dt is None:
         return ""
     return dt.strftime(fmt)
+
+
+def to_utc_isoformat(dt: Optional[datetime]) -> Optional[str]:
+    """Convert naive UTC datetime to ISO format string with 'Z' suffix for JSON serialization.
+
+    Args:
+        dt: Naive datetime assumed to be in UTC
+
+    Returns:
+        ISO format string with 'Z' suffix (e.g., '2026-04-20T12:34:56Z'), or None if dt is None
+    """
+    if dt is None:
+        return None
+    return dt.isoformat() + 'Z'

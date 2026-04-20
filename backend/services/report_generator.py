@@ -98,7 +98,7 @@ class ReportGenerator:
                 system_prompt=system_prompt,
                 db=self.db,
                 model_id=config.ai_model_id if config else None,
-                timeout_seconds=600
+                timeout_seconds=1800
             )
 
             report.status = result.get("status") or "failed"

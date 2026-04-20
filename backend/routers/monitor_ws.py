@@ -11,6 +11,7 @@ from backend.models.soft_delete import alive_filter
 from backend.services.config_service import get_config
 from backend.services.metric_collector import subscribe, unsubscribe
 from backend.services.session_service import SessionService
+from backend.utils.datetime_helper import to_utc_isoformat
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -81,7 +82,7 @@ async def monitor_websocket(websocket: WebSocket, conn_id: int):
                     "type": "db_status",
                     "datasource_id": conn_id,
                     "data": latest_snapshot.data,
-                    "collected_at": latest_snapshot.collected_at.isoformat(),
+                    "collected_at": to_utc_isoformat(latest_snapshot.collected_at),
                 })
                 logger.info(f"Sent latest snapshot to WebSocket client for connection {conn_id}")
     except Exception as e:

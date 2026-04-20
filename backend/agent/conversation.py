@@ -38,9 +38,13 @@ async def run_conversation(
                 model_name=model.model_name,
                 protocol=getattr(model, "protocol", "openai"),
             )
-    # Fallback: use first active model from DB
+    # Fallback: use default model, or first active model by ID
     if not client and db:
-        result = await db.execute(select(AIModel).filter(AIModel.is_active == True))
+        result = await db.execute(
+            select(AIModel)
+            .filter(AIModel.is_active == True)
+            .order_by(AIModel.is_default.desc(), AIModel.id.asc())
+        )
         model = result.scalars().first()
         if model:
             client = get_ai_client(

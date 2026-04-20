@@ -18,6 +18,7 @@ from backend.schemas.host_detail import (
     HostConfigResponse
 )
 from backend.services.ssh_connection_pool import get_ssh_pool
+from backend.utils.datetime_helper import to_utc_isoformat
 from backend.services.host_process_service import HostProcessService
 from backend.services.host_network_service import HostNetworkService
 
@@ -132,7 +133,7 @@ async def get_host_metrics(
     # 转换为前端需要的格式
     return [
         {
-            "collected_at": metric.collected_at.isoformat(),
+            "collected_at": to_utc_isoformat(metric.collected_at),
             "cpu_usage": metric.cpu_usage,
             "memory_usage": metric.memory_usage,
             "disk_usage": metric.disk_usage,

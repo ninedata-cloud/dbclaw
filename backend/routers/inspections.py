@@ -9,6 +9,7 @@ import logging
 
 from backend.database import get_db
 from backend.utils.security import escape_html
+from backend.utils.datetime_helper import now, to_utc_isoformat
 from backend.models.inspection_config import InspectionConfig
 from backend.models.alert_template import AlertTemplate
 from backend.models.inspection_trigger import InspectionTrigger
@@ -86,8 +87,8 @@ async def _build_report_detail_payload(
         "error_message": report.error_message,
         "alert_id": report.alert_id,
         "actions": [],
-        "created_at": report.created_at.isoformat() if report.created_at else None,
-        "completed_at": report.completed_at.isoformat() if report.completed_at else None,
+        "created_at": to_utc_isoformat(report.created_at),
+        "completed_at": to_utc_isoformat(report.completed_at),
         "completed_at_inferred": completed_at_inferred,
         "duration_seconds": duration_seconds,
     }
@@ -592,7 +593,7 @@ async def list_all_reports(
             "title": row.Report.title,
             "trigger_type": row.Report.trigger_type,
             "trigger_reason": row.Report.trigger_reason,
-            "created_at": row.Report.created_at.isoformat() if row.Report.created_at else "",
+            "created_at": to_utc_isoformat(row.Report.created_at) or "",
             "status": row.Report.status,
             "error_message": row.Report.error_message
         }
@@ -626,7 +627,7 @@ async def list_reports(
             title=r.title,
             trigger_type=r.trigger_type,
             trigger_reason=r.trigger_reason,
-            created_at=r.created_at.isoformat() if r.created_at else "",
+            created_at=to_utc_isoformat(r.created_at) or "",
             status=r.status,
             error_message=r.error_message
         )

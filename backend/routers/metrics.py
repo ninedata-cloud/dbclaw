@@ -10,7 +10,7 @@ from backend.models.soft_delete import alive_filter, get_alive_by_id
 from backend.models.inspection_config import InspectionConfig
 from backend.schemas.metrics import MetricResponse
 from backend.dependencies import get_current_user
-from backend.utils.datetime_helper import now, normalize_local_datetime
+from backend.utils.datetime_helper import now, normalize_local_datetime, to_utc_isoformat
 from backend.services import metric_collector
 from backend.services.integration_scheduler import execute_integration
 from backend.services.alert_template_service import resolve_effective_inspection_config
@@ -333,7 +333,7 @@ async def get_batch_dashboard(
                 "datasource_id": snap.datasource_id,
                 "metric_type": snap.metric_type,
                 "data": snap.data,
-                "collected_at": snap.collected_at.isoformat(),
+                "collected_at": to_utc_isoformat(snap.collected_at),
             }
         else:
             metric_data = None
