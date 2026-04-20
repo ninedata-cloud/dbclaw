@@ -13,6 +13,26 @@ const HostDetailPage = {
 
     validTabs: ['info', 'monitor', 'ai', 'processes', 'network', 'terminal'],
 
+    /**
+     * 解析后端返回的 UTC 时间字符串为本地 Date 对象
+     * 后端存储的是 UTC naive datetime，返回时没有时区标识
+     */
+    _parseUTCDateTime(dateInput) {
+        if (dateInput instanceof Date) {
+            return dateInput;
+        }
+        const dateStr = String(dateInput);
+        // 如果字符串不包含时区信息，添加 'Z' 标识为 UTC
+        if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('T')) {
+            // 格式如 "2024-01-01 12:00:00"
+            return new Date(dateStr.replace(' ', 'T') + 'Z');
+        } else if (!dateStr.endsWith('Z') && dateStr.includes('T') && !dateStr.includes('+')) {
+            // 格式如 "2024-01-01T12:00:00"
+            return new Date(dateStr + 'Z');
+        }
+        return new Date(dateStr);
+    },
+
     async render(routeParam = '') {
         this.cleanup();
         this.currentRoute = this._parseRoute(routeParam);
@@ -195,7 +215,7 @@ const HostDetailPage = {
             let statusText = '未知';
             if (metric) {
                 const now = new Date();
-                const metricTime = new Date(metric.collected_at);
+                const metricTime = this._parseUTCDateTime(metric.collected_at);
                 const ageSeconds = (now - metricTime) / 1000;
 
                 if (ageSeconds > 300) {
@@ -520,7 +540,7 @@ const HostDetailPage = {
 
                     <div class="host-config-footer">
                         <i data-lucide="clock"></i>
-                        <span>采集时间: ${new Date(config.collected_at).toLocaleString()}</span>
+                        <span>采集时间: ${this._parseUTCDateTime(config.collected_at).toLocaleString()}</span>
                     </div>
                 </div>
             `;
@@ -607,7 +627,7 @@ const HostDetailPage = {
                     <div class="metric-card">
                         <div class="metric-card-label">运行时间</div>
                         <div class="metric-card-value" style="font-size:16px">${summary.uptime_seconds ? this._formatUptime(summary.uptime_seconds) : '未知'}</div>
-                        <div class="metric-card-meta">最后更新: ${new Date(metric.collected_at).toLocaleTimeString()}</div>
+                        <div class="metric-card-meta">最后更新: ${this._parseUTCDateTime(metric.collected_at).toLocaleTimeString()}</div>
                     </div>
                 </div>
                 ` : ''}
@@ -719,7 +739,7 @@ const HostDetailPage = {
         window.hostMonitorCharts = {};
 
         const labels = metrics.map(m => {
-            const date = new Date(m.collected_at);
+            const date = this._parseUTCDateTime(m.collected_at);
             const now = new Date();
             const isToday = date.toDateString() === now.toDateString();
 

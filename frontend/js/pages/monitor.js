@@ -13,6 +13,26 @@ const MonitorPage = {
     isRealtime: true,
     chartMaxPoints: 240,
 
+    /**
+     * 解析后端返回的 UTC 时间字符串为本地 Date 对象
+     * 后端存储的是 UTC naive datetime，返回时没有时区标识
+     */
+    _parseUTCDateTime(dateInput) {
+        if (dateInput instanceof Date) {
+            return dateInput;
+        }
+        const dateStr = String(dateInput);
+        // 如果字符串不包含时区信息，添加 'Z' 标识为 UTC
+        if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('T')) {
+            // 格式如 "2024-01-01 12:00:00"
+            return new Date(dateStr.replace(' ', 'T') + 'Z');
+        } else if (!dateStr.endsWith('Z') && dateStr.includes('T') && !dateStr.includes('+')) {
+            // 格式如 "2024-01-01T12:00:00"
+            return new Date(dateStr + 'Z');
+        }
+        return new Date(dateStr);
+    },
+
     _getSelectedDatasource() {
         return this.datasourceSelector?.getValue() || Store.get('currentConnection') || null;
     },
@@ -101,7 +121,7 @@ const MonitorPage = {
     },
 
     _formatChartLabel(dateInput) {
-        const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+        const date = this._parseUTCDateTime(dateInput);
         if (Number.isNaN(date.getTime())) return '';
 
         const now = new Date();
@@ -859,11 +879,12 @@ const MonitorPage = {
             }
 
             // Filter metrics to only include those within the selected time range
+            // 注意：后端返回的是 UTC 时间，需要正确解析后再比较
             const now = Date.now();
             const rangeMs = this.currentTimeRange * 60 * 1000;
             const cutoffTime = now - rangeMs;
             const filtered = metrics.filter(m => {
-                const timestamp = new Date(m.collected_at).getTime();
+                const timestamp = this._parseUTCDateTime(m.collected_at).getTime();
                 return timestamp >= cutoffTime;
             });
 
@@ -1040,7 +1061,7 @@ const MonitorPage = {
         for (const m of metrics) {
             const time = this._formatChartLabel(m.collected_at);
             const data = m.data;
-            const timestamp = new Date(m.collected_at).getTime();
+            const timestamp = this._parseUTCDateTime(m.collected_at).getTime();
 
             batchData.labels.push(time);
 
