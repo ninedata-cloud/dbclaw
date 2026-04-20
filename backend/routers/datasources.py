@@ -488,3 +488,287 @@ async def get_datasource_silence_status(
         is_silenced=is_silenced,
         remaining_hours=remaining_hours
     )
+
+
+@router.get("/{datasource_id}/top-sql")
+async def get_datasource_top_sql(
+    datasource_id: int,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db)
+):
+    """获取数据源 TOP SQL 统计信息"""
+    from backend.services.mysql_service import MySQLConnector
+    from backend.services.postgres_service import PostgreSQLConnector
+    from backend.services.sqlserver_service import SQLServerConnector
+    from backend.services.oracle_service import OracleConnector
+    from backend.services.opengauss_service import OpenGaussConnector
+    from backend.services.hana_service import HANAConnector
+    from backend.utils.encryption import decrypt_value
+
+    datasource = await get_alive_by_id(db, Datasource, datasource_id)
+    if not datasource:
+        raise HTTPException(status_code=404, detail="数据源不存在")
+
+    try:
+        password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
+
+        # 根据数据库类型创建服务
+        if datasource.db_type in {"mysql", "tdsql-c-mysql"}:
+            service = MySQLConnector(
+                host=datasource.host,
+                port=datasource.port,
+                username=datasource.username,
+                password=password,
+                database=datasource.database,
+            )
+        elif datasource.db_type == "postgresql":
+            service = PostgreSQLConnector(
+                host=datasource.host,
+                port=datasource.port,
+                username=datasource.username,
+                password=password,
+                database=datasource.database,
+            )
+        elif datasource.db_type == "sqlserver":
+            service = SQLServerConnector(
+                host=datasource.host,
+                port=datasource.port,
+                username=datasource.username,
+                password=password,
+                database=datasource.database,
+                **(datasource.extra_params or {}),
+            )
+        elif datasource.db_type == "oracle":
+            service = OracleConnector(
+                host=datasource.host,
+                port=datasource.port,
+                username=datasource.username,
+                password=password,
+                database=datasource.database,
+            )
+        elif datasource.db_type == "opengauss":
+            service = OpenGaussConnector(
+                host=datasource.host,
+                port=datasource.port,
+                username=datasource.username,
+                password=password,
+                database=datasource.database,
+            )
+        elif datasource.db_type == "hana":
+            service = HANAConnector(
+                host=datasource.host,
+                port=datasource.port,
+                username=datasource.username,
+                password=password,
+                database=datasource.database,
+                **(datasource.extra_params or {}),
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"不支持的数据库类型: {datasource.db_type}")
+
+        # 检查服务是否支持 get_top_sql 方法
+        if not hasattr(service, 'get_top_sql'):
+            raise HTTPException(
+                status_code=400,
+                detail=f"数据库类型 {datasource.db_type} 暂不支持 TOP SQL 功能"
+            )
+
+        top_sql_list = await service.get_top_sql(limit=min(limit, 500))
+        return {
+            "datasource_id": datasource_id,
+            "datasource_name": datasource.name,
+            "db_type": datasource.db_type,
+            "total_count": len(top_sql_list),
+            "data": top_sql_list,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get TOP SQL for datasource {datasource_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"获取 TOP SQL 失败: {str(e)}")
+
+
+@router.post("/{datasource_id}/explain-sql")
+async def explain_sql(
+    datasource_id: int,
+    request: dict,
+    db: AsyncSession = Depends(get_db)
+):
+    """获取 SQL 执行计划"""
+    from backend.services.mysql_service import MySQLConnector
+    from backend.services.postgres_service import PostgreSQLConnector
+    from backend.services.sqlserver_service import SQLServerConnector
+    from backend.services.oracle_service import OracleConnector
+    from backend.services.opengauss_service import OpenGaussConnector
+    from backend.services.hana_service import HANAConnector
+    from backend.utils.encryption import decrypt_value
+
+    sql_text = request.get("sql_text")
+    if not sql_text:
+        raise HTTPException(status_code=400, detail="SQL 文本不能为空")
+
+    datasource = await get_alive_by_id(db, Datasource, datasource_id)
+    if not datasource:
+        raise HTTPException(status_code=404, detail="数据源不存在")
+
+    try:
+        password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
+
+        # 根据数据库类型创建服务
+        if datasource.db_type in {"mysql", "tdsql-c-mysql"}:
+            service = MySQLConnector(
+                host=datasource.host,
+                port=datasource.port,
+                username=datasource.username,
+                password=password,
+                database=datasource.database,
+            )
+        elif datasource.db_type == "postgresql":
+            service = PostgreSQLConnector(
+                host=datasource.host,
+                port=datasource.port,
+                username=datasource.username,
+                password=password,
+                database=datasource.database,
+            )
+        elif datasource.db_type == "sqlserver":
+            service = SQLServerConnector(
+                host=datasource.host,
+                port=datasource.port,
+                username=datasource.username,
+                password=password,
+                database=datasource.database,
+                **(datasource.extra_params or {}),
+            )
+        elif datasource.db_type == "oracle":
+            service = OracleConnector(
+                host=datasource.host,
+                port=datasource.port,
+                username=datasource.username,
+                password=password,
+                database=datasource.database,
+            )
+        elif datasource.db_type == "opengauss":
+            service = OpenGaussConnector(
+                host=datasource.host,
+                port=datasource.port,
+                username=datasource.username,
+                password=password,
+                database=datasource.database,
+            )
+        elif datasource.db_type == "hana":
+            service = HANAConnector(
+                host=datasource.host,
+                port=datasource.port,
+                username=datasource.username,
+                password=password,
+                database=datasource.database,
+                **(datasource.extra_params or {}),
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"不支持的数据库类型: {datasource.db_type}")
+
+        # 检查服务是否支持 explain_sql 方法
+        if not hasattr(service, 'explain_sql'):
+            raise HTTPException(
+                status_code=400,
+                detail=f"数据库类型 {datasource.db_type} 暂不支持执行计划功能"
+            )
+
+        explain_result = await service.explain_sql(sql_text)
+        return {
+            "datasource_id": datasource_id,
+            "sql_text": sql_text,
+            "explain_result": explain_result,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to explain SQL for datasource {datasource_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"获取执行计划失败: {str(e)}")
+
+
+@router.post("/{datasource_id}/diagnose-sql")
+async def diagnose_sql(
+    datasource_id: int,
+    request: dict,
+    db: AsyncSession = Depends(get_db)
+):
+    """AI 诊断 SQL 性能问题"""
+    from backend.services.ai_service import AIService
+
+    sql_text = request.get("sql_text")
+    sql_stats = request.get("sql_stats", {})
+
+    if not sql_text:
+        raise HTTPException(status_code=400, detail="SQL 文本不能为空")
+
+    datasource = await get_alive_by_id(db, Datasource, datasource_id)
+    if not datasource:
+        raise HTTPException(status_code=404, detail="数据源不存在")
+
+    try:
+        # 构建诊断提示词
+        prompt_parts = [
+            "请你作为资深数据库运维专家，针对下面这个 SQL 语句的性能问题做诊断分析。",
+            "",
+            "【分析目标】",
+            "请判断该 SQL 是否存在性能问题、风险等级如何，并给出优化建议。",
+            "",
+            "【实例信息】",
+            f"- 实例名称：{datasource.name}",
+            f"- 数据库类型：{datasource.db_type}",
+            f"- 主机：{datasource.host}:{datasource.port}",
+        ]
+
+        if datasource.database:
+            prompt_parts.append(f"- 数据库：{datasource.database}")
+
+        prompt_parts.extend([
+            "",
+            "【SQL 统计信息】",
+        ])
+
+        if sql_stats:
+            if sql_stats.get("exec_count"):
+                prompt_parts.append(f"- 执行次数：{sql_stats['exec_count']}")
+            if sql_stats.get("total_time_sec"):
+                prompt_parts.append(f"- 总执行时间：{sql_stats['total_time_sec']} 秒")
+            if sql_stats.get("avg_time_sec"):
+                prompt_parts.append(f"- 平均执行时间：{sql_stats['avg_time_sec']} 秒")
+            if sql_stats.get("total_rows_scanned"):
+                prompt_parts.append(f"- 总扫描行数：{sql_stats['total_rows_scanned']}")
+            if sql_stats.get("avg_rows_scanned"):
+                prompt_parts.append(f"- 平均扫描行数：{sql_stats['avg_rows_scanned']}")
+            if sql_stats.get("total_wait_time_sec"):
+                prompt_parts.append(f"- 总等待时间：{sql_stats['total_wait_time_sec']} 秒")
+
+        prompt_parts.extend([
+            "",
+            "【SQL 文本】",
+            sql_text[:3000] if len(sql_text) > 3000 else sql_text,
+            "",
+            "【输出要求】",
+            "1. SQL 性能状态判断（是否存在性能问题）",
+            "2. 主要性能瓶颈或风险点",
+            "3. 可能的根因分析",
+            "4. 具体的优化建议（索引、改写、配置等）",
+            "5. 如果信息不足，请明确指出需要补充哪些信息（如执行计划、表结构等）",
+        ])
+
+        prompt = "\n".join(prompt_parts)
+
+        # 调用 AI 服务
+        ai_service = AIService()
+        diagnosis_result = await ai_service.diagnose(prompt)
+
+        return {
+            "datasource_id": datasource_id,
+            "sql_text": sql_text,
+            "diagnosis": diagnosis_result,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to diagnose SQL for datasource {datasource_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"AI 诊断失败: {str(e)}")

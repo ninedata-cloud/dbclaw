@@ -22,11 +22,17 @@ GLOBAL_SKILL_IDS: Set[str] = {
     "execute_any_sql",
     "fetch_webpage",
     "web_search_bocha",
-    # Confirmed: keep datasource listing available even when scoped.
+    # Platform operations - always available regardless of datasource type
     "list_datasources",
+    "query_system_metadata",
     "query_monitoring_history",
     "query_alert_statistics",
     "manage_alert_settings",
+    "manage_datasource",
+    "manage_host",
+    "manage_skill",
+    "list_hosts",
+    "query_host_metrics",
 }
 
 # OS diagnostics are only useful when a datasource has an associated host.
@@ -204,7 +210,9 @@ async def get_available_skills_as_tools(
 
     registry = SkillRegistry(db)
     skills = await registry.list_skills(is_enabled=True, is_builtin=True)
+    logger.info(f"[SKILL_AUTH] Before filtering: {len(skills)} skills, skill_authorizations={skill_authorizations}")
     skills = filter_skills_by_authorization(skills, skill_authorizations, disabled_tools)
+    logger.info(f"[SKILL_AUTH] After filtering: {len(skills)} skills")
 
     disabled_set = set(disabled_tools) if disabled_tools else set()
 

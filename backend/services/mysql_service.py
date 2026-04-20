@@ -439,5 +439,77 @@ class MySQLConnector(DBConnector):
         finally:
             conn.close()
 
+    async def get_top_sql(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get TOP SQL statistics from performance_schema."""
+        conn = await self._connect()
+        try:
+            async with conn.cursor() as cur:
+                # 检查 performance_schema 是否启用
+                await cur.execute("SHOW VARIABLES LIKE 'performance_schema'")
+                ps_row = await cur.fetchone()
+                if not ps_row or ps_row[1].upper() != 'ON':
+                    return []
+
+                # 从 events_statements_summary_by_digest 获取 SQL 统计
+                await cur.execute(f"""
+                    SELECT
+                        DIGEST_TEXT as sql_text,
+                        DIGEST as sql_id,
+                        COUNT_STAR as exec_count,
+                        ROUND(SUM_TIMER_WAIT / 1000000000000, 6) as total_time_sec,
+                        ROUND(SUM_ROWS_EXAMINED, 0) as total_rows_scanned,
+                        ROUND(SUM_LOCK_TIME / 1000000000000, 6) as total_wait_time_sec,
+                        ROUND(AVG_TIMER_WAIT / 1000000000000, 6) as avg_time_sec,
+                        ROUND(AVG_ROWS_EXAMINED, 2) as avg_rows_scanned,
+                        ROUND(AVG_LOCK_TIME / 1000000000000, 6) as avg_wait_time_sec,
+                        FROM_UNIXTIME(UNIX_TIMESTAMP(LAST_SEEN)) as last_exec_time
+                    FROM performance_schema.events_statements_summary_by_digest
+                    WHERE DIGEST_TEXT IS NOT NULL
+                    ORDER BY SUM_TIMER_WAIT DESC
+                    LIMIT {int(limit)}
+                """)
+                rows = await cur.fetchall()
+                return [
+                    {
+                        "sql_text": r[0],
+                        "sql_id": r[1],
+                        "exec_count": int(r[2] or 0),
+                        "total_time_sec": float(r[3] or 0),
+                        "total_rows_scanned": int(r[4] or 0),
+                        "total_wait_time_sec": float(r[5] or 0),
+                        "avg_time_sec": float(r[6] or 0),
+                        "avg_rows_scanned": float(r[7] or 0),
+                        "avg_wait_time_sec": float(r[8] or 0),
+                        "last_exec_time": str(r[9]) if r[9] else None,
+                    }
+                    for r in rows
+                ]
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Failed to get TOP SQL: {e}")
+            return []
+        finally:
+            conn.close()
+
+    async def explain_sql(self, sql_text: str) -> List[Dict[str, Any]]:
+        """Get execution plan for SQL statement."""
+        conn = await self._connect()
+        try:
+            async with conn.cursor() as cur:
+                # 使用 EXPLAIN FORMAT=JSON 获取详细执行计划
+                await cur.execute(f"EXPLAIN FORMAT=JSON {sql_text}")
+                row = await cur.fetchone()
+                if row and row[0]:
+                    import json
+                    explain_json = json.loads(row[0])
+                    return {"format": "json", "plan": explain_json}
+                return {"format": "json", "plan": {}}
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to explain SQL: {e}")
+            raise
+        finally:
+            conn.close()
+
 
 import aiomysql

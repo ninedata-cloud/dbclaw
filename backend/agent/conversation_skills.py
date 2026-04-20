@@ -610,6 +610,8 @@ async def run_conversation_with_skills(
         skill_authorizations,
         disabled_tools,
     )
+    logger.info(f"[SKILL_AUTH] Input skill_authorizations: {skill_authorizations}")
+    logger.info(f"[SKILL_AUTH] Normalized skill_authorizations: {normalized_skill_authorizations}")
     knowledge_retrieval_enabled = any(
         is_static_tool_authorized(tool_name, normalized_skill_authorizations)
         for tool_name in KB_TOOL_NAMES
@@ -831,6 +833,8 @@ async def run_conversation_with_skills(
         datasource_db_type=datasource_db_type,
         host_configured=host_configured_for_tools,
     )
+    logger.info(f"[SKILL_AUTH] Active tools count: {len(active_tools)}")
+    logger.info(f"[SKILL_AUTH] Active tool names: {[t.get('function', {}).get('name') for t in active_tools[:10]]}")
     static_kb_tools = [
         tool
         for tool in get_filtered_tools(

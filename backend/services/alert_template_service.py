@@ -175,7 +175,7 @@ DEFAULT_ALERT_TEMPLATES: list[dict[str, Any]] = [
                 "cpu_usage": {
                     "levels": [
                         {"severity": "medium", "threshold": 70, "duration": 60},
-                        {"severity": "high", "threshold": 70, "duration": 180},
+                        {"severity": "high", "threshold": 75, "duration": 60},
                         {"severity": "critical", "threshold": 80, "duration": 60},
                     ]
                 },

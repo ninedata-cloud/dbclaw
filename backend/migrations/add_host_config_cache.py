@@ -12,12 +12,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from sqlalchemy import text
-from backend.database import engine
+from backend.database import async_engine
 
 
 async def migrate():
     """添加主机配置缓存字段"""
-    async with engine.begin() as conn:
+    async with async_engine.begin() as conn:
         # 添加 config_data 字段
         await conn.execute(text("""
             ALTER TABLE hosts

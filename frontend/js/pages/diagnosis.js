@@ -420,7 +420,8 @@ const DiagnosisPage = {
         try {
             this.skillAuthorizationCatalog = await API.getChatSkillAuthorizations();
         } catch (e) { /* ignore */ }
-        this.skillAuthorizations = this._normalizeSkillAuthorizations(this.skillAuthorizations);
+        // 每次渲染时重置为默认值，确保平台操作和高权限操作默认不授权
+        this.skillAuthorizations = this._normalizeSkillAuthorizations(null);
 
         // Header with connection, model and tool safety toggle
         const isCompactEmbedded = Boolean(options.embedded && options.compactEmbeddedToolbar);
@@ -759,7 +760,7 @@ const DiagnosisPage = {
             width: 'min(1120px, 94vw)',
             content: `
                 <p style="margin-bottom:12px;font-size:12px;color:var(--text-secondary);line-height:1.6;">
-                    控制 AI 在诊断过程中是否允许调用特定分类下的 skill。修改后的授权仅对新建会话生效，已存在会话会继续使用它创建时保存的授权配置。
+                    控制 AI 在诊断过程中是否允许调用特定分类下的 skill。修改后立即对当前会话生效，但刷新页面或切换会话后将恢复默认配置。
                 </p>
                 <div id="skill-authorization-list">
                     ${groups.map(group => renderGroup(group)).join('')}
@@ -791,7 +792,7 @@ const DiagnosisPage = {
         });
         this.skillAuthorizations = nextAuthorizations;
         Modal.hide();
-        Toast.success('Skill 授权已更新，新建会话将使用当前授权配置。');
+        Toast.success('Skill 授权已更新，当前会话立即生效。刷新页面或切换会话后将恢复默认配置。');
     },
 
     async _loadSessions() {
@@ -934,7 +935,7 @@ const DiagnosisPage = {
                 host_id: this._renderOptions?.fixedHostId || null,
                 title: this._renderOptions?.initialSessionTitle || '新建会话',
                 ai_model_id: this.selectedModelId,
-                skill_authorizations: this._normalizeSkillAuthorizations(this.skillAuthorizations)
+                skill_authorizations: null  // 不保存授权配置到数据库
             });
             this.currentSessionId = session.id;
             if (reloadList && !this._renderOptions?.hideSessionSidebar) {
@@ -960,7 +961,7 @@ const DiagnosisPage = {
         };
     },
 
-    _restoreSessionContext(sessionId) {
+    _restoreSessionContext(sessionId, preserveSkillAuthorizations = false) {
         const sessions = Store.get('chatSessions') || [];
         const session = sessions.find(s => s.id === sessionId);
         if (!session) return;
@@ -988,17 +989,18 @@ const DiagnosisPage = {
             this._modelSelectEl.value = this.selectedModelId != null ? String(this.selectedModelId) : '';
         }
 
-        // 恢复 Skill 授权
-        this.skillAuthorizations = this._normalizeSkillAuthorizations(
-            session.skill_authorizations,
-            session.disabled_tools || []
-        );
+        // 只在真正切换会话时重置 Skill 授权
+        if (!preserveSkillAuthorizations) {
+            this.skillAuthorizations = this._normalizeSkillAuthorizations(null);
+        }
     },
 
     async _switchSession(sessionId) {
+        const isActuallySwitching = this.currentSessionId !== sessionId;
         this.currentSessionId = sessionId;
         this._pendingResumeState = null;
-        this._restoreSessionContext(sessionId);
+        // 只在真正切换会话时重置授权配置为默认值
+        this._restoreSessionContext(sessionId, !isActuallySwitching);
         this._connectWebSocket(sessionId);
         ChatWidget.resetScrollState();
         ChatWidget.loadMessages([]);
@@ -1156,7 +1158,8 @@ const DiagnosisPage = {
             datasource_id: conn?.id || null,
             host_id: this._renderOptions?.fixedHostId || null,
             model_id: this.selectedModelId,
-            attachments: resolvedAttachments
+            attachments: resolvedAttachments,
+            skill_authorizations: this._normalizeSkillAuthorizations(this.skillAuthorizations)
         });
     },
 

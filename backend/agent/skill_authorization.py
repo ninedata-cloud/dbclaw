@@ -14,14 +14,14 @@ SKILL_AUTHORIZATION_GROUPS: list[dict[str, Any]] = [
         "label": "平台操作",
         "description": "允许 AI 调用平台操作类 skill，例如数据源管理、主机管理、技能管理、告警配置等。",
         "warning_level": "medium",
-        "categories": {"平台操作"},
+        "categories": {"平台操作", "system"},
     },
     {
         "id": GROUP_HIGH_PRIVILEGE_OPERATIONS,
         "label": "高权限操作",
         "description": "允许 AI 调用高危变更类 skill，例如任意 SQL、任意 OS 命令等。",
         "warning_level": "high",
-        "categories": {"高权限操作"},
+        "categories": {"高权限操作", "admin"},
     },
     {
         "id": GROUP_KNOWLEDGE_RETRIEVAL,
@@ -73,6 +73,10 @@ STATIC_TOOL_GROUP_MAP = {
 LEGACY_DISABLED_TOOL_GROUP_MAP = {
     "manage_alert_settings": GROUP_PLATFORM_OPERATIONS,
     "list_datasources": GROUP_PLATFORM_OPERATIONS,
+    "manage_datasource": GROUP_PLATFORM_OPERATIONS,
+    "manage_host": GROUP_PLATFORM_OPERATIONS,
+    "manage_skill": GROUP_PLATFORM_OPERATIONS,
+    "query_system_metadata": GROUP_PLATFORM_OPERATIONS,
     "query_monitoring_history": GROUP_PLATFORM_OPERATIONS,
     "query_alert_statistics": GROUP_PLATFORM_OPERATIONS,
     "execute_any_sql": GROUP_HIGH_PRIVILEGE_OPERATIONS,
@@ -131,11 +135,15 @@ def filter_skills_by_authorization(
     legacy_disabled_tools: Iterable[str] | None = None,
 ) -> list[Any]:
     normalized = normalize_skill_authorizations(authorizations, legacy_disabled_tools)
-    return [
-        skill
-        for skill in skills
-        if is_skill_authorized(skill, normalized)
-    ]
+    result = []
+    for skill in skills:
+        group_id = get_group_id_for_skill(skill)
+        if not group_id:
+            result.append(skill)
+            continue
+        if normalized.get(group_id, True):
+            result.append(skill)
+    return result
 
 
 def is_static_tool_authorized(

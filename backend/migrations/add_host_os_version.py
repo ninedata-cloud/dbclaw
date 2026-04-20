@@ -10,13 +10,13 @@ import asyncio
 import logging
 from sqlalchemy import text
 
-from backend.database import engine
+from backend.database import async_engine
 
 logger = logging.getLogger(__name__)
 
 
 async def migrate():
-    async with engine.begin() as conn:
+    async with async_engine.begin() as conn:
         # 检查字段是否已存在
         result = await conn.execute(text(
             "SELECT column_name FROM information_schema.columns "

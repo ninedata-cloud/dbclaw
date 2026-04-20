@@ -477,6 +477,7 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
             payload_host_id = data.get("host_id")
             model_id = data.get("model_id")
             attachments = data.get("attachments", [])  # List of attachment IDs
+            payload_skill_authorizations = data.get("skill_authorizations")  # Skill authorizations from frontend
 
             if not user_message and not attachments:
                 continue
@@ -501,6 +502,7 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
                 ds_id=payload_datasource_id,
                 h_id=payload_host_id,
                 m_id=model_id,
+                skill_auths=payload_skill_authorizations,
             ):
                 _start_stream_state(sid)
                 try:
@@ -514,6 +516,7 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
                             payload_datasource_id=ds_id,
                             payload_host_id=h_id,
                             model_id=m_id,
+                            payload_skill_authorizations=skill_auths,
                         )
 
                         await process_stream_events(

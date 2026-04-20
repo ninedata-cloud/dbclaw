@@ -168,6 +168,15 @@ const API = {
     terminateInstanceSession(datasourceId, sessionId) {
         return this.post(`/api/instances/${datasourceId}/sessions/${encodeURIComponent(sessionId)}/terminate`, {});
     },
+    getInstanceTopSql(datasourceId, limit = 100) {
+        return this.get(`/api/datasources/${datasourceId}/top-sql?limit=${limit}`);
+    },
+    explainSql(datasourceId, sqlText) {
+        return this.post(`/api/datasources/${datasourceId}/explain-sql`, { sql_text: sqlText });
+    },
+    diagnoseSql(datasourceId, sqlText, sqlStats = {}) {
+        return this.post(`/api/datasources/${datasourceId}/diagnose-sql`, { sql_text: sqlText, sql_stats: sqlStats });
+    },
 
     // Chat endpoints
     getChatSessions(params = null) {

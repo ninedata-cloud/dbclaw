@@ -122,6 +122,9 @@ POST_CREATE_MIGRATIONS = (
         "remove_datasource_monitoring_intervals",
         "backend.migrations.remove_datasource_monitoring_intervals",
     ),
+    MigrationSpec("add_ssh_agent_auth", "backend.migrations.add_ssh_agent_auth"),
+    MigrationSpec("add_host_os_version", "backend.migrations.add_host_os_version"),
+    MigrationSpec("add_host_config_cache", "backend.migrations.add_host_config_cache"),
 )
 
 

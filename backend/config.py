@@ -5,9 +5,9 @@ from urllib.parse import quote
 
 class Settings(BaseSettings):
     app_name: str = "DBClaw"
-    app_version: str = "1.0.0"
+    app_version: str = "0.9.5"
     build_commit: str = ""
-    build_time: str = "2026-04-15"
+    build_time: str = "2026-04-20"
     app_host: str = "0.0.0.0"
     app_port: int = 9939
     debug: bool = True
@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     log_file_backup_count: int = 10
 
     encryption_key: str = "temporary-encryption-key"
+    # Legacy encryption keys for decryption only (comma-separated)
+    legacy_encryption_keys: str = ""
     initial_admin_password: str = "admin1234"
 
     database_url: str = "postgresql+asyncpg://dbclaw:dbclaw@localhost:5432/dbclaw"

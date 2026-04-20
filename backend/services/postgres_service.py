@@ -344,3 +344,50 @@ class PostgreSQLConnector(DBConnector):
             return [dict(r) for r in rows]
         finally:
             await conn.close()
+
+    async def get_top_sql(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get TOP SQL statistics from pg_stat_statements."""
+        conn = await self._connect()
+        try:
+            try:
+                rows = await conn.fetch(f"""
+                    SELECT
+                        query as sql_text,
+                        queryid::text as sql_id,
+                        calls as exec_count,
+                        ROUND(total_exec_time / 1000, 6) as total_time_sec,
+                        rows as total_rows_scanned,
+                        ROUND((blk_read_time + blk_write_time) / 1000, 6) as total_wait_time_sec,
+                        ROUND(mean_exec_time / 1000, 6) as avg_time_sec,
+                        ROUND(rows::numeric / GREATEST(calls, 1), 2) as avg_rows_scanned,
+                        ROUND((blk_read_time + blk_write_time) / GREATEST(calls, 1) / 1000, 6) as avg_wait_time_sec,
+                        NULL as last_exec_time
+                    FROM pg_stat_statements
+                    WHERE query IS NOT NULL
+                    ORDER BY total_exec_time DESC
+                    LIMIT {int(limit)}
+                """)
+                return [dict(r) for r in rows]
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"pg_stat_statements not available: {e}")
+                return []
+        finally:
+            await conn.close()
+
+    async def explain_sql(self, sql_text: str) -> Dict[str, Any]:
+        """Get execution plan for SQL statement."""
+        conn = await self._connect()
+        try:
+            rows = await conn.fetch(f"EXPLAIN (FORMAT JSON, ANALYZE FALSE) {sql_text}")
+            if rows and len(rows) > 0:
+                import json
+                explain_json = json.loads(rows[0][0])
+                return {"format": "json", "plan": explain_json}
+            return {"format": "json", "plan": {}}
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to explain SQL: {e}")
+            raise
+        finally:
+            await conn.close()

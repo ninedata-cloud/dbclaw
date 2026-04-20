@@ -1269,6 +1269,7 @@ async def prepare_user_turn(
     payload_host_id: int | None = None,
     model_id: int | None = None,
     history_window_hours: int | None = None,
+    payload_skill_authorizations: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], int | None, int | None, int | None, Any, Any, Any]:
     attachments = attachments or []
     effective_datasource_id = payload_datasource_id
@@ -1344,10 +1345,23 @@ async def prepare_user_turn(
                 knowledge_context["host_context"] = host_context
 
         session.knowledge_snapshot = knowledge_context
-        skill_authorizations = normalize_skill_authorizations(
-            getattr(session, "skill_authorizations", None),
-            getattr(session, "disabled_tools", None),
-        )
+        # 优先使用 payload 中的授权配置，如果没有则从会话中读取
+        if payload_skill_authorizations is not None:
+            print(f"[DEBUG] Using payload_skill_authorizations: {payload_skill_authorizations}")
+            logger.info(f"Using payload_skill_authorizations: {payload_skill_authorizations}")
+            skill_authorizations = normalize_skill_authorizations(
+                payload_skill_authorizations,
+                getattr(session, "disabled_tools", None),
+            )
+        else:
+            print(f"[DEBUG] Using session skill_authorizations: {getattr(session, 'skill_authorizations', None)}")
+            logger.info(f"Using session skill_authorizations: {getattr(session, 'skill_authorizations', None)}")
+            skill_authorizations = normalize_skill_authorizations(
+                getattr(session, "skill_authorizations", None),
+                getattr(session, "disabled_tools", None),
+            )
+        print(f"[DEBUG] Final normalized skill_authorizations: {skill_authorizations}")
+        logger.info(f"Final normalized skill_authorizations: {skill_authorizations}")
 
     await db.commit()
 
