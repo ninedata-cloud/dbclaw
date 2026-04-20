@@ -2,7 +2,7 @@ id: list_datasources
 name: List Datasources
 version: 1.0.0
 author: DBClaw
-category: system
+category: query
 description: List all configured database datasources
 tags: [datasources, configuration]
 
