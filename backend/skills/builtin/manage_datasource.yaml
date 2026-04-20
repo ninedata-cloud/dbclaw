@@ -58,6 +58,39 @@ parameters:
     type: object
     required: false
     description: Extra connection parameters as JSON object (optional for create/update)
+  - name: tags
+    type: array
+    required: false
+    description: Tags for categorization (optional for create/update)
+  - name: remark
+    type: string
+    required: false
+    description: Remark to help AI understand datasource context (optional for create/update)
+  - name: metric_source
+    type: string
+    required: false
+    description: Metric source type (optional for create/update)
+    enum: [system, integration]
+  - name: external_instance_id
+    type: string
+    required: false
+    description: External system instance ID (optional for create/update)
+  - name: inbound_source
+    type: object
+    required: false
+    description: Integration binding and parameters (optional for create/update)
+  - name: silence_until
+    type: string
+    required: false
+    description: Silence until datetime in ISO format (optional for create/update)
+  - name: silence_reason
+    type: string
+    required: false
+    description: Reason for silencing (optional for create/update)
+  - name: is_active
+    type: boolean
+    required: false
+    description: Whether datasource is active (optional for create/update)
 
 permissions:
   - execute_command
@@ -91,8 +124,18 @@ code: |
                       "username": ds.username,
                       "database": ds.database,
                       "host_id": ds.host_id,
-                      "importance_level": ds.importance_level,
+                      "tags": ds.tags,
                       "is_active": ds.is_active,
+                      "importance_level": ds.importance_level,
+                      "remark": ds.remark,
+                      "metric_source": ds.metric_source,
+                      "external_instance_id": ds.external_instance_id,
+                      "silence_until": ds.silence_until.isoformat() if ds.silence_until else None,
+                      "silence_reason": ds.silence_reason,
+                      "db_version": ds.db_version,
+                      "connection_status": ds.connection_status,
+                      "connection_error": ds.connection_error,
+                      "connection_checked_at": ds.connection_checked_at.isoformat() if ds.connection_checked_at else None,
                       "created_at": ds.created_at.isoformat() if ds.created_at else None,
                       "updated_at": ds.updated_at.isoformat() if ds.updated_at else None
                   }
@@ -124,9 +167,20 @@ code: |
                   "username": datasource.username,
                   "database": datasource.database,
                   "host_id": datasource.host_id,
-                  "importance_level": datasource.importance_level,
-                  "extra_params": datasource.extra_params,
+                  "tags": datasource.tags,
                   "is_active": datasource.is_active,
+                  "importance_level": datasource.importance_level,
+                  "remark": datasource.remark,
+                  "metric_source": datasource.metric_source,
+                  "external_instance_id": datasource.external_instance_id,
+                  "inbound_source": datasource.inbound_source,
+                  "silence_until": datasource.silence_until.isoformat() if datasource.silence_until else None,
+                  "silence_reason": datasource.silence_reason,
+                  "db_version": datasource.db_version,
+                  "connection_status": datasource.connection_status,
+                  "connection_error": datasource.connection_error,
+                  "connection_checked_at": datasource.connection_checked_at.isoformat() if datasource.connection_checked_at else None,
+                  "extra_params": datasource.extra_params,
                   "created_at": datasource.created_at.isoformat() if datasource.created_at else None,
                   "updated_at": datasource.updated_at.isoformat() if datasource.updated_at else None
               }
@@ -148,7 +202,15 @@ code: |
               password_encrypted=encrypt_value(params['password']) if params.get('password') else None,
               database=params.get('database'),
               host_id=params.get('host_id'),
+              tags=params.get('tags', []),
+              is_active=params.get('is_active', True),
               importance_level=params.get('importance_level', 'production'),
+              remark=params.get('remark'),
+              metric_source=params.get('metric_source', 'system'),
+              external_instance_id=params.get('external_instance_id'),
+              inbound_source=params.get('inbound_source'),
+              silence_until=params.get('silence_until'),
+              silence_reason=params.get('silence_reason'),
               extra_params=params.get('extra_params')
           )
           
@@ -198,8 +260,24 @@ code: |
               datasource.database = params['database']
           if 'host_id' in params:
               datasource.host_id = params['host_id']
+          if 'tags' in params:
+              datasource.tags = params['tags']
+          if 'is_active' in params:
+              datasource.is_active = params['is_active']
           if 'importance_level' in params:
               datasource.importance_level = params['importance_level']
+          if 'remark' in params:
+              datasource.remark = params['remark']
+          if 'metric_source' in params:
+              datasource.metric_source = params['metric_source']
+          if 'external_instance_id' in params:
+              datasource.external_instance_id = params['external_instance_id']
+          if 'inbound_source' in params:
+              datasource.inbound_source = params['inbound_source']
+          if 'silence_until' in params:
+              datasource.silence_until = params['silence_until']
+          if 'silence_reason' in params:
+              datasource.silence_reason = params['silence_reason']
           if 'extra_params' in params:
               datasource.extra_params = params['extra_params']
           
