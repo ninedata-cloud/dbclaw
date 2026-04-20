@@ -185,7 +185,11 @@ def _format_short_text(text: str) -> str:
 
 
 def format_reply_text(text: str) -> str:
-    normalized = _normalize_markdown_text(text)
+    # 先过滤 thinking 标签内容
+    filtered = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    filtered = re.sub(r'&lt;think&gt;.*?&lt;/think&gt;', '', filtered, flags=re.DOTALL | re.IGNORECASE)
+
+    normalized = _normalize_markdown_text(filtered)
     if not normalized:
         return ""
     return _format_short_text(normalized)
