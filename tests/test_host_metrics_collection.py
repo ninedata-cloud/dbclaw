@@ -51,12 +51,18 @@ async def test_metrics_collection():
                 print(f"内存使用率: {metrics.get('memory_usage', 'N/A')}%")
                 print(f"磁盘使用率: {metrics.get('disk_usage', 'N/A')}%")
 
-                # 磁盘 IO 指标
-                print("\n💾 磁盘 IO 指标:")
-                print(f"  读 IOPS: {metrics.get('disk_read_iops', 'N/A')}")
-                print(f"  写 IOPS: {metrics.get('disk_write_iops', 'N/A')}")
-                print(f"  读取速率: {metrics.get('disk_read_kb_per_sec', 'N/A')} KB/s")
-                print(f"  写入速率: {metrics.get('disk_write_kb_per_sec', 'N/A')} KB/s")
+                # 磁盘 IO 指标（原始累计值）
+                print("\n💾 磁盘 IO 指标（累计值）:")
+                print(f"  读操作总数: {metrics.get('disk_reads_total', 'N/A')}")
+                print(f"  写操作总数: {metrics.get('disk_writes_total', 'N/A')}")
+                print(f"  读取扇区总数: {metrics.get('disk_read_sectors_total', 'N/A')}")
+                print(f"  写入扇区总数: {metrics.get('disk_write_sectors_total', 'N/A')}")
+                if metrics.get('disk_read_sectors_total'):
+                    read_kb = metrics['disk_read_sectors_total'] * 512 / 1024
+                    print(f"  读取总量: {read_kb:.2f} KB")
+                if metrics.get('disk_write_sectors_total'):
+                    write_kb = metrics['disk_write_sectors_total'] * 512 / 1024
+                    print(f"  写入总量: {write_kb:.2f} KB")
 
                 # 网络 IO 指标
                 print("\n🌐 网络 IO 指标:")

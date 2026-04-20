@@ -224,43 +224,41 @@ class OSMetricsCollector:
         return None
 
     @staticmethod
-    async def _get_linux_disk_io(ssh_client) -> Dict[str, float]:
-        """获取磁盘 IO 统计（IOPS 和流量）"""
-        try:
-            # 使用 iostat 获取详细的磁盘 IO 指标
-            # r/s: 每秒读操作数, w/s: 每秒写操作数
-            # rkB/s: 每秒读取 KB, wkB/s: 每秒写入 KB
-            output = await OSMetricsCollector._exec(
-                ssh_client,
-                "iostat -dx 1 2 | awk '/^[a-z]/ && NR>3 {r+=$4; w+=$5; rkb+=$6; wkb+=$7} END {print r, w, rkb, wkb}'"
-            )
-            if output:
-                parts = output.split()
-                if len(parts) == 4:
-                    return {
-                        'disk_read_iops': round(float(parts[0]), 2),
-                        'disk_write_iops': round(float(parts[1]), 2),
-                        'disk_read_kb_per_sec': round(float(parts[2]), 2),
-                        'disk_write_kb_per_sec': round(float(parts[3]), 2)
-                    }
-        except Exception:
-            pass
+    async def _get_linux_disk_io(ssh_client) -> Dict[str, Any]:
+        """获取磁盘 IO 原始累计值（从 /proc/diskstats）
 
-        # 备用方法：从 /proc/diskstats 读取
+        返回系统启动以来的累计值，由调用方根据时间差计算速率。
+        支持常见磁盘设备：sd*, vd*, xvd*, nvme*, hd*, mmcblk*
+        只统计整盘，排除分区（如 sda1, nvme0n1p1）
+        """
         try:
             output = await OSMetricsCollector._exec(
                 ssh_client,
-                "cat /proc/diskstats | awk '{if($3 ~ /^[sv]d[a-z]$/ || $3 ~ /^nvme[0-9]+n[0-9]+$/) {reads+=$4; writes+=$8; read_sectors+=$6; write_sectors+=$10}} END {print reads, writes, read_sectors*512/1024, write_sectors*512/1024}'"
+                # 匹配整盘设备，排除分区：
+                # - sd[a-z]$, vd[a-z]$, xvd[a-z]$, hd[a-z]$ (SCSI/virtio/Xen/IDE 整盘)
+                # - nvme[0-9]+n[0-9]+$ (NVMe 整盘)
+                # - mmcblk[0-9]+$ (eMMC/SD 整盘)
+                "cat /proc/diskstats | awk '{"
+                "  dev=$3;"
+                "  if (dev ~ /^(sd|vd|xvd|hd)[a-z]$/ || dev ~ /^nvme[0-9]+n[0-9]+$/ || dev ~ /^mmcblk[0-9]+$/) {"
+                "    reads+=$4; writes+=$8; read_sectors+=$6; write_sectors+=$10"
+                "  }"
+                "} END {print reads, writes, read_sectors, write_sectors}'"
             )
-            if output:
-                parts = output.split()
-                if len(parts) == 4:
-                    return {
-                        'disk_read_iops': round(float(parts[0]), 2),
-                        'disk_write_iops': round(float(parts[1]), 2),
-                        'disk_read_kb_per_sec': round(float(parts[2]), 2),
-                        'disk_write_kb_per_sec': round(float(parts[3]), 2)
-                    }
+
+            if not output or not output.strip():
+                return {}
+
+            parts = output.split()
+            if len(parts) != 4:
+                return {}
+
+            return {
+                'disk_reads_total': int(parts[0]),
+                'disk_writes_total': int(parts[1]),
+                'disk_read_sectors_total': int(parts[2]),
+                'disk_write_sectors_total': int(parts[3])
+            }
         except Exception:
             pass
 

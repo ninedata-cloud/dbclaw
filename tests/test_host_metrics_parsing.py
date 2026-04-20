@@ -29,8 +29,8 @@ SwapFree:        1024000 kB""",
             # 磁盘使用率
             "df -h / | awk 'NR==2 {print $5}' | sed 's/%//'": "45",
 
-            # 磁盘 IO (iostat)
-            "iostat -dx 1 2 | awk '/^[a-z]/ && NR>3 {r+=$4; w+=$5; rkb+=$6; wkb+=$7} END {print r, w, rkb, wkb}'": "150.5 80.2 2048.5 1024.3",
+            # 磁盘 IO (/proc/diskstats - 第一次采样)
+            "cat /proc/diskstats | awk '{if($3 ~ /^(sd|vd|xvd|hd)[a-z]$/ || $3 ~ /^nvme[0-9]+n[0-9]+$/ || $3 ~ /^mmcblk[0-9]+$/) {reads+=$4; writes+=$8; read_sectors+=$6; write_sectors+=$10}} END {print reads, writes, read_sectors, write_sectors}'": "1000000 500000 20480000 10240000",
 
             # 网络 IO (第一次采样)
             "cat /proc/net/dev | awk 'NR>2 && $1 !~ /^lo:/ {rx+=$2; tx+=$10} END {print rx, tx}'": "1000000000 500000000",
@@ -48,8 +48,18 @@ SwapFree:        1024000 kB""",
 
     def exec_command(self, command, timeout=15):
         """模拟执行命令"""
+        # 磁盘 IO 需要两次采样，第二次返回增加的值
+        if "cat /proc/diskstats" in command:
+            count = self.call_count.get(command, 0)
+            self.call_count[command] = count + 1
+            if count == 0:
+                # 第一次采样
+                output = "1000000 500000 20480000 10240000"
+            else:
+                # 1秒后：读增加150次，写增加80次，读扇区增加4000个(2MB)，写扇区增加2000个(1MB)
+                output = "1000150 500080 20484000 10242000"
         # 网络 IO 需要两次采样，第二次返回增加的值
-        if "cat /proc/net/dev" in command:
+        elif "cat /proc/net/dev" in command:
             count = self.call_count.get(command, 0)
             self.call_count[command] = count + 1
             if count == 0:
@@ -90,12 +100,12 @@ async def test_metrics_parsing():
     print(f"✓ 内存使用率: {metrics.get('memory_usage', 'N/A')}%")
     print(f"✓ 磁盘使用率: {metrics.get('disk_usage', 'N/A')}%")
 
-    # 磁盘 IO 指标
-    print("\n💾 磁盘 IO 指标:")
-    print(f"  ✓ 读 IOPS: {metrics.get('disk_read_iops', 'N/A')}")
-    print(f"  ✓ 写 IOPS: {metrics.get('disk_write_iops', 'N/A')}")
-    print(f"  ✓ 读取速率: {metrics.get('disk_read_kb_per_sec', 'N/A')} KB/s")
-    print(f"  ✓ 写入速率: {metrics.get('disk_write_kb_per_sec', 'N/A')} KB/s")
+    # 磁盘 IO 指标（原始累计值）
+    print("\n💾 磁盘 IO 指标（累计值）:")
+    print(f"  ✓ 读操作总数: {metrics.get('disk_reads_total', 'N/A')}")
+    print(f"  ✓ 写操作总数: {metrics.get('disk_writes_total', 'N/A')}")
+    print(f"  ✓ 读取扇区总数: {metrics.get('disk_read_sectors_total', 'N/A')}")
+    print(f"  ✓ 写入扇区总数: {metrics.get('disk_write_sectors_total', 'N/A')}")
 
     # 网络 IO 指标
     print("\n🌐 网络 IO 指标:")
@@ -127,10 +137,10 @@ async def test_metrics_parsing():
         ("CPU 使用率", metrics.get('cpu_usage') == 25.5),
         ("内存使用率", metrics.get('memory_usage') is not None),
         ("磁盘使用率", metrics.get('disk_usage') == 45.0),
-        ("磁盘读 IOPS", metrics.get('disk_read_iops') == 150.5),
-        ("磁盘写 IOPS", metrics.get('disk_write_iops') == 80.2),
-        ("磁盘读速率", metrics.get('disk_read_kb_per_sec') == 2048.5),
-        ("磁盘写速率", metrics.get('disk_write_kb_per_sec') == 1024.3),
+        ("磁盘读操作总数", metrics.get('disk_reads_total') == 1000150),
+        ("磁盘写操作总数", metrics.get('disk_writes_total') == 500080),
+        ("磁盘读扇区总数", metrics.get('disk_read_sectors_total') == 20484000),
+        ("磁盘写扇区总数", metrics.get('disk_write_sectors_total') == 10242000),
         ("网络接收速率", metrics.get('network_rx_kb_per_sec') == 1024.0),
         ("网络发送速率", metrics.get('network_tx_kb_per_sec') == 512.0),
         ("负载 1分钟", metrics.get('load_avg_1min') == 1.5),
