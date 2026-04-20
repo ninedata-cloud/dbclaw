@@ -30,7 +30,7 @@ const InstanceDetailPage = {
     collapsedInstanceGroups: {},
     sessionAiDialogCleanup: null,
 
-    validTabs: ['config', 'monitor', 'traffic', 'sessions', 'ai', 'sqlConsole', 'alerts', 'inspections', 'parameters'],
+    validTabs: ['config', 'monitor', 'traffic', 'sessions', 'ai', 'sqlConsole', 'alerts', 'inspections', 'parameters', 'topSql'],
 
     async render(routeParam = '') {
         this._rememberInstanceListScroll();
@@ -509,6 +509,7 @@ const InstanceDetailPage = {
             { id: 'sessions', label: '实时会话' },
             { id: 'ai', label: 'AI 对话诊断' },
             { id: 'sqlConsole', label: 'SQL 窗口' },
+            { id: 'topSql', label: 'TOP SQL' },
             { id: 'alerts', label: '告警管理' },
             { id: 'inspections', label: '巡检管理' },
             { id: 'parameters', label: '实例参数配置' },
@@ -632,6 +633,12 @@ const InstanceDetailPage = {
                 initialReportId: this.currentRoute.report ? parseInt(this.currentRoute.report, 10) : null,
             });
             this.currentRoute.report = null;
+            return;
+        }
+
+        if (this.currentTab === 'topSql') {
+            await this._renderTopSqlTab(container, datasourceId);
+            return;
         }
     },
 
@@ -1606,5 +1613,505 @@ const InstanceDetailPage = {
 
     _escapeAttr(value) {
         return this._escapeHtml(value).replace(/"/g, '&quot;');
+    },
+
+    async _renderTopSqlTab(container, datasourceId) {
+        try {
+            const response = await API.get(`/api/datasources/${datasourceId}/top-sql?limit=100`);
+            const topSqlList = response.data || [];
+
+            if (topSqlList.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i data-lucide="database"></i>
+                        <h3>暂无 TOP SQL 数据</h3>
+                        <p>当前数据库可能未启用 SQL 统计功能，或暂无 SQL 执行记录。</p>
+                        <p class="text-muted mt-8">MySQL 需启用 performance_schema，PostgreSQL/openGauss 需安装 pg_stat_statements 扩展。</p>
+                    </div>
+                `;
+                DOM.createIcons();
+                return;
+            }
+
+            // 存储原始数据和当前状态
+            this.topSqlData = {
+                datasourceId,
+                allData: topSqlList,
+                filteredData: topSqlList,
+                sortColumn: 'total_time_sec',
+                sortDirection: 'desc',
+                filterText: ''
+            };
+
+            this._renderTopSqlContent(container);
+        } catch (error) {
+            console.error('Failed to load TOP SQL:', error);
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i data-lucide="alert-circle"></i>
+                    <h3>加载失败</h3>
+                    <p>${this._escapeHtml(error.message || '获取 TOP SQL 数据失败')}</p>
+                </div>
+            `;
+            DOM.createIcons();
+        }
+    },
+
+    _renderTopSqlContent(container) {
+        const { filteredData, sortColumn, sortDirection, filterText } = this.topSqlData;
+
+        container.innerHTML = `
+            <div class="top-sql-container">
+                <div class="top-sql-header">
+                    <h3>TOP SQL 分析</h3>
+                    <div class="top-sql-controls">
+                        <div class="search-box">
+                            <i data-lucide="search"></i>
+                            <input type="text"
+                                   id="topSqlFilter"
+                                   placeholder="搜索 SQL ID 或 SQL 文本..."
+                                   value="${this._escapeAttr(filterText)}">
+                        </div>
+                        <div class="top-sql-stats">
+                            <span class="badge badge-info">共 ${filteredData.length} 条</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table top-sql-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 60px;">序号</th>
+                                <th style="width: 140px;" data-sort="sql_id">
+                                    SQL ID ${this._getSortIcon('sql_id')}
+                                </th>
+                                <th style="min-width: 300px;" data-sort="sql_text">
+                                    SQL 文本 ${this._getSortIcon('sql_text')}
+                                </th>
+                                <th style="width: 100px;" data-sort="exec_count">
+                                    执行次数 ${this._getSortIcon('exec_count')}
+                                </th>
+                                <th style="width: 130px;" data-sort="total_time_sec">
+                                    总执行时间(s) ${this._getSortIcon('total_time_sec')}
+                                </th>
+                                <th style="width: 120px;" data-sort="total_rows_scanned">
+                                    总扫描行数 ${this._getSortIcon('total_rows_scanned')}
+                                </th>
+                                <th style="width: 130px;" data-sort="total_wait_time_sec">
+                                    总等待时间(s) ${this._getSortIcon('total_wait_time_sec')}
+                                </th>
+                                <th style="width: 130px;" data-sort="avg_time_sec">
+                                    平均执行时间(s) ${this._getSortIcon('avg_time_sec')}
+                                </th>
+                                <th style="width: 120px;" data-sort="avg_rows_scanned">
+                                    平均扫描行数 ${this._getSortIcon('avg_rows_scanned')}
+                                </th>
+                                <th style="width: 130px;" data-sort="avg_wait_time_sec">
+                                    平均等待时间(s) ${this._getSortIcon('avg_wait_time_sec')}
+                                </th>
+                                <th style="width: 160px;" data-sort="last_exec_time">
+                                    最后执行时间 ${this._getSortIcon('last_exec_time')}
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filteredData.map((sql, index) => `
+                                <tr class="top-sql-row" data-sql-index="${index}">
+                                    <td>${index + 1}</td>
+                                    <td class="text-monospace" title="${this._escapeAttr(sql.sql_id || '-')}">${this._escapeHtml(this._truncate(sql.sql_id, 20))}</td>
+                                    <td class="sql-text-cell">
+                                        <div class="sql-text-wrapper" title="${this._escapeAttr(sql.sql_text || '-')}">
+                                            ${this._escapeHtml(sql.sql_text || '-')}
+                                        </div>
+                                    </td>
+                                    <td class="text-right">${Format.number(sql.exec_count || 0)}</td>
+                                    <td class="text-right">${Format.number(sql.total_time_sec || 0, 6)}</td>
+                                    <td class="text-right">${Format.number(sql.total_rows_scanned || 0)}</td>
+                                    <td class="text-right">${Format.number(sql.total_wait_time_sec || 0, 6)}</td>
+                                    <td class="text-right">${Format.number(sql.avg_time_sec || 0, 6)}</td>
+                                    <td class="text-right">${Format.number(sql.avg_rows_scanned || 0, 2)}</td>
+                                    <td class="text-right">${Format.number(sql.avg_wait_time_sec || 0, 6)}</td>
+                                    <td>${sql.last_exec_time ? Format.datetime(sql.last_exec_time) : '-'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        // 确保抽屉在body级别
+        if (!document.getElementById('topSqlDrawer')) {
+            const drawer = document.createElement('div');
+            drawer.id = 'topSqlDrawer';
+            drawer.className = 'drawer';
+            drawer.style.visibility = 'visible';
+            document.body.appendChild(drawer);
+        }
+
+        DOM.createIcons();
+        this._attachTopSqlEventListeners(container);
+
+        // 恢复输入框焦点
+        const filterInput = container.querySelector('#topSqlFilter');
+        if (filterInput && document.activeElement?.id === 'topSqlFilter') {
+            filterInput.focus();
+            filterInput.setSelectionRange(filterInput.value.length, filterInput.value.length);
+        }
+    },
+
+    _getSortIcon(column) {
+        const { sortColumn, sortDirection } = this.topSqlData;
+        if (sortColumn !== column) {
+            return '<i data-lucide="chevrons-up-down" class="sort-icon"></i>';
+        }
+        return sortDirection === 'asc'
+            ? '<i data-lucide="chevron-up" class="sort-icon active"></i>'
+            : '<i data-lucide="chevron-down" class="sort-icon active"></i>';
+    },
+
+    _attachTopSqlEventListeners(container) {
+        // 搜索过滤
+        const filterInput = container.querySelector('#topSqlFilter');
+        if (filterInput) {
+            filterInput.addEventListener('input', (e) => {
+                this.topSqlData.filterText = e.target.value.toLowerCase();
+                this._applyTopSqlFilter();
+                this._updateTopSqlTable(container);
+            });
+        }
+
+        // 表头排序
+        const headers = container.querySelectorAll('th[data-sort]');
+        headers.forEach(th => {
+            th.style.cursor = 'pointer';
+            th.addEventListener('click', () => {
+                const column = th.dataset.sort;
+                if (this.topSqlData.sortColumn === column) {
+                    this.topSqlData.sortDirection = this.topSqlData.sortDirection === 'asc' ? 'desc' : 'asc';
+                } else {
+                    this.topSqlData.sortColumn = column;
+                    this.topSqlData.sortDirection = 'desc';
+                }
+                this._sortTopSqlData();
+                this._updateTopSqlTable(container);
+            });
+        });
+
+        // 行点击显示详情
+        const rows = container.querySelectorAll('.top-sql-row');
+        rows.forEach(row => {
+            row.style.cursor = 'pointer';
+            row.addEventListener('click', () => {
+                const index = parseInt(row.dataset.sqlIndex);
+                const sql = this.topSqlData.filteredData[index];
+                this._showTopSqlDrawer(sql);
+            });
+        });
+    },
+
+    _updateTopSqlTable(container) {
+        const { filteredData } = this.topSqlData;
+
+        // 更新统计信息
+        const statsDiv = container.querySelector('.top-sql-stats');
+        if (statsDiv) {
+            statsDiv.innerHTML = `<span class="badge badge-info">共 ${filteredData.length} 条</span>`;
+        }
+
+        // 更新表格内容
+        const tbody = container.querySelector('.top-sql-table tbody');
+        if (tbody) {
+            tbody.innerHTML = filteredData.map((sql, index) => `
+                <tr class="top-sql-row" data-sql-index="${index}">
+                    <td>${index + 1}</td>
+                    <td class="text-monospace" title="${this._escapeAttr(sql.sql_id || '-')}">${this._escapeHtml(this._truncate(sql.sql_id, 20))}</td>
+                    <td class="sql-text-cell">
+                        <div class="sql-text-wrapper" title="${this._escapeAttr(sql.sql_text || '-')}">
+                            ${this._escapeHtml(sql.sql_text || '-')}
+                        </div>
+                    </td>
+                    <td class="text-right">${Format.number(sql.exec_count || 0)}</td>
+                    <td class="text-right">${Format.number(sql.total_time_sec || 0, 6)}</td>
+                    <td class="text-right">${Format.number(sql.total_rows_scanned || 0)}</td>
+                    <td class="text-right">${Format.number(sql.total_wait_time_sec || 0, 6)}</td>
+                    <td class="text-right">${Format.number(sql.avg_time_sec || 0, 6)}</td>
+                    <td class="text-right">${Format.number(sql.avg_rows_scanned || 0, 2)}</td>
+                    <td class="text-right">${Format.number(sql.avg_wait_time_sec || 0, 6)}</td>
+                    <td>${sql.last_exec_time ? Format.datetime(sql.last_exec_time) : '-'}</td>
+                </tr>
+            `).join('');
+
+            // 重新绑定行点击事件
+            const rows = tbody.querySelectorAll('.top-sql-row');
+            rows.forEach(row => {
+                row.style.cursor = 'pointer';
+                row.addEventListener('click', () => {
+                    const index = parseInt(row.dataset.sqlIndex);
+                    const sql = this.topSqlData.filteredData[index];
+                    this._showTopSqlDrawer(sql);
+                });
+            });
+        }
+
+        // 更新表头排序图标
+        const headers = container.querySelectorAll('th[data-sort]');
+        headers.forEach(th => {
+            const column = th.dataset.sort;
+            const iconHtml = this._getSortIcon(column);
+            const textContent = th.textContent.split(' ')[0] + ' ';
+            th.innerHTML = textContent + iconHtml;
+        });
+
+        DOM.createIcons();
+    },
+
+    _applyTopSqlFilter() {
+        const { allData, filterText } = this.topSqlData;
+        if (!filterText) {
+            this.topSqlData.filteredData = [...allData];
+        } else {
+            this.topSqlData.filteredData = allData.filter(sql => {
+                const sqlId = (sql.sql_id || '').toLowerCase();
+                const sqlText = (sql.sql_text || '').toLowerCase();
+                return sqlId.includes(filterText) || sqlText.includes(filterText);
+            });
+        }
+        this._sortTopSqlData();
+    },
+
+    _sortTopSqlData() {
+        const { filteredData, sortColumn, sortDirection } = this.topSqlData;
+        filteredData.sort((a, b) => {
+            let aVal = a[sortColumn];
+            let bVal = b[sortColumn];
+
+            // 处理 null/undefined
+            if (aVal == null) aVal = sortDirection === 'asc' ? Infinity : -Infinity;
+            if (bVal == null) bVal = sortDirection === 'asc' ? Infinity : -Infinity;
+
+            // 字符串比较
+            if (typeof aVal === 'string') {
+                return sortDirection === 'asc'
+                    ? aVal.localeCompare(bVal)
+                    : bVal.localeCompare(aVal);
+            }
+
+            // 数值比较
+            return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+        });
+    },
+
+    _showTopSqlDrawer(sql) {
+        const drawer = document.getElementById('topSqlDrawer');
+        if (!drawer) return;
+
+        drawer.style.visibility = 'visible';
+        drawer.innerHTML = `
+            <div class="drawer-overlay"></div>
+            <div class="drawer-content">
+                <div class="drawer-header">
+                    <h3>SQL 详情</h3>
+                    <button class="btn-icon" id="closeTopSqlDrawer">
+                        <i data-lucide="x"></i>
+                    </button>
+                </div>
+                <div class="drawer-body">
+                    <div class="sql-detail-section">
+                        <h4>SQL 文本</h4>
+                        <pre class="sql-code">${this._escapeHtml(sql.sql_text || '-')}</pre>
+                    </div>
+                    <div class="sql-detail-section">
+                        <h4>执行统计</h4>
+                        <div class="sql-stats-grid">
+                            <div class="stat-item">
+                                <label>SQL ID</label>
+                                <span class="text-monospace">${this._escapeHtml(sql.sql_id || '-')}</span>
+                            </div>
+                            <div class="stat-item">
+                                <label>执行次数</label>
+                                <span>${Format.number(sql.exec_count || 0)}</span>
+                            </div>
+                            <div class="stat-item">
+                                <label>总执行时间</label>
+                                <span>${Format.number(sql.total_time_sec || 0, 6)} 秒</span>
+                            </div>
+                            <div class="stat-item">
+                                <label>平均执行时间</label>
+                                <span>${Format.number(sql.avg_time_sec || 0, 6)} 秒</span>
+                            </div>
+                            <div class="stat-item">
+                                <label>总扫描行数</label>
+                                <span>${Format.number(sql.total_rows_scanned || 0)}</span>
+                            </div>
+                            <div class="stat-item">
+                                <label>平均扫描行数</label>
+                                <span>${Format.number(sql.avg_rows_scanned || 0, 2)}</span>
+                            </div>
+                            <div class="stat-item">
+                                <label>总等待时间</label>
+                                <span>${Format.number(sql.total_wait_time_sec || 0, 6)} 秒</span>
+                            </div>
+                            <div class="stat-item">
+                                <label>平均等待时间</label>
+                                <span>${Format.number(sql.avg_wait_time_sec || 0, 6)} 秒</span>
+                            </div>
+                            <div class="stat-item">
+                                <label>最后执行时间</label>
+                                <span>${sql.last_exec_time ? Format.datetime(sql.last_exec_time) : '-'}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="sql-detail-actions">
+                        <button class="btn btn-secondary" id="viewExplainPlan">
+                            <i data-lucide="git-branch"></i>
+                            查看执行计划
+                        </button>
+                        <button class="btn btn-primary" id="aiDiagnoseTopSql">
+                            <i data-lucide="sparkles"></i>
+                            AI 诊断分析
+                        </button>
+                    </div>
+                    <div id="explainPlanResult" class="sql-detail-section" style="display: none;">
+                        <h4>执行计划</h4>
+                        <div id="explainPlanContent"></div>
+                    </div>
+                    <div id="aiDiagnosisResult" class="sql-detail-section" style="display: none;">
+                        <h4>AI 诊断结果</h4>
+                        <div id="aiDiagnosisContent"></div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        drawer.classList.add('active');
+        DOM.createIcons();
+
+        // 关闭抽屉
+        const closeBtn = drawer.querySelector('#closeTopSqlDrawer');
+        const overlay = drawer.querySelector('.drawer-overlay');
+        const closeDrawer = () => drawer.classList.remove('active');
+        closeBtn?.addEventListener('click', closeDrawer);
+        overlay?.addEventListener('click', closeDrawer);
+
+        // 查看执行计划
+        const explainBtn = drawer.querySelector('#viewExplainPlan');
+        explainBtn?.addEventListener('click', () => this._viewExplainPlan(sql));
+
+        // AI 诊断分析
+        const aiBtn = drawer.querySelector('#aiDiagnoseTopSql');
+        aiBtn?.addEventListener('click', () => this._aiDiagnoseTopSql(sql));
+    },
+
+    async _viewExplainPlan(sql) {
+        const resultDiv = document.getElementById('explainPlanResult');
+        const contentDiv = document.getElementById('explainPlanContent');
+        if (!resultDiv || !contentDiv) return;
+
+        resultDiv.style.display = 'block';
+        contentDiv.innerHTML = '<div class="loading-spinner"><i data-lucide="loader"></i> 正在获取执行计划...</div>';
+        DOM.createIcons();
+
+        try {
+            const response = await API.explainSql(this.topSqlData.datasourceId, sql.sql_text);
+
+            if (response.explain_result) {
+                const plan = response.explain_result;
+                if (plan.format === 'json') {
+                    contentDiv.innerHTML = `<pre class="explain-plan">${this._escapeHtml(JSON.stringify(plan.plan, null, 2))}</pre>`;
+                } else if (plan.format === 'table') {
+                    contentDiv.innerHTML = this._renderExplainTable(plan.plan);
+                } else {
+                    contentDiv.innerHTML = `<pre class="explain-plan">${this._escapeHtml(JSON.stringify(plan, null, 2))}</pre>`;
+                }
+            } else {
+                contentDiv.innerHTML = '<div class="error-message">无法获取执行计划</div>';
+            }
+        } catch (error) {
+            console.error('Failed to get explain plan:', error);
+            contentDiv.innerHTML = `<div class="error-message">获取执行计划失败: ${this._escapeHtml(error.message)}</div>`;
+        }
+    },
+
+    _renderExplainTable(planRows) {
+        if (!planRows || planRows.length === 0) {
+            return '<div class="empty-state">无执行计划数据</div>';
+        }
+
+        // 过滤掉不需要展示的字段
+        const excludeColumns = ['OPERATOR_ID', 'PARENT_OPERATOR_ID', 'id', 'parent_id'];
+        const allColumns = Object.keys(planRows[0]);
+        const columns = allColumns.filter(col => !excludeColumns.includes(col));
+
+        return `
+            <div class="table-container">
+                <table class="data-table explain-plan-table">
+                    <thead>
+                        <tr>
+                            ${columns.map(col => `<th>${this._escapeHtml(col)}</th>`).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${planRows.map(row => `
+                            <tr>
+                                ${columns.map(col => {
+                                    const value = String(row[col] ?? '-');
+                                    // OPERATOR_NAME (HANA) 或 operation (Oracle) 列使用 pre 标签保留空格
+                                    if (col === 'OPERATOR_NAME' || col === 'operation') {
+                                        return `<td class="operator-name-cell"><pre class="operator-name">${this._escapeHtml(value)}</pre></td>`;
+                                    }
+                                    return `<td>${this._escapeHtml(value)}</td>`;
+                                }).join('')}
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    },
+
+    async _aiDiagnoseTopSql(sql) {
+        const resultDiv = document.getElementById('aiDiagnosisResult');
+        const contentDiv = document.getElementById('aiDiagnosisContent');
+        if (!resultDiv || !contentDiv) return;
+
+        resultDiv.style.display = 'block';
+        contentDiv.innerHTML = '<div class="loading-spinner"><i data-lucide="loader"></i> AI 正在分析...</div>';
+        DOM.createIcons();
+
+        try {
+            const sqlStats = {
+                exec_count: sql.exec_count,
+                total_time_sec: sql.total_time_sec,
+                avg_time_sec: sql.avg_time_sec,
+                total_rows_scanned: sql.total_rows_scanned,
+                avg_rows_scanned: sql.avg_rows_scanned,
+                total_wait_time_sec: sql.total_wait_time_sec,
+                avg_wait_time_sec: sql.avg_wait_time_sec,
+            };
+
+            const response = await API.diagnoseSql(this.topSqlData.datasourceId, sql.sql_text, sqlStats);
+
+            if (response.diagnosis) {
+                contentDiv.innerHTML = `<div class="ai-diagnosis-content">${this._formatAiResponse(response.diagnosis)}</div>`;
+            } else {
+                contentDiv.innerHTML = '<div class="error-message">AI 诊断失败</div>';
+            }
+        } catch (error) {
+            console.error('Failed to AI diagnose:', error);
+            contentDiv.innerHTML = `<div class="error-message">AI 诊断失败: ${this._escapeHtml(error.message)}</div>`;
+        }
+    },
+
+    _formatAiResponse(text) {
+        // 简单的 Markdown 格式化
+        return this._escapeHtml(text)
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\n/g, '<br>');
+    },
+
+    _truncate(text, maxLength) {
+        if (!text) return '-';
+        return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
     }
 };

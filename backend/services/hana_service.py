@@ -533,6 +533,133 @@ class HANAConnector(DBConnector):
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, conn.close)
 
+    async def get_top_sql(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get TOP SQL statistics from M_SQL_PLAN_CACHE."""
+        conn = await self._connect()
+        try:
+            rows = await self._execute_query(
+                conn,
+                f"""SELECT TOP {int(limit)}
+                    STATEMENT_HASH as sql_id,
+                    STATEMENT_STRING as sql_text,
+                    EXECUTION_COUNT as exec_count,
+                    TOTAL_EXECUTION_TIME / 1000000.0 as total_time_sec,
+                    TOTAL_RESULT_RECORD_COUNT as total_rows_scanned,
+                    TOTAL_LOCK_WAIT_DURATION / 1000000.0 as total_wait_time_sec,
+                    AVG_EXECUTION_TIME / 1000000.0 as avg_time_sec,
+                    CASE WHEN EXECUTION_COUNT > 0
+                        THEN TOTAL_RESULT_RECORD_COUNT / EXECUTION_COUNT
+                        ELSE 0
+                    END as avg_rows_scanned,
+                    TOTAL_LOCK_WAIT_DURATION / 1000000.0/EXECUTION_COUNT as avg_wait_time_sec,
+                    LAST_EXECUTION_TIMESTAMP as last_exec_time
+                FROM SYS.M_SQL_PLAN_CACHE
+                WHERE EXECUTION_COUNT > 0
+                ORDER BY TOTAL_EXECUTION_TIME DESC"""
+            )
+
+            result = []
+            for r in rows:
+                result.append({
+                    "sql_id": r[0],
+                    "sql_text": r[1][:1000] if r[1] else None,  # 截断长 SQL
+                    "exec_count": int(r[2] or 0),
+                    "total_time_sec": float(r[3] or 0),
+                    "total_rows_scanned": int(r[4] or 0),
+                    "total_wait_time_sec": float(r[5] or 0),
+                    "avg_time_sec": float(r[6] or 0),
+                    "avg_rows_scanned": float(r[7] or 0),
+                    "avg_wait_time_sec": float(r[8] or 0),
+                    "last_exec_time": str(r[9]) if r[9] else None,
+                })
+            return result
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Failed to get TOP SQL: {e}")
+            return []
+        finally:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, conn.close)
+
+    async def explain_sql(self, sql_text: str) -> Dict[str, Any]:
+        """Get execution plan for SQL statement."""
+        conn = await self._connect()
+        try:
+            def _sync_explain():
+                cursor = conn.cursor()
+                try:
+                    # HANA 的 EXPLAIN PLAN 需要先执行，然后查询 PLAN_TABLE
+                    # 但更简单的方法是使用 EXPLAIN PLAN SET STATEMENT_NAME = 'xxx' FOR ...
+                    # 或者直接查询执行计划缓存
+
+                    # 方法1: 使用 EXPLAIN PLAN 并查询结果
+                    import time
+                    statement_name = f"PLAN_{int(time.time() * 1000000)}"
+
+                    # 执行 EXPLAIN PLAN
+                    cursor.execute(f"EXPLAIN PLAN SET STATEMENT_NAME = '{statement_name}' FOR {sql_text}")
+
+                    # 查询执行计划（包含层级信息）
+                    cursor.execute(f"""
+                        SELECT OPERATOR_ID, PARENT_OPERATOR_ID, OPERATOR_NAME,
+                               OPERATOR_DETAILS, EXECUTION_ENGINE,
+                               DATABASE_NAME, SCHEMA_NAME, TABLE_NAME, OUTPUT_SIZE
+                        FROM EXPLAIN_PLAN_TABLE
+                        WHERE STATEMENT_NAME = '{statement_name}'
+                        ORDER BY OPERATOR_ID
+                    """)
+
+                    columns = [desc[0] for desc in cursor.description]
+                    rows = cursor.fetchall()
+
+                    # 清理执行计划表
+                    try:
+                        cursor.execute(f"DELETE FROM EXPLAIN_PLAN_TABLE WHERE STATEMENT_NAME = '{statement_name}'")
+                    except:
+                        pass
+
+                    return columns, rows
+                finally:
+                    cursor.close()
+
+            loop = asyncio.get_event_loop()
+            columns, rows = await loop.run_in_executor(None, _sync_explain)
+
+            # 构建层级结构
+            plan_rows = []
+            operator_levels = {}  # operator_id -> level
+
+            # 第一遍：计算每个节点的层级
+            for row in rows:
+                operator_id = row[0]
+                parent_id = row[1]
+
+                if parent_id is None or parent_id == 0:
+                    operator_levels[operator_id] = 0
+                else:
+                    # 父节点层级 + 1
+                    operator_levels[operator_id] = operator_levels.get(parent_id, 0) + 1
+
+            # 第二遍：构建带缩进的显示数据
+            for row in rows:
+                operator_id = row[0]
+                level = operator_levels.get(operator_id, 0)
+                indent = '  ' * level  # 每层缩进2个空格
+
+                row_dict = dict(zip(columns, row))
+                # 在 OPERATOR_NAME 前添加缩进
+                row_dict['OPERATOR_NAME'] = indent + str(row_dict.get('OPERATOR_NAME', ''))
+                plan_rows.append(row_dict)
+
+            return {"format": "table", "plan": plan_rows}
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to explain SQL: {e}")
+            raise
+        finally:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, conn.close)
+
     async def close(self):
         """Clean up connections."""
         pass

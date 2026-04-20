@@ -433,3 +433,162 @@ class OracleConnector(DBConnector):
             ]
         finally:
             await conn.close()
+
+    async def terminate_session(self, session_id: int) -> Dict[str, Any]:
+        """Terminate an Oracle session."""
+        conn = await self._connect()
+        try:
+            cursor = conn.cursor()
+            # session_id 格式为 "sid,serial#"
+            parts = str(session_id).split(',')
+            if len(parts) != 2:
+                raise ValueError("Oracle session_id 格式应为 'sid,serial#'")
+
+            sid = int(parts[0])
+            serial = int(parts[1])
+
+            await cursor.execute(f"ALTER SYSTEM KILL SESSION '{sid},{serial}' IMMEDIATE")
+            await conn.commit()
+            cursor.close()
+
+            return {
+                "success": True,
+                "session_id": session_id,
+                "message": f"Oracle 会话 {session_id} 已终止",
+            }
+        finally:
+            await conn.close()
+
+    async def get_top_sql(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get TOP SQL statistics from v$sql."""
+        conn = await self._connect()
+        try:
+            cursor = conn.cursor()
+            await cursor.execute(f"""
+                SELECT * FROM (
+                    SELECT
+                        sql_id,
+                        SUBSTR(sql_text, 1, 1000) as sql_text,
+                        executions as exec_count,
+                        ROUND(elapsed_time / 1000000, 6) as total_time_sec,
+                        rows_processed as total_rows_scanned,
+                        ROUND((elapsed_time - cpu_time) / 1000000, 6) as total_wait_time_sec,
+                        ROUND(elapsed_time / GREATEST(executions, 1) / 1000000, 6) as avg_time_sec,
+                        ROUND(rows_processed / GREATEST(executions, 1), 2) as avg_rows_scanned,
+                        ROUND((elapsed_time - cpu_time) / GREATEST(executions, 1) / 1000000, 6) as avg_wait_time_sec,
+                        last_active_time as last_exec_time
+                    FROM v$sql
+                    WHERE executions > 0
+                    ORDER BY elapsed_time DESC
+                ) WHERE ROWNUM <= {int(limit)}
+            """)
+            rows = await cursor.fetchall()
+            columns = [desc[0].lower() for desc in cursor.description]
+            cursor.close()
+
+            return [dict(zip(columns, row)) for row in rows]
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Failed to get TOP SQL: {e}")
+            return []
+        finally:
+            await conn.close()
+
+    async def explain_sql(self, sql_text: str) -> Dict[str, Any]:
+        """Get execution plan for SQL statement."""
+        import re
+        conn = await self._connect()
+        try:
+            cursor = conn.cursor()
+
+            # 提取绑定变量（排除字符串字面量中的冒号）
+            # 先移除所有字符串字面量，再查找绑定变量
+            sql_without_strings = re.sub(r"'[^']*'", '', sql_text)
+            bind_vars = re.findall(r':(\w+)', sql_without_strings)
+
+            # 使用 EXPLAIN PLAN FOR 生成执行计划
+            statement_id = f"EXPLAIN_{id(sql_text)}"
+            explain_stmt = f"EXPLAIN PLAN SET STATEMENT_ID = '{statement_id}' FOR {sql_text}"
+
+            # 为所有绑定变量提供 None 值
+            if bind_vars:
+                bind_params = {var: None for var in bind_vars}
+                await cursor.execute(explain_stmt, bind_params)
+            else:
+                await cursor.execute(explain_stmt)
+
+            # 查询执行计划
+            await cursor.execute(f"""
+                SELECT
+                    id,
+                    parent_id,
+                    operation,
+                    options,
+                    object_name,
+                    cost,
+                    cardinality,
+                    bytes,
+                    cpu_cost,
+                    io_cost
+                FROM plan_table
+                WHERE statement_id = '{statement_id}'
+                ORDER BY id
+            """)
+            rows = await cursor.fetchall()
+            columns = [desc[0].lower() for desc in cursor.description]
+
+            # 清理执行计划表
+            await cursor.execute(f"DELETE FROM plan_table WHERE statement_id = '{statement_id}'")
+            await conn.commit()
+            cursor.close()
+
+            # 构建层级结构
+            plan_rows = []
+            operator_levels = {}  # id -> level
+
+            # 第一遍：计算每个节点的层级
+            rows_dict = {}
+            for row in rows:
+                row_id = row[0]
+                parent_id = row[1]
+                rows_dict[row_id] = (parent_id, row)
+
+            # 递归计算层级
+            def calc_level(node_id):
+                if node_id in operator_levels:
+                    return operator_levels[node_id]
+                if node_id not in rows_dict:
+                    return 0
+                parent_id, _ = rows_dict[node_id]
+                if parent_id is None:
+                    operator_levels[node_id] = 0
+                else:
+                    operator_levels[node_id] = calc_level(parent_id) + 1
+                return operator_levels[node_id]
+
+            for row_id in rows_dict:
+                calc_level(row_id)
+
+            # 第二遍：构建带缩进的显示数据
+            for row in rows:
+                row_id = row[0]
+                level = operator_levels.get(row_id, 0)
+                indent = '  ' * level  # 每层缩进2个空格
+
+                row_dict = dict(zip(columns, row))
+                # 在 operation 前添加缩进
+                operation = str(row_dict.get('operation', ''))
+                options = str(row_dict.get('options', '')) if row_dict.get('options') else ''
+                full_operation = f"{operation} {options}".strip() if options else operation
+                row_dict['operation'] = indent + full_operation
+                # 移除 options 列，因为已经合并到 operation 中
+                row_dict.pop('options', None)
+                plan_rows.append(row_dict)
+
+            return {"format": "table", "plan": plan_rows}
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to explain SQL: {e}")
+            raise
+        finally:
+            await conn.close()

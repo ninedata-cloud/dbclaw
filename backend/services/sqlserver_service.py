@@ -573,35 +573,25 @@ class SQLServerConnector(DBConnector):
             try:
                 cursor = conn.cursor()
                 cursor.execute(f"""
-                    WITH QueryStats AS (
-                        SELECT
-                            SUBSTRING(qt.text, (qs.statement_start_offset/2)+1,
-                                ((CASE qs.statement_end_offset
-                                    WHEN -1 THEN DATALENGTH(qt.text)
-                                    ELSE qs.statement_end_offset
-                                END - qs.statement_start_offset)/2) + 1) AS sql_text,
-                            qs.execution_count,
-                            qs.total_elapsed_time,
-                            qs.total_worker_time,
-                            qs.total_rows,
-                            qs.last_execution_time
-                        FROM sys.dm_exec_query_stats qs
-                        CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) qt
-                        WHERE qs.execution_count > 0
-                    )
                     SELECT TOP {int(limit)}
-                        sql_text,
-                        CONVERT(VARCHAR(64), HASHBYTES('MD5', sql_text), 2) AS sql_id,
-                        execution_count AS exec_count,
-                        ROUND(total_elapsed_time / 1000000.0, 6) AS total_time_sec,
-                        total_rows AS total_rows_scanned,
-                        ROUND((total_elapsed_time - total_worker_time) / 1000000.0, 6) AS total_wait_time_sec,
-                        ROUND(total_elapsed_time / CAST(execution_count AS FLOAT) / 1000000.0, 6) AS avg_time_sec,
-                        ROUND(total_rows / CAST(execution_count AS FLOAT), 2) AS avg_rows_scanned,
-                        ROUND((total_elapsed_time - total_worker_time) / CAST(execution_count AS FLOAT) / 1000000.0, 6) AS avg_wait_time_sec,
-                        last_execution_time
-                    FROM QueryStats
-                    ORDER BY total_elapsed_time DESC
+                        SUBSTRING(qt.text, (qs.statement_start_offset/2)+1,
+                            ((CASE qs.statement_end_offset
+                                WHEN -1 THEN DATALENGTH(qt.text)
+                                ELSE qs.statement_end_offset
+                            END - qs.statement_start_offset)/2) + 1) AS sql_text,
+                        CONVERT(VARCHAR(64), qs.sql_handle, 2) AS sql_id,
+                        qs.execution_count AS exec_count,
+                        ROUND(qs.total_elapsed_time / 1000000.0, 6) AS total_time_sec,
+                        qs.total_rows AS total_rows_scanned,
+                        ROUND((qs.total_elapsed_time - qs.total_worker_time) / 1000000.0, 6) AS total_wait_time_sec,
+                        ROUND(qs.total_elapsed_time / CAST(qs.execution_count AS FLOAT) / 1000000.0, 6) AS avg_time_sec,
+                        ROUND(qs.total_rows / CAST(qs.execution_count AS FLOAT), 2) AS avg_rows_scanned,
+                        ROUND((qs.total_elapsed_time - qs.total_worker_time) / CAST(qs.execution_count AS FLOAT) / 1000000.0, 6) AS avg_wait_time_sec,
+                        qs.last_execution_time
+                    FROM sys.dm_exec_query_stats qs
+                    CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) qt
+                    WHERE qs.execution_count > 0
+                    ORDER BY qs.total_elapsed_time DESC
                 """)
                 columns = [desc[0] for desc in cursor.description]
                 return [dict(zip(columns, row)) for row in cursor.fetchall()]
