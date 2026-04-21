@@ -545,6 +545,7 @@ async def get_datasource_top_sql(
                 username=datasource.username,
                 password=password,
                 database=datasource.database,
+                **(datasource.extra_params or {}),
             )
         elif datasource.db_type == "opengauss":
             service = OpenGaussConnector(
@@ -647,6 +648,7 @@ async def explain_sql(
                 username=datasource.username,
                 password=password,
                 database=datasource.database,
+                **(datasource.extra_params or {}),
             )
         elif datasource.db_type == "opengauss":
             service = OpenGaussConnector(

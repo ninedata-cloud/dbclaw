@@ -39,7 +39,12 @@ class DBConnector(ABC):
         pass
 
     @abstractmethod
-    async def execute_query(self, sql: str, max_rows: int = 1000) -> Dict[str, Any]:
+    async def execute_query(
+        self,
+        sql: str,
+        max_rows: int = 1000,
+        execution_state: Optional[Any] = None,
+    ) -> Dict[str, Any]:
         """Execute a read-only query and return results."""
         pass
 
@@ -77,6 +82,10 @@ class DBConnector(ABC):
     async def terminate_session(self, session_id: int) -> Dict[str, Any]:
         """Terminate a database session/process when supported."""
         raise NotImplementedError("terminate_session is not supported for this database type")
+
+    async def cancel_query(self, session_id: int) -> Dict[str, Any]:
+        """Cancel the currently running statement when supported."""
+        raise NotImplementedError("cancel_query is not supported for this database type")
 
     @abstractmethod
     async def get_schemas(self) -> List[str]:

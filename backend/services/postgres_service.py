@@ -2,6 +2,7 @@ import asyncio
 from typing import Any, Dict, List, Optional
 from backend.services.db_connector import DBConnector
 from backend.services.asyncpg_query_executor import execute_asyncpg_query
+from backend.services.query_execution_state import QueryCancelledError
 
 
 class PostgreSQLConnector(DBConnector):
@@ -168,6 +169,25 @@ class PostgreSQLConnector(DBConnector):
         finally:
             await conn.close()
 
+    async def cancel_query(self, session_id: int) -> Dict[str, Any]:
+        conn = await self._connect()
+        try:
+            target_session_id = int(session_id)
+            row = await conn.fetchrow(
+                "SELECT pg_cancel_backend($1) AS cancelled",
+                target_session_id,
+            )
+            cancelled = bool(row["cancelled"]) if row else False
+            if not cancelled:
+                raise RuntimeError(f"PostgreSQL 查询 {target_session_id} 取消失败")
+            return {
+                "success": True,
+                "session_id": target_session_id,
+                "message": f"PostgreSQL 查询 {target_session_id} 已取消",
+            }
+        finally:
+            await conn.close()
+
     async def get_slow_queries(self) -> List[Dict[str, Any]]:
         conn = await self._connect()
         try:
@@ -189,10 +209,31 @@ class PostgreSQLConnector(DBConnector):
         finally:
             await conn.close()
 
-    async def execute_query(self, sql: str, max_rows: int = 1000) -> Dict[str, Any]:
+    async def _register_execution_session(self, conn, execution_state) -> None:
+        if execution_state is None:
+            return
+
+        row = await conn.fetchrow("SELECT pg_backend_pid() AS pid")
+        execution_state.session_id = str(row["pid"]) if row and row["pid"] is not None else None
+        if execution_state.cancel_requested:
+            raise QueryCancelledError("查询已取消")
+
+    async def execute_query(
+        self,
+        sql: str,
+        max_rows: int = 1000,
+        execution_state: Optional[Any] = None,
+    ) -> Dict[str, Any]:
         conn = await self._connect()
         try:
+            await self._register_execution_session(conn, execution_state)
             return await execute_asyncpg_query(conn, sql, max_rows=max_rows, explain_uses_fetch=False)
+        except QueryCancelledError:
+            raise
+        except Exception as exc:
+            if execution_state is not None and execution_state.cancel_requested:
+                raise QueryCancelledError("查询已取消") from exc
+            raise
         finally:
             await conn.close()
 

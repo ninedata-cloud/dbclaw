@@ -53,7 +53,7 @@ const AIModelsPage = {
             <div class="datasource-card-info">
                 <span><i data-lucide="cpu"></i> ${this._escapeHtml(model.model_name)}</span>
                 <span><i data-lucide="plug-zap"></i> ${this._escapeHtml(this._protocolLabel(model.protocol))}</span>
-                <span><i data-lucide="database"></i> ${model.context_window ? `${Number(model.context_window).toLocaleString()} tokens` : '未配置上下文上限'}</span>
+                <span><i data-lucide="database"></i> ${model.context_window ? `${String(Number(model.context_window))} tokens` : '未配置上下文上限'}</span>
                 <span><i data-lucide="link"></i> ${this._escapeHtml(model.base_url)}</span>
                 <span><i data-lucide="key-round"></i> ${this._escapeHtml(model.api_key_masked)}</span>
             </div>
@@ -190,7 +190,7 @@ const AIModelsPage = {
                     <div><strong>提供商：</strong>${this._escapeHtml(this._providerLabel(model.provider))}</div>
                     <div><strong>协议：</strong>${this._escapeHtml(this._protocolLabel(model.protocol))}</div>
                     <div><strong>模型名：</strong>${this._escapeHtml(model.model_name)}</div>
-                    <div><strong>上下文上限：</strong>${model.context_window ? `${Number(model.context_window).toLocaleString()} tokens` : '未配置'}</div>
+                    <div><strong>上下文上限：</strong>${model.context_window ? `${String(Number(model.context_window))} tokens` : '未配置'}</div>
                     <div><strong>基础 URL：</strong>${this._escapeHtml(model.base_url)}</div>
                 </div>
             </div>

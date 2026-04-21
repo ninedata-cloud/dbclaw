@@ -5,9 +5,9 @@ from urllib.parse import quote
 
 class Settings(BaseSettings):
     app_name: str = "DBClaw"
-    app_version: str = "0.9.8"
+    app_version: str = "0.9.9"
     build_commit: str = ""
-    build_time: str = "2026-04-20"
+    build_time: str = "2026-04-21"
     app_host: str = "0.0.0.0"
     app_port: int = 9939
     debug: bool = True

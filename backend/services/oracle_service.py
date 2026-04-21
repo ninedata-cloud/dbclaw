@@ -1,7 +1,9 @@
 import asyncio
+import inspect
 import time
 from typing import Any, Dict, List, Optional
 from backend.services.db_connector import DBConnector
+from backend.services.query_execution_state import QueryCancelledError
 
 
 class OracleConnector(DBConnector):
@@ -222,10 +224,36 @@ class OracleConnector(DBConnector):
         finally:
             await conn.close()
 
-    async def execute_query(self, sql: str, max_rows: int = 1000) -> Dict[str, Any]:
+    async def _register_execution_session(self, conn, execution_state) -> None:
+        if execution_state is None:
+            return
+
+        cursor = conn.cursor()
+        try:
+            await cursor.execute(
+                "SELECT sid, serial# FROM v$session "
+                "WHERE audsid = SYS_CONTEXT('USERENV', 'SESSIONID')"
+            )
+            row = await cursor.fetchone()
+        finally:
+            cursor.close()
+
+        execution_state.session_id = f"{row[0]},{row[1]}" if row else None
+        if execution_state.cancel_requested:
+            raise QueryCancelledError("查询已取消")
+
+    async def execute_query(
+        self,
+        sql: str,
+        max_rows: int = 1000,
+        execution_state: Optional[Any] = None,
+    ) -> Dict[str, Any]:
         conn = await self._connect()
         cursor = None
         try:
+            await self._register_execution_session(conn, execution_state)
+            if execution_state is not None:
+                execution_state.cancel_callback = conn.cancel
             cursor = conn.cursor()
             start = time.time()
             await cursor.execute(sql)
@@ -258,6 +286,12 @@ class OracleConnector(DBConnector):
                 }
 
             return result
+        except QueryCancelledError:
+            raise
+        except Exception as exc:
+            if execution_state is not None and execution_state.cancel_requested:
+                raise QueryCancelledError("查询已取消") from exc
+            raise
         finally:
             if cursor is not None:
                 cursor.close()
@@ -378,7 +412,7 @@ class OracleConnector(DBConnector):
         try:
             cursor = conn.cursor()
             await cursor.execute(
-                "SELECT username FROM all_user "
+                "SELECT username FROM all_users "
                 "WHERE username NOT IN ('SYS', 'SYSTEM', 'OUTLN', 'DBSNMP', 'APPQOSSYS', "
                 "'WMSYS', 'EXFSYS', 'CTXSYS', 'XDB', 'ANONYMOUS', 'ORDSYS', 'MDSYS', 'OLAPSYS') "
                 "ORDER BY username"
@@ -479,7 +513,8 @@ class OracleConnector(DBConnector):
                 SELECT * FROM (
                     SELECT
                         sql_id,
-                        SUBSTR(sql_text, 1, 1000) as sql_text,
+                        sql_text,
+                        sql_fulltext,
                         executions as exec_count,
                         ROUND(elapsed_time / 1000000, 6) as total_time_sec,
                         rows_processed as total_rows_scanned,
@@ -497,7 +532,22 @@ class OracleConnector(DBConnector):
             columns = [desc[0].lower() for desc in cursor.description]
             cursor.close()
 
-            return [dict(zip(columns, row)) for row in rows]
+            results = []
+            for row in rows:
+                item = dict(zip(columns, row))
+                full_sql = item.pop("sql_fulltext", None)
+                if full_sql is not None:
+                    # Oracle may return CLOB objects for sql_fulltext.
+                    if hasattr(full_sql, "read"):
+                        full_sql = full_sql.read()
+                        if inspect.isawaitable(full_sql):
+                            full_sql = await full_sql
+                    item["sql_text"] = str(full_sql)
+                elif item.get("sql_text") is not None:
+                    item["sql_text"] = str(item["sql_text"])
+                results.append(item)
+
+            return results
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning(f"Failed to get TOP SQL: {e}")

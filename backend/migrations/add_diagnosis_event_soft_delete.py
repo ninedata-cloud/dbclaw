@@ -11,7 +11,7 @@ async def migrate():
     async with engine.begin() as conn:
         for column_def in [
             ("is_deleted", "ALTER TABLE diagnosis_event ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT FALSE"),
-            ("deleted_at", "ALTER TABLE diagnosis_event ADD COLUMN deleted_at TIMESTAMP"),
+            ("deleted_at", "ALTER TABLE diagnosis_event ADD COLUMN deleted_at TIMESTAMP WITH TIME ZONE"),
             ("deleted_by", "ALTER TABLE diagnosis_event ADD COLUMN deleted_by INTEGER"),
         ]:
             column_name, ddl = column_def

@@ -227,6 +227,13 @@ const API = {
             signal: options.signal
         });
     },
+    cancelQuery(data, options = {}) {
+        return this.request('/api/query/cancel', {
+            method: 'POST',
+            body: data,
+            keepalive: Boolean(options.keepalive)
+        });
+    },
     explainQuery(data) { return this.post('/api/query/explain', data); },
     getQueryHistory() { return this.get('/api/query/history'); },
     getQueryContext(datasourceId, database = null) {

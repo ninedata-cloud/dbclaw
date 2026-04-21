@@ -588,7 +588,7 @@ async def _store_diagnosis_event(
         event_type=event_type,
         sequence_no=sequence_no,
         step_id=step_id,
-        payload=payload,
+        payload=sanitize_for_json(payload),
     )
     db.add(event_row)
     await db.commit()

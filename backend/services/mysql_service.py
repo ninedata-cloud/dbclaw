@@ -1,6 +1,7 @@
 import asyncio
 from typing import Any, Dict, List, Optional
 from backend.services.db_connector import DBConnector
+from backend.services.query_execution_state import QueryCancelledError
 
 
 class MySQLConnector(DBConnector):
@@ -165,6 +166,20 @@ class MySQLConnector(DBConnector):
         finally:
             conn.close()
 
+    async def cancel_query(self, session_id: int) -> Dict[str, Any]:
+        conn = await self._connect()
+        try:
+            target_session_id = int(session_id)
+            async with conn.cursor() as cur:
+                await cur.execute(f"KILL QUERY {target_session_id}")
+            return {
+                "success": True,
+                "session_id": target_session_id,
+                "message": f"MySQL 查询 {target_session_id} 已取消",
+            }
+        finally:
+            conn.close()
+
     async def get_slow_queries(self) -> List[Dict[str, Any]]:
         conn = await self._connect()
         try:
@@ -185,10 +200,28 @@ class MySQLConnector(DBConnector):
         finally:
             conn.close()
 
-    async def execute_query(self, sql: str, max_rows: int = 1000) -> Dict[str, Any]:
+    async def _register_execution_session(self, conn, execution_state) -> None:
+        if execution_state is None:
+            return
+
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT CONNECTION_ID()")
+            row = await cur.fetchone()
+
+        execution_state.session_id = str(row[0]) if row and row[0] is not None else None
+        if execution_state.cancel_requested:
+            raise QueryCancelledError("查询已取消")
+
+    async def execute_query(
+        self,
+        sql: str,
+        max_rows: int = 1000,
+        execution_state: Optional[Any] = None,
+    ) -> Dict[str, Any]:
         import time
         conn = await self._connect()
         try:
+            await self._register_execution_session(conn, execution_state)
             async with conn.cursor() as cur:
                 start = time.time()
                 await cur.execute(sql)
@@ -217,6 +250,12 @@ class MySQLConnector(DBConnector):
                         "truncated": False,
                         "message": f"Query OK, {row_count} rows affected",
                     }
+        except QueryCancelledError:
+            raise
+        except Exception as exc:
+            if execution_state is not None and execution_state.cancel_requested:
+                raise QueryCancelledError("查询已取消") from exc
+            raise
         finally:
             conn.close()
 

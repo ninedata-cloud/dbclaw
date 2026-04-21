@@ -50,6 +50,7 @@ code: |
               username=datasource.username,
               password=password,
               database=datasource.database,
+              **(datasource.extra_params or {}),
           )
 
           try:

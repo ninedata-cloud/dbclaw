@@ -968,7 +968,7 @@ const MonitorPage = {
         const summaryEl = cards[0].querySelector('[data-connection-metric="summary"]');
         const activeText = active !== undefined && active !== null ? Number(active).toLocaleString() : '--';
         const totalText = total !== undefined && total !== null ? Number(total).toLocaleString() : '--';
-        const maxText = maxConnections !== undefined && maxConnections !== null && maxConnections !== 0 ? Number(maxConnections).toLocaleString() : '--';
+        const maxText = maxConnections !== undefined && maxConnections !== null && maxConnections !== 0 ? String(Number(maxConnections)) : '--';
         if (summaryEl) summaryEl.textContent = `${activeText}/${totalText}/${maxText}`;
 
         MetricCard.update(cards[1], typeof qps === 'number' ? qps.toFixed(1) : qps);

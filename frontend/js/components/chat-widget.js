@@ -11,7 +11,7 @@ const ChatWidget = {
     autoScrollEnabled: true,
     hasUnreadWhileDetached: false,
     _streamTimeoutTimer: null,
-    _streamTimeoutMs: 600 * 1000,
+    _streamTimeoutMs: 120 * 1000,
     _bottomThresholdPx: 48,
     _ignoreScrollStateChanges: false,
     _scrollResumeRaf: null,
@@ -728,7 +728,7 @@ const ChatWidget = {
                     <span><strong>本次会话已用</strong> ${usage.total_tokens.toLocaleString()} tokens</span>
                     <span>输入 ${usage.input_tokens.toLocaleString()}</span>
                     <span>输出 ${usage.output_tokens.toLocaleString()}</span>
-                    <span>${contextWindow ? `上限 ${contextWindow.toLocaleString()}` : '未配置上下文上限'}</span>
+                    <span>${contextWindow ? `上限 ${String(Number(contextWindow))}` : '未配置上下文上限'}</span>
                     <span>${usageRate !== null ? `使用率 ${usageRate.toFixed(1)}%` : ''}</span>
                 </div>
                 ${warningText ? `<div style="color:${tone.text};font-weight:600;">${this._escapeHtml(warningText)}</div>` : ''}

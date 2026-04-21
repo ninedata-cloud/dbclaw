@@ -1,5 +1,6 @@
 import sys
 from datetime import timedelta
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -91,3 +92,22 @@ async def test_resolve_pending_approval_keeps_history_window_for_resume(monkeypa
 
     assert result["status"] == "approved"
     assert resume_mock.await_args.kwargs["history_window_hours"] == 24
+
+
+@pytest.mark.asyncio
+async def test_store_diagnosis_event_sanitizes_decimal_payload():
+    db = MagicMock()
+    db.add = MagicMock()
+    db.commit = AsyncMock()
+
+    await chat_orchestration_service._store_diagnosis_event(
+        db,
+        session_id=1,
+        run_id="run_1",
+        sequence_no=1,
+        event_type="diagnosis_state",
+        payload={"metric_value": Decimal("12.34")},
+    )
+
+    event_row = db.add.call_args.args[0]
+    assert event_row.payload["metric_value"] == 12.34

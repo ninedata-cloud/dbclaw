@@ -1,7 +1,9 @@
 import time
 import logging
 import asyncio
+import inspect
 from collections import defaultdict, deque
+from uuid import uuid4
 from typing import Optional, List, Dict
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,10 +14,12 @@ from backend.models.datasource import Datasource
 from backend.models.soft_delete import alive_filter
 from backend.schemas.query import (
     QueryExecuteRequest, QueryExplainRequest, QueryResult,
-    SchemaInfo, TableInfo, ColumnInfo, QueryContextResponse
+    QueryCancelRequest, QueryCancelResponse, SchemaInfo,
+    TableInfo, ColumnInfo, QueryContextResponse
 )
 from backend.services.db_connector import get_connector
 from backend.services.asyncpg_query_executor import execute_asyncpg_query
+from backend.services.query_execution_state import QueryExecutionState, QueryCancelledError
 from backend.utils.encryption import decrypt_value
 from backend.utils.db_connector import _is_read_only_query
 
@@ -26,6 +30,8 @@ router = APIRouter(prefix="/api/query", tags=["query"], dependencies=[Depends(ge
 
 # Keep a small per-user in-memory history to avoid cross-user data leakage.
 _query_history_by_user: dict[int, deque] = defaultdict(lambda: deque(maxlen=100))
+_active_queries_by_request_id: dict[str, QueryExecutionState] = {}
+_active_queries_lock = asyncio.Lock()
 _DB_TYPES_WITH_DATABASE_LIST_FROM_SCHEMAS = {"mysql", "tdsql-c-mysql"}
 _DB_TYPES_WITH_SCHEMA_SELECTOR = {"postgresql", "sqlserver", "hana"}
 _DEFAULT_SCHEMA_BY_DB_TYPE = {
@@ -53,6 +59,24 @@ def _resolve_current_value(requested: Optional[str], fallback: Optional[str], av
 def _quote_postgres_identifier(identifier: str) -> str:
     escaped = identifier.replace('"', '""')
     return f'"{escaped}"'
+
+
+async def _register_active_query(state: QueryExecutionState) -> None:
+    async with _active_queries_lock:
+        _active_queries_by_request_id[state.request_id] = state
+
+
+async def _get_active_query(request_id: str, user_id: int) -> Optional[QueryExecutionState]:
+    async with _active_queries_lock:
+        state = _active_queries_by_request_id.get(request_id)
+    if state and state.user_id == user_id:
+        return state
+    return None
+
+
+async def _remove_active_query(request_id: str) -> None:
+    async with _active_queries_lock:
+        _active_queries_by_request_id.pop(request_id, None)
 
 
 async def _get_connector_for(datasource_id: int, db: AsyncSession, database_override: Optional[str] = None):
@@ -111,13 +135,33 @@ async def _get_database_options(datasource: Datasource, connector) -> List[str]:
     return [datasource.database] if datasource.database else []
 
 
-async def _execute_postgresql_query_with_context(connector, sql: str, max_rows: int, schema: Optional[str]) -> Dict:
+async def _execute_postgresql_query_with_context(
+    connector,
+    sql: str,
+    max_rows: int,
+    schema: Optional[str],
+    execution_state: Optional[QueryExecutionState] = None,
+) -> Dict:
     conn = await connector._connect()
     try:
+        if execution_state is not None:
+            row = await conn.fetchrow("SELECT pg_backend_pid() AS pid")
+            execution_state.session_id = str(row["pid"]) if row and row["pid"] is not None else None
+            if execution_state.cancel_requested:
+                raise QueryCancelledError("查询已取消")
+
         if schema:
             quoted_schema = _quote_postgres_identifier(schema)
             await conn.execute(f"SET search_path TO {quoted_schema}, public")
+        if execution_state is not None and execution_state.cancel_requested:
+            raise QueryCancelledError("查询已取消")
         return await execute_asyncpg_query(conn, sql, max_rows=max_rows, explain_uses_fetch=False)
+    except QueryCancelledError:
+        raise
+    except Exception as exc:
+        if execution_state is not None and execution_state.cancel_requested:
+            raise QueryCancelledError("查询已取消") from exc
+        raise
     finally:
         await conn.close()
 
@@ -188,11 +232,34 @@ async def execute_query(
     selected_database = _normalize_optional_text(req.database)
     selected_schema = _normalize_optional_text(req.schema_name)
     connector, datasource = await _get_connector_for(req.datasource_id, db, selected_database)
+    request_id = (req.request_id or str(uuid4())).strip()
+    execution_state = QueryExecutionState(
+        request_id=request_id,
+        datasource_id=req.datasource_id,
+        user_id=current_user.id,
+        db_type=datasource.db_type,
+        sql=req.sql,
+    )
+    await _register_active_query(execution_state)
     try:
         if datasource.db_type == "postgresql":
-            result = await _execute_postgresql_query_with_context(connector, req.sql, req.max_rows, selected_schema)
+            result = await _execute_postgresql_query_with_context(
+                connector,
+                req.sql,
+                req.max_rows,
+                selected_schema,
+                execution_state=execution_state,
+            )
         else:
-            result = await connector.execute_query(req.sql, max_rows=req.max_rows)
+            result = await connector.execute_query(
+                req.sql,
+                max_rows=req.max_rows,
+                execution_state=execution_state,
+            )
+
+        if execution_state.cancel_requested:
+            raise QueryCancelledError("查询已取消")
+
         history.append({
             "id": len(history) + 1,
             "datasource_id": req.datasource_id,
@@ -213,9 +280,72 @@ async def execute_query(
             truncated=result.get("truncated", False),
             message=result.get("message"),
         )
+    except QueryCancelledError:
+        raise HTTPException(status_code=409, detail="查询已取消")
     except Exception as e:
+        if execution_state.cancel_requested:
+            raise HTTPException(status_code=409, detail="查询已取消") from e
         logger.error(f"Query execute failed: datasource_id={req.datasource_id}, sql={req.sql!r}, error={e}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        await _remove_active_query(request_id)
+        await connector.close()
+
+
+@router.post("/cancel", response_model=QueryCancelResponse)
+async def cancel_query(
+    req: QueryCancelRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    execution_state = await _get_active_query(req.request_id, current_user.id)
+    if not execution_state or execution_state.datasource_id != req.datasource_id:
+        return QueryCancelResponse(success=True, message="查询已结束或未找到对应执行任务")
+
+    execution_state.cancel_requested = True
+
+    if not execution_state.session_id:
+        return QueryCancelResponse(success=True, message="已收到取消请求，正在等待数据库会话就绪")
+
+    if execution_state.cancel_callback is not None:
+        try:
+            cancel_result = execution_state.cancel_callback()
+            if inspect.isawaitable(cancel_result):
+                await cancel_result
+            return QueryCancelResponse(success=True, message="已发送取消请求")
+        except Exception as exc:
+            logger.warning(
+                "Cancel callback failed: request_id=%s, datasource_id=%s, session_id=%s, error=%s",
+                req.request_id,
+                req.datasource_id,
+                execution_state.session_id,
+                exc,
+                exc_info=True,
+            )
+            raise HTTPException(status_code=400, detail=f"取消查询失败: {exc}") from exc
+
+    connector, _ = await _get_connector_for(execution_state.datasource_id, db)
+    try:
+        result = await connector.cancel_query(execution_state.session_id)
+        if isinstance(result, dict) and result.get("success") is False:
+            raise HTTPException(status_code=400, detail=result.get("message") or "取消查询失败")
+
+        message = result.get("message") if isinstance(result, dict) else None
+        return QueryCancelResponse(success=True, message=message or "已发送取消请求")
+    except NotImplementedError as exc:
+        raise HTTPException(status_code=400, detail="当前数据源暂不支持取消 SQL 执行") from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning(
+            "Cancel query failed: request_id=%s, datasource_id=%s, session_id=%s, error=%s",
+            req.request_id,
+            req.datasource_id,
+            execution_state.session_id,
+            exc,
+            exc_info=True,
+        )
+        raise HTTPException(status_code=400, detail=f"取消查询失败: {exc}") from exc
     finally:
         await connector.close()
 

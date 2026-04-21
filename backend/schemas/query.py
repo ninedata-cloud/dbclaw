@@ -6,6 +6,7 @@ class QueryExecuteRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     datasource_id: int
+    request_id: Optional[str] = Field(None, min_length=1, max_length=128)
     sql: str = Field(..., min_length=1)
     max_rows: int = Field(1000, gt=0, le=10000)
     database: Optional[str] = None
@@ -19,6 +20,16 @@ class QueryExplainRequest(BaseModel):
     sql: str = Field(..., min_length=1)
     database: Optional[str] = None
     schema_name: Optional[str] = Field(None, alias="schema")
+
+
+class QueryCancelRequest(BaseModel):
+    datasource_id: int
+    request_id: str = Field(..., min_length=1, max_length=128)
+
+
+class QueryCancelResponse(BaseModel):
+    success: bool = True
+    message: str
 
 
 class QueryResult(BaseModel):

@@ -34,6 +34,7 @@ from backend.services.chat_orchestration_service import (
 )
 from backend.services.config_service import get_config
 from backend.services.session_service import SessionService
+from backend.utils.json_sanitizer import sanitize_for_json
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
@@ -88,6 +89,13 @@ async def _broadcast_to_session(session_id: int, payload: dict) -> None:
         try:
             await ws.send_json(payload)
         except Exception:
+            logger.warning(
+                "Failed to broadcast chat event for session %s: type=%s phase=%s",
+                session_id,
+                payload.get("type"),
+                payload.get("phase"),
+                exc_info=True,
+            )
             stale.append(ws)
     for ws in stale:
         _unregister_socket(session_id, ws)
@@ -165,8 +173,9 @@ def _update_stream_state(session_id: int, payload: dict) -> None:
 
 
 async def _emit_session_event(session_id: int, payload: dict) -> None:
-    _update_stream_state(session_id, payload)
-    await _broadcast_to_session(session_id, payload)
+    safe_payload = sanitize_for_json(payload)
+    _update_stream_state(session_id, safe_payload)
+    await _broadcast_to_session(session_id, safe_payload)
 
 
 async def _rebuild_llm_messages(all_msgs):

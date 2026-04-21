@@ -1,6 +1,8 @@
 /* SQL Console page */
 const SqlConsolePage = {
     currentAbortController: null,
+    currentQueryRequestId: null,
+    currentQueryDatasourceId: null,
     datasourceSelector: null,
     _renderOptions: null,
     _container: null,
@@ -204,7 +206,16 @@ const SqlConsolePage = {
             this.schemaOptions = [];
             this._renderOptions = null;
             this._container = null;
+            this.currentQueryRequestId = null;
+            this.currentQueryDatasourceId = null;
         };
+    },
+
+    _generateRequestId() {
+        if (window.crypto?.randomUUID) {
+            return window.crypto.randomUUID();
+        }
+        return `sql-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     },
 
     _getCurrentExecutionContext() {
@@ -371,9 +382,28 @@ const SqlConsolePage = {
     },
 
     _cancelQuery() {
-        if (this.currentAbortController) {
-            this.currentAbortController.abort();
+        const abortController = this.currentAbortController;
+        const requestId = this.currentQueryRequestId;
+        const datasourceId = this.currentQueryDatasourceId;
+
+        if (requestId && datasourceId) {
+            API.cancelQuery(
+                { datasource_id: datasourceId, request_id: requestId },
+                { keepalive: true }
+            ).catch((error) => {
+                console.warn('[SqlConsole] Failed to cancel query on server:', error);
+                Toast.warning(error.message || '取消请求发送失败，后端 SQL 可能仍在执行');
+            });
+        }
+
+        if (abortController || requestId) {
             this.currentAbortController = null;
+            this.currentQueryRequestId = null;
+            this.currentQueryDatasourceId = null;
+
+            if (abortController) {
+                abortController.abort();
+            }
 
             const status = DOM.$('#sql-console-status');
             const executeBtn = DOM.$('#execute-btn');
@@ -462,12 +492,16 @@ const SqlConsolePage = {
         executeBtn.disabled = true;
         cancelBtn.style.display = 'inline-flex';
 
-        this.currentAbortController = new AbortController();
+        const requestId = this._generateRequestId();
+        const abortController = new AbortController();
+        this.currentAbortController = abortController;
+        this.currentQueryRequestId = requestId;
+        this.currentQueryDatasourceId = connId;
 
         try {
             const result = await API.executeQuery(
-                { datasource_id: connId, sql, max_rows: 10000, ...this._getCurrentExecutionContext() },
-                { signal: this.currentAbortController.signal }
+                { datasource_id: connId, request_id: requestId, sql, max_rows: 10000, ...this._getCurrentExecutionContext() },
+                { signal: abortController.signal }
             );
 
             if (result.columns && result.columns.length > 0) {
@@ -494,6 +528,13 @@ const SqlConsolePage = {
             if (err.name === 'AbortError') {
                 return;
             }
+            if (err.message === '查询已取消') {
+                const canceledStatus = DOM.$('#sql-console-status');
+                if (canceledStatus) {
+                    canceledStatus.innerHTML = '<div class="status-info"><span style="color:var(--accent-orange)">已取消</span></div>';
+                }
+                return;
+            }
             const errResults = DOM.$('#sql-console-results');
             if (errResults) {
                 errResults.innerHTML = `<div style="padding:20px;color:var(--accent-red);font-family:var(--font-mono);font-size:13px;white-space:pre-wrap">${err.message}</div>`;
@@ -503,9 +544,13 @@ const SqlConsolePage = {
                 errStatus.innerHTML = '<div class="status-info"><span style="color:var(--accent-red)">错误</span></div>';
             }
         } finally {
-            this.currentAbortController = null;
-            if (executeBtn) executeBtn.disabled = false;
-            if (cancelBtn) cancelBtn.style.display = 'none';
+            if (this.currentQueryRequestId === requestId) {
+                this.currentAbortController = null;
+                this.currentQueryRequestId = null;
+                this.currentQueryDatasourceId = null;
+                if (executeBtn) executeBtn.disabled = false;
+                if (cancelBtn) cancelBtn.style.display = 'none';
+            }
         }
     },
 

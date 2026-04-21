@@ -2,6 +2,7 @@ import os
 import time
 from typing import Any, Dict, List, Optional
 from backend.services.db_connector import DBConnector
+from backend.services.query_execution_state import QueryCancelledError
 
 
 _PROCESS_LIST_SQL = """
@@ -313,12 +314,31 @@ class SQLServerConnector(DBConnector):
                 conn.close()
         return await asyncio.get_event_loop().run_in_executor(None, _slow)
 
-    async def execute_query(self, sql: str, max_rows: int = 1000) -> Dict[str, Any]:
+    async def execute_query(
+        self,
+        sql: str,
+        max_rows: int = 1000,
+        execution_state: Optional[Any] = None,
+    ) -> Dict[str, Any]:
         import asyncio
         def _exec():
             conn = self._connect()
             try:
+                if execution_state is not None:
+                    session_cursor = conn.cursor()
+                    try:
+                        session_cursor.execute("SELECT @@SPID")
+                        row = session_cursor.fetchone()
+                        execution_state.session_id = str(row[0]) if row and row[0] is not None else None
+                    finally:
+                        session_cursor.close()
+
+                    if execution_state.cancel_requested:
+                        raise QueryCancelledError("查询已取消")
+
                 cursor = conn.cursor()
+                if execution_state is not None:
+                    execution_state.cancel_callback = cursor.cancel
                 start = time.time()
                 cursor.execute(sql)
                 elapsed = round((time.time() - start) * 1000, 2)
@@ -345,6 +365,12 @@ class SQLServerConnector(DBConnector):
                 }
                 cursor.close()  # Close cursor to free connection
                 return result
+            except QueryCancelledError:
+                raise
+            except Exception as exc:
+                if execution_state is not None and execution_state.cancel_requested:
+                    raise QueryCancelledError("查询已取消") from exc
+                raise
             finally:
                 conn.close()
         return await asyncio.get_event_loop().run_in_executor(None, _exec)

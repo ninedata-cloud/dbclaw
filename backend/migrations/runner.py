@@ -51,6 +51,7 @@ POST_CREATE_MIGRATIONS = (
     MigrationSpec("add_feishu_chat_tables", "backend.migrations.add_feishu_chat_tables"),
     MigrationSpec("fix_feishu_chat_event_dedups_duplicates", "backend.migrations.fix_feishu_chat_event_dedups_duplicates"),
     MigrationSpec("create_diagnosis_events", "backend.migrations.create_diagnosis_events"),
+    MigrationSpec("add_diagnosis_event_soft_delete", "backend.migrations.add_diagnosis_event_soft_delete"),
     MigrationSpec("create_diagnosis_conclusions", "backend.migrations.create_diagnosis_conclusions"),
     MigrationSpec("add_subscription_integration_targets", "backend.migrations.add_subscription_integration_targets"),
     MigrationSpec("add_datasource_inbound_source", "backend.migrations.add_datasource_inbound_source"),

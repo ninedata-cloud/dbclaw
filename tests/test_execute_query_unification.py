@@ -98,6 +98,48 @@ async def test_wrapper_adds_success_and_data_for_result_sets():
 
 
 @pytest.mark.asyncio
+async def test_db_connector_passes_oracle_extra_params_to_connector():
+    captured = {}
+
+    class FakeConnector:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        async def execute_query(self, sql: str):
+            captured["sql"] = sql
+            return {
+                "columns": ["1"],
+                "rows": [[1]],
+                "row_count": 1,
+                "execution_time_ms": 1.0,
+                "truncated": False,
+            }
+
+    datasource = Datasource(
+        id=1,
+        name="test-oracle",
+        db_type="oracle",
+        host="localhost",
+        port=1521,
+        username="sys",
+        password_encrypted="encrypted",
+        database="ORCL",
+        extra_params={"oracle_conn_mode": "sysdba"},
+    )
+
+    with patch("backend.utils.db_connector.decrypt_value", return_value="secret"), \
+         patch("backend.utils.db_connector.OracleConnector", FakeConnector):
+        result = await db_connector.execute_query(datasource, "SELECT 1 FROM dual")
+
+    assert result["success"] is True
+    assert captured["host"] == "localhost"
+    assert captured["password"] == "secret"
+    assert captured["database"] == "ORCL"
+    assert captured["oracle_conn_mode"] == "sysdba"
+    assert captured["sql"] == "SELECT 1 FROM dual"
+
+
+@pytest.mark.asyncio
 async def test_db_connector_allows_read_only_explain_select_when_allow_write_false():
     class FakeConnector:
         def __init__(self, **kwargs):
@@ -349,6 +391,28 @@ class FakeOracleCursor:
         self.execute = AsyncMock()
         self.fetchmany = AsyncMock(return_value=self._fetch_rows)
         self.close = MagicMock()
+
+
+@pytest.mark.asyncio
+async def test_oracle_get_schemas_queries_all_users_and_closes_connection():
+    connector = OracleConnector(host="localhost", port=1521, username="tester", password="secret", database="ORCL")
+    cursor = MagicMock()
+    cursor.execute = AsyncMock()
+    cursor.fetchall = AsyncMock(return_value=[("APP",), ("HR",)])
+    cursor.close = MagicMock()
+    conn = MagicMock()
+    conn.cursor.return_value = cursor
+    conn.close = AsyncMock()
+
+    with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
+        schemas = await connector.get_schemas()
+
+    cursor.execute.assert_awaited_once()
+    executed_sql = cursor.execute.await_args.args[0].upper()
+    assert "FROM ALL_USERS" in executed_sql
+    assert schemas == ["APP", "HR"]
+    cursor.close.assert_called_once_with()
+    conn.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio
