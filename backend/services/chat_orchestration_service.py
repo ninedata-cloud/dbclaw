@@ -1356,21 +1356,18 @@ async def prepare_user_turn(
         session.knowledge_snapshot = sanitize_for_json(knowledge_context)
         # 优先使用 payload 中的授权配置，如果没有则从会话中读取
         if payload_skill_authorizations is not None:
-            print(f"[DEBUG] Using payload_skill_authorizations: {payload_skill_authorizations}")
-            logger.info(f"Using payload_skill_authorizations: {payload_skill_authorizations}")
+            logger.debug(f"Using payload_skill_authorizations: {payload_skill_authorizations}")
             skill_authorizations = normalize_skill_authorizations(
                 payload_skill_authorizations,
                 getattr(session, "disabled_tools", None),
             )
         else:
-            print(f"[DEBUG] Using session skill_authorizations: {getattr(session, 'skill_authorizations', None)}")
-            logger.info(f"Using session skill_authorizations: {getattr(session, 'skill_authorizations', None)}")
+            logger.debug(f"Using session skill_authorizations: {getattr(session, 'skill_authorizations', None)}")
             skill_authorizations = normalize_skill_authorizations(
                 getattr(session, "skill_authorizations", None),
                 getattr(session, "disabled_tools", None),
             )
-        print(f"[DEBUG] Final normalized skill_authorizations: {skill_authorizations}")
-        logger.info(f"Final normalized skill_authorizations: {skill_authorizations}")
+        logger.debug(f"Final normalized skill_authorizations: {skill_authorizations}")
 
     await db.commit()
 

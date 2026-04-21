@@ -452,7 +452,7 @@ async def get_host_config(
             uptime_seconds = 0
             try:
                 uptime_seconds = int(float(raw_data.get('uptime', '0')))
-            except:
+            except (ValueError, TypeError):
                 pass
 
             load_avg_parts = raw_data.get('load_avg', '').split()

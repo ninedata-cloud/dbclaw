@@ -305,7 +305,7 @@ async def send_notification(context, params, payload):
             if server:
                 try:
                     server.quit()
-                except:
+                except Exception:
                     pass
 
     loop = asyncio.get_event_loop()

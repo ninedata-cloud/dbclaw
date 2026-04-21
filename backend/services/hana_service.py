@@ -638,9 +638,9 @@ class HANAConnector(DBConnector):
 
                     # 清理执行计划表
                     try:
-                        cursor.execute(f"DELETE FROM EXPLAIN_PLAN_TABLE WHERE STATEMENT_NAME = '{statement_name}'")
-                    except:
-                        pass
+                        cursor.execute("DELETE FROM EXPLAIN_PLAN_TABLE WHERE STATEMENT_NAME = ?", (statement_name,))
+                    except Exception as e:
+                        logger.warning(f"Failed to clean up EXPLAIN_PLAN_TABLE: {e}")
 
                     return columns, rows
                 finally:

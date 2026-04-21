@@ -68,7 +68,7 @@ class IntegrationContext:
                 json_content = None
                 try:
                     json_content = await response.json()
-                except:
+                except (ValueError, aiohttp.ContentTypeError):
                     pass
 
                 return SimpleResponse(response.status, text_content, json_content, response.headers)

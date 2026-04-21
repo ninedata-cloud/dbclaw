@@ -4,8 +4,22 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-green.svg)
 ![FastAPI](https://img.shields.io/badge/backend-FastAPI-009688.svg)
 ![Frontend](https://img.shields.io/badge/frontend-Vanilla%20JS-ffb300.svg)
+![Version](https://img.shields.io/badge/version-0.9.3-blue.svg)
 
 数据库智能卫士（英文名：DBClaw）是一款面向企业数据库运维场景的 AI 驱动平台，提供数据库监控、告警管理、自动巡检、智能诊断、知识增强和外部集成能力，帮助 DBA、SRE 和运维团队提升日常运维效率与故障定位速度。
+
+## 📋 目录
+
+- [产品定位](#产品定位)
+- [核心能力](#核心能力)
+- [支持的数据库](#支持的数据库类型)
+- [系统架构](#系统架构)
+- [快速开始](#快速开始)
+- [Docker 部署](#docker-单容器部署)
+- [配置说明](#关键配置说明)
+- [开发指南](#开发命令)
+- [贡献指南](#贡献)
+- [许可证](#license)
 
 ## 产品定位
 
@@ -39,6 +53,7 @@
 - SQL Server
 - TDSQL-C MySQL
 - openGauss
+- SAP HANA
 
 ## 系统架构
 
@@ -181,9 +196,109 @@ docker run -d \
 ## 开发命令
 
 ```bash
+# 安装依赖
 pip install -r requirements.txt
+
+# 启动开发服务器
 python run.py
+
+# 运行测试
+python -m pytest
+
+# 运行特定测试
+python -m pytest tests/test_skills.py
+
+# 生成加密密钥
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
+
+## 贡献
+
+我们欢迎所有形式的贡献！请查看 [CONTRIBUTING.md](CONTRIBUTING.md) 了解如何参与项目。
+
+### 报告问题
+
+如果您发现 Bug 或有功能建议，请在 [GitHub Issues](https://github.com/ninedata/dbclaw/issues) 中创建新问题。
+
+### 安全漏洞
+
+如果您发现安全漏洞，请查看 [SECURITY.md](SECURITY.md) 了解如何负责任地报告。
+
+## 文档
+
+- [更新日志](CHANGELOG.md) - 版本变更记录
+- [贡献指南](CONTRIBUTING.md) - 如何为项目做贡献
+- [安全策略](SECURITY.md) - 安全最佳实践和漏洞报告
+- [项目说明](CLAUDE.md) - 项目架构和开发指南
+
+## 常见问题
+
+### 如何修改管理员密码？
+
+首次登录后，点击右上角用户头像 → 修改密码。
+
+### 如何配置 AI 模型？
+
+登录后进入"AI 大模型管理"页面，添加 OpenAI 兼容的模型配置。
+
+### 支持哪些 AI 模型？
+
+支持所有 OpenAI 兼容接口的模型，包括：
+- OpenAI GPT-4/GPT-3.5
+- Anthropic Claude
+- 国内大模型（通义千问、文心一言、智谱 GLM 等）
+
+### Docker 部署时如何持久化数据？
+
+使用 Docker Volume 挂载以下目录：
+- `/var/lib/postgresql/data` - PostgreSQL 数据
+- `/app/data` - 应用运行数据
+- `/app/uploads` - 上传文件
+
+### 如何备份数据？
+
+备份元数据库即可：
+```bash
+docker exec dbclaw pg_dump -U dbclaw dbclaw > backup.sql
+```
+
+## 技术栈
+
+**后端**：
+- FastAPI - Web 框架
+- SQLAlchemy - ORM
+- AsyncPG - PostgreSQL 异步驱动
+- Pydantic - 数据验证
+- APScheduler - 任务调度
+
+**前端**：
+- 原生 JavaScript (ES6+)
+- Monaco Editor - 代码编辑器
+- Lucide Icons - 图标库
+- Chart.js - 图表库
+
+**数据库驱动**：
+- aiomysql - MySQL
+- asyncpg - PostgreSQL
+- oracledb - Oracle
+- pyodbc/pymssql - SQL Server
+- hdbcli - SAP HANA
+
+## 性能指标
+
+- 支持管理数据库实例数：1000+
+- 单实例指标采集周期：15-60 秒（可配置）
+- AI 对话响应时间：< 5 秒（取决于模型）
+- 并发用户数：100+（单容器部署）
+
+## 路线图
+
+- [ ] 支持更多数据库类型（MongoDB、Redis、ClickHouse）
+- [ ] 增强 AI 诊断能力（根因分析、自动修复建议）
+- [ ] 支持多租户和 RBAC
+- [ ] 提供 Kubernetes Operator
+- [ ] 支持分布式部署
+- [ ] 移动端适配
 
 ## License
 
