@@ -611,8 +611,6 @@ async def run_conversation_with_skills(
         skill_authorizations,
         disabled_tools,
     )
-    logger.info(f"[SKILL_AUTH] Input skill_authorizations: {skill_authorizations}")
-    logger.info(f"[SKILL_AUTH] Normalized skill_authorizations: {normalized_skill_authorizations}")
     knowledge_retrieval_enabled = any(
         is_static_tool_authorized(tool_name, normalized_skill_authorizations)
         for tool_name in KB_TOOL_NAMES
