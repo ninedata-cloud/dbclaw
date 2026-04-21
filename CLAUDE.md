@@ -8,14 +8,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-DBClaw 是一个 AI 驱动的数据库运维平台，提供数据库诊断、监控、巡检和告警能力。
+DBClaw（数据库智能卫士）是一个 AI 驱动的数据库运维平台，提供数据库诊断、监控、巡检和告警能力。
 
 **架构**：FastAPI 后端 + 原生 JavaScript SPA（无构建步骤） + PostgreSQL 元数据库。
+
+**支持的数据库类型**：
+- MySQL
+- PostgreSQL
+- Oracle
+- SQL Server
+- TDSQL-C MySQL
+- openGauss
+- SAP HANA
 
 **关键约束**：
 - 元数据库只支持 PostgreSQL。
 - 前端没有 npm / Vite / Webpack 构建链。
-- AI 模型优先读取数据库中的 AI Model 配置，`OPENAI_*` 只作兜底。
+- AI 模型配置统一在前端"AI 大模型管理"中维护，环境变量 `OPENAI_*` 仅作兜底。
 - 更完整的部署/环境变量说明优先看 `README.md`。
 
 ## 常用命令
@@ -69,14 +78,16 @@ python backend/migrations/<migration_name>.py
 - `GET /health/ready`
 - `GET /health/checks`（管理员）
 
-`backend/app.py` 启动的关键后台组件：
-- SSH 连接池
-- `metric_collector`
-- `InspectionService`
-- `host_collector`
-- `notification_dispatcher`
-- `integration_scheduler`
-- 飞书长连接、钉钉 Stream、企业微信轮询器
+`backend/app.py` lifespan 启动的关键后台组件：
+1. 数据库初始化（`init_db`）+ 默认系统配置种子数据
+2. SSH 连接池（`ssh_connection_pool`）
+3. 指标收集器（`metric_collector`）
+4. 文档知识初始化 + 内置文档种子
+5. 巡检服务（`InspectionService`）
+6. 主机指标收集器（`host_collector`）
+7. 通知分发器（`notification_dispatcher`）
+8. 集成模板加载 + 集成调度器（`integration_scheduler`）
+9. IM 机器人：飞书长连接、钉钉 Stream、企业微信轮询器
 
 ## 核心业务链路
 
@@ -117,10 +128,12 @@ python backend/migrations/<migration_name>.py
 - 高风险工具带审批流
 
 技能系统：
-- 内置技能源码在 `backend/skills/builtin/*.yaml`
+- 内置技能源码在 `backend/skills/builtin/*.yaml`（当前约 77 个内置技能）
 - 启动时会加载进数据库；运行态主要读取数据库中的 skill 记录
 - 核心文件：`backend/skills/registry.py`、`backend/skills/executor.py`、`backend/skills/context.py`
 - `/api/skills/{id}/test` 当前只允许 builtin skill，自定义 skill 测试被禁用
+- 技能分类包括：诊断类、查询类、系统命令类、网络工具类等
+- 技能支持权限控制和沙箱执行，自动成为 AI Agent 工具
 
 ## 前端结构
 
@@ -140,3 +153,30 @@ python backend/migrations/<migration_name>.py
 - 默认管理员用户名固定为 `admin`；密码优先取 `INITIAL_ADMIN_PASSWORD`，未配置时才回落到 `admin1234`。
 - Schema 变更通常要同时考虑 `create_all` 和增量迁移脚本。
 - 前端静态资源由 FastAPI 直接挂载 `/css`、`/js`、`/assets`、`/lib`，根路径 `/` 返回 `frontend/index.html`。
+- 前端资源带版本号缓存控制（`?build=<version>`），有版本号的资源长期缓存，无版本号的强制重新验证。
+
+## 已注册的 API Router
+
+- `auth`：认证登录
+- `user`：用户管理
+- `datasource`：数据源管理
+- `host`：主机管理
+- `host_detail`：主机详情
+- `terminal_ws`：WebSocket 终端
+- `metrics`：指标查询
+- `monitor_ws`：WebSocket 实时监控
+- `chat`：AI 对话
+- `query`：SQL 查询执行
+- `instances`：实例管理
+- `ai_model`：AI 模型管理
+- `documents`：文档知识管理
+- `skills`：技能管理
+- `inspections`：巡检管理
+- `system_config`：系统配置
+- `alerts`：告警管理
+- `alert_ai`：AI 告警策略
+- `integration`：外部集成
+- `integration_bots`：集成机器人
+- `feishu_bot`：飞书机器人
+- `dingtalk_bot`：钉钉机器人
+- `weixin_bot`：企业微信机器人

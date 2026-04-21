@@ -1,0 +1,41 @@
+id: get_current_time
+name: Get Current Time
+version: 1.0.0
+author: DBClaw
+category: system
+description: Get current system time and date information. This skill is always available and does not require any authorization.
+tags: [time, date, system, utility]
+timeout: 5
+
+parameters: []
+
+permissions: []
+
+code: |
+  async def execute(context, params):
+      from datetime import datetime
+      import time
+
+      # Get current time
+      now = datetime.now()
+
+      # Format in multiple ways for convenience
+      result = {
+          "success": True,
+          "current_time": now.strftime("%Y-%m-%d %H:%M:%S"),
+          "date": now.strftime("%Y-%m-%d"),
+          "time": now.strftime("%H:%M:%S"),
+          "datetime_iso": now.isoformat(),
+          "timestamp": int(time.time()),
+          "year": now.year,
+          "month": now.month,
+          "day": now.day,
+          "hour": now.hour,
+          "minute": now.minute,
+          "second": now.second,
+          "weekday": now.strftime("%A"),
+          "weekday_cn": ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"][now.weekday()],
+          "timezone": now.astimezone().tzname()
+      }
+
+      return result

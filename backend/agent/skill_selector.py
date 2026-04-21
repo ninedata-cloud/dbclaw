@@ -33,6 +33,8 @@ GLOBAL_SKILL_IDS: Set[str] = {
     "manage_skill",
     "list_host",
     "query_host_metric",
+    # Utility skills - always available
+    "get_current_time",
 }
 
 # OS diagnostics are only useful when a datasource has an associated host.
