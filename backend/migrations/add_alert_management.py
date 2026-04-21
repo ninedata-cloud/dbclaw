@@ -2,7 +2,7 @@
 Migration: Add Alert Management Module
 
 Creates tables for alert messages, subscriptions, and delivery logs.
-Adds email and phone fields to users table.
+Adds email and phone fields to user table.
 """
 
 import asyncio
@@ -21,10 +21,10 @@ async def run_migration():
     async with engine.begin() as conn:
         print("Starting alert management migration...")
 
-        # Create alert_messages table
-        print("Creating alert_messages table...")
+        # Create alert_message table
+        print("Creating alert_message table...")
         await conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS alert_messages (
+            CREATE TABLE IF NOT EXISTS alert_message (
                 id SERIAL PRIMARY KEY,
                 datasource_id INTEGER NOT NULL,
                 alert_type VARCHAR(50) NOT NULL,
@@ -41,38 +41,38 @@ async def run_migration():
                 resolved_at TIMESTAMP,
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (datasource_id) REFERENCES datasources(id),
-                FOREIGN KEY (acknowledged_by) REFERENCES users(id)
+                FOREIGN KEY (datasource_id) REFERENCES datasource(id),
+                FOREIGN KEY (acknowledged_by) REFERENCES user(id)
             )
         """))
 
-        # Create indexes for alert_messages
-        print("Creating indexes for alert_messages...")
+        # Create indexes for alert_message
+        print("Creating indexes for alert_message...")
         await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_alert_messages_datasource_id
-            ON alert_messages(datasource_id)
+            CREATE INDEX IF NOT EXISTS idx_alert_message_datasource_id
+            ON alert_message(datasource_id)
         """))
         await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_alert_messages_alert_type
-            ON alert_messages(alert_type)
+            CREATE INDEX IF NOT EXISTS idx_alert_message_alert_type
+            ON alert_message(alert_type)
         """))
         await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_alert_messages_severity
-            ON alert_messages(severity)
+            CREATE INDEX IF NOT EXISTS idx_alert_message_severity
+            ON alert_message(severity)
         """))
         await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_alert_messages_status
-            ON alert_messages(status)
+            CREATE INDEX IF NOT EXISTS idx_alert_message_status
+            ON alert_message(status)
         """))
         await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_alert_messages_created_at
-            ON alert_messages(created_at)
+            CREATE INDEX IF NOT EXISTS idx_alert_message_created_at
+            ON alert_message(created_at)
         """))
 
-        # Create alert_subscriptions table
-        print("Creating alert_subscriptions table...")
+        # Create alert_subscription table
+        print("Creating alert_subscription table...")
         await conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS alert_subscriptions (
+            CREATE TABLE IF NOT EXISTS alert_subscription (
                 id SERIAL PRIMARY KEY,
                 user_id INTEGER NOT NULL,
                 datasource_ids TEXT NOT NULL DEFAULT '[]',
@@ -84,25 +84,25 @@ async def run_migration():
                 aggregation_script TEXT,
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(id)
+                FOREIGN KEY (user_id) REFERENCES user(id)
             )
         """))
 
-        # Create indexes for alert_subscriptions
-        print("Creating indexes for alert_subscriptions...")
+        # Create indexes for alert_subscription
+        print("Creating indexes for alert_subscription...")
         await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_alert_subscriptions_user_id
-            ON alert_subscriptions(user_id)
+            CREATE INDEX IF NOT EXISTS idx_alert_subscription_user_id
+            ON alert_subscription(user_id)
         """))
         await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_alert_subscriptions_enabled
-            ON alert_subscriptions(enabled)
+            CREATE INDEX IF NOT EXISTS idx_alert_subscription_enabled
+            ON alert_subscription(enabled)
         """))
 
-        # Create alert_delivery_logs table
-        print("Creating alert_delivery_logs table...")
+        # Create alert_delivery_log table
+        print("Creating alert_delivery_log table...")
         await conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS alert_delivery_logs (
+            CREATE TABLE IF NOT EXISTS alert_delivery_log (
                 id SERIAL PRIMARY KEY,
                 alert_id INTEGER NOT NULL,
                 subscription_id INTEGER NOT NULL,
@@ -112,50 +112,50 @@ async def run_migration():
                 error_message TEXT,
                 sent_at TIMESTAMP,
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (alert_id) REFERENCES alert_messages(id),
-                FOREIGN KEY (subscription_id) REFERENCES alert_subscriptions(id)
+                FOREIGN KEY (alert_id) REFERENCES alert_message(id),
+                FOREIGN KEY (subscription_id) REFERENCES alert_subscription(id)
             )
         """))
 
-        # Create indexes for alert_delivery_logs
-        print("Creating indexes for alert_delivery_logs...")
+        # Create indexes for alert_delivery_log
+        print("Creating indexes for alert_delivery_log...")
         await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_alert_delivery_logs_alert_id
-            ON alert_delivery_logs(alert_id)
+            CREATE INDEX IF NOT EXISTS idx_alert_delivery_log_alert_id
+            ON alert_delivery_log(alert_id)
         """))
         await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_alert_delivery_logs_subscription_id
-            ON alert_delivery_logs(subscription_id)
+            CREATE INDEX IF NOT EXISTS idx_alert_delivery_log_subscription_id
+            ON alert_delivery_log(subscription_id)
         """))
         await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_alert_delivery_logs_status
-            ON alert_delivery_logs(status)
+            CREATE INDEX IF NOT EXISTS idx_alert_delivery_log_status
+            ON alert_delivery_log(status)
         """))
         await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_alert_delivery_logs_created_at
-            ON alert_delivery_logs(created_at)
+            CREATE INDEX IF NOT EXISTS idx_alert_delivery_log_created_at
+            ON alert_delivery_log(created_at)
         """))
 
-        # Check if email and phone columns exist in users table
-        print("Checking users table structure...")
+        # Check if email and phone columns exist in user table
+        print("Checking user table structure...")
         result = await conn.execute(text("""
             SELECT column_name FROM information_schema.columns
-            WHERE table_name = 'users' AND column_name IN ('email', 'phone')
+            WHERE table_name = 'user' AND column_name IN ('email', 'phone')
         """))
         existing_columns = [row[0] for row in result.fetchall()]
 
         # Add email column if not exists
         if 'email' not in existing_columns:
-            print("Adding email column to users table...")
+            print("Adding email column to user table...")
             await conn.execute(text("""
-                ALTER TABLE users ADD COLUMN email VARCHAR(255)
+                ALTER TABLE user ADD COLUMN email VARCHAR(255)
             """))
 
         # Add phone column if not exists
         if 'phone' not in existing_columns:
-            print("Adding phone column to users table...")
+            print("Adding phone column to user table...")
             await conn.execute(text("""
-                ALTER TABLE users ADD COLUMN phone VARCHAR(50)
+                ALTER TABLE user ADD COLUMN phone VARCHAR(50)
             """))
 
         print("Alert management migration completed successfully!")

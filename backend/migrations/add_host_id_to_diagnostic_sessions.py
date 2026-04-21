@@ -1,5 +1,5 @@
 """
-数据库迁移脚本：为 diagnostic_sessions 表添加 host_id 字段
+数据库迁移脚本：为 diagnostic_session 表添加 host_id 字段
 """
 import asyncio
 from sqlalchemy import text
@@ -11,18 +11,18 @@ async def migrate():
     async with async_engine.begin() as conn:
         # 添加 host_id 字段
         await conn.execute(text("""
-            ALTER TABLE diagnostic_sessions
+            ALTER TABLE diagnostic_session
             ADD COLUMN IF NOT EXISTS host_id INTEGER;
         """))
 
         # 创建索引
         await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS ix_diagnostic_sessions_host_id
-            ON diagnostic_sessions(host_id);
+            CREATE INDEX IF NOT EXISTS ix_diagnostic_session_host_id
+            ON diagnostic_session(host_id);
         """))
 
-        print("✓ 成功添加 host_id 字段到 diagnostic_sessions 表")
-        print("✓ 成功创建索引 ix_diagnostic_sessions_host_id")
+        print("✓ 成功添加 host_id 字段到 diagnostic_session 表")
+        print("✓ 成功创建索引 ix_diagnostic_session_host_id")
 
 
 if __name__ == "__main__":

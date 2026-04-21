@@ -314,7 +314,7 @@ async def test_combined_validation():
             "enum": ["http", "https", "tcp", "udp"]
         },
         {
-            "name": "hosts",
+            "name": "host",
             "type": "array",
             "required": False,
             "description": "Host list",
@@ -327,7 +327,7 @@ async def test_combined_validation():
         {
             "port": 8080,
             "protocol": "https",
-            "hosts": ["host1", "host2"]
+            "host": ["host1", "host2"]
         },
         param_defs
     )
@@ -341,20 +341,20 @@ async def test_combined_validation():
         {
             "port": 70000,  # Out of range
             "protocol": "ftp",  # Not in enum
-            "hosts": ["host1", 123]  # Wrong item type
+            "host": ["host1", 123]  # Wrong item type
         },
         param_defs
     )
     if not is_valid:
         has_port_error = any("port" in e and "maximum" in e for e in errors)
         has_protocol_error = any("protocol" in e and "must be one of" in e for e in errors)
-        has_hosts_error = any("hosts" in e and "type" in e for e in errors)
+        has_host_error = any("host" in e and "type" in e for e in errors)
 
-        if has_port_error and has_protocol_error and has_hosts_error:
+        if has_port_error and has_protocol_error and has_host_error:
             results.record_pass("Multiple validation errors detected")
         else:
             results.record_fail("Multiple validation errors detected",
-                              f"Missing errors. Port: {has_port_error}, Protocol: {has_protocol_error}, Hosts: {has_hosts_error}")
+                              f"Missing errors. Port: {has_port_error}, Protocol: {has_protocol_error}, Hosts: {has_host_error}")
     else:
         results.record_fail("Multiple validation errors detected", "Should detect all errors")
 

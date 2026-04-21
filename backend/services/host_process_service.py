@@ -205,7 +205,7 @@ class HostProcessService:
 
             try:
                 # ss 输出格式: Recv-Q Send-Q Local Address:Port Peer Address:Port [Process]
-                # 示例: 0 0 192.168.2.29:37892 192.168.2.3:9022 users:(("python",pid=12927,fd=182))
+                # 示例: 0 0 192.168.2.29:37892 192.168.2.3:9022 user:(("python",pid=12927,fd=182))
                 parts = line.split()
                 if len(parts) >= 4:
                     recv_q = int(parts[0]) if parts[0].isdigit() else 0

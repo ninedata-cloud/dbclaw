@@ -13,7 +13,7 @@ async def check_fields():
         result = await conn.execute(text("""
             SELECT column_name, data_type
             FROM information_schema.columns
-            WHERE table_name = 'hosts'
+            WHERE table_name = 'host'
             AND column_name IN ('config_data', 'config_collected_at')
             ORDER BY column_name
         """))

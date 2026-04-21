@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Literal, List, Dict, Any
 from datetime import datetime
+from backend.schemas.base import TimestampSerializerMixin
 
 
 class DatasourceCreate(BaseModel):
@@ -43,7 +44,7 @@ class DatasourceUpdate(BaseModel):
     inbound_source: Optional[Dict[str, Any]] = None
 
 
-class DatasourceResponse(BaseModel):
+class DatasourceResponse(TimestampSerializerMixin, BaseModel):
     id: int
     name: str
     db_type: str
@@ -141,7 +142,7 @@ class DatasourceSilenceRequest(BaseModel):
     reason: Optional[str] = Field(None, max_length=500, description="静默原因")
 
 
-class DatasourceSilenceResponse(BaseModel):
+class DatasourceSilenceResponse(TimestampSerializerMixin, BaseModel):
     """数据源静默状态响应"""
     datasource_id: int
     silence_until: Optional[datetime] = None

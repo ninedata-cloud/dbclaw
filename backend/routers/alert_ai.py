@@ -13,7 +13,7 @@ from backend.models.alert_ai_evaluation_log import AlertAIEvaluationLog
 from backend.models.alert_ai_policy import AlertAIPolicy
 from backend.models.alert_ai_runtime_state import AlertAIRuntimeState
 from backend.models.datasource import Datasource
-from backend.models.metric_snapshot import MetricSnapshot
+from backend.models.datasource_metric import DatasourceMetric
 from backend.models.soft_delete import alive_filter
 from backend.models.user import User
 from backend.schemas.alert_ai import (
@@ -42,13 +42,13 @@ router = APIRouter(prefix="/api/alert-ai", tags=["alert-ai"], dependencies=[Depe
 
 
 @router.get("/policies", response_model=list[AlertAIPolicyResponse])
-async def list_alert_ai_policies(
+async def list_alert_ai_policy(
     include_disabled: bool = Query(False),
     db: AsyncSession = Depends(get_db),
 ):
     query = select(AlertAIPolicy).order_by(AlertAIPolicy.name.asc(), AlertAIPolicy.id.asc())
     if not include_disabled:
-        query = query.where(AlertAIPolicy.enabled == True)
+        query = query.where(AlertAIPolicy.is_enabled == True)
     result = await db.execute(query)
     policies = result.scalars().all()
     changed = False
@@ -79,7 +79,7 @@ async def create_alert_ai_policy(
         name=data.name,
         description=data.description,
         rule_text=data.rule_text,
-        enabled=data.enabled,
+        is_enabled=data.enabled,
         model_id=data.model_id,
         analysis_strategy=data.analysis_strategy,
         analysis_config=data.analysis_config,
@@ -115,7 +115,7 @@ async def update_alert_ai_policy(
     if data.rule_text is not None:
         policy.rule_text = data.rule_text
     if data.enabled is not None:
-        policy.enabled = data.enabled
+        policy.is_enabled = data.enabled
     if "model_id" in data.model_fields_set:
         policy.model_id = data.model_id
     if "analysis_strategy" in data.model_fields_set:
@@ -140,7 +140,7 @@ async def toggle_alert_ai_policy(
     policy = await db.get(AlertAIPolicy, policy_id)
     if not policy:
         raise HTTPException(status_code=404, detail="AI 告警模板不存在")
-    policy.enabled = data.enabled
+    policy.is_enabled = data.enabled
     policy.updated_by = current_user.id
     await db.commit()
     await db.refresh(policy)
@@ -190,7 +190,7 @@ async def get_alert_ai_stats(
     )
 
 
-def _pick_preview_snapshots(snapshots: list[MetricSnapshot], max_samples: int) -> list[MetricSnapshot]:
+def _pick_preview_snapshots(snapshots: list[DatasourceMetric], max_samples: int) -> list[DatasourceMetric]:
     if len(snapshots) <= max_samples:
         return snapshots
     if max_samples <= 1:
@@ -235,13 +235,13 @@ async def evaluate_alert_ai_preview(
         raise HTTPException(status_code=400, detail="AI 告警规则未配置或模板不可用")
 
     result = await db.execute(
-        select(MetricSnapshot)
+        select(DatasourceMetric)
         .where(
-            MetricSnapshot.datasource_id == datasource.id,
-            MetricSnapshot.metric_type == "db_status",
-            MetricSnapshot.collected_at >= now() - timedelta(hours=data.hours),
+            DatasourceMetric.datasource_id == datasource.id,
+            DatasourceMetric.metric_type == "db_status",
+            DatasourceMetric.collected_at >= now() - timedelta(hours=data.hours),
         )
-        .order_by(MetricSnapshot.collected_at.asc())
+        .order_by(DatasourceMetric.collected_at.asc())
     )
     snapshots = result.scalars().all()
     if not snapshots:
@@ -262,7 +262,7 @@ async def evaluate_alert_ai_preview(
         policy_id=binding.policy_id,
         policy_source=binding.policy_source,
         policy_fingerprint=binding.policy_fingerprint,
-        active=False,
+        is_active=False,
         consecutive_alert_count=0,
         consecutive_recover_count=0,
     )
@@ -290,7 +290,7 @@ async def evaluate_alert_ai_preview(
             mode="preview",
         )
         transition = compute_ai_transition(
-            active=bool(runtime_state.active),
+            active=bool(runtime_state.is_active),
             decision=judge_result.decision,
             confidence=judge_result.confidence,
             confidence_threshold=confidence_threshold,
@@ -305,7 +305,7 @@ async def evaluate_alert_ai_preview(
         elif action == "recover_alert":
             recover_count += 1
 
-        runtime_state.active = transition.active
+        runtime_state.is_active = transition.active
         runtime_state.consecutive_alert_count = transition.consecutive_alert_count
         runtime_state.consecutive_recover_count = transition.consecutive_recover_count
         runtime_state.cooldown_until = transition.cooldown_until
@@ -318,7 +318,7 @@ async def evaluate_alert_ai_preview(
         elif action == "recover_alert":
             runtime_state.last_recovered_at = snapshot.collected_at
 
-        log_entry.accepted = action in {"trigger_alert", "recover_alert"}
+        log_entry.is_accepted = action in {"trigger_alert", "recover_alert"}
 
         samples.append(
             AlertAIPreviewSample(
@@ -331,7 +331,7 @@ async def evaluate_alert_ai_preview(
                 severity_source=judge_result.severity_source,
                 reason=judge_result.reason,
                 evidence=judge_result.evidence,
-                accepted=log_entry.accepted,
+                accepted=log_entry.is_accepted,
                 action=action,
             )
         )
@@ -377,10 +377,10 @@ async def list_alert_ai_evaluations(
         query = query.where(AlertAIEvaluationLog.decision == decision)
         count_query = count_query.where(AlertAIEvaluationLog.decision == decision)
     if status == "accepted":
-        status_clause = AlertAIEvaluationLog.accepted == True
+        status_clause = AlertAIEvaluationLog.is_accepted == True
     elif status == "recorded":
         status_clause = and_(
-            AlertAIEvaluationLog.accepted == False,
+            AlertAIEvaluationLog.is_accepted == False,
             AlertAIEvaluationLog.error_message.is_(None),
         )
     elif status == "failed":

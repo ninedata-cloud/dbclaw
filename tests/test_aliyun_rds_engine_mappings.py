@@ -248,7 +248,7 @@ async def test_aliyun_rds_template_supports_multiple_engines(
     )
     executor = IntegrationExecutor(AsyncMock(), logging.getLogger(__name__))
 
-    datasources = [
+    datasource = [
         {
             "id": 1,
             "name": f"test-{db_type}",
@@ -264,7 +264,7 @@ async def test_aliyun_rds_template_supports_multiple_engines(
     }
 
     with patch.dict("sys.modules", fake_modules):
-        metrics = await executor.execute_metric_collection(ALIYUN_RDS_TEMPLATE["code"], params, datasources)
+        metrics = await executor.execute_metric_collection(ALIYUN_RDS_TEMPLATE["code"], params, datasource)
 
     metrics_by_name = {item["metric_name"]: item for item in metrics}
 
@@ -298,7 +298,7 @@ async def test_aliyun_rds_template_rejects_unsupported_db_type():
     fake_modules = _install_fake_aliyun_modules({}, recorded_requests)
     executor = IntegrationExecutor(AsyncMock(), logging.getLogger(__name__))
 
-    datasources = [
+    datasource = [
         {
             "id": 1,
             "name": "test-oracle",
@@ -315,7 +315,7 @@ async def test_aliyun_rds_template_rejects_unsupported_db_type():
 
     with patch.dict("sys.modules", fake_modules):
         with pytest.raises(ValueError, match="暂不支持阿里云 RDS 外部采集"):
-            await executor.execute_metric_collection(ALIYUN_RDS_TEMPLATE["code"], params, datasources)
+            await executor.execute_metric_collection(ALIYUN_RDS_TEMPLATE["code"], params, datasource)
 
 
 @pytest.mark.asyncio
@@ -339,7 +339,7 @@ async def test_aliyun_mysql_prefers_mysql_mem_cpu_usage_over_rcu_variant():
     )
     executor = IntegrationExecutor(AsyncMock(), logging.getLogger(__name__))
 
-    datasources = [
+    datasource = [
         {
             "id": 1,
             "name": "test-mysql-priority",
@@ -355,7 +355,7 @@ async def test_aliyun_mysql_prefers_mysql_mem_cpu_usage_over_rcu_variant():
     }
 
     with patch.dict("sys.modules", fake_modules):
-        metrics = await executor.execute_metric_collection(ALIYUN_RDS_TEMPLATE["code"], params, datasources)
+        metrics = await executor.execute_metric_collection(ALIYUN_RDS_TEMPLATE["code"], params, datasource)
 
     metrics_by_name = {item["metric_name"]: item for item in metrics}
 

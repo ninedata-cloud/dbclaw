@@ -42,7 +42,7 @@ class HostNetworkService:
                 if not line or line.startswith('Netid') or line.startswith('Proto') or line.startswith('Active'):
                     continue
 
-                # ss 格式: tcp ESTAB 0 0 192.168.1.10:22 192.168.1.100:54321 users:(("sshd",pid=1234,fd=3))
+                # ss 格式: tcp ESTAB 0 0 192.168.1.10:22 192.168.1.100:54321 user:(("sshd",pid=1234,fd=3))
                 # netstat 格式: tcp 0 0 192.168.1.10:22 192.168.1.100:54321 ESTABLISHED 1234/sshd
 
                 parts = line.split()
@@ -70,7 +70,7 @@ class HostNetworkService:
                 process_name = None
                 pid = None
                 if len(parts) > 6:
-                    # ss 格式: users:(("sshd",pid=1234,fd=3))
+                    # ss 格式: user:(("sshd",pid=1234,fd=3))
                     process_match = re.search(r'\("([^"]+)",pid=(\d+)', line)
                     if process_match:
                         process_name = process_match.group(1)

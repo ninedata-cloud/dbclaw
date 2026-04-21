@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.inspection_config import InspectionConfig
 from backend.models.inspection_trigger import InspectionTrigger
 from backend.models.datasource import Datasource
-from backend.models.metric_snapshot import MetricSnapshot
+from backend.models.datasource_metric import DatasourceMetric
 from backend.models.report import Report
 from backend.models.soft_delete import alive_select, get_alive_by_id
 from backend.utils.datetime_helper import now as get_now
@@ -54,7 +54,7 @@ class InspectionService:
         self.running = True
         logger.info("InspectionService started")
 
-        # Initialize configs for all datasources
+        # Initialize configs for all datasource
         async with self.db_session_factory() as db:
             await self.initialize_all_configs(db)
 
@@ -67,26 +67,26 @@ class InspectionService:
         logger.info("InspectionService stopped")
 
     async def initialize_all_configs(self, db: AsyncSession):
-        """Create default inspection configs for datasources that don't have one"""
+        """Create default inspection configs for datasource that don't have one"""
         from backend.services.alert_template_service import (
-            bind_default_template_to_all_inspection_configs,
-            ensure_default_alert_templates,
+            bind_default_template_to_all_inspection_config,
+            ensure_default_alert_template,
             get_default_alert_template,
         )
 
-        await ensure_default_alert_templates(db)
+        await ensure_default_alert_template(db)
         default_template = await get_default_alert_template(db)
         result = await db.execute(alive_select(Datasource))
-        datasources = result.scalars().all()
+        datasource = result.scalars().all()
 
-        for ds in datasources:
+        for ds in datasource:
             existing = await db.execute(
                 select(InspectionConfig).where(InspectionConfig.datasource_id == ds.id)
             )
             if not existing.scalar_one_or_none():
                 config = InspectionConfig(
                     datasource_id=ds.id,
-                    enabled=True,
+                    is_enabled=True,
                     schedule_interval=86400,  # daily
                     use_ai_analysis=True,
                     alert_template_id=default_template.id if default_template else None,
@@ -100,14 +100,14 @@ class InspectionService:
                 )
                 db.add(config)
 
-        await bind_default_template_to_all_inspection_configs(db)
+        await bind_default_template_to_all_inspection_config(db)
 
         await db.commit()
-        logger.info(f"Initialized inspection configs for {len(datasources)} datasources")
+        logger.info(f"Initialized inspection configs for {len(datasource)} datasource")
 
     async def trigger_inspection(self, db: AsyncSession, datasource_id: int,
                                 trigger_type: str, reason: str = None,
-                                metric_snapshot: Dict[str, Any] = None,
+                                datasource_metric: Dict[str, Any] = None,
                                 alert_id: Optional[int] = None) -> int:
         """Manually or programmatically trigger an inspection"""
         recent_trigger = await self._find_recent_duplicate_trigger(
@@ -129,9 +129,9 @@ class InspectionService:
             datasource_id=datasource_id,
             trigger_type=trigger_type,
             trigger_reason=reason,
-            metric_snapshot=metric_snapshot,
+            datasource_metric=datasource_metric,
             alert_id=alert_id,
-            processed=False
+            is_processed=False
         )
         db.add(trigger)
         await db.flush()
@@ -188,7 +188,7 @@ class InspectionService:
                     result = await db.execute(
                         select(InspectionConfig).where(
                             and_(
-                                InspectionConfig.enabled == True,
+                                InspectionConfig.is_enabled == True,
                                 InspectionConfig.next_scheduled_at <= now
                             )
                         )
@@ -223,13 +223,13 @@ class InspectionService:
             select(InspectionTrigger).where(InspectionTrigger.id == trigger_id)
         )
         trigger = result.scalar_one_or_none()
-        if not trigger or trigger.processed:
+        if not trigger or trigger.is_processed:
             return
 
         generator = ReportGenerator(db)
         report_id = await generator.generate_inspection_report(trigger_id)
 
-        trigger.processed = True
+        trigger.is_processed = True
         trigger.report_id = report_id
 
         report = await get_alive_by_id(db, Report, report_id)

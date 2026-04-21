@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.skills.registry import SkillRegistry
 from backend.skills.loader import SkillLoader
 from backend.skills.builtin_metadata import normalize_builtin_skill_definition
-from backend.skills.models import Skill
+from backend.models.skill import Skill
 
 
 async def load_builtin_skills(db: AsyncSession) -> List[Skill]:

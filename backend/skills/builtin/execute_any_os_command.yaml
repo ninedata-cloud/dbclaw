@@ -15,7 +15,7 @@ description: |
   - Install/remove packages
   - Shutdown/reboot system
   - Modify network settings
-  - Create/delete users
+  - Create/delete user
 
   USE CASES:
   - Database maintenance: restart database services, clear logs, backup operations

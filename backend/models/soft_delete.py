@@ -6,7 +6,7 @@ from backend.utils.datetime_helper import now
 
 class SoftDeleteMixin:
     is_deleted = Column(Boolean, nullable=False, default=False, index=True)
-    deleted_at = Column(DateTime, nullable=True)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
     deleted_by = Column(Integer, nullable=True)
 
     def soft_delete(self, user_id: int | None = None) -> None:

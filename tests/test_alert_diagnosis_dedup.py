@@ -33,10 +33,10 @@ async def test_find_recent_diagnosis_uses_metric_name_and_completion_window():
         await _find_recent_diagnosis(db, current_event)
 
     query_text = str(db.execute.call_args.args[0])
-    assert "alert_events.alert_type =" in query_text
-    assert "alert_events.metric_name =" in query_text
+    assert "alert_event.alert_type =" in query_text
+    assert "alert_event.metric_name =" in query_text
     assert "diagnosis_completed_at" in query_text
-    assert "alert_events.last_updated >=" not in query_text
+    assert "alert_event.last_updated >=" not in query_text
 
 
 @pytest.mark.asyncio
@@ -57,11 +57,11 @@ async def test_find_in_progress_diagnosis_uses_metric_name_and_started_at():
         await _find_in_progress_diagnosis(db, current_event)
 
     query_text = str(db.execute.call_args.args[0])
-    assert "alert_events.alert_type =" in query_text
-    assert "alert_events.metric_name =" in query_text
+    assert "alert_event.alert_type =" in query_text
+    assert "alert_event.metric_name =" in query_text
     assert "diagnosis_started_at" in query_text
     assert "diagnosis_status IN" in query_text
-    assert "alert_events.diagnosis_started_at >=" in query_text
+    assert "alert_event.diagnosis_started_at >=" in query_text
 
 
 @pytest.mark.asyncio

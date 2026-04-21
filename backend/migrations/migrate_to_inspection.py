@@ -15,9 +15,9 @@ async def migrate():
         print("Starting migration to Inspection system...")
 
         # 1. Create new tables
-        print("Creating inspection_configs table...")
+        print("Creating inspection_config table...")
         await db.execute(text("""
-            CREATE TABLE IF NOT EXISTS inspection_configs (
+            CREATE TABLE IF NOT EXISTS inspection_config (
                 id SERIAL PRIMARY KEY,
                 datasource_id INTEGER UNIQUE NOT NULL,
                 enabled BOOLEAN NOT NULL DEFAULT TRUE,
@@ -33,45 +33,45 @@ async def migrate():
                 last_anomaly_diagnosis_at TIMESTAMP,
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (datasource_id) REFERENCES datasources(id)
+                FOREIGN KEY (datasource_id) REFERENCES datasource(id)
             )
         """))
 
-        print("Creating inspection_triggers table...")
+        print("Creating inspection_trigger table...")
         await db.execute(text("""
-            CREATE TABLE IF NOT EXISTS inspection_triggers (
+            CREATE TABLE IF NOT EXISTS inspection_trigger (
                 id SERIAL PRIMARY KEY,
                 datasource_id INTEGER NOT NULL,
                 trigger_type VARCHAR(20) NOT NULL,
                 trigger_reason VARCHAR(500),
-                metric_snapshot TEXT,
+                datasource_metric TEXT,
                 triggered_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 processed BOOLEAN NOT NULL DEFAULT FALSE,
                 report_id INTEGER,
-                FOREIGN KEY (datasource_id) REFERENCES datasources(id),
-                FOREIGN KEY (report_id) REFERENCES reports(id)
+                FOREIGN KEY (datasource_id) REFERENCES datasource(id),
+                FOREIGN KEY (report_id) REFERENCES report(id)
             )
         """))
-        await db.execute(text("CREATE INDEX IF NOT EXISTS idx_triggers_datasource ON inspection_triggers(datasource_id)"))
-        await db.execute(text("CREATE INDEX IF NOT EXISTS idx_triggers_time ON inspection_triggers(triggered_at)"))
+        await db.execute(text("CREATE INDEX IF NOT EXISTS idx_triggers_datasource ON inspection_trigger(datasource_id)"))
+        await db.execute(text("CREATE INDEX IF NOT EXISTS idx_triggers_time ON inspection_trigger(triggered_at)"))
 
-        # 2. Add trigger columns to reports table
-        print("Adding trigger columns to reports table...")
+        # 2. Add trigger columns to report table
+        print("Adding trigger columns to report table...")
         result = await db.execute(text("""
             SELECT column_name FROM information_schema.columns
-            WHERE table_name = 'reports' AND column_name IN ('trigger_type', 'trigger_id', 'trigger_reason')
+            WHERE table_name = 'report' AND column_name IN ('trigger_type', 'trigger_id', 'trigger_reason')
         """))
         existing_columns = {row[0] for row in result.fetchall()}
 
         if 'trigger_type' not in existing_columns:
-            await db.execute(text("ALTER TABLE reports ADD COLUMN trigger_type VARCHAR(20)"))
+            await db.execute(text("ALTER TABLE report ADD COLUMN trigger_type VARCHAR(20)"))
         if 'trigger_id' not in existing_columns:
-            await db.execute(text("ALTER TABLE reports ADD COLUMN trigger_id INTEGER REFERENCES inspection_triggers(id)"))
+            await db.execute(text("ALTER TABLE report ADD COLUMN trigger_id INTEGER REFERENCES inspection_trigger(id)"))
         if 'trigger_reason' not in existing_columns:
-            await db.execute(text("ALTER TABLE reports ADD COLUMN trigger_reason VARCHAR(500)"))
+            await db.execute(text("ALTER TABLE report ADD COLUMN trigger_reason VARCHAR(500)"))
         print("Trigger columns added")
 
-        # 3. Migrate scheduled_report_configs to inspection_configs
+        # 3. Migrate scheduled_report_configs to inspection_config
         print("Migrating scheduled report configs...")
         result = await db.execute(text("""
             SELECT table_name FROM information_schema.tables
@@ -87,7 +87,7 @@ async def migrate():
 
             if 'interval_seconds' in columns:
                 await db.execute(text("""
-                    INSERT INTO inspection_configs (datasource_id, enabled, schedule_interval, use_ai_analysis, ai_model_id, kb_ids, next_scheduled_at)
+                    INSERT INTO inspection_config (datasource_id, enabled, schedule_interval, use_ai_analysis, ai_model_id, kb_ids, next_scheduled_at)
                     SELECT datasource_id, enabled, interval_seconds, use_ai_analysis, ai_model_id,
                            COALESCE(kb_ids, '[]'), next_run_at
                     FROM scheduled_report_configs
@@ -98,10 +98,10 @@ async def migrate():
         else:
             print("No scheduled_report_configs table found - skipping migration")
 
-        # 4. Mark existing scheduled reports
-        print("Marking existing scheduled reports...")
+        # 4. Mark existing scheduled report
+        print("Marking existing scheduled report...")
         await db.execute(text("""
-            UPDATE reports
+            UPDATE report
             SET trigger_type = 'scheduled'
             WHERE is_scheduled = TRUE
         """))

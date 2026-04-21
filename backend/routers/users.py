@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/users", tags=["users"], dependencies=[Depends(ge
 
 
 @router.get("", response_model=List[UserResponse])
-async def list_users(db: AsyncSession = Depends(get_db)):
+async def list_user(db: AsyncSession = Depends(get_db)):
     result = await db.execute(alive_select(User).order_by(User.id))
     return result.scalars().all()
 
@@ -75,7 +75,7 @@ async def delete_user(
 
     user.soft_delete(current_admin.id)
     user.session_version += 1
-    await SessionService.revoke_user_sessions(db, user.id, "user_deleted")
+    await SessionService.revoke_user_session(db, user.id, "user_deleted")
     await db.commit()
     return {"message": "User deleted"}
 
@@ -94,9 +94,9 @@ async def reset_password(
         raise HTTPException(status_code=403, detail="admin 密码只能由本人修改")
 
     user.password_hash = hash_password(data.new_password)
-    user.password_changed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    user.password_changed_at = datetime.now(timezone.utc)
     user.session_version += 1
-    await SessionService.revoke_user_sessions(db, user.id, "password_reset")
+    await SessionService.revoke_user_session(db, user.id, "password_reset")
     await db.commit()
     return {"message": "Password reset successfully"}
 
@@ -117,18 +117,18 @@ async def toggle_status(
     user.is_active = not user.is_active
     if not user.is_active:
         user.session_version += 1
-        await SessionService.revoke_user_sessions(db, user.id, "user_disabled")
+        await SessionService.revoke_user_session(db, user.id, "user_disabled")
     await db.commit()
     await db.refresh(user)
     return {"message": f"User {'enabled' if user.is_active else 'disabled'}", "is_active": user.is_active}
 
 
 @router.get("/{user_id}/login-logs", response_model=List[LoginLogResponse])
-async def get_login_logs(user_id: int, db: AsyncSession = Depends(get_db)):
+async def get_login_log(user_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(LoginLog)
         .where(LoginLog.user_id == user_id)
-        .order_by(desc(LoginLog.login_time))
+        .order_by(desc(LoginLog.logged_in_at))
         .limit(100)
     )
     return result.scalars().all()

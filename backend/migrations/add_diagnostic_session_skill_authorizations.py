@@ -1,4 +1,4 @@
-"""Add skill_authorizations column to diagnostic_sessions."""
+"""Add skill_authorizations column to diagnostic_session."""
 import asyncio
 import logging
 
@@ -16,17 +16,17 @@ async def migrate():
                 "SELECT EXISTS ("
                 "SELECT 1 FROM information_schema.columns "
                 "WHERE table_schema = current_schema() "
-                "AND table_name='diagnostic_sessions' AND column_name='skill_authorizations'"
+                "AND table_name='diagnostic_session' AND column_name='skill_authorizations'"
                 ")"
             )
         )
         if not result.scalar_one():
             await conn.execute(
-                text("ALTER TABLE diagnostic_sessions ADD COLUMN skill_authorizations JSON NULL")
+                text("ALTER TABLE diagnostic_session ADD COLUMN skill_authorizations JSON NULL")
             )
-            logger.info("Added skill_authorizations column to diagnostic_sessions")
+            logger.info("Added skill_authorizations column to diagnostic_session")
 
-    logger.info("Migration complete: diagnostic_sessions.skill_authorizations")
+    logger.info("Migration complete: diagnostic_session.skill_authorizations")
 
 
 if __name__ == "__main__":

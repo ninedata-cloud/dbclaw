@@ -16,7 +16,7 @@ from backend.models.integration import Integration, IntegrationExecutionLog
 from backend.models.datasource import Datasource
 from backend.models.soft_delete import get_alive_by_id, alive_filter
 from backend.services.integration_executor import IntegrationExecutor
-from backend.services.metric_snapshot_merge import (
+from backend.services.datasource_metric_merge import (
     cleanup_obsolete_integration_keys,
     merge_integration_metric_data,
 )
@@ -50,7 +50,7 @@ async def refresh_scheduler(interval_seconds: Optional[int] = None, trigger_now:
             interval_seconds = await get_monitoring_collection_interval_seconds(session)
 
     scheduler.add_job(
-        execute_all_integrations,
+        execute_all_integration,
         'interval',
         seconds=interval_seconds,
         id=GLOBAL_INTEGRATION_JOB_ID,
@@ -59,7 +59,7 @@ async def refresh_scheduler(interval_seconds: Optional[int] = None, trigger_now:
     logger.info("已刷新全局入站集成调度任务: 每 %s 秒", interval_seconds)
 
     if trigger_now:
-        asyncio.create_task(execute_all_integrations())
+        asyncio.create_task(execute_all_integration())
 
 
 async def sync_datasource_schedule(datasource_id: int, trigger_now: bool = True):
@@ -104,7 +104,7 @@ async def execute_integration(datasource_id: int):
                 return
 
             integration = await get_alive_by_id(session, Integration, int(integration_id))
-            if not integration or not integration.enabled:
+            if not integration or not integration.is_enabled:
                 logger.warning(f"集成 {integration_id} 不存在或未启用")
                 return
 
@@ -140,7 +140,7 @@ async def execute_integration(datasource_id: int):
             metrics = await executor.execute_metric_collection(integration.code, params, datasource_list)
 
             if metrics:
-                from backend.models.metric_snapshot import MetricSnapshot
+                from backend.models.datasource_metric import DatasourceMetric
                 current_time = dt.now()
                 metric_data = {}
                 for metric in metrics:
@@ -152,9 +152,9 @@ async def execute_integration(datasource_id: int):
 
                 if metric_data:
                     result = await session.execute(
-                        select(MetricSnapshot)
-                        .where(and_(MetricSnapshot.datasource_id == datasource.id, MetricSnapshot.metric_type == "db_status"))
-                        .order_by(desc(MetricSnapshot.collected_at))
+                        select(DatasourceMetric)
+                        .where(and_(DatasourceMetric.datasource_id == datasource.id, DatasourceMetric.metric_type == "db_status"))
+                        .order_by(desc(DatasourceMetric.collected_at))
                         .limit(1)
                     )
                     latest_snapshot = result.scalar_one_or_none()
@@ -163,7 +163,7 @@ async def execute_integration(datasource_id: int):
                         metric_data,
                     )
                     merged_data = cleanup_obsolete_integration_keys(datasource.db_type, merged_data)
-                    snapshot = MetricSnapshot(
+                    snapshot = DatasourceMetric(
                         datasource_id=datasource.id,
                         metric_type="db_status",
                         data=merged_data,
@@ -203,7 +203,7 @@ async def execute_integration(datasource_id: int):
             await session.commit()
 
 
-async def execute_all_integrations():
+async def execute_all_integration():
     """按全局采集周期执行所有启用的 inbound_metric 数据源。"""
     async with async_session() as session:
         result = await session.execute(
@@ -215,10 +215,10 @@ async def execute_all_integrations():
                 )
             )
         )
-        datasources = result.scalars().all()
+        datasource = result.scalars().all()
         datasource_ids = [
             datasource.id
-            for datasource in datasources
+            for datasource in datasource
             if (datasource.inbound_source or {}).get('integration_id')
             and (datasource.inbound_source or {}).get('enabled', True)
         ]
@@ -234,7 +234,7 @@ async def execute_all_integrations():
     )
 
 
-async def schedule_all_integrations():
+async def schedule_all_integration():
     """兼容旧调用入口：刷新全局入站集成调度。"""
     await refresh_scheduler(trigger_now=True)
 

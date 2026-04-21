@@ -2,6 +2,7 @@
 from typing import Optional, List, Any, Dict
 from datetime import datetime
 from pydantic import BaseModel
+from backend.schemas.base import TimestampSerializerMixin
 
 
 class DocDiagnosisProfile(BaseModel):
@@ -13,7 +14,7 @@ class DocDiagnosisProfile(BaseModel):
     related_doc_ids: List[int] = []
 
 
-class DocCategoryResponse(BaseModel):
+class DocCategoryResponse(TimestampSerializerMixin, BaseModel):
     id: int
     name: str
     db_type: str
@@ -77,7 +78,7 @@ class DocDocumentUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
-class DocDocumentListItem(BaseModel):
+class DocDocumentListItem(TimestampSerializerMixin, BaseModel):
     """目录列表项，不含完整 content"""
     id: int
     title: str

@@ -82,7 +82,7 @@ python backend/migrations/<migration_name>.py
 
 ### 指标 → 告警 → 巡检
 
-系统有两条指标入口，但都会汇总到 `MetricSnapshot(metric_type="db_status")`：
+系统有两条指标入口，但都会汇总到 `DatasourceMetric(metric_type="db_status")`：
 
 1. `backend/services/metric_collector.py`
    - 直连采集数据库状态

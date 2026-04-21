@@ -1,5 +1,5 @@
 """
-Migration: populate datasource.inbound_source from enabled inbound integrations.
+Migration: populate datasource.inbound_source from enabled inbound integration.
 """
 
 import asyncio
@@ -15,13 +15,15 @@ async def migrate():
     from backend.models.integration import Integration
 
     async with async_session() as db:
-        result = await db.execute(select(Integration).where(Integration.integration_type == 'inbound_metric', Integration.enabled == True))
-        integrations = result.scalars().all()
-        if len(integrations) != 1:
-            logger.warning("Expected exactly one enabled inbound_metric integration for automatic migration, found %s", len(integrations))
+        result = await db.execute(
+            select(Integration).where(Integration.integration_type == "inbound_metric", Integration.is_enabled == True)
+        )
+        integration = result.scalars().all()
+        if len(integration) != 1:
+            logger.warning("Expected exactly one enabled inbound_metric integration for automatic migration, found %s", len(integration))
             return
 
-        integration = integrations[0]
+        integration = integration[0]
         default_params = {}
         properties = (integration.config_schema or {}).get('properties') or {}
         for key, prop in properties.items():
@@ -29,9 +31,9 @@ async def migrate():
                 default_params[key] = prop.get('default')
 
         ds_result = await db.execute(select(Datasource).where(Datasource.metric_source == 'integration'))
-        datasources = ds_result.scalars().all()
+        datasource = ds_result.scalars().all()
         migrated = 0
-        for ds in datasources:
+        for ds in datasource:
             if ds.inbound_source:
                 continue
             ds.inbound_source = {
@@ -43,7 +45,7 @@ async def migrate():
             migrated += 1
 
         await db.commit()
-        logger.info("Migrated %s datasources to inbound_source", migrated)
+        logger.info("Migrated %s datasource to inbound_source", migrated)
 
 
 if __name__ == '__main__':

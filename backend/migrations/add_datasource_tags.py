@@ -21,16 +21,16 @@ async def migrate():
         result = await conn.execute(text(
             "SELECT column_name FROM information_schema.columns "
             "WHERE table_schema = current_schema() "
-            "AND table_name = 'datasources' AND column_name = 'tags'"
+            "AND table_name = 'datasource' AND column_name = 'tags'"
         ))
         if result.fetchone():
             logger.info("tags column already exists, skipping migration")
             return
 
-        logger.info("Adding tags column to datasources table...")
+        logger.info("Adding tags column to datasource table...")
 
         await conn.execute(text(
-            "ALTER TABLE datasources ADD COLUMN tags JSON DEFAULT '[]'::json NOT NULL"
+            "ALTER TABLE datasource ADD COLUMN tags JSON DEFAULT '[]'::json NOT NULL"
         ))
 
         logger.info("Migration complete: added tags column")

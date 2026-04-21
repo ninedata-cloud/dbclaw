@@ -1,5 +1,5 @@
 """
-Migration: extend alert_delivery_logs with integration target metadata.
+Migration: extend alert_delivery_log with integration target metadata.
 """
 
 import asyncio
@@ -22,12 +22,12 @@ async def _add_column_if_missing(conn, table_name: str, column_name: str, ddl: s
 
 async def migrate():
     async with engine.begin() as conn:
-        await _add_column_if_missing(conn, 'alert_delivery_logs', 'integration_id', 'integration_id INTEGER NULL')
-        await _add_column_if_missing(conn, 'alert_delivery_logs', 'target_id', 'target_id VARCHAR(100) NULL')
-        await _add_column_if_missing(conn, 'alert_delivery_logs', 'target_name', 'target_name VARCHAR(255) NULL')
-        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_alert_delivery_logs_integration_id ON alert_delivery_logs (integration_id)"))
-        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_alert_delivery_logs_target_id ON alert_delivery_logs (target_id)"))
-        logger.info("Migration complete: extended alert_delivery_logs")
+        await _add_column_if_missing(conn, 'alert_delivery_log', 'integration_id', 'integration_id INTEGER NULL')
+        await _add_column_if_missing(conn, 'alert_delivery_log', 'target_id', 'target_id VARCHAR(100) NULL')
+        await _add_column_if_missing(conn, 'alert_delivery_log', 'target_name', 'target_name VARCHAR(255) NULL')
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_alert_delivery_log_integration_id ON alert_delivery_log (integration_id)"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_alert_delivery_log_target_id ON alert_delivery_log (target_id)"))
+        logger.info("Migration complete: extended alert_delivery_log")
 
 
 if __name__ == '__main__':

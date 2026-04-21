@@ -24,7 +24,7 @@ async def _column_exists(conn, column_name: str) -> bool:
                 SELECT 1
                 FROM information_schema.columns
                 WHERE table_schema = current_schema()
-                  AND table_name = 'reports'
+                  AND table_name = 'report'
                   AND column_name = :column_name
             )
             """
@@ -49,7 +49,7 @@ async def migrate():
                     source_schema VARCHAR(255) NOT NULL,
                     report_id INTEGER NOT NULL,
                     ai_analysis TEXT NULL,
-                    knowledge_sources JSONB NULL,
+                    knowledge_sources JSON NULL,
                     is_scheduled BOOLEAN NULL,
                     schedule_config_id INTEGER NULL,
                     retention_days INTEGER NULL,
@@ -67,7 +67,7 @@ async def migrate():
         for column in existing:
             if column == "knowledge_sources":
                 select_columns.append(
-                    "CASE WHEN knowledge_sources IS NULL THEN NULL ELSE CAST(knowledge_sources AS JSONB) END"
+                    "CASE WHEN knowledge_sources IS NULL THEN NULL ELSE CAST(knowledge_sources AS JSON) END"
                 )
             else:
                 select_columns.append(column)
@@ -76,7 +76,7 @@ async def migrate():
         sql = f"""
             INSERT INTO archive.report_deprecated_fields ({", ".join(insert_columns)})
             SELECT {", ".join(select_columns)}
-            FROM reports
+            FROM report
             ON CONFLICT (source_schema, report_id) DO UPDATE
             SET
                 {", ".join(update_assignments)},
@@ -85,7 +85,7 @@ async def migrate():
         await conn.execute(text(sql))
 
         for column in existing:
-            logger.info("Dropping reports.%s", column)
-            await conn.execute(text(f"ALTER TABLE reports DROP COLUMN {column}"))
+            logger.info("Dropping report.%s", column)
+            await conn.execute(text(f"ALTER TABLE report DROP COLUMN {column}"))
 
     logger.info("Deprecated report columns archived and dropped")

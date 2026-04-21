@@ -11,7 +11,8 @@ const SqlConsolePage = {
     supportsSchema: false,
     databaseOptions: [],
     schemaOptions: [],
-    editorHeight: 400,
+    editorHeight: 320,
+    resizeHandler: null,
     isResizing: false,
     startY: 0,
     startHeight: 0,
@@ -126,17 +127,11 @@ const SqlConsolePage = {
             innerHTML: '<i data-lucide="history"></i> 历史记录',
             onClick: () => this._showHistory()
         });
-        const refreshSchemaBtn = DOM.el('button', {
-            className: 'btn btn-secondary',
-            innerHTML: '<i data-lucide="refresh-cw"></i> 刷新结构',
-            onClick: () => this._refreshSchema()
-        });
         toolbarActions.appendChild(executeBtn);
         toolbarActions.appendChild(cancelBtn);
         toolbarActions.appendChild(explainBtn);
         toolbarActions.appendChild(diagnoseBtn);
         toolbarActions.appendChild(historyBtn);
-        toolbarActions.appendChild(refreshSchemaBtn);
         toolbar.appendChild(toolbarActions);
 
         const contextToolbar = DOM.el('div', { className: 'sql-console-toolbar-context', id: 'sql-console-context-toolbar' });
@@ -171,10 +166,6 @@ const SqlConsolePage = {
             }
         }, 500);
 
-        const statusBar = DOM.el('div', { className: 'sql-console-status-bar', id: 'sql-console-status' });
-        statusBar.innerHTML = '<div class="status-info"><span class="text-muted">就绪</span></div>';
-        container.appendChild(statusBar);
-
         const results = DOM.el('div', { className: 'sql-console-results', id: 'sql-console-results' });
         results.innerHTML = `
             <div class="empty-state" style="padding:40px">
@@ -185,11 +176,20 @@ const SqlConsolePage = {
         `;
         container.appendChild(resizer);
         container.appendChild(results);
-
+        const statusBar = DOM.el('div', { className: 'sql-console-status-bar', id: 'sql-console-status' });
+        statusBar.innerHTML = '<div class="status-info"><span class="text-muted">就绪</span></div>';
+        container.appendChild(statusBar);
+        
         content.appendChild(container);
         DOM.createIcons();
+        this._bindResizeHandler();
+        requestAnimationFrame(() => this._applyAdaptiveEditorHeight());
 
         return () => {
+            if (this.resizeHandler) {
+                window.removeEventListener('resize', this.resizeHandler);
+                this.resizeHandler = null;
+            }
             this.datasourceSelector?.destroy();
             this.datasourceSelector = null;
             this._cancelQuery();
@@ -370,21 +370,6 @@ const SqlConsolePage = {
         }
     },
 
-    async _refreshSchema() {
-        const connId = this._getSelectedDatasourceId();
-        if (!connId) {
-            Toast.warning('请先选择数据源');
-            return;
-        }
-
-        window.SchemaCache.invalidate(connId);
-        await this._loadQueryContext(connId, {
-            database: this.currentDatabase,
-            schema: this.currentSchema,
-        });
-        Toast.success('结构已刷新');
-    },
-
     _cancelQuery() {
         if (this.currentAbortController) {
             this.currentAbortController.abort();
@@ -404,6 +389,50 @@ const SqlConsolePage = {
                 cancelBtn.style.display = 'none';
             }
         }
+    },
+
+    _bindResizeHandler() {
+        if (this.resizeHandler) {
+            window.removeEventListener('resize', this.resizeHandler);
+        }
+
+        this.resizeHandler = () => this._applyAdaptiveEditorHeight();
+        window.addEventListener('resize', this.resizeHandler);
+    },
+
+    _getEditorHeightBounds() {
+        const container = DOM.$('.sql-console-container');
+        const toolbar = DOM.$('.sql-console-toolbar');
+        const resizer = DOM.$('#sql-console-resizer');
+        const statusBar = DOM.$('#sql-console-status');
+        const minEditorHeight = 150;
+        const preferredResultsHeight = 140;
+
+        if (!container) {
+            return { min: minEditorHeight, max: this.editorHeight || 400 };
+        }
+
+        const reservedHeight = [toolbar, resizer, statusBar]
+            .reduce((total, element) => total + (element?.offsetHeight || 0), 0);
+        const availableHeight = Math.max(0, container.clientHeight - reservedHeight);
+        const maxEditorHeight = Math.max(minEditorHeight, availableHeight - preferredResultsHeight);
+
+        return {
+            min: minEditorHeight,
+            max: maxEditorHeight,
+        };
+    },
+
+    _applyAdaptiveEditorHeight() {
+        const wrapper = DOM.$('.sql-console-editor-wrapper');
+        if (!wrapper) return;
+
+        const { min, max } = this._getEditorHeightBounds();
+        const currentHeight = wrapper.offsetHeight || this.editorHeight || 400;
+        const nextHeight = Math.max(min, Math.min(currentHeight, max));
+
+        wrapper.style.height = `${nextHeight}px`;
+        this.editorHeight = nextHeight;
     },
 
     async _executeQuery() {
@@ -540,7 +569,8 @@ const SqlConsolePage = {
             if (!this.isResizing) return;
             e.preventDefault();
             const delta = e.clientY - this.startY;
-            const newHeight = Math.max(150, Math.min(this.startHeight + delta, window.innerHeight - 400));
+            const { min, max } = this._getEditorHeightBounds();
+            const newHeight = Math.max(min, Math.min(this.startHeight + delta, max));
 
             const wrapper = DOM.$('.sql-console-editor-wrapper');
             if (wrapper) {

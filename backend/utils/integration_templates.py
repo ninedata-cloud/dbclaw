@@ -414,7 +414,7 @@ ALIYUN_RDS_TEMPLATE = {
         "required": ["region_id"]
     },
     "code": """
-async def fetch_metrics(context, params, datasources):
+async def fetch_metrics(context, params, datasource):
     access_key_id = params.get("access_key_id") or await context.get_system_config("aliyun_access_key_id")
     access_key_secret = params.get("access_key_secret") or await context.get_system_config("aliyun_access_key_secret")
     if not access_key_id or not access_key_secret:
@@ -680,11 +680,11 @@ async def fetch_metrics(context, params, datasources):
         raise ValueError("阿里云 AccessKey 验证失败，请检查配置: " + str(e))
 
     metrics = []
-    if not datasources:
+    if not datasource:
         await context.log("info", "没有配置数据源，阿里云凭证验证已通过")
         return metrics
 
-    for ds in datasources:
+    for ds in datasource:
         db_type = normalize_db_type(ds.get("db_type"))
         if db_type not in engine_metric_configs:
             raise ValueError("数据源 " + ds["name"] + " 的数据库类型暂不支持阿里云 RDS 外部采集: " + str(ds.get("db_type")))
@@ -780,7 +780,7 @@ HUAWEI_CLOUD_RDS_TEMPLATE = {
         "required": ["region_id"]
     },
     "code": """
-async def fetch_metrics(context, params, datasources):
+async def fetch_metrics(context, params, datasource):
     from datetime import datetime, timedelta, timezone
     import hashlib
     import hmac
@@ -1168,7 +1168,7 @@ async def fetch_metrics(context, params, datasources):
                     + str(region_id)
                     + " 对应的项目可访问，或手动填写 project_id"
                 )
-        elif not datasources:
+        elif not datasource:
             project_response = await signed_request("GET", iam_endpoint + "/v3/projects")
             if project_response.status_code != 200:
                 raise ValueError(
@@ -1242,7 +1242,7 @@ async def fetch_metrics(context, params, datasources):
         )
 
     metrics = []
-    if not datasources:
+    if not datasource:
         await context.log("info", "没有配置数据源，华为云凭证验证已通过")
         return metrics
 
@@ -1268,7 +1268,7 @@ async def fetch_metrics(context, params, datasources):
     end_ms = int(end_time.timestamp() * 1000)
     query_url = ces_endpoint + "/V1.0/" + project_id + "/batch-query-metric-data"
 
-    for ds in datasources:
+    for ds in datasource:
         db_type = normalize_db_type(ds.get("db_type"))
         if db_type not in engine_metric_configs:
             raise ValueError("数据源 " + ds["name"] + " 的数据库类型暂不支持华为云 RDS 外部采集: " + str(ds.get("db_type")))
@@ -1398,7 +1398,7 @@ TENCENT_CLOUD_RDS_TEMPLATE = {
         "required": ["region_id"]
     },
     "code": """
-async def fetch_metrics(context, params, datasources):
+async def fetch_metrics(context, params, datasource):
     import hashlib
     import hmac
     import json
@@ -1797,7 +1797,7 @@ async def fetch_metrics(context, params, datasources):
     await validate_credentials()
 
     metrics = []
-    if not datasources:
+    if not datasource:
         await context.log("info", "没有配置数据源，腾讯云凭证验证已通过")
         return metrics
 
@@ -1808,7 +1808,7 @@ async def fetch_metrics(context, params, datasources):
     # 使用 300 秒粒度，覆盖四类数据库公共监控指标。
     period = 300
 
-    for ds in datasources:
+    for ds in datasource:
         db_type = normalize_db_type(ds.get("db_type"))
         if db_type not in engine_metric_configs:
             raise ValueError("数据源 " + ds["name"] + " 的数据库类型暂不支持腾讯云 RDS 外部采集: " + str(ds.get("db_type")))

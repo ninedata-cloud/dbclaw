@@ -130,7 +130,7 @@ async def logout(
 @router.post("/logout-all")
 async def logout_all(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     current_user.session_version += 1
-    await SessionService.revoke_user_sessions(db, current_user.id, "logout_all")
+    await SessionService.revoke_user_session(db, current_user.id, "logout_all")
     await db.commit()
     return {"message": "All sessions revoked"}
 
@@ -146,9 +146,9 @@ async def change_password(
         raise HTTPException(status_code=400, detail="当前密码不正确")
 
     current_user.password_hash = hash_password(data.new_password)
-    current_user.password_changed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    current_user.password_changed_at = datetime.now(timezone.utc)
     current_user.session_version += 1
-    await SessionService.revoke_user_sessions(db, current_user.id, "password_changed")
+    await SessionService.revoke_user_session(db, current_user.id, "password_changed")
     await db.commit()
     _clear_session_cookie(response)
     return {"message": "Password changed successfully"}

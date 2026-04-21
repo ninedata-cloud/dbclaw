@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
+from backend.schemas.base import TimestampSerializerMixin
 
 
 class LoginRequest(BaseModel):
@@ -8,7 +9,7 @@ class LoginRequest(BaseModel):
     password: str
 
 
-class UserResponse(BaseModel):
+class UserResponse(TimestampSerializerMixin, BaseModel):
     id: int
     username: str
     display_name: Optional[str] = None
@@ -58,13 +59,13 @@ class ResetPasswordRequest(BaseModel):
     new_password: str = Field(..., min_length=6)
 
 
-class LoginLogResponse(BaseModel):
+class LoginLogResponse(TimestampSerializerMixin, BaseModel):
     id: int
     user_id: int
-    login_time: Optional[datetime] = None
+    logged_in_at: Optional[datetime] = None
     ip_address: Optional[str] = None
     user_agent: Optional[str] = None
-    success: bool
+    is_success: bool
 
     class Config:
         from_attributes = True

@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, model_validator
+from backend.schemas.base import TimestampSerializerMixin
 
 
 class AlertAIPolicyBase(BaseModel):
@@ -30,7 +31,7 @@ class AlertAIPolicyUpdate(BaseModel):
     analysis_config: Optional[Dict[str, Any]] = None
 
 
-class AlertAIPolicyResponse(AlertAIPolicyBase):
+class AlertAIPolicyResponse(TimestampSerializerMixin, AlertAIPolicyBase):
     id: int
     compiled_trigger_profile: Optional[Dict[str, Any]] = None
     compile_status: str = "pending"
@@ -49,7 +50,7 @@ class AlertAIPolicyToggleRequest(BaseModel):
     enabled: bool
 
 
-class AlertAIEvaluationLogResponse(BaseModel):
+class AlertAIEvaluationLogResponse(TimestampSerializerMixin, BaseModel):
     id: int
     datasource_id: int
     datasource_name: Optional[str] = None
@@ -107,7 +108,7 @@ class AlertAIPreviewRequest(BaseModel):
         return self
 
 
-class AlertAIPreviewSample(BaseModel):
+class AlertAIPreviewSample(TimestampSerializerMixin, BaseModel):
     snapshot_id: int
     collected_at: datetime
     decision: str

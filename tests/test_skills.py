@@ -15,7 +15,7 @@ from backend.skills.validator import SkillValidator
 from backend.skills.executor import SkillExecutor
 from backend.skills.context import SkillContext
 from backend.skills.schema import SkillParameter
-from backend.skills.models import Skill
+from backend.models.skill import Skill
 
 
 class TestResults:
@@ -197,7 +197,7 @@ async def test_parameter_validation():
 
     # Test valid parameters
     valid_params = {
-        "query": "SELECT * FROM users",
+        "query": "SELECT * FROM user",
         "limit": 20,
         "ratio": 1.25,
         "enabled": False,

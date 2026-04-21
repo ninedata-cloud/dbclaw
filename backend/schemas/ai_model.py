@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Literal
 from datetime import datetime
+from backend.schemas.base import TimestampSerializerMixin
 
 AIModelProvider = Literal["openai", "dashscope", "anthropic", "other"]
 AIModelProtocol = Literal["openai", "anthropic"]
@@ -26,7 +27,7 @@ class AIModelUpdate(BaseModel):
     context_window: Optional[int] = Field(default=None, ge=1)
 
 
-class AIModelResponse(BaseModel):
+class AIModelResponse(TimestampSerializerMixin, BaseModel):
     id: int
     name: str
     provider: AIModelProvider

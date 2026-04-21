@@ -58,7 +58,7 @@ Files
 | /Users/william/prog2/temp/smartdba/backend/migrations/add_metric_composite_index.py              | Python   |         32 |          2 |          7 |         41 |
 | /Users/william/prog2/temp/smartdba/backend/migrations/add_reports_indexes.py                     | Python   |         38 |          1 |          9 |         48 |
 | /Users/william/prog2/temp/smartdba/backend/migrations/add_system_configs.py                      | Python   |         41 |          4 |          9 |         54 |
-| /Users/william/prog2/temp/smartdba/backend/migrations/fix_metric_snapshot_timezone.py            | Python   |         55 |          5 |         12 |         72 |
+| /Users/william/prog2/temp/smartdba/backend/migrations/fix_datasource_metric_timezone.py            | Python   |         55 |          5 |         12 |         72 |
 | /Users/william/prog2/temp/smartdba/backend/migrations/migrate_to_inspection.py                   | Python   |        100 |          6 |         17 |        123 |
 | /Users/william/prog2/temp/smartdba/backend/migrations/remove_anomaly_fields.py                   | Python   |         38 |          5 |          8 |         51 |
 | /Users/william/prog2/temp/smartdba/backend/migrations/rename_connection_to_datasource.py         | Python   |         68 |         10 |         20 |         98 |
@@ -79,7 +79,7 @@ Files
 | /Users/william/prog2/temp/smartdba/backend/models/inspection_trigger.py                          | Python   |         14 |          0 |          4 |         18 |
 | /Users/william/prog2/temp/smartdba/backend/models/knowledge_base.py                              | Python   |         34 |          0 |         10 |         44 |
 | /Users/william/prog2/temp/smartdba/backend/models/login_log.py                                   | Python   |         11 |          0 |          4 |         15 |
-| /Users/william/prog2/temp/smartdba/backend/models/metric_snapshot.py                             | Python   |          9 |          0 |          4 |         13 |
+| /Users/william/prog2/temp/smartdba/backend/models/datasource_metric.py                             | Python   |          9 |          0 |          4 |         13 |
 | /Users/william/prog2/temp/smartdba/backend/models/report.py                                      | Python   |         29 |          4 |          8 |         41 |
 | /Users/william/prog2/temp/smartdba/backend/models/system_config.py                               | Python   |         14 |          0 |          4 |         18 |
 | /Users/william/prog2/temp/smartdba/backend/models/user.py                                        | Python   |         15 |          0 |          4 |         19 |

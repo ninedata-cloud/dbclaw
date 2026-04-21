@@ -1,18 +1,22 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, JSON
+from sqlalchemy import BigInteger, Column, Integer, String, Boolean, DateTime, JSON
+from sqlalchemy.orm import synonym
 from sqlalchemy.sql import func
 from backend.database import Base
 
 
 class InspectionTrigger(Base):
     """Audit trail of inspection events (scheduled/manual/anomaly)"""
-    __tablename__ = "inspection_triggers"
+    __tablename__ = "inspection_trigger"
 
     id = Column(Integer, primary_key=True, index=True)
     datasource_id = Column(Integer, nullable=False, index=True)
     trigger_type = Column(String(20), nullable=False)  # 'scheduled', 'manual', 'anomaly', 'connection_failure'
     trigger_reason = Column(String(500), nullable=True)  # e.g., "CPU 95% > 80% for 60s"
-    metric_snapshot = Column(JSON, nullable=True)  # metrics at trigger time
-    triggered_at = Column(DateTime, server_default=func.now(), nullable=False, index=True)
-    processed = Column(Boolean, default=False, nullable=False)
+    datasource_metric = Column(JSON, nullable=True)  # metrics at trigger time
+    triggered_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    is_processed = Column("is_processed", Boolean, default=False, nullable=False)
     report_id = Column(Integer, nullable=True)
-    alert_id = Column(Integer, nullable=True, index=True)
+    alert_id = Column(BigInteger, nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    processed = synonym("is_processed")

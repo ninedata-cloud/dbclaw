@@ -18,22 +18,22 @@ async def migrate():
         result = await conn.execute(text(
             "SELECT column_name FROM information_schema.columns "
             "WHERE table_schema = current_schema() "
-            "AND table_name = 'datasources' AND column_name = 'connection_status'"
+            "AND table_name = 'datasource' AND column_name = 'connection_status'"
         ))
         if result.fetchone():
             logger.info("connection_status column already exists, skipping migration")
             return
 
-        logger.info("Adding connection status columns to datasources table...")
+        logger.info("Adding connection status columns to datasource table...")
 
         await conn.execute(text(
-            "ALTER TABLE datasources ADD COLUMN connection_status VARCHAR(20) DEFAULT 'unknown'"
+            "ALTER TABLE datasource ADD COLUMN connection_status VARCHAR(20) DEFAULT 'unknown'"
         ))
         await conn.execute(text(
-            "ALTER TABLE datasources ADD COLUMN connection_error TEXT"
+            "ALTER TABLE datasource ADD COLUMN connection_error TEXT"
         ))
         await conn.execute(text(
-            "ALTER TABLE datasources ADD COLUMN connection_checked_at TIMESTAMP"
+            "ALTER TABLE datasource ADD COLUMN connection_checked_at TIMESTAMP"
         ))
 
         logger.info("Migration complete: added connection status columns")

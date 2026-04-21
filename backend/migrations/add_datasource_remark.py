@@ -20,16 +20,16 @@ async def migrate():
         # 检查字段是否已存在
         result = await conn.execute(text(
             "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = 'datasources' AND column_name = 'remark'"
+            "WHERE table_name = 'datasource' AND column_name = 'remark'"
         ))
         if result.fetchone():
             logger.info("remark column already exists, skipping migration")
             return
 
-        logger.info("Adding remark column to datasources table...")
+        logger.info("Adding remark column to datasource table...")
 
         await conn.execute(text(
-            "ALTER TABLE datasources ADD COLUMN remark TEXT"
+            "ALTER TABLE datasource ADD COLUMN remark TEXT"
         ))
 
         logger.info("Migration complete: added remark column")

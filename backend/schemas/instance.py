@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 from backend.schemas.datasource import DatasourceResponse
+from backend.schemas.base import TimestampSerializerMixin
 
 
 class InstanceCapabilities(BaseModel):
@@ -13,7 +14,7 @@ class InstanceCapabilities(BaseModel):
     supports_os_metrics: bool = False
 
 
-class InstanceInspectionSummary(BaseModel):
+class InstanceInspectionSummary(TimestampSerializerMixin, BaseModel):
     enabled: bool = False
     schedule_interval: Optional[int] = None
     next_scheduled_at: Optional[datetime] = None
@@ -23,7 +24,7 @@ class InstanceInspectionSummary(BaseModel):
     last_report_created_at: Optional[datetime] = None
 
 
-class InstanceSummaryResponse(BaseModel):
+class InstanceSummaryResponse(TimestampSerializerMixin, BaseModel):
     datasource: DatasourceResponse
     latest_metric: Optional[Dict[str, Any]] = None
     metric_collected_at: Optional[datetime] = None
@@ -63,7 +64,7 @@ class TerminateSessionResponse(BaseModel):
     result: Optional[Dict[str, Any]] = None
 
 
-class InstanceTrafficHistoryPoint(BaseModel):
+class InstanceTrafficHistoryPoint(TimestampSerializerMixin, BaseModel):
     timestamp: datetime
     rx_rate: Optional[float] = None
     tx_rate: Optional[float] = None
@@ -79,7 +80,7 @@ class InstanceTrafficClientItem(BaseModel):
     waiting_session_count: int = 0
     idle_session_count: int = 0
     user_count: int = 0
-    users: List[str] = Field(default_factory=list)
+    user: List[str] = Field(default_factory=list)
     databases: List[str] = Field(default_factory=list)
     max_duration_seconds: Optional[int] = None
     sample_sql: Optional[str] = None
@@ -91,7 +92,7 @@ class InstanceTrafficClientItem(BaseModel):
     estimated_total_rate: Optional[float] = None
 
 
-class InstanceTrafficSnapshotResponse(BaseModel):
+class InstanceTrafficSnapshotResponse(TimestampSerializerMixin, BaseModel):
     datasource: DatasourceResponse
     captured_at: datetime
     poll_interval_seconds: int = 5

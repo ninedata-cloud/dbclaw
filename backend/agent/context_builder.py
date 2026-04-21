@@ -7,7 +7,7 @@ from backend.database import async_session
 from backend.models.datasource import Datasource
 from backend.models.host import Host
 from backend.models.soft_delete import alive_filter
-from backend.models.metric_snapshot import MetricSnapshot
+from backend.models.datasource_metric import DatasourceMetric
 from backend.services.db_connector import get_connector
 from backend.services.ssh_service import SSHService
 from backend.services.os_metrics_service import OSMetricsService
@@ -230,12 +230,12 @@ async def _tool_get_metric_history(args):
 
     async with async_session() as db:
         result = await db.execute(
-            select(MetricSnapshot)
+            select(DatasourceMetric)
             .where(
-                MetricSnapshot.datasource_id == datasource_id,
-                MetricSnapshot.metric_type == metric_type,
+                DatasourceMetric.datasource_id == datasource_id,
+                DatasourceMetric.metric_type == metric_type,
             )
-            .order_by(desc(MetricSnapshot.collected_at))
+            .order_by(desc(DatasourceMetric.collected_at))
             .limit(limit)
         )
         snapshots = result.scalars().all()

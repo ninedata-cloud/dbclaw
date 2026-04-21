@@ -1,5 +1,74 @@
 /* Formatting utilities */
 const Format = {
+    parseDate(value) {
+        if (!value) return null;
+        if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+        if (typeof value === 'number') {
+            const dateFromNumber = new Date(value);
+            return Number.isNaN(dateFromNumber.getTime()) ? null : dateFromNumber;
+        }
+
+        if (typeof value !== 'string') return null;
+        const raw = value.trim();
+        if (!raw) return null;
+        if (/^\d+$/.test(raw)) {
+            const ts = Number(raw);
+            if (Number.isFinite(ts)) {
+                const normalizedTs = raw.length === 10 ? ts * 1000 : ts;
+                const dateFromTs = new Date(normalizedTs);
+                if (!Number.isNaN(dateFromTs.getTime())) return dateFromTs;
+            }
+        }
+
+        let normalized = raw.replace(' ', 'T');
+        normalized = normalized.replace(/(\.\d{3})\d+/, '$1');
+        normalized = normalized.replace(/([+-]\d{2})(\d{2})$/, '$1:$2');
+        normalized = normalized.replace(/([+-]\d{2})$/, '$1:00');
+        normalized = normalized.replace(/UTC$/i, 'Z');
+        normalized = normalized.replace(/ GMT$/i, 'Z');
+        normalized = normalized.replace(/([+-]\d{2}:\d{2})Z$/i, '$1');
+        normalized = normalized.replace(/([+-]\d{2})Z$/i, '$1:00');
+
+        const parsed = new Date(normalized);
+        if (!Number.isNaN(parsed.getTime())) return parsed;
+
+        const match = raw.match(
+            /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?(?:\.(\d+))?(?:\s*(Z|UTC|[+-]\d{2}(?::?\d{2})?))?$/i
+        );
+        if (match) {
+            const year = Number(match[1]);
+            const month = Number(match[2]) - 1;
+            const day = Number(match[3]);
+            const hour = Number(match[4]);
+            const minute = Number(match[5]);
+            const second = Number(match[6] || 0);
+            const millisecond = Number((match[7] || '0').slice(0, 3).padEnd(3, '0'));
+            const tz = (match[8] || '').toUpperCase();
+            let offsetMinutes = null;
+
+            if (!tz || tz === 'Z' || tz === 'UTC') {
+                offsetMinutes = 0;
+            } else {
+                const tzMatch = tz.match(/^([+-])(\d{2})(?::?(\d{2}))?$/);
+                if (tzMatch) {
+                    const sign = tzMatch[1] === '-' ? -1 : 1;
+                    const tzHours = Number(tzMatch[2]);
+                    const tzMinutes = Number(tzMatch[3] || 0);
+                    offsetMinutes = sign * (tzHours * 60 + tzMinutes);
+                }
+            }
+
+            if (offsetMinutes !== null) {
+                const utcMs = Date.UTC(year, month, day, hour, minute, second, millisecond) - offsetMinutes * 60 * 1000;
+                const manual = new Date(utcMs);
+                if (!Number.isNaN(manual.getTime())) return manual;
+            }
+        }
+
+        const fallback = new Date(raw);
+        return Number.isNaN(fallback.getTime()) ? null : fallback;
+    },
+
     bytes(bytes) {
         if (!bytes || bytes === 0) return '0 B';
         const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -48,10 +117,11 @@ const Format = {
     },
 
     timeAgo(dateStr) {
-        if (!dateStr) return 'N/A';
-        const date = new Date(dateStr);
+        const date = Format.parseDate(dateStr);
+        if (!date) return 'N/A';
         const now = new Date();
         const seconds = Math.floor((now - date) / 1000);
+        if (Number.isNaN(seconds) || seconds < 0) return 'N/A';
         if (seconds < 60) return 'just now';
         if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago';
         if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ago';
@@ -59,8 +129,9 @@ const Format = {
     },
 
     datetime(dateStr) {
-        if (!dateStr) return 'N/A';
-        return new Date(dateStr).toLocaleString();
+        const date = Format.parseDate(dateStr);
+        if (!date) return typeof dateStr === 'string' && dateStr.trim() ? dateStr : 'N/A';
+        return date.toLocaleString();
     },
 
     uptime(seconds) {

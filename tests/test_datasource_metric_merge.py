@@ -1,4 +1,4 @@
-from backend.services.metric_snapshot_merge import (
+from backend.services.datasource_metric_merge import (
     INTEGRATION_PREFERRED_METRIC_KEYS,
     cleanup_obsolete_integration_keys,
     merge_integration_metric_data,

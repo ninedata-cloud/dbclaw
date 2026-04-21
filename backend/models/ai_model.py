@@ -4,7 +4,7 @@ from backend.database import Base
 
 
 class AIModel(Base):
-    __tablename__ = "ai_models"
+    __tablename__ = "ai_model"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
@@ -16,5 +16,5 @@ class AIModel(Base):
     context_window = Column(Integer, nullable=True)
     is_default = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())

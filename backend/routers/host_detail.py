@@ -3,7 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from typing import List
 import logging
-from datetime import datetime, timedelta
+import re
+from datetime import datetime, timedelta, timezone
 
 from backend.database import get_db
 from backend.models.host import Host
@@ -18,7 +19,7 @@ from backend.schemas.host_detail import (
     HostConfigResponse
 )
 from backend.services.ssh_connection_pool import get_ssh_pool
-from backend.utils.datetime_helper import to_utc_isoformat
+from backend.utils.datetime_helper import to_utc_isoformat, now
 from backend.services.host_process_service import HostProcessService
 from backend.services.host_network_service import HostNetworkService
 
@@ -86,15 +87,26 @@ async def get_host_summary(host_id: int, db: AsyncSession = Depends(get_db)):
             connections = await HostNetworkService.get_connections(ssh_client)
             connection_count = len(connections)
 
-            # 获取运行时间
+            # 获取运行时间（优先使用采集器直接写入的 uptime_seconds，缺失时回退到 boot_time 计算）
             if latest_metric_dict and latest_metric_dict.get("data"):
-                boot_time_str = latest_metric_dict["data"].get("boot_time")
-                if boot_time_str:
+                metric_data = latest_metric_dict["data"]
+                raw_uptime = metric_data.get("uptime_seconds")
+                if raw_uptime is not None:
                     try:
-                        boot_time = datetime.fromisoformat(boot_time_str.replace('Z', '+00:00'))
-                        uptime_seconds = int((datetime.utcnow() - boot_time).total_seconds())
-                    except Exception:
-                        pass
+                        uptime_seconds = max(int(float(raw_uptime)), 0)
+                    except (TypeError, ValueError):
+                        uptime_seconds = None
+
+                if uptime_seconds is None:
+                    boot_time_str = metric_data.get("boot_time")
+                    if boot_time_str:
+                        try:
+                            boot_time = datetime.fromisoformat(boot_time_str.replace('Z', '+00:00'))
+                            if boot_time.tzinfo is None:
+                                boot_time = boot_time.replace(tzinfo=timezone.utc)
+                            uptime_seconds = max(int((now() - boot_time).total_seconds()), 0)
+                        except Exception:
+                            pass
     except Exception as e:
         logger.warning(f"Failed to get additional host info for {host_id}: {e}")
 
@@ -108,7 +120,7 @@ async def get_host_summary(host_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{host_id}/metrics")
-async def get_host_metrics(
+async def get_host_metric(
     host_id: int,
     minutes: int = 60,
     db: AsyncSession = Depends(get_db)
@@ -119,7 +131,7 @@ async def get_host_metrics(
         raise HTTPException(status_code=404, detail="主机不存在")
 
     # 查询指定时间范围内的指标
-    start_time = datetime.utcnow() - timedelta(minutes=minutes)
+    start_time = now() - timedelta(minutes=minutes)
 
     result = await db.execute(
         select(HostMetric)
@@ -261,14 +273,22 @@ async def get_host_config(
         raise HTTPException(status_code=404, detail="主机不存在")
 
     # 如果有缓存且未过期（24小时内），直接返回
+    # 但网络接口为空时不复用缓存，避免旧缓存掩盖采集兼容性问题
     if not force_refresh and host.config_data and host.config_collected_at:
-        cache_age = (datetime.utcnow() - host.config_collected_at).total_seconds()
-        if cache_age < 86400:  # 24小时
+        cache_age = (now() - host.config_collected_at).total_seconds()
+        cached_network = []
+        if isinstance(host.config_data, dict):
+            candidate = host.config_data.get("network")
+            if isinstance(candidate, list):
+                cached_network = candidate
+        if cache_age < 86400 and cached_network:  # 24小时
             logger.info(f"返回主机 {host_id} 的缓存配置（{cache_age:.0f}秒前采集）")
             return HostConfigResponse(
                 **host.config_data,
                 collected_at=host.config_collected_at
             )
+        if cache_age < 86400 and not cached_network:
+            logger.info(f"主机 {host_id} 缓存配置网络接口为空，触发重新采集")
 
     # 实时采集配置
     try:
@@ -294,7 +314,8 @@ async def get_host_config(
                     'disk_io': "cat /proc/diskstats | awk '{print $3, $4, $8}'",
 
                     # 网络接口信息
-                    'network_interfaces': "ip -o addr show | awk '{print $2, $3, $4}'",
+                    'network_interfaces': "ip -o addr show 2>/dev/null || true",
+                    'network_interfaces_ifconfig': "ifconfig -a 2>/dev/null || true",
                     'network_stats': "cat /proc/net/dev | tail -n +3",
 
                     # 系统信息
@@ -355,18 +376,68 @@ async def get_host_config(
             # 解析网络接口信息
             network_lines = raw_data.get('network_interfaces', '').split('\n')
             network_info = []
-            seen_interfaces = set()
+            seen_entries = set()
             for line in network_lines:
-                parts = line.split()
-                if len(parts) >= 3:
-                    iface = parts[0]
-                    if iface not in seen_interfaces:
-                        network_info.append({
-                            "interface": iface,
-                            "family": parts[1],
-                            "address": parts[2]
-                        })
-                        seen_interfaces.add(iface)
+                line = line.strip()
+                if not line:
+                    continue
+                # ip -o addr show: "2: eth0    inet 192.168.2.44/24 ..."
+                match = re.match(r'^\d+:\s+(\S+)\s+(\S+)\s+(\S+)', line)
+                if not match:
+                    continue
+                iface, family, address = match.group(1), match.group(2), match.group(3)
+                entry_key = f"{iface}|{family}|{address}"
+                if entry_key in seen_entries:
+                    continue
+                network_info.append({
+                    "interface": iface,
+                    "family": family,
+                    "address": address
+                })
+                seen_entries.add(entry_key)
+
+            # 兼容部分环境缺失 ip 命令，仅有 ifconfig 输出
+            if not network_info:
+                ifconfig_output = raw_data.get('network_interfaces_ifconfig', '')
+                current_iface = None
+                for raw_line in ifconfig_output.split('\n'):
+                    line = raw_line.rstrip()
+                    stripped = line.strip()
+                    if not stripped:
+                        continue
+
+                    iface_match = re.match(r'^([A-Za-z0-9_.:-]+):', stripped)
+                    if iface_match:
+                        current_iface = iface_match.group(1)
+                        continue
+
+                    if not current_iface:
+                        continue
+
+                    inet_match = re.search(r'\binet\s(?:addr:)?([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)', stripped)
+                    if inet_match:
+                        address = inet_match.group(1)
+                        entry_key = f"{current_iface}|inet|{address}"
+                        if entry_key not in seen_entries:
+                            network_info.append({
+                                "interface": current_iface,
+                                "family": "inet",
+                                "address": address
+                            })
+                            seen_entries.add(entry_key)
+                        continue
+
+                    inet6_match = re.search(r'\binet6\s(?:addr:)?([0-9a-fA-F:]+)', stripped)
+                    if inet6_match:
+                        address = inet6_match.group(1)
+                        entry_key = f"{current_iface}|inet6|{address}"
+                        if entry_key not in seen_entries:
+                            network_info.append({
+                                "interface": current_iface,
+                                "family": "inet6",
+                                "address": address
+                            })
+                            seen_entries.add(entry_key)
 
             # 解析系统信息
             os_release_lines = raw_data.get('os_release', '').split('\n')
@@ -402,7 +473,7 @@ async def get_host_config(
                 disk=disk_info,
                 network=network_info,
                 system=system_info,
-                collected_at=datetime.utcnow()
+                collected_at=now()
             )
 
             # 自动保存到数据库

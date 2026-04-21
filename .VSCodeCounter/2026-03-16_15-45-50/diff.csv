@@ -24,7 +24,7 @@
 "/Users/william/prog2/temp/smartdba/backend/migrations/add_metric_composite_index.py", "Python", 32, 0, 2, 7, 41
 "/Users/william/prog2/temp/smartdba/backend/migrations/add_reports_indexes.py", "Python", 38, 0, 1, 9, 48
 "/Users/william/prog2/temp/smartdba/backend/migrations/add_system_configs.py", "Python", 41, 0, 4, 9, 54
-"/Users/william/prog2/temp/smartdba/backend/migrations/fix_metric_snapshot_timezone.py", "Python", 55, 0, 5, 12, 72
+"/Users/william/prog2/temp/smartdba/backend/migrations/fix_datasource_metric_timezone.py", "Python", 55, 0, 5, 12, 72
 "/Users/william/prog2/temp/smartdba/backend/migrations/migrate_to_inspection.py", "Python", 100, 0, 6, 17, 123
 "/Users/william/prog2/temp/smartdba/backend/migrations/remove_anomaly_fields.py", "Python", 38, 0, 5, 8, 51
 "/Users/william/prog2/temp/smartdba/backend/migrations/rename_connection_to_datasource.py", "Python", 68, 0, 10, 20, 98

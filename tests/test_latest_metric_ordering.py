@@ -1,6 +1,6 @@
 import pytest
 
-from backend.routers import datasources as datasources_router
+from backend.routers import datasource as datasource_router
 from backend.routers import metrics as metrics_router
 
 
@@ -31,13 +31,13 @@ class _FakeDB:
 
 
 @pytest.mark.asyncio
-async def test_datasources_latest_metrics_prefers_latest_inserted_snapshot():
+async def test_datasource_latest_metrics_prefers_latest_inserted_snapshot():
     fake_db = _FakeDB()
 
-    await datasources_router.get_datasources_latest_metrics(db=fake_db)
+    await datasource_router.get_datasource_latest_metrics(db=fake_db)
 
     sql = str(fake_db.last_statement)
-    assert "ORDER BY metric_snapshots.datasource_id, metric_snapshots.id DESC" in sql
+    assert "ORDER BY datasource_metric.datasource_id, datasource_metric.id DESC" in sql
 
 
 @pytest.mark.asyncio
@@ -47,4 +47,4 @@ async def test_db_status_snapshot_query_prefers_latest_inserted_snapshot():
     await metrics_router._get_db_status_snapshots(fake_db, conn_id=1, limit=5)
 
     sql = str(fake_db.last_statement)
-    assert "ORDER BY metric_snapshots.id DESC" in sql
+    assert "ORDER BY datasource_metric.id DESC" in sql

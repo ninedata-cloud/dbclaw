@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+from backend.schemas.base import TimestampSerializerMixin
 
 
 class HostSummaryResponse(BaseModel):
@@ -41,7 +42,7 @@ class HostNetworkTopologyResponse(BaseModel):
     stats: Dict[str, int]  # 总连接数、各状态统计
 
 
-class HostConfigResponse(BaseModel):
+class HostConfigResponse(TimestampSerializerMixin, BaseModel):
     """主机配置响应"""
     cpu: Dict[str, Any]  # CPU 信息
     memory: Dict[str, Any]  # 内存信息

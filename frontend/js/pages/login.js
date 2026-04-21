@@ -73,6 +73,7 @@ const LoginPage = {
         try {
             const result = await API.login(username, password);
             Store.set('currentUser', result.user);
+            API.markSessionAvailable();
 
             // Restore sidebar and header
             const sidebar = DOM.$('#sidebar');

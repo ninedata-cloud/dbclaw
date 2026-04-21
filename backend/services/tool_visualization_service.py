@@ -139,7 +139,7 @@ def build_tool_result_visualization(tool_name: str, result: Any) -> dict[str, An
     datasource_panel = _build_panel(
         "datasource",
         "数据源监控趋势",
-        result.get("datasource_metrics") if isinstance(result.get("datasource_metrics"), Mapping) else {},
+        result.get("datasource_metric") if isinstance(result.get("datasource_metric"), Mapping) else {},
         target_name=str(datasource_meta.get("name") or "").strip() or None,
     )
     if datasource_panel:
@@ -149,7 +149,7 @@ def build_tool_result_visualization(tool_name: str, result: Any) -> dict[str, An
     host_panel = _build_panel(
         "host",
         "主机监控趋势",
-        result.get("host_metrics") if isinstance(result.get("host_metrics"), Mapping) else {},
+        result.get("host_metric") if isinstance(result.get("host_metric"), Mapping) else {},
         target_name=host_target_name,
     )
     if host_panel:

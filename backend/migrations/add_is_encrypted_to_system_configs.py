@@ -1,4 +1,4 @@
-"""Add is_encrypted column to system_configs table"""
+"""Add is_encrypted column to system_config table"""
 import asyncio
 from sqlalchemy import text
 from backend.database import async_session
@@ -9,17 +9,17 @@ async def migrate():
         # Check if column already exists
         result = await db.execute(text("""
             SELECT column_name FROM information_schema.columns
-            WHERE table_name = 'system_configs' AND column_name = 'is_encrypted'
+            WHERE table_name = 'system_config' AND column_name = 'is_encrypted'
         """))
         if result.scalar_one_or_none():
-            print("Column is_encrypted already exists in system_configs")
+            print("Column is_encrypted already exists in system_config")
             return
 
         await db.execute(text("""
-            ALTER TABLE system_configs ADD COLUMN is_encrypted BOOLEAN DEFAULT FALSE
+            ALTER TABLE system_config ADD COLUMN is_encrypted BOOLEAN DEFAULT FALSE
         """))
         await db.commit()
-        print("Successfully added is_encrypted column to system_configs")
+        print("Successfully added is_encrypted column to system_config")
 
 
 if __name__ == "__main__":

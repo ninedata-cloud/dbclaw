@@ -9,66 +9,66 @@ from backend.database import engine
 async def migrate():
     async with engine.begin() as conn:
         await conn.execute(text("""
-            ALTER TABLE diagnostic_sessions
+            ALTER TABLE diagnostic_session
             ADD COLUMN IF NOT EXISTS knowledge_snapshot JSON
         """))
         await conn.execute(text("""
-            ALTER TABLE reports
+            ALTER TABLE report
             ADD COLUMN IF NOT EXISTS knowledge_sources JSON
         """))
         await conn.execute(text("""
-            ALTER TABLE doc_documents
+            ALTER TABLE doc_document
             ADD COLUMN IF NOT EXISTS scope VARCHAR(20) DEFAULT 'builtin'
         """))
         await conn.execute(text("""
-            ALTER TABLE doc_documents
+            ALTER TABLE doc_document
             ADD COLUMN IF NOT EXISTS doc_kind VARCHAR(30) DEFAULT 'reference'
         """))
         await conn.execute(text("""
-            ALTER TABLE doc_documents
+            ALTER TABLE doc_document
             ADD COLUMN IF NOT EXISTS db_types JSON
         """))
         await conn.execute(text("""
-            ALTER TABLE doc_documents
+            ALTER TABLE doc_document
             ADD COLUMN IF NOT EXISTS issue_categories JSON
         """))
         await conn.execute(text("""
-            ALTER TABLE doc_documents
+            ALTER TABLE doc_document
             ADD COLUMN IF NOT EXISTS datasource_ids JSON
         """))
         await conn.execute(text("""
-            ALTER TABLE doc_documents
+            ALTER TABLE doc_document
             ADD COLUMN IF NOT EXISTS host_ids JSON
         """))
         await conn.execute(text("""
-            ALTER TABLE doc_documents
+            ALTER TABLE doc_document
             ADD COLUMN IF NOT EXISTS tags JSON
         """))
         await conn.execute(text("""
-            ALTER TABLE doc_documents
+            ALTER TABLE doc_document
             ADD COLUMN IF NOT EXISTS priority INTEGER DEFAULT 0
         """))
         await conn.execute(text("""
-            ALTER TABLE doc_documents
+            ALTER TABLE doc_document
             ADD COLUMN IF NOT EXISTS freshness_level VARCHAR(20) DEFAULT 'stable'
         """))
         await conn.execute(text("""
-            ALTER TABLE doc_documents
+            ALTER TABLE doc_document
             ADD COLUMN IF NOT EXISTS enabled_in_diagnosis BOOLEAN DEFAULT TRUE
         """))
 
         await conn.execute(text("""
-            UPDATE doc_documents
+            UPDATE doc_document
             SET scope = COALESCE(scope, CASE WHEN is_builtin THEN 'builtin' ELSE 'tenant' END)
         """))
         await conn.execute(text("""
-            UPDATE doc_documents
+            UPDATE doc_document
             SET db_types = COALESCE(db_types, json_build_array(dc.db_type))
-            FROM doc_categories dc
-            WHERE dc.id = doc_documents.category_id
+            FROM doc_category dc
+            WHERE dc.id = doc_document.category_id
         """))
         await conn.execute(text("""
-            UPDATE doc_documents
+            UPDATE doc_document
             SET doc_kind = COALESCE(
                 doc_kind,
                 CASE
@@ -78,11 +78,11 @@ async def migrate():
                     ELSE 'runbook'
                 END
             )
-            FROM doc_categories dc
-            WHERE dc.id = doc_documents.category_id
+            FROM doc_category dc
+            WHERE dc.id = doc_document.category_id
         """))
         await conn.execute(text("""
-            UPDATE doc_documents
+            UPDATE doc_document
             SET issue_categories = COALESCE(
                 issue_categories,
                 CASE
@@ -94,11 +94,11 @@ async def migrate():
                     ELSE '["general"]'::json
                 END
             )
-            FROM doc_categories dc
-            WHERE dc.id = doc_documents.category_id
+            FROM doc_category dc
+            WHERE dc.id = doc_document.category_id
         """))
         await conn.execute(text("""
-            UPDATE doc_documents
+            UPDATE doc_document
             SET enabled_in_diagnosis = COALESCE(enabled_in_diagnosis, TRUE),
                 freshness_level = COALESCE(freshness_level, 'stable'),
                 priority = COALESCE(priority, 0)

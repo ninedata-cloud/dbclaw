@@ -86,7 +86,7 @@ def test_build_tool_result_visualization_for_monitoring_history():
                 "end_time": "2026-04-08T02:00:00",
             },
             "aggregation": {"bucket_seconds": 900, "bucket_label": "15m", "max_points": 96},
-            "datasource_metrics": {
+            "datasource_metric": {
                 "selected_metric_names": ["cpu_usage", "qps"],
                 "summary": {
                     "cpu_usage": {"avg": 32.4, "min": 21.0, "max": 61.3, "last": 28.5},
@@ -103,7 +103,7 @@ def test_build_tool_result_visualization_for_monitoring_history():
                     ],
                 },
             },
-            "host_metrics": {
+            "host_metric": {
                 "available": True,
                 "selected_metric_names": ["memory_usage"],
                 "summary": {

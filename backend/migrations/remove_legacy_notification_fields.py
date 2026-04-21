@@ -25,7 +25,7 @@ async def migrate():
         result = await conn.execute(text("""
             SELECT column_name
             FROM information_schema.columns
-            WHERE table_name = 'alert_subscriptions'
+            WHERE table_name = 'alert_subscription'
             AND column_name IN ('channels', 'webhook_url', 'dingtalk_webhook_url', 'dingtalk_secret')
         """))
         existing_columns = [row[0] for row in result.fetchall()]
@@ -40,7 +40,7 @@ async def migrate():
         for column in existing_columns:
             try:
                 await conn.execute(text(f"""
-                    ALTER TABLE alert_subscriptions DROP COLUMN IF EXISTS {column}
+                    ALTER TABLE alert_subscription DROP COLUMN IF EXISTS {column}
                 """))
                 print(f"✓ 已移除字段: {column}")
             except Exception as e:

@@ -17,11 +17,11 @@
 
 #### 1. 新增 API 接口
 
-**路径**: `GET /api/hosts/{host_id}/processes/{pid}`
+**路径**: `GET /api/host/{host_id}/processes/{pid}`
 
 **功能**: 获取指定主机上指定进程的详细信息
 
-**实现位置**: `backend/routers/hosts.py`
+**实现位置**: `backend/routers/host.py`
 
 #### 2. 进程服务扩展
 
@@ -48,7 +48,7 @@
 **新增方法**:
 ```javascript
 getProcessDetail(hostId, pid) { 
-    return this.get(`/api/hosts/${hostId}/processes/${pid}`); 
+    return this.get(`/api/host/${hostId}/processes/${pid}`); 
 }
 ```
 

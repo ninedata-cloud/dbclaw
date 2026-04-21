@@ -45,7 +45,7 @@ async def _get_or_create_binding(db: AsyncSession, code: str) -> IntegrationBotB
     integration_result = await db.execute(
         select(Integration).where(
             Integration.integration_id == metadata["integration_id"],
-            Integration.enabled == True,
+            Integration.is_enabled == True,
             alive_filter(Integration),
         )
     )

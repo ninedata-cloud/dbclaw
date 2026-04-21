@@ -1,5 +1,31 @@
 /* API fetch wrapper */
+const AUTH_STATE_KEY = 'dbclaw_has_session';
+
 const API = {
+    markSessionAvailable() {
+        try {
+            localStorage.setItem(AUTH_STATE_KEY, '1');
+        } catch (e) {
+            // ignore localStorage errors
+        }
+    },
+
+    clearSessionMark() {
+        try {
+            localStorage.removeItem(AUTH_STATE_KEY);
+        } catch (e) {
+            // ignore localStorage errors
+        }
+    },
+
+    shouldRestoreSession() {
+        try {
+            return localStorage.getItem(AUTH_STATE_KEY) === '1';
+        } catch (e) {
+            return false;
+        }
+    },
+
     async request(url, options = {}) {
         const defaultOpts = {
             headers: { 'Content-Type': 'application/json' },
@@ -16,6 +42,7 @@ const API = {
             if (!response.ok) {
                 if (response.status === 401 && url !== '/api/auth/login') {
                     Store.set('currentUser', null);
+                    this.clearSessionMark();
                     window.location.hash = 'login';
                     throw new Error('会话已过期，请重新登录');
                 }
@@ -67,6 +94,7 @@ const API = {
         if (!response.ok) {
             if (response.status === 401) {
                 Store.set('currentUser', null);
+                this.clearSessionMark();
                 window.location.hash = 'login';
                 throw new Error('会话已过期，请重新登录');
             }

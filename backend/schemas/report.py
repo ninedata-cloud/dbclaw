@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional, List, Any
 from datetime import datetime
+from backend.schemas.base import TimestampSerializerMixin
 
 
 class ReportGenerateRequest(BaseModel):
@@ -12,7 +13,7 @@ class ReportGenerateRequest(BaseModel):
     kb_ids: Optional[List[int]] = None  # Knowledge bases to use
 
 
-class ReportResponse(BaseModel):
+class ReportResponse(TimestampSerializerMixin, BaseModel):
     id: int
     datasource_id: int
     title: str

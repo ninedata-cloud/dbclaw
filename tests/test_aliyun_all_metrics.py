@@ -68,7 +68,7 @@ async def test_all_metrics():
                 print(f"✗ 数据源 ID {test_datasource_id} 不存在")
                 return False
 
-            datasources = [{
+            datasource = [{
                 "id": datasource.id,
                 "name": datasource.name,
                 "db_type": datasource.db_type,
@@ -83,7 +83,7 @@ async def test_all_metrics():
             metrics = await executor.execute_metric_collection(
                 integration.code,
                 test_params,
-                datasources
+                datasource
             )
 
             print(f"✓ 测试成功")

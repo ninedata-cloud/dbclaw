@@ -4,6 +4,7 @@
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+from backend.schemas.base import TimestampSerializerMixin
 
 
 class IntegrationCreate(BaseModel):
@@ -33,7 +34,7 @@ class IntegrationUpdate(BaseModel):
     enabled: Optional[bool] = None
 
 
-class IntegrationResponse(BaseModel):
+class IntegrationResponse(TimestampSerializerMixin, BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: int
@@ -64,7 +65,7 @@ class IntegrationBotBindingUpdate(BaseModel):
     params: Optional[Dict[str, Any]] = None
 
 
-class IntegrationBotBindingResponse(BaseModel):
+class IntegrationBotBindingResponse(TimestampSerializerMixin, BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -76,7 +77,7 @@ class IntegrationBotBindingResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-class IntegrationExecutionLogResponse(BaseModel):
+class IntegrationExecutionLogResponse(TimestampSerializerMixin, BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int

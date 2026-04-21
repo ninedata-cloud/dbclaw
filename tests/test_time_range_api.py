@@ -4,7 +4,7 @@
 import asyncio
 from datetime import datetime, timedelta
 from backend.database import async_session
-from backend.models.metric_snapshot import MetricSnapshot
+from backend.models.datasource_metric import DatasourceMetric
 from backend.utils.datetime_helper import now
 from sqlalchemy import select, desc
 
@@ -16,13 +16,13 @@ async def test_time_range_query():
         print("测试 1: 查询最近 60 分钟")
         start_time = now() - timedelta(minutes=60)
         result = await db.execute(
-            select(MetricSnapshot)
+            select(DatasourceMetric)
             .where(
-                MetricSnapshot.datasource_id == 1,
-                MetricSnapshot.metric_type == 'db_status',
-                MetricSnapshot.collected_at >= start_time
+                DatasourceMetric.datasource_id == 1,
+                DatasourceMetric.metric_type == 'db_status',
+                DatasourceMetric.collected_at >= start_time
             )
-            .order_by(desc(MetricSnapshot.collected_at))
+            .order_by(desc(DatasourceMetric.collected_at))
             .limit(1000)
         )
         metrics = result.scalars().all()
@@ -36,14 +36,14 @@ async def test_time_range_query():
         start = now() - timedelta(hours=2)
         end = now() - timedelta(hours=1)
         result = await db.execute(
-            select(MetricSnapshot)
+            select(DatasourceMetric)
             .where(
-                MetricSnapshot.datasource_id == 1,
-                MetricSnapshot.metric_type == 'db_status',
-                MetricSnapshot.collected_at >= start,
-                MetricSnapshot.collected_at <= end
+                DatasourceMetric.datasource_id == 1,
+                DatasourceMetric.metric_type == 'db_status',
+                DatasourceMetric.collected_at >= start,
+                DatasourceMetric.collected_at <= end
             )
-            .order_by(desc(MetricSnapshot.collected_at))
+            .order_by(desc(DatasourceMetric.collected_at))
             .limit(1000)
         )
         metrics = result.scalars().all()
@@ -56,13 +56,13 @@ async def test_time_range_query():
         print("\n测试 3: 查询最近 1 天")
         start_time = now() - timedelta(days=1)
         result = await db.execute(
-            select(MetricSnapshot)
+            select(DatasourceMetric)
             .where(
-                MetricSnapshot.datasource_id == 1,
-                MetricSnapshot.metric_type == 'db_status',
-                MetricSnapshot.collected_at >= start_time
+                DatasourceMetric.datasource_id == 1,
+                DatasourceMetric.metric_type == 'db_status',
+                DatasourceMetric.collected_at >= start_time
             )
-            .order_by(desc(MetricSnapshot.collected_at))
+            .order_by(desc(DatasourceMetric.collected_at))
             .limit(10000)
         )
         metrics = result.scalars().all()

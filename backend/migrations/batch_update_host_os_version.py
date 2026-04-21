@@ -51,18 +51,18 @@ async def batch_update_os_versions():
     """批量更新所有主机的 OS 版本"""
     async with async_session() as db:
         result = await db.execute(alive_select(Host))
-        hosts = result.scalars().all()
+        host = result.scalars().all()
 
-        if not hosts:
-            logger.info("No hosts found")
+        if not host:
+            logger.info("No host found")
             return
 
-        logger.info(f"Found {len(hosts)} hosts, starting OS version collection...")
+        logger.info(f"Found {len(host)} host, starting OS version collection...")
 
         success_count = 0
         fail_count = 0
 
-        for host in hosts:
+        for host in host:
             # 获取密码/私钥
             password = decrypt_value(host.password_encrypted) if host.password_encrypted else None
             private_key = decrypt_value(host.private_key_encrypted) if host.private_key_encrypted else None

@@ -1,26 +1,28 @@
-"""Host metrics collector - collects CPU, memory, disk usage from SSH hosts"""
+"""Host metrics collector - collects CPU, memory, disk usage from SSH host"""
 import asyncio
 import logging
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from backend.database import async_session
 from backend.models.host import Host
 from backend.models.host_metric import HostMetric
+from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
 
 
-async def collect_host_metrics():
-    """Collect metrics from all SSH hosts every minute"""
+async def collect_host_metric():
+    """Collect metrics from all SSH host every minute"""
     while True:
         try:
             async with async_session() as db:
                 result = await db.execute(select(Host))
-                hosts = result.scalars().all()
+                host = result.scalars().all()
 
-                for host in hosts:
+                for host in host:
                     try:
-                        await _collect_host_metrics(db, host)
+                        await _collect_host_metric(db, host)
                     except Exception as e:
                         logger.error(f"Failed to collect metrics for host {host.name}: {e}")
 
@@ -31,7 +33,7 @@ async def collect_host_metrics():
         await asyncio.sleep(60)
 
 
-async def _collect_host_metrics(db: AsyncSession, host: Host):
+async def _collect_host_metric(db: AsyncSession, host: Host):
     """Collect metrics for a single SSH host using connection pool + OSMetricsCollector"""
     try:
         from backend.services.ssh_connection_pool import get_ssh_pool
@@ -57,23 +59,30 @@ async def _collect_host_metrics(db: AsyncSession, host: Host):
                     .limit(1)
                 )
                 last_metric = result.scalar_one_or_none()
+                collection_time = now()
 
                 # 计算磁盘 IO 速率
                 if last_metric and last_metric.data:
-                    _calculate_disk_io_rates(os_metrics, last_metric.data, last_metric.collected_at)
+                    _calculate_disk_io_rates(
+                        os_metrics,
+                        last_metric.data,
+                        last_metric.collected_at,
+                        current_time=collection_time,
+                    )
 
                 # 提取核心指标，带安全的类型转换
                 cpu_usage = _safe_float(os_metrics.get('cpu_usage'))
                 memory_usage = _safe_float(os_metrics.get('memory_usage'))
                 disk_usage = _safe_float(os_metrics.get('disk_usage'))
 
-                # Save to host_metrics table
+                # Save to host_metric table
                 metric = HostMetric(
                     host_id=host.id,
                     cpu_usage=cpu_usage,
                     memory_usage=memory_usage,
                     disk_usage=disk_usage,
                     data=os_metrics if os_metrics else None,
+                    collected_at=collection_time,
                 )
                 db.add(metric)
 
@@ -85,10 +94,43 @@ async def _collect_host_metrics(db: AsyncSession, host: Host):
             logger.error(f"Failed to collect metrics for {host.name}: {e}")
 
     except Exception as e:
-        logger.error(f"Error in _collect_host_metrics: {e}")
+        logger.error(f"Error in _collect_host_metric: {e}")
 
 
-def _calculate_disk_io_rates(current_metrics: dict, last_data: dict, last_collected_at):
+def _to_utc_aware(dt):
+    """将 datetime 统一转换为 UTC aware。"""
+    if dt is None:
+        return None
+    if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _normalize_metric_timestamp(last_collected_at, current_time, local_tz=None):
+    """归一化历史采集时间。
+
+    HostMetric 历史上依赖 PostgreSQL `server_default=now()` 写入 collected_at。
+    当数据库会话时区不是 UTC 时，TIMESTAMP WITHOUT TIME ZONE 会把本地时间直接落库，
+    读取出来又是 naive datetime。这里若发现“历史时间明显在未来”，就按本地时区
+    重新解释一次，兼容存量数据，避免磁盘 IO 速率一直算不出来。
+    """
+    current_time = _to_utc_aware(current_time)
+    last_time = _to_utc_aware(last_collected_at)
+    if last_time is None:
+        return None
+
+    if (
+        last_collected_at.tzinfo is None
+        and current_time is not None
+        and last_time > current_time + timedelta(minutes=5)
+    ):
+        fallback_tz = local_tz or datetime.now().astimezone().tzinfo or timezone.utc
+        return last_collected_at.replace(tzinfo=fallback_tz).astimezone(timezone.utc)
+
+    return last_time
+
+
+def _calculate_disk_io_rates(current_metrics: dict, last_data: dict, last_collected_at, current_time=None, local_tz=None):
     """
     根据上一次采集的累计值计算磁盘 IO 速率
 
@@ -96,9 +138,9 @@ def _calculate_disk_io_rates(current_metrics: dict, last_data: dict, last_collec
         current_metrics: 当前采集的指标字典（会被修改，添加速率字段）
         last_data: 上一次采集的 data 字段
         last_collected_at: 上一次采集时间
+        current_time: 当前采集时间（UTC aware），默认使用 now()
+        local_tz: 回退解释 naive 时间时使用的本地时区，默认取当前进程本地时区
     """
-    from datetime import datetime, timezone
-
     # 提取当前累计值
     curr_reads = current_metrics.get('disk_reads_total')
     curr_writes = current_metrics.get('disk_writes_total')
@@ -117,14 +159,12 @@ def _calculate_disk_io_rates(current_metrics: dict, last_data: dict, last_collec
         return
 
     # 计算时间差（秒）
-    now = datetime.now(timezone.utc)
-    if last_collected_at.tzinfo is None:
-        # 如果数据库时间是 naive，假设为 UTC
-        last_time = last_collected_at.replace(tzinfo=timezone.utc)
-    else:
-        last_time = last_collected_at
+    current_time = _to_utc_aware(current_time or now())
+    last_time = _normalize_metric_timestamp(last_collected_at, current_time, local_tz=local_tz)
+    if last_time is None:
+        return
 
-    time_diff = (now - last_time).total_seconds()
+    time_diff = (current_time - last_time).total_seconds()
 
     if time_diff <= 0:
         return

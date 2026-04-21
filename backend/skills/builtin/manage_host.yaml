@@ -3,7 +3,7 @@ name: Manage SSH Host
 version: 1.0.0
 author: DBClaw
 category: system
-description: Manage SSH hosts for database tunneling - create, update, delete, list, get details, and test connections
+description: Manage SSH host for database tunneling - create, update, delete, list, get details, and test connections
 tags: [host, ssh, management, crud, system]
 
 parameters:
@@ -69,12 +69,12 @@ code: |
           result = await context.db.execute(
               select(Host).order_by(Host.id.desc())
           )
-          hosts = result.scalars().all()
+          host = result.scalars().all()
           
           return {
               "success": True,
               "action": "list",
-              "hosts": [
+              "host": [
                   {
                       "id": h.id,
                       "name": h.name,
@@ -87,9 +87,9 @@ code: |
                       "created_at": h.created_at.isoformat() if h.created_at else None,
                       "updated_at": h.updated_at.isoformat() if h.updated_at else None
                   }
-                  for h in hosts
+                  for h in host
               ],
-              "count": len(hosts)
+              "count": len(host)
           }
       
       # Get action

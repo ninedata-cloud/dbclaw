@@ -16,7 +16,7 @@ from backend.models.alert_event import AlertEvent
 from backend.models.alert_message import AlertMessage
 from backend.models.datasource import Datasource
 from backend.models.inspection_config import InspectionConfig
-from backend.models.metric_snapshot import MetricSnapshot
+from backend.models.datasource_metric import DatasourceMetric
 from backend.models.report import Report
 from backend.models.soft_delete import alive_filter, get_alive_by_id
 from backend.schemas.instance import (
@@ -200,8 +200,8 @@ def _seconds_between(current: Optional[datetime], previous: Optional[datetime]) 
 
 
 def _extract_network_rates_from_snapshots(
-    current_snapshot: Optional[MetricSnapshot],
-    previous_snapshot: Optional[MetricSnapshot] = None,
+    current_snapshot: Optional[DatasourceMetric],
+    previous_snapshot: Optional[DatasourceMetric] = None,
 ) -> tuple[Optional[float], Optional[float], str]:
     if not current_snapshot:
         return None, None, "unavailable"
@@ -263,7 +263,7 @@ def _extract_network_rates_from_snapshots(
     return None, None, "unavailable"
 
 
-def _build_traffic_history(snapshots: list[MetricSnapshot], limit: int = 24) -> list[InstanceTrafficHistoryPoint]:
+def _build_traffic_history(snapshots: list[DatasourceMetric], limit: int = 24) -> list[InstanceTrafficHistoryPoint]:
     ordered = list(sorted(snapshots, key=lambda item: item.collected_at))
     history: list[InstanceTrafficHistoryPoint] = []
 
@@ -351,7 +351,7 @@ def _aggregate_traffic_clients(
                 "active_session_count": 0,
                 "waiting_session_count": 0,
                 "idle_session_count": 0,
-                "users": set(),
+                "user": set(),
                 "databases": set(),
                 "max_duration_seconds": 0,
                 "sample_sql": None,
@@ -378,7 +378,7 @@ def _aggregate_traffic_clients(
             idle_session_count += 1
 
         if session.user:
-            bucket["users"].add(str(session.user))
+            bucket["user"].add(str(session.user))
         if session.database:
             bucket["databases"].add(str(session.database))
 
@@ -443,8 +443,8 @@ def _aggregate_traffic_clients(
                 active_session_count=bucket["active_session_count"],
                 waiting_session_count=bucket["waiting_session_count"],
                 idle_session_count=bucket["idle_session_count"],
-                user_count=len(bucket["users"]),
-                users=sorted(bucket["users"])[:6],
+                user_count=len(bucket["user"]),
+                user=sorted(bucket["user"])[:6],
                 databases=sorted(bucket["databases"])[:4],
                 max_duration_seconds=bucket["max_duration_seconds"] or None,
                 sample_sql=bucket["sample_sql"],
@@ -486,7 +486,7 @@ def _aggregate_traffic_clients(
     }
 
 
-def _extract_max_session_count(snapshot: Optional[MetricSnapshot]) -> Optional[int]:
+def _extract_max_session_count(snapshot: Optional[DatasourceMetric]) -> Optional[int]:
     if not snapshot or not isinstance(snapshot.data, dict):
         return None
 
@@ -556,7 +556,7 @@ async def get_instance_summary(datasource_id: int, db: AsyncSession = Depends(ge
         active_alert_event_count=active_event_count,
         active_alert_count=active_alert_count,
         inspection=InstanceInspectionSummary(
-            enabled=bool(inspection_config.enabled) if inspection_config else False,
+            enabled=bool(inspection_config.is_enabled) if inspection_config else False,
             schedule_interval=inspection_config.schedule_interval if inspection_config else None,
             next_scheduled_at=inspection_config.next_scheduled_at if inspection_config else None,
             last_report_id=latest_report.id if latest_report else None,

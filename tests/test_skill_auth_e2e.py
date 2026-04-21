@@ -41,7 +41,7 @@ def simulate_frontend_to_backend_flow():
     print("\nStep 3: Backend filters skills based on authorization")
     all_skills = [
         MockSkill("manage_alert_settings", "平台操作"),
-        MockSkill("list_datasources", "平台操作"),
+        MockSkill("list_datasource", "平台操作"),
         MockSkill("query_monitoring_history", "平台操作"),
         MockSkill("execute_any_sql", "高权限操作"),
         MockSkill("execute_any_os_command", "高权限操作"),
@@ -60,7 +60,7 @@ def simulate_frontend_to_backend_flow():
     print("\nStep 4: Verify results")
     expected_skills = {
         "manage_alert_settings",  # platform_operations enabled
-        "list_datasources",  # platform_operations enabled
+        "list_datasource",  # platform_operations enabled
         "query_monitoring_history",  # platform_operations enabled
         "fetch_webpage",  # knowledge_retrieval enabled
         "web_search_bocha",  # knowledge_retrieval enabled

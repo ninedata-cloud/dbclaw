@@ -1,4 +1,4 @@
-"""Add resolved_value column to alert_messages table"""
+"""Add resolved_value column to alert_message table"""
 import asyncio
 import logging
 from backend.database import async_session
@@ -12,17 +12,17 @@ async def run_migration():
         # Check if column already exists
         result = await db.execute(text("""
             SELECT column_name FROM information_schema.columns
-            WHERE table_name = 'alert_messages' AND column_name = 'resolved_value'
+            WHERE table_name = 'alert_message' AND column_name = 'resolved_value'
         """))
         if result.fetchone():
             logger.info("resolved_value column already exists")
             return
 
         await db.execute(text(
-            "ALTER TABLE alert_messages ADD COLUMN resolved_value REAL"
+            "ALTER TABLE alert_message ADD COLUMN resolved_value REAL"
         ))
         await db.commit()
-        logger.info("Added resolved_value column to alert_messages")
+        logger.info("Added resolved_value column to alert_message")
 
 
 if __name__ == "__main__":

@@ -18,19 +18,21 @@ const MonitorPage = {
      * 后端存储的是 UTC naive datetime，返回时没有时区标识
      */
     _parseUTCDateTime(dateInput) {
-        if (dateInput instanceof Date) {
-            return dateInput;
+        const parsed = Format.parseDate(dateInput);
+        if (parsed) return parsed;
+
+        // Preserve backward-compatible UTC-naive handling for legacy values.
+        if (typeof dateInput === 'string') {
+            const dateStr = dateInput.trim();
+            if (dateStr && !dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('T')) {
+                return new Date(dateStr.replace(' ', 'T') + 'Z');
+            }
+            if (dateStr && !dateStr.endsWith('Z') && dateStr.includes('T') && !dateStr.includes('+')) {
+                return new Date(dateStr + 'Z');
+            }
         }
-        const dateStr = String(dateInput);
-        // 如果字符串不包含时区信息，添加 'Z' 标识为 UTC
-        if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('T')) {
-            // 格式如 "2024-01-01 12:00:00"
-            return new Date(dateStr.replace(' ', 'T') + 'Z');
-        } else if (!dateStr.endsWith('Z') && dateStr.includes('T') && !dateStr.includes('+')) {
-            // 格式如 "2024-01-01T12:00:00"
-            return new Date(dateStr + 'Z');
-        }
-        return new Date(dateStr);
+
+        return new Date(NaN);
     },
 
     _getSelectedDatasource() {
@@ -885,7 +887,7 @@ const MonitorPage = {
             const cutoffTime = now - rangeMs;
             const filtered = metrics.filter(m => {
                 const timestamp = this._parseUTCDateTime(m.collected_at).getTime();
-                return timestamp >= cutoffTime;
+                return Number.isFinite(timestamp) && timestamp >= cutoffTime;
             });
 
             console.log('[Monitor] Filtered metrics:', filtered.length, 'records within range');

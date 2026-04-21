@@ -272,8 +272,8 @@ async def lifespan(app: FastAPI):
     logger.info("Inspection Service activated")
 
     # Start SSH host metrics collector
-    from backend.services.host_collector import collect_host_metrics
-    asyncio.create_task(collect_host_metrics())
+    from backend.services.host_collector import collect_host_metric
+    asyncio.create_task(collect_host_metric())
     logger.info("Host metrics collector started")
 
     # Start notification dispatcher
@@ -386,12 +386,33 @@ def create_app() -> FastAPI:
         )
 
     # Register routers
-    from backend.routers import datasources, hosts, metrics, monitor_ws, chat, query, ai_models, auth, users, inspections, system_configs, alerts, integrations, documents, feishu_bot, integration_bots, weixin_bot, instances, host_detail, terminal_ws
+    from backend.routers import (
+        ai_models as ai_model,
+        alerts,
+        auth,
+        chat,
+        datasources as datasource,
+        documents,
+        feishu_bot,
+        host_detail,
+        hosts as host,
+        inspections,
+        instances,
+        integration_bots,
+        integrations as integration,
+        metrics,
+        monitor_ws,
+        query,
+        system_configs as system_config,
+        terminal_ws,
+        users as user,
+        weixin_bot,
+    )
     from backend.api import skills
     app.include_router(auth.router)
-    app.include_router(users.router)
-    app.include_router(datasources.router)
-    app.include_router(hosts.router)
+    app.include_router(user.router)
+    app.include_router(datasource.router)
+    app.include_router(host.router)
     app.include_router(host_detail.router)
     app.include_router(terminal_ws.router)
     app.include_router(metrics.router)
@@ -399,13 +420,13 @@ def create_app() -> FastAPI:
     app.include_router(chat.router)
     app.include_router(query.router)
     app.include_router(instances.router)
-    app.include_router(ai_models.router)
+    app.include_router(ai_model.router)
     app.include_router(documents.router)
     app.include_router(skills.router)
     app.include_router(inspections.router)
-    app.include_router(system_configs.router)
+    app.include_router(system_config.router)
     app.include_router(alerts.router)
-    app.include_router(integrations.router)
+    app.include_router(integration.router)
     app.include_router(integration_bots.router)
     app.include_router(feishu_bot.router)
     app.include_router(weixin_bot.router)
@@ -435,7 +456,7 @@ def create_app() -> FastAPI:
             },
         )
 
-    @app.get("/public/reports/{report_id}")
+    @app.get("/public/report/{report_id}")
     async def serve_public_report_entry(report_id: int):
         return HTMLResponse(
             content=render_frontend_index(settings),

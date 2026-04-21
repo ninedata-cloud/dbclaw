@@ -8,45 +8,45 @@ logger = logging.getLogger(__name__)
 
 
 INDEX_STATEMENTS = {
-    "idx_host_metrics_host_id_collected_at": """
-        CREATE INDEX IF NOT EXISTS idx_host_metrics_host_id_collected_at
-        ON host_metrics(host_id, collected_at DESC)
+    "idx_host_metric_host_id_collected_at": """
+        CREATE INDEX IF NOT EXISTS idx_host_metric_host_id_collected_at
+        ON host_metric(host_id, collected_at DESC)
     """,
-    "idx_alert_messages_event_created_at": """
-        CREATE INDEX IF NOT EXISTS idx_alert_messages_event_created_at
-        ON alert_messages(event_id, created_at DESC)
+    "idx_alert_message_event_created_at": """
+        CREATE INDEX IF NOT EXISTS idx_alert_message_event_created_at
+        ON alert_message(event_id, created_at DESC)
     """,
-    "idx_alert_messages_status_created_at_id": """
-        CREATE INDEX IF NOT EXISTS idx_alert_messages_status_created_at_id
-        ON alert_messages(status, created_at DESC, id DESC)
+    "idx_alert_message_status_created_at_id": """
+        CREATE INDEX IF NOT EXISTS idx_alert_message_status_created_at_id
+        ON alert_message(status, created_at DESC, id DESC)
     """,
-    "idx_diagnosis_events_session_run_sequence_id": """
-        CREATE INDEX IF NOT EXISTS idx_diagnosis_events_session_run_sequence_id
-        ON diagnosis_events(session_id, run_id, sequence_no, id)
+    "idx_diagnosis_event_session_run_sequence_id": """
+        CREATE INDEX IF NOT EXISTS idx_diagnosis_event_session_run_sequence_id
+        ON diagnosis_event(session_id, run_id, sequence_no, id)
     """,
-    "idx_diagnosis_conclusions_session_updated_at_id": """
-        CREATE INDEX IF NOT EXISTS idx_diagnosis_conclusions_session_updated_at_id
-        ON diagnosis_conclusions(session_id, updated_at DESC, id DESC)
+    "idx_diagnosis_conclusion_session_updated_at_id": """
+        CREATE INDEX IF NOT EXISTS idx_diagnosis_conclusion_session_updated_at_id
+        ON diagnosis_conclusion(session_id, updated_at DESC, id DESC)
     """,
-    "idx_doc_categories_parent_sort": """
-        CREATE INDEX IF NOT EXISTS idx_doc_categories_parent_sort
-        ON doc_categories(parent_id, sort_order)
+    "idx_doc_category_parent_sort": """
+        CREATE INDEX IF NOT EXISTS idx_doc_category_parent_sort
+        ON doc_category(parent_id, sort_order)
     """,
-    "idx_doc_documents_category_active_sort": """
-        CREATE INDEX IF NOT EXISTS idx_doc_documents_category_active_sort
-        ON doc_documents(category_id, is_active, is_deleted, sort_order)
+    "idx_doc_document_category_active_sort": """
+        CREATE INDEX IF NOT EXISTS idx_doc_document_category_active_sort
+        ON doc_document(category_id, is_active, is_deleted, sort_order)
     """,
     "idx_skill_executions_skill_id_created_at": """
         CREATE INDEX IF NOT EXISTS idx_skill_executions_skill_id_created_at
-        ON skill_executions(skill_id, created_at DESC)
+        ON skill_execution(skill_id, created_at DESC)
     """,
-    "uq_skill_ratings_skill_user": """
-        CREATE UNIQUE INDEX IF NOT EXISTS uq_skill_ratings_skill_user
-        ON skill_ratings(skill_id, user_id)
+    "uq_skill_rating_skill_user": """
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_skill_rating_skill_user
+        ON skill_rating(skill_id, user_id)
     """,
-    "uq_chat_channel_bindings_channel_chat_user": """
-        CREATE UNIQUE INDEX IF NOT EXISTS uq_chat_channel_bindings_channel_chat_user
-        ON chat_channel_bindings(channel_type, external_chat_id, COALESCE(external_user_id, ''))
+    "uq_chat_channel_binding_channel_chat_user": """
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_chat_channel_binding_channel_chat_user
+        ON chat_channel_binding(channel_type, external_chat_id, COALESCE(external_user_id, ''))
     """,
 }
 
@@ -71,12 +71,12 @@ async def migrate():
     engine = get_engine()
 
     async with engine.begin() as conn:
-        if await _table_exists(conn, "skill_ratings"):
+        if await _table_exists(conn, "skill_rating"):
             await conn.execute(
                 text(
                     """
-                    DELETE FROM skill_ratings older
-                    USING skill_ratings newer
+                    DELETE FROM skill_rating older
+                    USING skill_rating newer
                     WHERE older.id < newer.id
                       AND older.skill_id = newer.skill_id
                       AND older.user_id = newer.user_id
@@ -84,12 +84,12 @@ async def migrate():
                 )
             )
 
-        if await _table_exists(conn, "chat_channel_bindings"):
+        if await _table_exists(conn, "chat_channel_binding"):
             await conn.execute(
                 text(
                     """
-                    DELETE FROM chat_channel_bindings older
-                    USING chat_channel_bindings newer
+                    DELETE FROM chat_channel_binding older
+                    USING chat_channel_binding newer
                     WHERE older.id < newer.id
                       AND older.channel_type = newer.channel_type
                       AND older.external_chat_id = newer.external_chat_id

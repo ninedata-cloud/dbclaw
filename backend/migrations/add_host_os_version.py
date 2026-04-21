@@ -20,16 +20,16 @@ async def migrate():
         # 检查字段是否已存在
         result = await conn.execute(text(
             "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = 'hosts' AND column_name = 'os_version'"
+            "WHERE table_name = 'host' AND column_name = 'os_version'"
         ))
         if result.fetchone():
             logger.info("os_version column already exists, skipping migration")
             return
 
-        logger.info("Adding os_version column to hosts table...")
+        logger.info("Adding os_version column to host table...")
 
         await conn.execute(text(
-            "ALTER TABLE hosts ADD COLUMN os_version VARCHAR(255)"
+            "ALTER TABLE host ADD COLUMN os_version VARCHAR(255)"
         ))
 
         logger.info("Migration complete: added os_version column")

@@ -342,6 +342,7 @@ const Sidebar = {
             Modal.hide();
             Toast.success('密码已修改，请重新登录');
             Store.set('currentUser', null);
+            API.clearSessionMark();
             Router.navigate('login');
         } catch (err) {
             Toast.error(err.message);
@@ -368,6 +369,7 @@ const Sidebar = {
         }
         Modal.hide();
         Store.set('currentUser', null);
+        API.clearSessionMark();
         Router.navigate('login');
     }
 };

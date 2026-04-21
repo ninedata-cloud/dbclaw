@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 async def main():
     from backend.database import async_session, init_db
-    from backend.skills.models import Skill
+    from backend.models.skill import Skill
     from sqlalchemy import select
     
     print("=" * 60)
@@ -26,7 +26,7 @@ async def main():
         'manage_host',
         'manage_skill',
         'query_monitoring_data',
-        'query_inspection_reports',
+        'query_inspection_report',
         'trigger_inspection',
         'query_system_metadata'
     ]

@@ -48,8 +48,8 @@ def apply_event_diagnosis_lifecycle(
 ) -> None:
     event.lifecycle_stage = stage
     event.diagnosis_trigger_reason = trigger_reason
-    event.diagnosis_refresh_needed = refresh_needed
-    event.last_updated = now()
+    event.is_diagnosis_refresh_needed = refresh_needed
+    event.updated_at = now()
 
 
 def hydrate_event_strategy_fields(event):
@@ -139,11 +139,11 @@ class AlertEventService:
             .where(
                 and_(
                     AlertEvent.aggregation_key == aggregation_key,
-                    AlertEvent.event_end_time >= time_threshold,
+                    AlertEvent.event_ended_at >= time_threshold,
                     AlertEvent.status.in_(["active", "acknowledged"])  # 只匹配未解决的事件
                 )
             )
-            .order_by(AlertEvent.event_end_time.desc())
+            .order_by(AlertEvent.event_ended_at.desc())
             .limit(1)
         )
 
@@ -172,9 +172,9 @@ class AlertEventService:
             first_alert_id=alert.id,
             latest_alert_id=alert.id,
             alert_count=1,
-            event_start_time=alert.created_at,
-            event_end_time=alert.created_at,
-            last_updated=now(),
+            event_started_at=alert.created_at,
+            event_ended_at=alert.created_at,
+            updated_at=now(),
             status=alert.status,
             severity=alert.severity,
             title=alert.title,
@@ -183,7 +183,7 @@ class AlertEventService:
             event_category=event_category,
             fault_domain=fault_domain,
             lifecycle_stage="created",
-            diagnosis_refresh_needed=True,
+            is_diagnosis_refresh_needed=True,
             diagnosis_trigger_reason="event_created",
         )
 
@@ -204,8 +204,8 @@ class AlertEventService:
         old_severity = event.severity
         event.latest_alert_id = alert.id
         event.alert_count += 1
-        event.event_end_time = alert.created_at
-        event.last_updated = now()
+        event.event_ended_at = alert.created_at
+        event.updated_at = now()
         event.status = alert.status  # Inherit status from latest alert
         event.title = alert.title
 
@@ -220,7 +220,7 @@ class AlertEventService:
         else:
             event.lifecycle_stage = "active"
 
-        if event.severity == old_severity and event.alert_type != alert.alert_type and not event.diagnosis_refresh_needed:
+        if event.severity == old_severity and event.alert_type != alert.alert_type and not event.is_diagnosis_refresh_needed:
             event.diagnosis_trigger_reason = "event_updated"
 
         await db.flush()
@@ -254,10 +254,10 @@ class AlertEventService:
             filters.append(AlertEvent.datasource_id.in_(datasource_ids))
 
         if start_time:
-            filters.append(AlertEvent.event_start_time >= start_time)
+            filters.append(AlertEvent.event_started_at >= start_time)
 
         if end_time:
-            filters.append(AlertEvent.event_end_time <= end_time)
+            filters.append(AlertEvent.event_ended_at <= end_time)
 
         if status and status != "all":
             filters.append(AlertEvent.status == status)
@@ -286,19 +286,19 @@ class AlertEventService:
         # Apply ordering and pagination
         query = query.order_by(
             AlertEventService._status_priority_expr().asc(),
-            AlertEvent.event_start_time.desc(),
+            AlertEvent.event_started_at.desc(),
             AlertEvent.id.desc(),
         )
         query = query.limit(limit).offset(offset)
 
         # Execute query
         result = await db.execute(query)
-        events_with_datasources = [
+        events_with_datasource = [
             (hydrate_event_strategy_fields(event), datasource)
             for event, datasource in result.all()
         ]
 
-        return events_with_datasources, total
+        return events_with_datasource, total
 
     @staticmethod
     async def get_alerts_in_event(
@@ -345,7 +345,7 @@ class AlertEventService:
 
         # Update event status
         event.status = "acknowledged"
-        event.last_updated = now()
+        event.updated_at = now()
 
         # Update all alerts in event
         await db.execute(
@@ -388,8 +388,8 @@ class AlertEventService:
         # Update event status and end time
         now_time = now()
         event.status = "resolved"
-        event.event_end_time = now_time  # 更新恢复时间
-        event.last_updated = now_time
+        event.event_ended_at = now_time  # 更新恢复时间
+        event.updated_at = now_time
         apply_event_diagnosis_lifecycle(
             event,
             stage="recovered",
@@ -452,8 +452,8 @@ class AlertEventService:
             # Auto-resolve the event
             now_time = now()
             event.status = "resolved"
-            event.event_end_time = now_time  # 更新恢复时间
-            event.last_updated = now_time
+            event.event_ended_at = now_time  # 更新恢复时间
+            event.updated_at = now_time
             apply_event_diagnosis_lifecycle(
                 event,
                 stage="recovered",

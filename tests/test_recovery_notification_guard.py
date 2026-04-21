@@ -19,7 +19,7 @@ async def test_get_pending_recovery_notifications_requires_original_notification
     await AlertService.get_pending_recovery_notifications(db, minutes=60)
 
     stmt = db.execute.call_args[0][0]
-    assert "alert_messages.notified_at IS NOT NULL" in str(stmt)
+    assert "alert_message.notified_at IS NOT NULL" in str(stmt)
 
 
 @pytest.mark.asyncio
@@ -47,7 +47,7 @@ async def test_recovery_notification_skips_subscription_without_original_deliver
         "backend.services.notification_dispatcher.AlertService.has_recovery_notification_for_subscription",
         new=AsyncMock(return_value=False),
     ), patch(
-        "backend.services.notification_dispatcher._send_recovery_via_integrations",
+        "backend.services.notification_dispatcher._send_recovery_via_integration",
         new=AsyncMock(return_value=[]),
     ) as mock_send:
         await _process_recovery_notifications(db)
@@ -81,7 +81,7 @@ async def test_recovery_notification_sends_only_after_original_delivery():
         "backend.services.notification_dispatcher.AlertService.has_recovery_notification_for_subscription",
         new=AsyncMock(return_value=False),
     ), patch(
-        "backend.services.notification_dispatcher._send_recovery_via_integrations",
+        "backend.services.notification_dispatcher._send_recovery_via_integration",
         new=mock_send,
     ):
         await _process_recovery_notifications(db)

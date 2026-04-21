@@ -20,16 +20,16 @@ async def migrate():
         # 检查字段是否已存在
         result = await conn.execute(text(
             "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = 'datasources' AND column_name = 'db_version'"
+            "WHERE table_name = 'datasource' AND column_name = 'db_version'"
         ))
         if result.fetchone():
             logger.info("db_version column already exists, skipping migration")
             return
 
-        logger.info("Adding db_version column to datasources table...")
+        logger.info("Adding db_version column to datasource table...")
 
         await conn.execute(text(
-            "ALTER TABLE datasources ADD COLUMN db_version VARCHAR(255)"
+            "ALTER TABLE datasource ADD COLUMN db_version VARCHAR(255)"
         ))
 
         logger.info("Migration complete: added db_version column")

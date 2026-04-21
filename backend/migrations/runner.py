@@ -11,6 +11,8 @@ from backend.database import get_engine
 logger = logging.getLogger(__name__)
 
 MIGRATION_LOCK_KEY = 48203117
+MIGRATION_TABLE_NAME = "startup_migration"
+LEGACY_MIGRATION_TABLE_NAME = "startup_migrations"
 
 
 @dataclass(frozen=True)
@@ -24,6 +26,10 @@ PRE_CREATE_MIGRATIONS = (
     MigrationSpec(
         name="rename_legacy_log_tables_to_plural",
         module_path="backend.migrations.rename_legacy_log_tables_to_plural",
+    ),
+    MigrationSpec(
+        name="rename_tables_to_singular",
+        module_path="backend.migrations.rename_tables_to_singular",
     ),
 )
 
@@ -75,12 +81,12 @@ POST_CREATE_MIGRATIONS = (
     ),
     MigrationSpec("add_alert_ai_engine", "backend.migrations.add_alert_ai_engine"),
     MigrationSpec("add_alert_templates", "backend.migrations.add_alert_templates"),
+    MigrationSpec("add_alert_ai_candidate_gating", "backend.migrations.add_alert_ai_candidate_gating"),
+    MigrationSpec("add_baseline_and_event_strategy", "backend.migrations.add_baseline_and_event_strategy"),
     MigrationSpec(
         "rebind_inspection_configs_to_default_template",
         "backend.migrations.rebind_inspection_configs_to_default_template",
     ),
-    MigrationSpec("add_alert_ai_candidate_gating", "backend.migrations.add_alert_ai_candidate_gating"),
-    MigrationSpec("add_baseline_and_event_strategy", "backend.migrations.add_baseline_and_event_strategy"),
     MigrationSpec(
         "add_metric_composite_index",
         "backend.migrations.add_metric_composite_index",
@@ -110,8 +116,8 @@ POST_CREATE_MIGRATIONS = (
         "backend.migrations.migrate_feishu_bot_channel_to_bot_binding",
     ),
     MigrationSpec(
-        "migrate_integration_metric_snapshots_to_db_status",
-        "backend.migrations.migrate_integration_metric_snapshots_to_db_status",
+        "migrate_integration_datasource_metrics_to_db_status",
+        "backend.migrations.migrate_integration_datasource_metrics_to_db_status",
     ),
     MigrationSpec(
         "drop_legacy_alert_channel_schema",
@@ -125,6 +131,51 @@ POST_CREATE_MIGRATIONS = (
     MigrationSpec("add_ssh_agent_auth", "backend.migrations.add_ssh_agent_auth"),
     MigrationSpec("add_host_os_version", "backend.migrations.add_host_os_version"),
     MigrationSpec("add_host_config_cache", "backend.migrations.add_host_config_cache"),
+    MigrationSpec("add_host_id_to_diagnostic_sessions", "backend.migrations.add_host_id_to_diagnostic_sessions"),
+    MigrationSpec(
+        "migrate_models_datetime_to_timestamptz",
+        "backend.migrations.migrate_models_datetime_to_timestamptz",
+    ),
+    MigrationSpec(
+        "migrate_float_columns_to_numeric_22_4",
+        "backend.migrations.migrate_float_columns_to_numeric_22_4",
+    ),
+    MigrationSpec(
+        "ensure_inspection_trigger_datasource_metric",
+        "backend.migrations.ensure_inspection_trigger_datasource_metric",
+    ),
+    MigrationSpec(
+        "alter_metric_tables_pk_to_bigint",
+        "backend.migrations.alter_metric_tables_pk_to_bigint",
+    ),
+    MigrationSpec(
+        "alter_large_volume_ids_to_bigint",
+        "backend.migrations.alter_large_volume_ids_to_bigint",
+    ),
+    MigrationSpec(
+        "alter_log_table_ids_to_bigint",
+        "backend.migrations.alter_log_table_ids_to_bigint",
+    ),
+    MigrationSpec(
+        "migrate_jsonb_columns_to_json",
+        "backend.migrations.migrate_jsonb_columns_to_json",
+    ),
+    MigrationSpec(
+        "fix_soft_delete_deleted_at_timezone",
+        "backend.migrations.fix_soft_delete_deleted_at_timezone",
+    ),
+    MigrationSpec(
+        "normalize_skill_model_columns",
+        "backend.migrations.normalize_skill_model_columns",
+    ),
+    MigrationSpec(
+        "normalize_schema_p0_p1_and_audit_timestamps",
+        "backend.migrations.normalize_schema_p0_p1_and_audit_timestamps",
+    ),
+    MigrationSpec(
+        "fix_alert_event_last_updated_column",
+        "backend.migrations.fix_alert_event_last_updated_column",
+    ),
 )
 
 
@@ -156,28 +207,92 @@ def _suppress_migration_noise():
 
 
 async def _ensure_migration_table(conn) -> None:
-    await conn.execute(
+    legacy_exists = await conn.execute(
         text(
             """
-            CREATE TABLE IF NOT EXISTS startup_migrations (
-                name VARCHAR(255) PRIMARY KEY,
-                applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.tables
+                WHERE table_schema = current_schema()
+                  AND table_name = :table_name
             )
+            """
+        ),
+        {"table_name": LEGACY_MIGRATION_TABLE_NAME},
+    )
+    current_exists = await conn.execute(
+        text(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.tables
+                WHERE table_schema = current_schema()
+                  AND table_name = :table_name
+            )
+            """
+        ),
+        {"table_name": MIGRATION_TABLE_NAME},
+    )
+    if bool(legacy_exists.scalar_one()) and not bool(current_exists.scalar_one()):
+        await conn.execute(
+            text(
+                f'ALTER TABLE "{LEGACY_MIGRATION_TABLE_NAME}" RENAME TO "{MIGRATION_TABLE_NAME}"'
+            )
+        )
+
+    await conn.execute(
+        text(
+            f"""
+            CREATE TABLE IF NOT EXISTS {MIGRATION_TABLE_NAME} (
+                name VARCHAR(255) PRIMARY KEY,
+                applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+    applied_at_type = await conn.execute(
+        text(
+            """
+            SELECT data_type
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = :table_name
+              AND column_name = 'applied_at'
+            """
+        ),
+        {"table_name": MIGRATION_TABLE_NAME},
+    )
+    if applied_at_type.scalar_one_or_none() == "timestamp without time zone":
+        await conn.execute(
+            text(
+                f"""
+                ALTER TABLE {MIGRATION_TABLE_NAME}
+                ALTER COLUMN applied_at TYPE TIMESTAMPTZ USING applied_at AT TIME ZONE 'UTC'
+                """
+            )
+        )
+
+    await conn.execute(
+        text(
+            f"""
+            ALTER TABLE {MIGRATION_TABLE_NAME}
+            ALTER COLUMN applied_at SET DEFAULT CURRENT_TIMESTAMP,
+            ALTER COLUMN applied_at SET NOT NULL
             """
         )
     )
 
 
 async def _load_applied_migrations(conn) -> set[str]:
-    result = await conn.execute(text("SELECT name FROM startup_migrations"))
+    result = await conn.execute(text(f"SELECT name FROM {MIGRATION_TABLE_NAME}"))
     return {row[0] for row in result.fetchall()}
 
 
 async def _record_migration(conn, migration_name: str) -> None:
     await conn.execute(
         text(
-            """
-            INSERT INTO startup_migrations (name)
+            f"""
+            INSERT INTO {MIGRATION_TABLE_NAME} (name)
             VALUES (:name)
             ON CONFLICT (name) DO NOTHING
             """
@@ -231,6 +346,9 @@ async def _run_migrations(stage: str, migrations: tuple[MigrationSpec, ...]) -> 
                 applied.add(spec.name)
                 applied_count += 1
         finally:
+            # 若前面任一步 SQL 失败，连接会处于 aborted transaction 状态；
+            # 先回滚再释放 advisory lock，避免 unlock 自身也报错。
+            await conn.rollback()
             await conn.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": MIGRATION_LOCK_KEY})
             await conn.commit()
 

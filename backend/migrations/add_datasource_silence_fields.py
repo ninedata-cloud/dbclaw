@@ -1,5 +1,5 @@
 """
-Add silence fields to datasources table
+Add silence fields to datasource table
 为数据源表添加临时静默字段
 
 Usage:
@@ -11,14 +11,14 @@ from backend.database import async_session
 
 
 async def migrate():
-    """Add silence_until and silence_reason columns to datasources table"""
+    """Add silence_until and silence_reason columns to datasource table"""
     async with async_session() as db:
         try:
             # Check if columns already exist
             result = await db.execute(text("""
                 SELECT column_name
                 FROM information_schema.columns
-                WHERE table_name = 'datasources'
+                WHERE table_name = 'datasource'
                 AND column_name IN ('silence_until', 'silence_reason')
             """))
             existing_columns = {row[0] for row in result.fetchall()}
@@ -26,7 +26,7 @@ async def migrate():
             # Add silence_until column if not exists
             if 'silence_until' not in existing_columns:
                 await db.execute(text("""
-                    ALTER TABLE datasources
+                    ALTER TABLE datasource
                     ADD COLUMN silence_until TIMESTAMP NULL
                 """))
                 print("✓ Added column: silence_until")
@@ -36,7 +36,7 @@ async def migrate():
             # Add silence_reason column if not exists
             if 'silence_reason' not in existing_columns:
                 await db.execute(text("""
-                    ALTER TABLE datasources
+                    ALTER TABLE datasource
                     ADD COLUMN silence_reason VARCHAR(500) NULL
                 """))
                 print("✓ Added column: silence_reason")

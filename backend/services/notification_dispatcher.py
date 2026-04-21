@@ -184,13 +184,13 @@ async def _build_ai_native_metric_summary(db, alert) -> str | None:
         return None
 
     from backend.models.alert_ai_evaluation_log import AlertAIEvaluationLog
-    from backend.models.metric_snapshot import MetricSnapshot
+    from backend.models.datasource_metric import DatasourceMetric
 
     evaluation_result = await db.execute(
         select(AlertAIEvaluationLog)
         .where(
             AlertAIEvaluationLog.datasource_id == alert.datasource_id,
-            AlertAIEvaluationLog.accepted == True,
+            AlertAIEvaluationLog.is_accepted == True,
             AlertAIEvaluationLog.decision == "alert",
         )
         .order_by(AlertAIEvaluationLog.created_at.desc(), AlertAIEvaluationLog.id.desc())
@@ -212,12 +212,12 @@ async def _build_ai_native_metric_summary(db, alert) -> str | None:
                 return feature_lines
 
     snapshot_result = await db.execute(
-        select(MetricSnapshot)
+        select(DatasourceMetric)
         .where(
-            MetricSnapshot.datasource_id == alert.datasource_id,
-            MetricSnapshot.metric_type == "db_status",
+            DatasourceMetric.datasource_id == alert.datasource_id,
+            DatasourceMetric.metric_type == "db_status",
         )
-        .order_by(MetricSnapshot.collected_at.desc(), MetricSnapshot.id.desc())
+        .order_by(DatasourceMetric.collected_at.desc(), DatasourceMetric.id.desc())
         .limit(1)
     )
     latest_snapshot = snapshot_result.scalar_one_or_none()
@@ -463,7 +463,7 @@ async def _process_pending_alerts():
                                 )
                                 continue
 
-                            delivery_logs = await _send_via_integrations(
+                            delivery_logs = await _send_via_integration(
                                 db, alert, subscription, diagnosis_result
                             )
 
@@ -503,7 +503,7 @@ async def _process_pending_alerts():
 
 async def _already_delivered(db, alert_id: int, subscription_id: int) -> bool:
     """Check if a successful delivery already exists for this alert+subscription"""
-    from backend.models.alert_delivery_logs import AlertDeliveryLog
+    from backend.models.alert_delivery_log import AlertDeliveryLog
     from sqlalchemy import select, and_
 
     result = await db.execute(
@@ -535,11 +535,11 @@ async def _mark_alert_notified(db, alert):
     await db.commit()
 
 
-async def _send_via_integrations(db, alert, subscription, diagnosis_result=None):
+async def _send_via_integration(db, alert, subscription, diagnosis_result=None):
     """通过 Integration 系统发送通知"""
     from backend.config import get_settings
     from backend.models.integration import Integration, IntegrationExecutionLog
-    from backend.models.alert_delivery_logs import AlertDeliveryLog
+    from backend.models.alert_delivery_log import AlertDeliveryLog
     from backend.models.datasource import Datasource
     from backend.services.integration_executor import IntegrationExecutor
     from backend.services.public_share_service import PublicShareService
@@ -567,7 +567,7 @@ async def _send_via_integrations(db, alert, subscription, diagnosis_result=None)
         linked_report = await PublicShareService.get_report_by_alert_id(db, alert.id)
         if linked_report:
             report_token = PublicShareService.create_report_share_token(linked_report.id, settings.public_share_expire_minutes)
-            report_url = f"{base_url}/api/inspections/reports/public/{linked_report.id}/page?token={report_token}"
+            report_url = f"{base_url}/api/inspections/report/public/{linked_report.id}/page?token={report_token}"
 
     for target in (subscription.integration_targets or []):
         if not isinstance(target, dict):
@@ -582,7 +582,7 @@ async def _send_via_integrations(db, alert, subscription, diagnosis_result=None)
             continue
 
         integration = await get_alive_by_id(db, Integration, int(integration_id))
-        if not integration or not integration.enabled:
+        if not integration or not integration.is_enabled:
             logger.warning(f"Integration {integration_id} 不存在或已禁用")
             continue
 
@@ -639,7 +639,7 @@ async def _send_via_integrations(db, alert, subscription, diagnosis_result=None)
         required_params = _get_required_integration_params(integration)
         missing_params = [key for key in required_params if not params.get(key)]
         executor = IntegrationExecutor(db, logger)
-        start_time = datetime.utcnow()
+        start_time = now()
 
         if missing_params:
             missing_params_text = ", ".join(missing_params)
@@ -688,7 +688,7 @@ async def _send_via_integrations(db, alert, subscription, diagnosis_result=None)
 
         try:
             result = await executor.execute_notification(integration.code, params, payload)
-            execution_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+            execution_time_ms = int((now() - start_time).total_seconds() * 1000)
 
             exec_log = IntegrationExecutionLog(
                 integration_id=integration.id,
@@ -760,10 +760,10 @@ async def _send_via_integrations(db, alert, subscription, diagnosis_result=None)
     return delivery_logs
 
 
-async def _send_recovery_via_integrations(db, alert, subscription):
+async def _send_recovery_via_integration(db, alert, subscription):
     """通过 Integration 系统发送恢复通知"""
     from backend.models.integration import Integration, IntegrationExecutionLog
-    from backend.models.alert_delivery_logs import AlertDeliveryLog
+    from backend.models.alert_delivery_log import AlertDeliveryLog
     from backend.models.datasource import Datasource
     from backend.services.integration_executor import IntegrationExecutor
     from sqlalchemy import select
@@ -798,7 +798,7 @@ async def _send_recovery_via_integrations(db, alert, subscription):
             continue
 
         integration = await get_alive_by_id(db, Integration, int(integration_id))
-        if not integration or not integration.enabled:
+        if not integration or not integration.is_enabled:
             logger.warning(f"Integration {integration_id} 不存在或已禁用")
             continue
 
@@ -810,7 +810,7 @@ async def _send_recovery_via_integrations(db, alert, subscription):
         required_params = _get_required_integration_params(integration)
         missing_params = [key for key in required_params if not params.get(key)]
         executor = IntegrationExecutor(db, logger)
-        start_time = datetime.utcnow()
+        start_time = now()
 
         if missing_params:
             missing_params_text = ", ".join(missing_params)
@@ -859,7 +859,7 @@ async def _send_recovery_via_integrations(db, alert, subscription):
 
         try:
             result = await executor.execute_notification(integration.code, params, payload)
-            execution_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+            execution_time_ms = int((now() - start_time).total_seconds() * 1000)
 
             exec_log = IntegrationExecutionLog(
                 integration_id=integration.id,
@@ -999,7 +999,7 @@ async def _process_recovery_notifications(db):
                 ):
                     continue
 
-                delivery_logs = await _send_recovery_via_integrations(
+                delivery_logs = await _send_recovery_via_integration(
                     db, alert, subscription
                 )
 

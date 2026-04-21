@@ -378,7 +378,7 @@ class OracleConnector(DBConnector):
         try:
             cursor = conn.cursor()
             await cursor.execute(
-                "SELECT username FROM all_users "
+                "SELECT username FROM all_user "
                 "WHERE username NOT IN ('SYS', 'SYSTEM', 'OUTLN', 'DBSNMP', 'APPQOSSYS', "
                 "'WMSYS', 'EXFSYS', 'CTXSYS', 'XDB', 'ANONYMOUS', 'ORDSYS', 'MDSYS', 'OLAPSYS') "
                 "ORDER BY username"

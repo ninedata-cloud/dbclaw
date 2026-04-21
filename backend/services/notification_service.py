@@ -17,11 +17,12 @@ from email.mime.multipart import MIMEMultipart
 
 from backend.models.alert_message import AlertMessage
 from backend.models.alert_subscription import AlertSubscription
-from backend.models.alert_delivery_logs import AlertDeliveryLog
+from backend.models.alert_delivery_log import AlertDeliveryLog
 from backend.models.user import User
 from backend.models.system_config import SystemConfig
 from backend.models.datasource import Datasource
 from backend.models.soft_delete import alive_filter
+from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +92,7 @@ class NotificationService:
 
         # Check time range filter
         if subscription.time_ranges:
-            current_time = datetime.now()
+            current_time = now()
             current_hour = current_time.hour
             current_minute = current_time.minute
             current_weekday = current_time.weekday()  # 0=Monday, 6=Sunday
@@ -139,13 +140,13 @@ class NotificationService:
         Returns:
             List of delivery log entries
         """
-        from backend.services.notification_dispatcher import _send_via_integrations
+        from backend.services.notification_dispatcher import _send_via_integration
 
         if not subscription.integration_targets:
             logger.warning(f"Subscription {subscription.id} has no integration targets configured")
             return []
 
-        return await _send_via_integrations(db, alert, subscription)
+        return await _send_via_integration(db, alert, subscription)
 
     @staticmethod
     async def _send_email(
@@ -220,7 +221,7 @@ class NotificationService:
                 server.quit()
 
             log.status = "sent"
-            log.sent_at = datetime.now()
+            log.sent_at = now()
             logger.info(f"Email sent to {recipient} for alert {alert.id}")
 
         except Exception as e:
@@ -280,7 +281,7 @@ class NotificationService:
                 raise NotImplementedError(f"SMS provider {sms_provider} not implemented")
 
             log.status = "sent"
-            log.sent_at = datetime.now()
+            log.sent_at = now()
             logger.info(f"SMS sent to {recipient} for alert {alert.id}")
 
         except Exception as e:
@@ -340,7 +341,7 @@ class NotificationService:
                 raise NotImplementedError(f"Phone provider {phone_provider} not implemented")
 
             log.status = "sent"
-            log.sent_at = datetime.now()
+            log.sent_at = now()
             logger.info(f"Phone call sent to {recipient} for alert {alert.id}")
 
         except Exception as e:
@@ -476,7 +477,7 @@ class NotificationService:
                 server.quit()
 
             log.status = "sent"
-            log.sent_at = datetime.now()
+            log.sent_at = now()
             logger.info(f"Recovery email sent to {recipient} for alert {alert.id}")
 
         except Exception as e:
@@ -527,7 +528,7 @@ class NotificationService:
                 raise NotImplementedError(f"SMS provider {sms_provider} not implemented")
 
             log.status = "sent"
-            log.sent_at = datetime.now()
+            log.sent_at = now()
             logger.info(f"Recovery SMS sent to {recipient} for alert {alert.id}")
 
         except Exception as e:
@@ -578,7 +579,7 @@ class NotificationService:
                 raise NotImplementedError(f"Phone provider {phone_provider} not implemented")
 
             log.status = "sent"
-            log.sent_at = datetime.now()
+            log.sent_at = now()
             logger.info(f"Recovery phone call sent to {recipient} for alert {alert.id}")
 
         except Exception as e:
@@ -651,7 +652,7 @@ class NotificationService:
                         if resp_json.get('errcode', 0) != 0:
                             raise Exception(f"DingTalk error {resp_json.get('errcode')}: {resp_json.get('errmsg')}")
                     log.status = "sent"
-                    log.sent_at = datetime.now()
+                    log.sent_at = now()
                     logger.info(f"DingTalk recovery webhook sent to {webhook_url} for alert {alert.id}")
                     await db.commit()
                     await db.refresh(log)
@@ -692,7 +693,7 @@ class NotificationService:
                             raise Exception(f"Feishu error {resp_json.get('code')}: {resp_json.get('msg')}")
 
             log.status = "sent"
-            log.sent_at = datetime.now()
+            log.sent_at = now()
             logger.info(f"Recovery webhook sent to {webhook_url} for alert {alert.id}")
 
         except Exception as e:
@@ -737,7 +738,7 @@ class NotificationService:
                         raise Exception(f"DingTalk error {resp_json.get('errcode')}: {resp_json.get('errmsg')}")
 
             log.status = "sent"
-            log.sent_at = datetime.now()
+            log.sent_at = now()
             logger.info(f"DingTalk notification sent for alert {alert.id}")
 
         except Exception as e:
@@ -782,7 +783,7 @@ class NotificationService:
                         raise Exception(f"DingTalk error {resp_json.get('errcode')}: {resp_json.get('errmsg')}")
 
             log.status = "sent"
-            log.sent_at = datetime.now()
+            log.sent_at = now()
             logger.info(f"DingTalk recovery notification sent for alert {alert.id}")
 
         except Exception as e:
@@ -984,7 +985,7 @@ class NotificationService:
                         if resp_json.get('errcode', 0) != 0:
                             raise Exception(f"DingTalk error {resp_json.get('errcode')}: {resp_json.get('errmsg')}")
                     log.status = "sent"
-                    log.sent_at = datetime.now()
+                    log.sent_at = now()
                     logger.info(f"DingTalk webhook sent to {webhook_url} for alert {alert.id}")
                     await db.commit()
                     await db.refresh(log)
@@ -1024,7 +1025,7 @@ class NotificationService:
                             raise Exception(f"Feishu error {resp_json.get('code')}: {resp_json.get('msg')}")
 
             log.status = "sent"
-            log.sent_at = datetime.now()
+            log.sent_at = now()
             logger.info(f"Webhook sent to {webhook_url} for alert {alert.id}")
 
         except Exception as e:

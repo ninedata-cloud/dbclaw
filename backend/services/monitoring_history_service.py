@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.datasource import Datasource
 from backend.models.host import Host
 from backend.models.host_metric import HostMetric
-from backend.models.metric_snapshot import MetricSnapshot
+from backend.models.datasource_metric import DatasourceMetric
 from backend.models.soft_delete import alive_filter
 from backend.utils.datetime_helper import normalize_local_datetime, now
 
@@ -363,14 +363,14 @@ async def _load_datasource_records(
     end_time: datetime,
 ) -> list[tuple[datetime, dict[str, float]]]:
     result = await db.execute(
-        select(MetricSnapshot)
+        select(DatasourceMetric)
         .where(
-            MetricSnapshot.datasource_id == datasource_id,
-            MetricSnapshot.metric_type == metric_type,
-            MetricSnapshot.collected_at >= start_time,
-            MetricSnapshot.collected_at <= end_time,
+            DatasourceMetric.datasource_id == datasource_id,
+            DatasourceMetric.metric_type == metric_type,
+            DatasourceMetric.collected_at >= start_time,
+            DatasourceMetric.collected_at <= end_time,
         )
-        .order_by(MetricSnapshot.collected_at.asc())
+        .order_by(DatasourceMetric.collected_at.asc())
     )
     snapshots = result.scalars().all()
     return [(snapshot.collected_at, _coerce_metric_dict(snapshot.data or {})) for snapshot in snapshots]
@@ -474,7 +474,7 @@ async def query_monitoring_history(
             metric_names=selected_metrics,
             bucket_seconds=bucket_seconds,
         )
-        result["datasource_metrics"] = {
+        result["datasource_metric"] = {
             "metric_type": metric_type,
             "available_metric_names": available_metrics,
             **aggregated,
@@ -487,8 +487,8 @@ async def query_monitoring_history(
                 "reason": "当前数据源未关联主机，无法查询主机监控历史",
             }
             if scope == "host":
-                return {"success": False, "error": host_payload["reason"], **result, "host_metrics": host_payload}
-            result["host_metrics"] = host_payload
+                return {"success": False, "error": host_payload["reason"], **result, "host_metric": host_payload}
+            result["host_metric"] = host_payload
         else:
             host_records = await _load_host_records(
                 db,
@@ -513,7 +513,7 @@ async def query_monitoring_history(
                 "host": host.host,
                 "os_version": host.os_version,
             }
-            result["host_metrics"] = {
+            result["host_metric"] = {
                 "available": True,
                 "available_metric_names": available_metrics,
                 **aggregated,

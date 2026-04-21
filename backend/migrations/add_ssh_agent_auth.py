@@ -18,7 +18,7 @@ from backend.database import async_engine
 async def migrate():
     """执行迁移"""
     async with async_engine.begin() as conn:
-        print("检查 hosts 表的 auth_type 字段...")
+        print("检查 host 表的 auth_type 字段...")
 
         # 检查是否需要更新字段长度（从 VARCHAR(20) 确保足够存储 'agent'）
         # PostgreSQL 中 VARCHAR(20) 已经足够，但我们可以添加注释说明支持的值
@@ -26,7 +26,7 @@ async def migrate():
         result = await conn.execute(text("""
             SELECT column_name, data_type, character_maximum_length
             FROM information_schema.columns
-            WHERE table_name = 'hosts' AND column_name = 'auth_type'
+            WHERE table_name = 'host' AND column_name = 'auth_type'
         """))
 
         row = result.fetchone()
@@ -39,7 +39,7 @@ async def migrate():
 
         # 添加表注释说明支持的认证类型
         await conn.execute(text("""
-            COMMENT ON COLUMN hosts.auth_type IS 'Authentication type: password, key, or agent'
+            COMMENT ON COLUMN host.auth_type IS 'Authentication type: password, key, or agent'
         """))
 
         print("✓ 迁移完成")

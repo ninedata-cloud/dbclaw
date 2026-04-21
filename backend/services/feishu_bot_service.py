@@ -7,13 +7,14 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.chat_channel_binding import ChatChannelBinding
-from backend.models.chat_event_dedups import ChatEventDedup
+from backend.models.chat_event_dedup import ChatEventDedup
 from backend.models.diagnostic_session import ChatMessage, DiagnosticSession
 from backend.models.integration import Integration
 from backend.models.integration_bot_binding import IntegrationBotBinding
 from backend.models.soft_delete import alive_filter, alive_select
 from backend.services.chat_orchestration_service import prepare_user_turn, process_stream_events, resolve_pending_approval
 from backend.services.feishu_service import feishu_service, format_reply_text
+from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
 
@@ -319,7 +320,7 @@ class FeishuBotService:
         result = await db.execute(
             select(Integration).where(
                 Integration.integration_id == "builtin_feishu_bot",
-                Integration.enabled == True,
+                Integration.is_enabled == True,
                 alive_filter(Integration),
             )
         )
@@ -365,7 +366,7 @@ class FeishuBotService:
         params["login_status"] = login_status
         params["last_error"] = last_error
         binding.params = params
-        binding.enabled = login_status == "confirmed"
+        binding.is_enabled = login_status == "confirmed"
         await db.commit()
 
     @staticmethod
@@ -417,7 +418,7 @@ class FeishuBotService:
         )
         binding = result.scalar_one_or_none()
         if binding:
-            binding.last_message_at = datetime.utcnow()
+            binding.last_message_at = now()
             await db.commit()
             return binding
 
@@ -435,7 +436,7 @@ class FeishuBotService:
             external_user_id=user_open_id,
             session_id=session.id,
             integration_id=integration.id if integration else None,
-            last_message_at=datetime.utcnow(),
+            last_message_at=now(),
         )
         db.add(binding)
         await db.commit()

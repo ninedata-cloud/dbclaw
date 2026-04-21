@@ -1,10 +1,10 @@
-id: list_datasources
+id: list_datasource
 name: List Datasources
 version: 1.0.0
 author: DBClaw
 category: query
-description: List all configured database datasources
-tags: [datasources, configuration]
+description: List all configured database datasource
+tags: [datasource, configuration]
 
 permissions: []
 
@@ -13,13 +13,13 @@ code: |
       from backend.models.datasource import Datasource
       from backend.models.soft_delete import alive_select
 
-      # Get all datasources
+      # Get all datasource
       result = await context.db.execute(alive_select(Datasource))
-      datasources = result.scalars().all()
+      datasource = result.scalars().all()
 
       # Format datasource info
       datasource_list = []
-      for datasource in datasources:
+      for datasource in datasource:
           datasource_list.append({
               "id": datasource.id,
               "name": datasource.name,
@@ -46,5 +46,5 @@ code: |
 
       return {
           "success": True,
-          "datasources": datasource_list
+          "datasource": datasource_list
       }

@@ -70,7 +70,7 @@ def _alert_sort_key(alert: AlertMessage):
 
 
 @pytest.mark.asyncio
-async def test_alert_events_prioritize_active_before_resolved():
+async def test_alert_event_prioritize_active_before_resolved():
     fake_db = FakeOrderedSession(
         [
             AlertEvent(
@@ -158,7 +158,7 @@ async def test_alert_events_prioritize_active_before_resolved():
 
 
 @pytest.mark.asyncio
-async def test_alert_messages_prioritize_active_before_resolved():
+async def test_alert_message_prioritize_active_before_resolved():
     fake_db = FakeOrderedSession(
         [
             AlertMessage(

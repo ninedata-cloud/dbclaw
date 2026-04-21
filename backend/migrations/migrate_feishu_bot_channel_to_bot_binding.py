@@ -1,4 +1,4 @@
-"""Migration: promote Feishu bot channel config into integration_bot_bindings."""
+"""Migration: promote Feishu bot channel config into integration_bot_binding."""
 
 import asyncio
 import json
@@ -34,9 +34,9 @@ async def _table_exists(conn, table_name: str) -> bool:
 
 async def migrate():
     async with engine.begin() as conn:
-        if not await _table_exists(conn, "integrations"):
+        if not await _table_exists(conn, "integration"):
             return
-        if not await _table_exists(conn, "integration_bot_bindings"):
+        if not await _table_exists(conn, "integration_bot_binding"):
             return
         if not await _table_exists(conn, "alert_channels"):
             return
@@ -45,7 +45,7 @@ async def migrate():
             text(
                 """
                 SELECT id
-                FROM integrations
+                FROM integration
                 WHERE integration_id = 'builtin_feishu_bot'
                 LIMIT 1
                 """
@@ -60,7 +60,7 @@ async def migrate():
             text(
                 """
                 SELECT 1
-                FROM integration_bot_bindings
+                FROM integration_bot_binding
                 WHERE code = 'feishu_bot'
                 LIMIT 1
                 """
@@ -91,8 +91,8 @@ async def migrate():
         await conn.execute(
             text(
                 """
-                INSERT INTO integration_bot_bindings (integration_id, code, name, enabled, params)
-                VALUES (:integration_id, 'feishu_bot', :name, :enabled, CAST(:params AS JSONB))
+                INSERT INTO integration_bot_binding (integration_id, code, name, enabled, params)
+                VALUES (:integration_id, 'feishu_bot', :name, :enabled, CAST(:params AS JSON))
                 """
             ),
             {
@@ -102,7 +102,7 @@ async def migrate():
                 "params": json.dumps(_load_json_value(channel.params) or {}, ensure_ascii=False),
             },
         )
-        logger.info('Migrated Feishu bot channel to integration_bot_bindings')
+        logger.info('Migrated Feishu bot channel to integration_bot_binding')
 
 
 if __name__ == '__main__':

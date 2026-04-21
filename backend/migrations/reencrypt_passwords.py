@@ -19,23 +19,23 @@ from cryptography.fernet import InvalidToken
 async def run_migration():
     """Re-encrypt all encrypted passwords in the database."""
     async with async_engine.begin() as conn:
-        # Get all datasources with passwords
+        # Get all datasource with passwords
         result = await conn.execute(
-            text("SELECT id, password FROM datasources WHERE password IS NOT NULL AND password != ''")
+            text("SELECT id, password FROM datasource WHERE password IS NOT NULL AND password != ''")
         )
-        datasources = result.fetchall()
+        datasource = result.fetchall()
 
-        # Get all hosts with passwords
+        # Get all host with passwords
         result = await conn.execute(
-            text("SELECT id, password FROM hosts WHERE password IS NOT NULL AND password != ''")
+            text("SELECT id, password FROM host WHERE password IS NOT NULL AND password != ''")
         )
-        hosts = result.fetchall()
+        host = result.fetchall()
 
         total_updated = 0
         failed = []
 
         # Re-encrypt datasource passwords
-        for ds_id, encrypted_password in datasources:
+        for ds_id, encrypted_password in datasource:
             try:
                 # Decrypt with current or legacy key
                 plain_password = decrypt_value(encrypted_password)
@@ -45,7 +45,7 @@ async def run_migration():
                 # Only update if different (means it was encrypted with legacy key)
                 if new_encrypted != encrypted_password:
                     await conn.execute(
-                        text("UPDATE datasources SET password = :password WHERE id = :id"),
+                        text("UPDATE datasource SET password = :password WHERE id = :id"),
                         {"password": new_encrypted, "id": ds_id}
                     )
                     total_updated += 1
@@ -53,14 +53,14 @@ async def run_migration():
                 failed.append(("datasource", ds_id))
 
         # Re-encrypt host passwords
-        for host_id, encrypted_password in hosts:
+        for host_id, encrypted_password in host:
             try:
                 plain_password = decrypt_value(encrypted_password)
                 new_encrypted = encrypt_value(plain_password)
 
                 if new_encrypted != encrypted_password:
                     await conn.execute(
-                        text("UPDATE hosts SET password = :password WHERE id = :id"),
+                        text("UPDATE host SET password = :password WHERE id = :id"),
                         {"password": new_encrypted, "id": host_id}
                     )
                     total_updated += 1

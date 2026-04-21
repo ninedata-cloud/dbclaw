@@ -1,4 +1,4 @@
-"""Add system_configs table and initialize default configurations"""
+"""Add system_config table and initialize default configurations"""
 import asyncio
 from sqlalchemy import text
 from backend.database import async_session
@@ -9,15 +9,15 @@ async def migrate():
         # Check if table exists
         result = await db.execute(text("""
             SELECT table_name FROM information_schema.tables
-            WHERE table_name = 'system_configs'
+            WHERE table_name = 'system_config'
         """))
         if result.scalar_one_or_none():
-            print("Table system_configs already exists")
+            print("Table system_config already exists")
             return
 
         # Create table
         await db.execute(text("""
-            CREATE TABLE system_configs (
+            CREATE TABLE system_config (
                 id SERIAL PRIMARY KEY,
                 key VARCHAR(100) UNIQUE NOT NULL,
                 value TEXT,
@@ -32,22 +32,22 @@ async def migrate():
 
         # Create indexes
         await db.execute(text(
-            "CREATE INDEX idx_system_configs_key ON system_configs(key)"
+            "CREATE INDEX idx_system_config_key ON system_config(key)"
         ))
         await db.execute(text(
-            "CREATE INDEX idx_system_configs_category ON system_configs(category)"
+            "CREATE INDEX idx_system_config_category ON system_config(category)"
         ))
 
         # Insert initial configurations
         await db.execute(text("""
-            INSERT INTO system_configs (key, value, value_type, description, category)
+            INSERT INTO system_config (key, value, value_type, description, category)
             VALUES
             ('bocha_api_key', 'sk-66d203942a6c404b89eff2adb494febc', 'string', 'Bocha AI Web Search API Key', 'external_api'),
             ('bocha_api_url', 'https://api.bochaai.com/v1/web-search', 'string', 'Bocha AI Web Search API URL', 'external_api')
         """))
 
         await db.commit()
-        print("Successfully created system_configs table and initialized default configurations")
+        print("Successfully created system_config table and initialized default configurations")
 
 
 if __name__ == "__main__":

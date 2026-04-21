@@ -44,8 +44,8 @@ async def test_immediate_collection():
         print("Simulating host update...")
 
         # Simulate an update by calling the collection function directly
-        from backend.services.host_collector import _collect_host_metrics
-        await _collect_host_metrics(db, host)
+        from backend.services.host_collector import _collect_host_metric
+        await _collect_host_metric(db, host)
         await db.commit()
 
         # Get metrics after update

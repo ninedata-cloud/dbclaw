@@ -8,6 +8,7 @@ import math
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from decimal import Decimal
 from time import perf_counter
 from typing import Any, Iterable, Optional
 
@@ -19,7 +20,7 @@ from backend.models.alert_ai_evaluation_log import AlertAIEvaluationLog
 from backend.models.alert_ai_policy import AlertAIPolicy
 from backend.models.alert_ai_runtime_state import AlertAIRuntimeState
 from backend.models.alert_message import AlertMessage
-from backend.models.metric_snapshot import MetricSnapshot
+from backend.models.datasource_metric import DatasourceMetric
 from backend.services.ai_agent import get_ai_client, request_text_response_with_usage
 from backend.services.alert_service import AlertService
 from backend.services.config_service import get_config
@@ -67,6 +68,22 @@ SEVERITY_LABELS = {
     "medium": "中",
     "low": "低",
 }
+
+
+def _json_default(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return float(value)
+    raise TypeError(f"Object of type {value.__class__.__name__} is not JSON serializable")
+
+
+def _json_dumps(payload: Any, *, sort_keys: bool = False) -> str:
+    return json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=sort_keys,
+        default=_json_default,
+    )
 
 PREFERRED_METRICS = [
     "cpu_usage",
@@ -870,7 +887,7 @@ def _extract_focus_metric_names(rule_text: str, current_metrics: dict[str, Any])
 
 
 def _find_snapshot_value_at_window(
-    snapshots_desc: list[MetricSnapshot],
+    snapshots_desc: list[DatasourceMetric],
     metric_name: str,
     reference_time: datetime,
     seconds: int,
@@ -883,7 +900,7 @@ def _find_snapshot_value_at_window(
 
 
 def _resolve_sampling_interval_seconds(
-    snapshots_desc: list[MetricSnapshot],
+    snapshots_desc: list[DatasourceMetric],
     configured_interval_seconds: Optional[int] = None,
 ) -> int:
     configured_interval = _to_float(configured_interval_seconds)
@@ -909,7 +926,7 @@ def _resolve_sampling_interval_seconds(
 
 
 def _build_recent_samples(
-    snapshots_desc: list[MetricSnapshot],
+    snapshots_desc: list[DatasourceMetric],
     metric_name: str,
     sample_limit: int = MAX_RECENT_SAMPLES_PER_METRIC,
 ) -> list[dict[str, Any]]:
@@ -931,7 +948,7 @@ def _build_recent_samples(
 
 
 def _build_metric_features(
-    snapshots_desc: list[MetricSnapshot],
+    snapshots_desc: list[DatasourceMetric],
     current_metrics: dict[str, Any],
     metric_names: Iterable[str],
     collected_at: datetime,
@@ -1099,7 +1116,7 @@ def _build_candidate_fingerprint(
             for item in matched_conditions
         ],
     }
-    return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+    return hashlib.sha256(_json_dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
 
 def _merge_gate_skip_reason(skip_map: Any, reason: str) -> dict[str, int]:
@@ -1173,20 +1190,20 @@ async def build_alert_ai_feature_summary(
     compiled_trigger_profile: Optional[dict[str, Any]] = None,
     runtime_state: Optional[AlertAIRuntimeState] = None,
     gate_decision: Optional[AlertAIGateDecision] = None,
-    snapshots_desc: Optional[list[MetricSnapshot]] = None,
+    snapshots_desc: Optional[list[DatasourceMetric]] = None,
     sampling_interval_seconds: Optional[int] = None,
 ) -> dict[str, Any]:
     from backend.services.monitoring_scheduler_service import get_monitoring_collection_interval_seconds
 
     if snapshots_desc is None:
         result = await db.execute(
-            select(MetricSnapshot)
+            select(DatasourceMetric)
             .where(
-                MetricSnapshot.datasource_id == datasource.id,
-                MetricSnapshot.metric_type == "db_status",
-                MetricSnapshot.collected_at >= collected_at - timedelta(hours=24),
+                DatasourceMetric.datasource_id == datasource.id,
+                DatasourceMetric.metric_type == "db_status",
+                DatasourceMetric.collected_at >= collected_at - timedelta(hours=24),
             )
-            .order_by(desc(MetricSnapshot.collected_at))
+            .order_by(desc(DatasourceMetric.collected_at))
             .limit(MAX_HISTORY_SNAPSHOTS)
         )
         snapshots_desc = result.scalars().all()
@@ -1241,7 +1258,7 @@ async def build_alert_ai_feature_summary(
             "fallback_mode": profile.get("fallback_mode") or "trend_heuristic",
         },
         "runtime_state": {
-            "active": bool(runtime_state.active) if runtime_state else False,
+            "active": bool(runtime_state.is_active) if runtime_state else False,
             "last_decision": getattr(runtime_state, "last_decision", None),
             "last_triggered_at": runtime_state.last_triggered_at.isoformat() if runtime_state and runtime_state.last_triggered_at else None,
             "last_recovered_at": runtime_state.last_recovered_at.isoformat() if runtime_state and runtime_state.last_recovered_at else None,
@@ -1329,7 +1346,7 @@ async def resolve_alert_ai_policy_binding(
             return None
         result = await db.execute(select(AlertAIPolicy).where(AlertAIPolicy.id == ai_policy_id))
         policy = result.scalar_one_or_none()
-        if not policy or not policy.enabled:
+        if not policy or not policy.is_enabled:
             return None
         policy = await ensure_alert_ai_policy_compiled(db, policy)
         rule_text = (policy.rule_text or "").strip()
@@ -1457,7 +1474,7 @@ async def _compile_policy_profile_with_ai(
                 client,
                 [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False, separators=(",", ":"))},
+                    {"role": "user", "content": _json_dumps(user_payload)},
                 ],
                 temperature=0,
                 max_tokens=320,
@@ -1552,7 +1569,7 @@ async def get_or_create_runtime_state(
         policy_id=binding.policy_id,
         policy_source=binding.policy_source,
         policy_fingerprint=binding.policy_fingerprint,
-        active=False,
+        is_active=False,
         consecutive_alert_count=0,
         consecutive_recover_count=0,
     )
@@ -1581,7 +1598,7 @@ def decide_alert_ai_candidate(
     state: AlertAIRuntimeState,
     current_metrics: dict[str, Any],
     collected_at: datetime,
-    snapshots_desc: list[MetricSnapshot],
+    snapshots_desc: list[DatasourceMetric],
     threshold_rules: Optional[dict[str, Any]] = None,
     current_alert_severity: Optional[str] = None,
     datasource=None,
@@ -1602,7 +1619,7 @@ def decide_alert_ai_candidate(
     recovery_conditions = profile.get("recovery_conditions") or []
     escalation_rules = profile.get("escalation_rules") or []
 
-    if not state.active:
+    if not state.is_active:
         matched_triggers = [
             _evaluate_condition(condition, metric_features, sampling_interval_seconds)
             for condition in trigger_conditions
@@ -1760,7 +1777,7 @@ def _build_alert_ai_messages(
             "analysis_config": analysis_config,
         },
         "runtime_state": {
-            "active": bool(state.active),
+            "active": bool(state.is_active),
             "cooldown_until": state.cooldown_until.isoformat() if state.cooldown_until else None,
             "last_decision": state.last_decision,
             "last_confidence": state.last_confidence,
@@ -1772,7 +1789,7 @@ def _build_alert_ai_messages(
     }
     return [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False, separators=(",", ":"))},
+        {"role": "user", "content": _json_dumps(user_payload)},
     ]
 
 
@@ -1858,7 +1875,7 @@ async def evaluate_alert_ai_policy(
             confidence=judge_result.confidence,
             severity=judge_result.severity,
             trigger_inspection=False,
-            accepted=False,
+            is_accepted=False,
             error_message=judge_result.error_message,
             reason=judge_result.reason,
             policy_severity_hint=binding.policy_severity_hint,
@@ -1930,7 +1947,7 @@ async def evaluate_alert_ai_policy(
         confidence=judge_result.confidence,
         severity=judge_result.severity,
         trigger_inspection=judge_result.trigger_inspection,
-        accepted=False,
+        is_accepted=False,
         error_message=error_message,
         reason=judge_result.reason,
         policy_severity_hint=binding.policy_severity_hint,
@@ -1981,7 +1998,7 @@ async def apply_alert_ai_result(
     current_time = now()
     confidence_threshold = await get_ai_alert_confidence_threshold(db)
     transition = compute_ai_transition(
-        active=bool(state.active),
+        active=bool(state.is_active),
         decision=judge_result.decision,
         confidence=judge_result.confidence,
         confidence_threshold=confidence_threshold,
@@ -2004,7 +2021,7 @@ async def apply_alert_ai_result(
                 trigger_reason=trigger_reason,
             )
             state.alert_id = alert.id
-            state.active = True
+            state.is_active = True
             state.last_triggered_at = current_time
             action = "trigger_alert"
 
@@ -2014,7 +2031,7 @@ async def apply_alert_ai_result(
                     datasource_id=datasource.id,
                     trigger_type="anomaly",
                     reason=trigger_reason or f"AI 告警策略命中：{binding.display_name}",
-                    metric_snapshot={
+                    datasource_metric={
                         "policy": {
                             "policy_id": binding.policy_id,
                             "policy_source": binding.policy_source,
@@ -2043,14 +2060,14 @@ async def apply_alert_ai_result(
             if alert:
                 await AlertService.resolve_alert(db, alert.id)
             state.alert_id = None
-            state.active = False
+            state.is_active = False
             state.last_recovered_at = current_time
             action = "recover_alert"
 
     state.policy_id = binding.policy_id
     state.policy_source = binding.policy_source
     state.policy_fingerprint = binding.policy_fingerprint
-    state.active = transition.active if mode == "formal" else state.active
+    state.is_active = transition.active if mode == "formal" else state.is_active
     state.consecutive_alert_count = transition.consecutive_alert_count if mode == "formal" else state.consecutive_alert_count
     state.consecutive_recover_count = transition.consecutive_recover_count if mode == "formal" else state.consecutive_recover_count
     state.cooldown_until = transition.cooldown_until if mode == "formal" else state.cooldown_until
@@ -2062,7 +2079,7 @@ async def apply_alert_ai_result(
 
     accepted = action in {"trigger_alert", "recover_alert"}
     if evaluation_log is not None:
-        evaluation_log.accepted = accepted
+        evaluation_log.is_accepted = accepted
 
     await db.flush()
     return {

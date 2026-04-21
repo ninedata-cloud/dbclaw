@@ -1,4 +1,4 @@
-"""Simple PDF generator for inspection reports using reportlab"""
+"""Simple PDF generator for inspection report using reportlab"""
 from io import BytesIO
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle

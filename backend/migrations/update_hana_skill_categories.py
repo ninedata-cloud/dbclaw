@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 async def migrate():
     from backend.database import async_session
-    from backend.skills.models import Skill
+    from backend.models.skill import Skill
     from sqlalchemy import select, update
 
     async with async_session() as db:

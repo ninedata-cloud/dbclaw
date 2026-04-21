@@ -1,4 +1,4 @@
-"""Test skills with datasources that have no host configured"""
+"""Test skills with datasource that have no host configured"""
 import asyncio
 import sys
 from sqlalchemy import select
@@ -24,7 +24,7 @@ async def test_get_os_metrics_no_host():
             result = await db.execute(select(Datasource))
             datasource = result.scalars().first()
             if not datasource:
-                print("❌ No datasources found in database")
+                print("❌ No datasource found in database")
                 return False
 
             # Temporarily clear host_id for testing
@@ -96,7 +96,7 @@ async def test_diagnose_high_cpu_no_host():
             result = await db.execute(select(Datasource))
             datasource = result.scalars().first()
             if not datasource:
-                print("❌ No datasources found in database")
+                print("❌ No datasource found in database")
                 return False
 
             original_host_id = datasource.host_id
@@ -155,7 +155,7 @@ async def test_diagnose_high_cpu_no_host():
 
 async def main():
     print("=" * 60)
-    print("Testing skills with datasources that have no host configured")
+    print("Testing skills with datasource that have no host configured")
     print("=" * 60)
 
     print("\n[Test 1] get_os_metrics skill")

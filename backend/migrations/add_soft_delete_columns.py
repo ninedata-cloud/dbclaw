@@ -16,15 +16,15 @@ logger = logging.getLogger(__name__)
 
 
 TABLES = [
-    "datasources",
-    "users",
-    "hosts",
-    "doc_documents",
-    "integrations",
-    "alert_subscriptions",
-    "diagnostic_sessions",
-    "chat_messages",
-    "reports",
+    "datasource",
+    "user",
+    "host",
+    "doc_document",
+    "integration",
+    "alert_subscription",
+    "diagnostic_session",
+    "chat_message",
+    "report",
 ]
 
 
@@ -60,7 +60,11 @@ async def migrate(max_retries: int = 3):
                         print(f"- {table_name}: is_deleted already exists")
 
                     if not await _column_exists(db, table_name, "deleted_at"):
-                        await db.execute(text(f"ALTER TABLE {table_name} ADD COLUMN deleted_at TIMESTAMP NULL"))
+                        await db.execute(
+                            text(
+                                f"ALTER TABLE {table_name} ADD COLUMN deleted_at TIMESTAMP WITH TIME ZONE NULL"
+                            )
+                        )
                         print(f"✓ {table_name}: added deleted_at")
                     else:
                         print(f"- {table_name}: deleted_at already exists")

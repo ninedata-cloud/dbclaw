@@ -23,15 +23,15 @@ async def diagnose():
     async with async_session() as db:
         # 1. 检查主机数量
         result = await db.execute(select(Host))
-        hosts = result.scalars().all()
-        print(f"\n1. 主机数量: {len(hosts)}")
+        host = result.scalars().all()
+        print(f"\n1. 主机数量: {len(host)}")
 
-        if len(hosts) == 0:
+        if len(host) == 0:
             print("   ⚠ 没有配置主机")
             return
 
         # 2. 检查每个主机的指标
-        for host in hosts:
+        for host in host:
             print(f"\n2. 主机: {host.name} ({host.host}:{host.port})")
             print(f"   用户名: {host.username}")
             print(f"   认证方式: {host.auth_type}")
@@ -79,7 +79,7 @@ async def diagnose():
 
         # 3. 测试 SSH 连接
         print(f"\n3. 测试 SSH 连接")
-        for host in hosts[:3]:  # 只测试前3个
+        for host in host[:3]:  # 只测试前3个
             print(f"\n   测试主机: {host.name}")
             try:
                 from backend.services.ssh_connection_pool import get_ssh_pool

@@ -10,7 +10,7 @@ import logging
 from typing import Any, Dict, List, Optional, Set
 
 from backend.agent.skill_authorization import filter_skills_by_authorization
-from backend.skills.models import Skill
+from backend.models.skill import Skill
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ GLOBAL_SKILL_IDS: Set[str] = {
     "fetch_webpage",
     "web_search_bocha",
     # Platform operations - always available regardless of datasource type
-    "list_datasources",
+    "list_datasource",
     "query_system_metadata",
     "query_monitoring_history",
     "query_alert_statistics",
@@ -31,8 +31,8 @@ GLOBAL_SKILL_IDS: Set[str] = {
     "manage_datasource",
     "manage_host",
     "manage_skill",
-    "list_hosts",
-    "query_host_metrics",
+    "list_host",
+    "query_host_metric",
 }
 
 # OS diagnostics are only useful when a datasource has an associated host.

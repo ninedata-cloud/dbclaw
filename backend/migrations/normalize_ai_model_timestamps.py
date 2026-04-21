@@ -14,7 +14,7 @@ async def _column_type(conn, column_name: str) -> str | None:
             SELECT data_type
             FROM information_schema.columns
             WHERE table_schema = current_schema()
-              AND table_name = 'ai_models'
+              AND table_name = 'ai_model'
               AND column_name = :column_name
             """
         ),
@@ -30,15 +30,15 @@ async def migrate():
             if column_type != "timestamp with time zone":
                 continue
 
-            logger.info("Normalizing ai_models.%s to UTC naive timestamp", column_name)
+            logger.info("Normalizing ai_model.%s to UTC naive timestamp", column_name)
             await conn.execute(
                 text(
                     f"""
-                    ALTER TABLE ai_models
+                    ALTER TABLE ai_model
                     ALTER COLUMN {column_name} TYPE TIMESTAMP WITHOUT TIME ZONE
                     USING {column_name} AT TIME ZONE 'UTC'
                     """
                 )
             )
 
-    logger.info("ai_models timestamp columns normalized")
+    logger.info("ai_model timestamp columns normalized")

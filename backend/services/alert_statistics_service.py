@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
@@ -31,7 +31,7 @@ def _parse_datetime(value: Any) -> datetime | None:
     if value is None or value == "":
         return None
     if isinstance(value, datetime):
-        return value.replace(tzinfo=None) if value.tzinfo else value
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
 
     text = str(value).strip()
     if not text:
@@ -43,7 +43,7 @@ def _parse_datetime(value: Any) -> datetime | None:
         parsed = datetime.fromisoformat(normalized)
     except ValueError as exc:
         raise ValueError(f"invalid datetime: {value}") from exc
-    return parsed.replace(tzinfo=None) if parsed.tzinfo else parsed
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
 def _normalize_datasource_ids(raw: Any) -> list[int]:
@@ -77,7 +77,8 @@ def _floor_datetime(value: datetime, bucket_delta: timedelta) -> datetime:
     bucket_seconds = int(bucket_delta.total_seconds())
     epoch_seconds = int(value.timestamp())
     floored = epoch_seconds - (epoch_seconds % bucket_seconds)
-    return datetime.fromtimestamp(floored)
+    tzinfo = value.tzinfo if value.tzinfo and value.tzinfo.utcoffset(value) is not None else UTC
+    return datetime.fromtimestamp(floored, tz=tzinfo)
 
 
 def _counter_to_list(counter: Counter, *, top_n: int | None = None) -> list[dict[str, Any]]:
@@ -131,8 +132,8 @@ async def query_alert_statistics(
         if datasource_id_list:
             query = query.where(AlertEvent.datasource_id.in_(datasource_id_list))
         query = query.where(
-            AlertEvent.event_start_time >= window_start,
-            AlertEvent.event_start_time <= window_end,
+            AlertEvent.event_started_at >= window_start,
+            AlertEvent.event_started_at <= window_end,
         )
         if status and status != "all":
             query = query.where(AlertEvent.status == status)
@@ -170,7 +171,7 @@ async def query_alert_statistics(
             if record.title:
                 title_counter[record.title] += 1
 
-            bucket_start = _floor_datetime(record.event_start_time, bucket_delta)
+            bucket_start = _floor_datetime(record.event_started_at, bucket_delta)
             bucket_map[bucket_start]["count"] += 1
             bucket_map[bucket_start]["by_severity"][record.severity] += 1
             bucket_map[bucket_start]["by_status"][record.status] += 1
@@ -188,7 +189,7 @@ async def query_alert_statistics(
                 }
             )
 
-        top_datasources = [
+        top_datasource = [
             {
                 "datasource_id": datasource_id,
                 "datasource_name": datasource_name_map.get(datasource_id),
@@ -203,7 +204,7 @@ async def query_alert_statistics(
             "overview": {
                 "total": len(records),
                 "window_hours": round((window_end - window_start).total_seconds() / 3600, 2),
-                "unique_datasources": len(datasource_counter),
+                "unique_datasource": len(datasource_counter),
                 "active": status_counter.get("active", 0),
                 "acknowledged": status_counter.get("acknowledged", 0),
                 "resolved": status_counter.get("resolved", 0),
@@ -214,7 +215,7 @@ async def query_alert_statistics(
             "by_event_category": _counter_to_list(event_category_counter),
             "by_fault_domain": _counter_to_list(fault_domain_counter),
             "trend": trend,
-            "top_datasources": top_datasources,
+            "top_datasource": top_datasource,
             "top_metrics": _counter_to_list(metric_counter, top_n=top_n),
             "top_titles": _counter_to_list(title_counter, top_n=top_n),
             "filters": {
@@ -295,7 +296,7 @@ async def query_alert_statistics(
             }
         )
 
-    top_datasources = [
+    top_datasource = [
         {
             "datasource_id": datasource_id,
             "datasource_name": datasource_name_map.get(datasource_id),
@@ -310,7 +311,7 @@ async def query_alert_statistics(
         "overview": {
             "total": len(rows),
             "window_hours": round((window_end - window_start).total_seconds() / 3600, 2),
-            "unique_datasources": len(datasource_counter),
+            "unique_datasource": len(datasource_counter),
             "active": status_counter.get("active", 0),
             "acknowledged": status_counter.get("acknowledged", 0),
             "resolved": status_counter.get("resolved", 0),
@@ -321,7 +322,7 @@ async def query_alert_statistics(
         "by_event_category": _counter_to_list(event_category_counter),
         "by_fault_domain": _counter_to_list(fault_domain_counter),
         "trend": trend,
-        "top_datasources": top_datasources,
+        "top_datasource": top_datasource,
         "top_metrics": _counter_to_list(metric_counter, top_n=top_n),
         "top_titles": _counter_to_list(title_counter, top_n=top_n),
         "filters": {

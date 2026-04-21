@@ -8,7 +8,7 @@
 
 ### 1. 数据库变更
 
-在 `hosts` 表中新增两个字段：
+在 `host` 表中新增两个字段：
 - `config_data` (JSONB): 存储主机配置信息（CPU、内存、磁盘、网络、系统信息）
 - `config_collected_at` (TIMESTAMP): 配置采集时间
 

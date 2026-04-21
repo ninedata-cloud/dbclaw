@@ -27,48 +27,48 @@ async def _column_exists(conn, table_name: str, column_name: str) -> bool:
 async def migrate():
     async with engine.begin() as conn:
         policy_columns = [
-            ("analysis_strategy", "ALTER TABLE alert_ai_policies ADD COLUMN analysis_strategy VARCHAR(32) NOT NULL DEFAULT 'candidate_only'"),
-            ("analysis_config", "ALTER TABLE alert_ai_policies ADD COLUMN analysis_config JSONB NOT NULL DEFAULT '{}'::jsonb"),
-            ("compiled_trigger_profile", "ALTER TABLE alert_ai_policies ADD COLUMN compiled_trigger_profile JSONB NULL"),
-            ("compile_status", "ALTER TABLE alert_ai_policies ADD COLUMN compile_status VARCHAR(20) NOT NULL DEFAULT 'pending'"),
-            ("compile_error", "ALTER TABLE alert_ai_policies ADD COLUMN compile_error TEXT NULL"),
-            ("compiled_at", "ALTER TABLE alert_ai_policies ADD COLUMN compiled_at TIMESTAMP NULL"),
+            ("analysis_strategy", "ALTER TABLE alert_ai_policy ADD COLUMN analysis_strategy VARCHAR(32) NOT NULL DEFAULT 'candidate_only'"),
+            ("analysis_config", "ALTER TABLE alert_ai_policy ADD COLUMN analysis_config JSON NOT NULL DEFAULT '{}'::json"),
+            ("compiled_trigger_profile", "ALTER TABLE alert_ai_policy ADD COLUMN compiled_trigger_profile JSON NULL"),
+            ("compile_status", "ALTER TABLE alert_ai_policy ADD COLUMN compile_status VARCHAR(20) NOT NULL DEFAULT 'pending'"),
+            ("compile_error", "ALTER TABLE alert_ai_policy ADD COLUMN compile_error TEXT NULL"),
+            ("compiled_at", "ALTER TABLE alert_ai_policy ADD COLUMN compiled_at TIMESTAMP NULL"),
         ]
         for column_name, ddl in policy_columns:
-            if not await _column_exists(conn, "alert_ai_policies", column_name):
+            if not await _column_exists(conn, "alert_ai_policy", column_name):
                 await conn.execute(text(ddl))
 
         runtime_columns = [
-            ("last_candidate_type", "ALTER TABLE alert_ai_runtime_states ADD COLUMN last_candidate_type VARCHAR(32) NULL"),
-            ("last_candidate_fingerprint", "ALTER TABLE alert_ai_runtime_states ADD COLUMN last_candidate_fingerprint VARCHAR(128) NULL"),
-            ("last_ai_evaluated_at", "ALTER TABLE alert_ai_runtime_states ADD COLUMN last_ai_evaluated_at TIMESTAMP NULL"),
-            ("last_gate_reason", "ALTER TABLE alert_ai_runtime_states ADD COLUMN last_gate_reason VARCHAR(64) NULL"),
-            ("last_gate_metrics", "ALTER TABLE alert_ai_runtime_states ADD COLUMN last_gate_metrics JSONB NULL"),
-            ("samples_seen", "ALTER TABLE alert_ai_runtime_states ADD COLUMN samples_seen INTEGER NOT NULL DEFAULT 0"),
-            ("candidate_hits", "ALTER TABLE alert_ai_runtime_states ADD COLUMN candidate_hits INTEGER NOT NULL DEFAULT 0"),
-            ("ai_evaluations", "ALTER TABLE alert_ai_runtime_states ADD COLUMN ai_evaluations INTEGER NOT NULL DEFAULT 0"),
-            ("gate_skips_by_reason", "ALTER TABLE alert_ai_runtime_states ADD COLUMN gate_skips_by_reason JSONB NULL"),
+            ("last_candidate_type", "ALTER TABLE alert_ai_runtime_state ADD COLUMN last_candidate_type VARCHAR(32) NULL"),
+            ("last_candidate_fingerprint", "ALTER TABLE alert_ai_runtime_state ADD COLUMN last_candidate_fingerprint VARCHAR(128) NULL"),
+            ("last_ai_evaluated_at", "ALTER TABLE alert_ai_runtime_state ADD COLUMN last_ai_evaluated_at TIMESTAMP NULL"),
+            ("last_gate_reason", "ALTER TABLE alert_ai_runtime_state ADD COLUMN last_gate_reason VARCHAR(64) NULL"),
+            ("last_gate_metrics", "ALTER TABLE alert_ai_runtime_state ADD COLUMN last_gate_metrics JSON NULL"),
+            ("samples_seen", "ALTER TABLE alert_ai_runtime_state ADD COLUMN samples_seen INTEGER NOT NULL DEFAULT 0"),
+            ("candidate_hits", "ALTER TABLE alert_ai_runtime_state ADD COLUMN candidate_hits INTEGER NOT NULL DEFAULT 0"),
+            ("ai_evaluations", "ALTER TABLE alert_ai_runtime_state ADD COLUMN ai_evaluations INTEGER NOT NULL DEFAULT 0"),
+            ("gate_skips_by_reason", "ALTER TABLE alert_ai_runtime_state ADD COLUMN gate_skips_by_reason JSON NULL"),
         ]
         for column_name, ddl in runtime_columns:
-            if not await _column_exists(conn, "alert_ai_runtime_states", column_name):
+            if not await _column_exists(conn, "alert_ai_runtime_state", column_name):
                 await conn.execute(text(ddl))
 
         await conn.execute(
             text(
-                "CREATE INDEX IF NOT EXISTS ix_alert_ai_policies_compile_status "
-                "ON alert_ai_policies (compile_status)"
+                "CREATE INDEX IF NOT EXISTS ix_alert_ai_policy_compile_status "
+                "ON alert_ai_policy (compile_status)"
             )
         )
         await conn.execute(
             text(
-                "CREATE INDEX IF NOT EXISTS ix_alert_ai_runtime_states_last_candidate_type "
-                "ON alert_ai_runtime_states (last_candidate_type)"
+                "CREATE INDEX IF NOT EXISTS ix_alert_ai_runtime_state_last_candidate_type "
+                "ON alert_ai_runtime_state (last_candidate_type)"
             )
         )
         await conn.execute(
             text(
-                "CREATE INDEX IF NOT EXISTS ix_alert_ai_runtime_states_last_ai_evaluated_at "
-                "ON alert_ai_runtime_states (last_ai_evaluated_at)"
+                "CREATE INDEX IF NOT EXISTS ix_alert_ai_runtime_state_last_ai_evaluated_at "
+                "ON alert_ai_runtime_state (last_ai_evaluated_at)"
             )
         )
 

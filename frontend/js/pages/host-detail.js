@@ -18,19 +18,39 @@ const HostDetailPage = {
      * 后端存储的是 UTC naive datetime，返回时没有时区标识
      */
     _parseUTCDateTime(dateInput) {
-        if (dateInput instanceof Date) {
-            return dateInput;
+        const parsed = Format.parseDate(dateInput);
+        if (parsed) return parsed;
+
+        if (typeof dateInput === 'string') {
+            const dateStr = dateInput.trim();
+            if (dateStr && !dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('T')) {
+                return new Date(dateStr.replace(' ', 'T') + 'Z');
+            }
+            if (dateStr && !dateStr.endsWith('Z') && dateStr.includes('T') && !dateStr.includes('+')) {
+                return new Date(dateStr + 'Z');
+            }
         }
-        const dateStr = String(dateInput);
-        // 如果字符串不包含时区信息，添加 'Z' 标识为 UTC
-        if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('T')) {
-            // 格式如 "2024-01-01 12:00:00"
-            return new Date(dateStr.replace(' ', 'T') + 'Z');
-        } else if (!dateStr.endsWith('Z') && dateStr.includes('T') && !dateStr.includes('+')) {
-            // 格式如 "2024-01-01T12:00:00"
-            return new Date(dateStr + 'Z');
+        return new Date(NaN);
+    },
+
+    _formatDateTime(dateInput, mode = 'datetime') {
+        const date = this._parseUTCDateTime(dateInput);
+        if (!Number.isFinite(date.getTime())) {
+            if (typeof dateInput === 'string' && dateInput.trim()) return dateInput;
+            return 'N/A';
         }
-        return new Date(dateStr);
+        if (mode === 'time') {
+            return date.toLocaleTimeString();
+        }
+        return date.toLocaleString();
+    },
+
+    _formatPercent(value, digits = 1) {
+        const numericValue = Number(value);
+        if (!Number.isFinite(numericValue)) {
+            return (0).toFixed(digits);
+        }
+        return numericValue.toFixed(digits);
     },
 
     async render(routeParam = '') {
@@ -540,7 +560,7 @@ const HostDetailPage = {
 
                     <div class="host-config-footer">
                         <i data-lucide="clock"></i>
-                        <span>采集时间: ${this._parseUTCDateTime(config.collected_at).toLocaleString()}</span>
+                        <span>采集时间: ${this._formatDateTime(config.collected_at)}</span>
                     </div>
                 </div>
             `;
@@ -568,16 +588,60 @@ const HostDetailPage = {
 
         } catch (error) {
             console.error('Failed to load host config:', error);
-            container.innerHTML = `
-                <div class="empty-state">
-                    <i data-lucide="alert-circle"></i>
-                    <h3>加载失败</h3>
-                    <p>${error.message}</p>
-                    <button class="btn btn-primary mt-16" onclick="HostDetailPage._renderInfoTab(DOM.$('#host-tab-content'))">重试</button>
-                </div>
-            `;
-            DOM.createIcons();
+            await this._renderInfoTabDegraded(container, error);
         }
+    },
+
+    async _renderInfoTabDegraded(container, error) {
+        let summary = null;
+        try {
+            summary = await API.getHostSummary(this.currentHost.id);
+        } catch (summaryError) {
+            console.warn('Failed to load host summary for degraded info tab:', summaryError);
+        }
+
+        const metric = summary?.latest_metric;
+        const metricTimeText = metric?.collected_at
+            ? this._formatDateTime(metric.collected_at)
+            : '暂无';
+        const statusText = metric ? '主机存在历史监控数据，但当前无法建立 SSH 连接' : '主机当前不可达，且暂无可用监控数据';
+
+        container.innerHTML = `
+            <div class="host-config-page">
+                <div class="host-config-header">
+                    <div class="host-config-header-info">
+                        <h2>${Utils.escapeHtml(this.currentHost.name)}</h2>
+                        <p>${Utils.escapeHtml(this.currentHost.host)}:${this.currentHost.port} · ${Utils.escapeHtml(this.currentHost.username)}</p>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" id="retry-config-btn">
+                        <i data-lucide="refresh-cw"></i> 重试连接
+                    </button>
+                </div>
+                <div class="host-config-grid">
+                    <div class="host-config-card host-config-card-wide">
+                        <div class="host-config-card-header">
+                            <i data-lucide="wifi-off"></i>
+                            <h3>主机配置暂不可用</h3>
+                        </div>
+                        <div class="host-config-card-body">
+                            <p class="host-config-empty">${Utils.escapeHtml(statusText)}</p>
+                            <p class="host-config-empty">错误信息：${Utils.escapeHtml(error?.message || '未知错误')}</p>
+                            <p class="host-config-empty">最近指标时间：${Utils.escapeHtml(metricTimeText)}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        DOM.createIcons();
+
+        DOM.$('#retry-config-btn')?.addEventListener('click', async () => {
+            const btn = DOM.$('#retry-config-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader" class="spin"></i> 重试中...';
+            DOM.createIcons();
+            await this._renderInfoTab(container);
+        });
     },
 
     async _renderMonitorTab(container) {
@@ -585,6 +649,9 @@ const HostDetailPage = {
         const summary = await API.getHostSummary(this.currentHost.id);
         const metric = summary.latest_metric;
         const data = metric?.data || {};
+        const cpuUsage = this._formatPercent(metric?.cpu_usage);
+        const memoryUsage = this._formatPercent(metric?.memory_usage);
+        const diskUsage = this._formatPercent(metric?.disk_usage);
 
         const memoryTotal = data.memory_total_kb ? this._formatBytes(data.memory_total_kb * 1024) : '未知';
         const diskTotal = data.disk_total ? this._formatBytes(data.disk_total) : '未知';
@@ -612,22 +679,22 @@ const HostDetailPage = {
                 <div class="grid-4 mb-24">
                     <div class="metric-card">
                         <div class="metric-card-label">CPU 使用率</div>
-                        <div class="metric-card-value">${metric.cpu_usage?.toFixed(1) || 0}%</div>
+                        <div class="metric-card-value">${cpuUsage}%</div>
                     </div>
                     <div class="metric-card">
                         <div class="metric-card-label">内存使用</div>
-                        <div class="metric-card-value">${metric.memory_usage?.toFixed(1) || 0}%</div>
+                        <div class="metric-card-value">${memoryUsage}%</div>
                         <div class="metric-card-meta">${memoryUsed} / ${memoryTotal}</div>
                     </div>
                     <div class="metric-card">
                         <div class="metric-card-label">磁盘使用</div>
-                        <div class="metric-card-value">${metric.disk_usage?.toFixed(1) || 0}%</div>
+                        <div class="metric-card-value">${diskUsage}%</div>
                         <div class="metric-card-meta">${diskUsed} / ${diskTotal}</div>
                     </div>
                     <div class="metric-card">
                         <div class="metric-card-label">运行时间</div>
-                        <div class="metric-card-value" style="font-size:16px">${summary.uptime_seconds ? this._formatUptime(summary.uptime_seconds) : '未知'}</div>
-                        <div class="metric-card-meta">最后更新: ${this._parseUTCDateTime(metric.collected_at).toLocaleTimeString()}</div>
+                        <div class="metric-card-value" style="font-size:16px">${Number.isFinite(summary?.uptime_seconds) ? this._formatUptime(summary.uptime_seconds) : '未知'}</div>
+                        <div class="metric-card-meta">最后更新: ${this._formatDateTime(metric.collected_at, 'time')}</div>
                     </div>
                 </div>
                 ` : ''}
@@ -1045,8 +1112,8 @@ const HostDetailPage = {
             <tr class="process-row" data-pid="${p.pid}" style="cursor:pointer">
                 <td>${p.pid}</td>
                 <td>${Utils.escapeHtml(p.user)}</td>
-                <td>${p.cpu_percent.toFixed(1)}%</td>
-                <td>${p.memory_percent.toFixed(1)}%</td>
+                <td>${this._formatPercent(p.cpu_percent)}%</td>
+                <td>${this._formatPercent(p.memory_percent)}%</td>
                 <td>${Utils.escapeHtml(p.state)}</td>
                 <td class="host-process-command" title="${Utils.escapeHtml(p.command)}">${Utils.escapeHtml(p.command)}</td>
             </tr>
@@ -1106,11 +1173,11 @@ const HostDetailPage = {
                             </div>
                             <div class="process-detail-item">
                                 <span class="process-detail-label">CPU 使用率</span>
-                                <span class="process-detail-value">${detail.cpu_percent?.toFixed(1) || 0}%</span>
+                                <span class="process-detail-value">${this._formatPercent(detail.cpu_percent)}%</span>
                             </div>
                             <div class="process-detail-item">
                                 <span class="process-detail-label">内存使用率</span>
-                                <span class="process-detail-value">${detail.memory_percent?.toFixed(1) || 0}%</span>
+                                <span class="process-detail-value">${this._formatPercent(detail.memory_percent)}%</span>
                             </div>
                             <div class="process-detail-item">
                                 <span class="process-detail-label">虚拟内存</span>

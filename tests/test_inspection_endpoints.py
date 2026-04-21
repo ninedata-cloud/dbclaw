@@ -58,7 +58,7 @@ async def test_config_with_thresholds():
         datasource = result.scalar_one_or_none()
         
         if not datasource:
-            print("No datasources found. Please create a datasource first.")
+            print("No datasource found. Please create a datasource first.")
             return
         
         print(f"Using datasource: {datasource.name} (ID: {datasource.id})")

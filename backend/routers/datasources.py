@@ -70,7 +70,7 @@ router = APIRouter(prefix="/api/datasources", tags=["datasources"], dependencies
 
 
 @router.get("", response_model=List[DatasourceResponse])
-async def list_datasources(
+async def list_datasource(
     q: str | None = None,
     db_type: str | None = None,
     importance_level: str | None = None,
@@ -104,32 +104,32 @@ async def list_datasources(
         query = query.where(and_(*filters))
 
     result = await db.execute(query.order_by(Datasource.id.desc()))
-    datasources = result.scalars().all()
+    datasource = result.scalars().all()
 
     if filter_tags:
         lowered_tags = {tag.lower() for tag in filter_tags}
-        datasources = [
-            datasource for datasource in datasources
+        datasource = [
+            datasource for datasource in datasource
             if lowered_tags.issubset({(tag or '').strip().lower() for tag in (datasource.tags or []) if (tag or '').strip()})
         ]
 
-    return datasources
+    return datasource
 
 
 @router.get("/latest-metrics")
-async def get_datasources_latest_metrics(
+async def get_datasource_latest_metrics(
     db: AsyncSession = Depends(get_db)
 ):
     """获取所有数据源的最新指标（轻量级接口，列表页使用）"""
     from sqlalchemy import select, desc
-    from backend.models.metric_snapshot import MetricSnapshot
+    from backend.models.datasource_metric import DatasourceMetric
 
-    # Get all datasources with their latest db_status metric
+    # Get all datasource with their latest db_status metric
     result = await db.execute(
-        select(MetricSnapshot)
-        .where(MetricSnapshot.metric_type == 'db_status')
-        .order_by(MetricSnapshot.datasource_id, desc(MetricSnapshot.id))
-        .distinct(MetricSnapshot.datasource_id)
+        select(DatasourceMetric)
+        .where(DatasourceMetric.metric_type == 'db_status')
+        .order_by(DatasourceMetric.datasource_id, desc(DatasourceMetric.id))
+        .distinct(DatasourceMetric.datasource_id)
     )
     metrics = result.scalars().all()
 
@@ -150,7 +150,7 @@ async def check_all_datasource_status(db: AsyncSession = Depends(get_db)):
     from backend.utils.datetime_helper import now
 
     result = await db.execute(alive_select(Datasource).order_by(Datasource.id.desc()))
-    datasources = result.scalars().all()
+    datasource = result.scalars().all()
     diagnostic_service = ConnectionDiagnosticService(db)
 
     async def check_one(ds):
@@ -159,7 +159,7 @@ async def check_all_datasource_status(db: AsyncSession = Depends(get_db)):
         error = None if diagnosis.get('success') else diagnosis.get('summary') or diagnosis.get('message')
         return ds.id, status, error
 
-    tasks = [check_one(ds) for ds in datasources]
+    tasks = [check_one(ds) for ds in datasource]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     checked_at = now()
@@ -171,7 +171,7 @@ async def check_all_datasource_status(db: AsyncSession = Depends(get_db)):
         status_map[ds_id] = {'status': status, 'error': error, 'checked_at': str(checked_at)}
 
     # 批量更新数据库
-    for ds in datasources:
+    for ds in datasource:
         if ds.id in status_map:
             ds.connection_status = status_map[ds.id]['status']
             ds.connection_error = status_map[ds.id]['error']

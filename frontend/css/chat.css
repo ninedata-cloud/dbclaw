@@ -344,6 +344,11 @@
     background: rgba(57, 210, 192, 0.12);
 }
 
+.chat-tool-icon-glyph {
+    font-size: 15px;
+    line-height: 1;
+}
+
 .tool-tone-success .chat-tool-icon {
     color: var(--accent-green);
     background: rgba(16, 185, 129, 0.12);

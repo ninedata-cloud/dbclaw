@@ -20,17 +20,17 @@ async def migrate():
     async with async_engine.begin() as conn:
         # 添加 config_data 字段
         await conn.execute(text("""
-            ALTER TABLE hosts
-            ADD COLUMN IF NOT EXISTS config_data JSONB
+            ALTER TABLE host
+            ADD COLUMN IF NOT EXISTS config_data JSON
         """))
 
         # 添加 config_collected_at 字段
         await conn.execute(text("""
-            ALTER TABLE hosts
+            ALTER TABLE host
             ADD COLUMN IF NOT EXISTS config_collected_at TIMESTAMP
         """))
 
-        print("✓ 已添加 hosts.config_data 和 hosts.config_collected_at 字段")
+        print("✓ 已添加 host.config_data 和 host.config_collected_at 字段")
 
 
 if __name__ == "__main__":

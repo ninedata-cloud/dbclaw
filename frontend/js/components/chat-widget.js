@@ -961,7 +961,7 @@ const ChatWidget = {
                 <details class="${detailClass}" ${detailAttrs}>
                     <summary class="chat-tool-summary">
                         <div class="chat-tool-summary-main">
-                            <div class="chat-tool-icon"><i data-lucide="wrench"></i></div>
+                            <div class="chat-tool-icon" aria-hidden="true"><span class="chat-tool-icon-glyph">⚙</span></div>
                             <div class="chat-tool-main">
                                 <div class="chat-tool-title-row">
                                     <span class="chat-tool-name">${this._escapeHtml(toolState.toolName)}</span>
@@ -1815,7 +1815,7 @@ const ChatWidget = {
 
         step.innerHTML = `
             <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary);">
-                <i data-lucide="wrench" style="width:14px;height:14px;color:var(--accent-blue);"></i>
+                <span style="font-size:14px;line-height:1;color:var(--accent-blue);" aria-hidden="true">⚙</span>
                 <span style="font-weight:500;color:var(--text-primary);">正在执行 ${toolName}...</span>
             </div>
         `;

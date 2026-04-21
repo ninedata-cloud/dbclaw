@@ -10,7 +10,7 @@ parameters:
   - name: datasource_id
     type: integer
     required: false
-    description: Filter by datasource ID (if omitted, return all datasources)
+    description: Filter by datasource ID (if omitted, return all datasource)
   - name: metric_type
     type: string
     required: false
@@ -34,7 +34,7 @@ permissions: []
 
 code: |
   async def execute(context, params):
-      from backend.models.metric_snapshot import MetricSnapshot
+      from backend.models.datasource_metric import DatasourceMetric
       from sqlalchemy import select, desc
       from datetime import datetime, timedelta
       
@@ -44,20 +44,20 @@ code: |
       limit = params.get('limit', 100)
       
       # Build query with filters
-      query = select(MetricSnapshot)
+      query = select(DatasourceMetric)
       
       if datasource_id:
-          query = query.where(MetricSnapshot.datasource_id == datasource_id)
+          query = query.where(DatasourceMetric.datasource_id == datasource_id)
       
       if metric_type:
-          query = query.where(MetricSnapshot.metric_type == metric_type)
+          query = query.where(DatasourceMetric.metric_type == metric_type)
       
       # Time range filter
       time_threshold = datetime.now() - timedelta(minutes=minutes)
-      query = query.where(MetricSnapshot.collected_at >= time_threshold)
+      query = query.where(DatasourceMetric.collected_at >= time_threshold)
       
       # Order and limit
-      query = query.order_by(desc(MetricSnapshot.collected_at)).limit(limit)
+      query = query.order_by(desc(DatasourceMetric.collected_at)).limit(limit)
       
       # Execute query
       result = await context.db.execute(query)

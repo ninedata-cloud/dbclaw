@@ -1,4 +1,4 @@
-"""Add performance indexes to reports table"""
+"""Add performance indexes to report table"""
 import asyncio
 import logging
 from sqlalchemy import text
@@ -8,24 +8,24 @@ logger = logging.getLogger(__name__)
 
 
 async def migrate():
-    """Add indexes to reports table for better query performance"""
+    """Add indexes to report table for better query performance"""
     async with async_session() as db:
         try:
             # Check existing indexes via pg_indexes
             result = await db.execute(text("""
                 SELECT indexname FROM pg_indexes
                 WHERE schemaname = current_schema()
-                AND tablename = 'reports'
+                AND tablename = 'report'
             """))
             existing_indexes = {row[0] for row in result.fetchall()}
 
             indexes_to_create = [
-                ("idx_reports_datasource_id", "CREATE INDEX IF NOT EXISTS idx_reports_datasource_id ON reports(datasource_id)"),
-                ("idx_reports_datasource_created_at", "CREATE INDEX IF NOT EXISTS idx_reports_datasource_created_at ON reports(datasource_id, created_at DESC)"),
-                ("idx_reports_status", "CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status)"),
-                ("idx_reports_trigger_type", "CREATE INDEX IF NOT EXISTS idx_reports_trigger_type ON reports(trigger_type)"),
-                ("idx_reports_created_at", "CREATE INDEX IF NOT EXISTS idx_reports_created_at ON reports(created_at DESC)"),
-                ("idx_reports_composite", "CREATE INDEX IF NOT EXISTS idx_reports_composite ON reports(datasource_id, status, trigger_type, created_at DESC)"),
+                ("idx_report_datasource_id", "CREATE INDEX IF NOT EXISTS idx_report_datasource_id ON report(datasource_id)"),
+                ("idx_report_datasource_created_at", "CREATE INDEX IF NOT EXISTS idx_report_datasource_created_at ON report(datasource_id, created_at DESC)"),
+                ("idx_report_status", "CREATE INDEX IF NOT EXISTS idx_report_status ON report(status)"),
+                ("idx_report_trigger_type", "CREATE INDEX IF NOT EXISTS idx_report_trigger_type ON report(trigger_type)"),
+                ("idx_report_created_at", "CREATE INDEX IF NOT EXISTS idx_report_created_at ON report(created_at DESC)"),
+                ("idx_report_composite", "CREATE INDEX IF NOT EXISTS idx_report_composite ON report(datasource_id, status, trigger_type, created_at DESC)"),
             ]
 
             for idx_name, sql in indexes_to_create:

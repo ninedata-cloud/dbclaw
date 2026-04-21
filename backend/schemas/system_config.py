@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional, Literal
 from datetime import datetime
+from backend.schemas.base import TimestampSerializerMixin
 
 
 class SystemConfigCreate(BaseModel):
@@ -21,7 +22,7 @@ class SystemConfigUpdate(BaseModel):
     is_encrypted: Optional[bool] = None
 
 
-class SystemConfigResponse(BaseModel):
+class SystemConfigResponse(TimestampSerializerMixin, BaseModel):
     id: int
     key: str
     value: Optional[str]

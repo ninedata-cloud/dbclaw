@@ -225,7 +225,9 @@ const InspectionPage = {
 
         try {
             const response = await API.get(`/api/inspections/reports?${params.toString()}`);
-            const reports = Array.isArray(response) ? response : response.reports || [];
+            const reports = Array.isArray(response)
+                ? response
+                : (response.reports || response.report || []);
             const showDatasourceColumn = !this._renderOptions?.fixedDatasourceId;
             this.totalReports = response.total || reports.length;
             const meta = DOM.$('#inspection-list-meta');

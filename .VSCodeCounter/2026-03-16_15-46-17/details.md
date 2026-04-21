@@ -45,9 +45,9 @@ Total : 2339 files,  262547 codes, 48713 comments, 19633 blanks, all 330893 line
 | [frontend/js/pages/ai-models.js](/frontend/js/pages/ai-models.js) | JavaScript | 135 | 1 | 17 | 153 |
 | [frontend/js/pages/alerts.js](/frontend/js/pages/alerts.js) | JavaScript | 905 | 44 | 121 | 1,070 |
 | [frontend/js/pages/dashboard.js](/frontend/js/pages/dashboard.js) | JavaScript | 142 | 9 | 21 | 172 |
-| [frontend/js/pages/datasources.js](/frontend/js/pages/datasources.js) | JavaScript | 415 | 11 | 60 | 486 |
+| [frontend/js/pages/datasource.js](/frontend/js/pages/datasource.js) | JavaScript | 415 | 11 | 60 | 486 |
 | [frontend/js/pages/diagnosis.js](/frontend/js/pages/diagnosis.js) | JavaScript | 638 | 31 | 76 | 745 |
-| [frontend/js/pages/hosts.js](/frontend/js/pages/hosts.js) | JavaScript | 237 | 3 | 24 | 264 |
+| [frontend/js/pages/host.js](/frontend/js/pages/host.js) | JavaScript | 237 | 3 | 24 | 264 |
 | [frontend/js/pages/inspection.js](/frontend/js/pages/inspection.js) | JavaScript | 353 | 17 | 51 | 421 |
 | [frontend/js/pages/knowledge-bases.js](/frontend/js/pages/knowledge-bases.js) | JavaScript | 324 | 6 | 47 | 377 |
 | [frontend/js/pages/login.js](/frontend/js/pages/login.js) | JavaScript | 81 | 8 | 16 | 105 |
@@ -55,7 +55,7 @@ Total : 2339 files,  262547 codes, 48713 comments, 19633 blanks, all 330893 line
 | [frontend/js/pages/query.js](/frontend/js/pages/query.js) | JavaScript | 252 | 16 | 40 | 308 |
 | [frontend/js/pages/skills.js](/frontend/js/pages/skills.js) | JavaScript | 596 | 16 | 78 | 690 |
 | [frontend/js/pages/system-configs.js](/frontend/js/pages/system-configs.js) | JavaScript | 290 | 2 | 30 | 322 |
-| [frontend/js/pages/users.js](/frontend/js/pages/users.js) | JavaScript | 244 | 5 | 25 | 274 |
+| [frontend/js/pages/user.js](/frontend/js/pages/user.js) | JavaScript | 244 | 5 | 25 | 274 |
 | [frontend/js/router.js](/frontend/js/router.js) | JavaScript | 41 | 4 | 10 | 55 |
 | [frontend/js/state.js](/frontend/js/state.js) | JavaScript | 32 | 1 | 5 | 38 |
 | [frontend/js/utils/dom.js](/frontend/js/utils/dom.js) | JavaScript | 42 | 2 | 8 | 52 |

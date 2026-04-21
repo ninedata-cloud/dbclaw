@@ -45,7 +45,7 @@ async def _get_or_create_binding(db: AsyncSession) -> IntegrationBotBinding:
     result = await db.execute(
         select(Integration).where(
             Integration.integration_id == "builtin_weixin_bot",
-            Integration.enabled == True,
+            Integration.is_enabled == True,
             alive_filter(Integration),
         )
     )
@@ -96,7 +96,7 @@ async def get_weixin_bot_status(
 
     return WeixinBotBindingStatusResponse(
         code=binding.code,
-        enabled=bool(binding.enabled),
+        enabled=bool(binding.is_enabled),
         login_status=login_status,
         has_token=bool(params.get("bot_token")),
         api_baseurl=_ilink_api_base(params),
@@ -214,7 +214,7 @@ async def poll_weixin_login_status(
         params["bot_token"] = encrypted.get("bot_token")
         params["login_status"] = "confirmed"
         params["last_error"] = ""
-        binding.enabled = True
+        binding.is_enabled = True
 
     # 后续 API 调用统一用返回的 baseurl（可能是反向代理地址）
     if api_baseurl:

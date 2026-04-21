@@ -25,7 +25,7 @@ Total : 18 files,  363 codes, 21 comments, 102 blanks, all 486 lines
 | [backend/models/inspection_trigger.py](/backend/models/inspection_trigger.py) | Python | 14 | 0 | 4 | 18 |
 | [backend/models/knowledge_base.py](/backend/models/knowledge_base.py) | Python | 34 | 0 | 10 | 44 |
 | [backend/models/login_log.py](/backend/models/login_log.py) | Python | 11 | 0 | 4 | 15 |
-| [backend/models/metric_snapshot.py](/backend/models/metric_snapshot.py) | Python | 9 | 0 | 4 | 13 |
+| [backend/models/datasource_metric.py](/backend/models/datasource_metric.py) | Python | 9 | 0 | 4 | 13 |
 | [backend/models/report.py](/backend/models/report.py) | Python | 29 | 4 | 8 | 41 |
 | [backend/models/system_config.py](/backend/models/system_config.py) | Python | 14 | 0 | 4 | 18 |
 | [backend/models/user.py](/backend/models/user.py) | Python | 15 | 0 | 4 | 19 |

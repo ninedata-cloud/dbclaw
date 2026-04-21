@@ -116,7 +116,7 @@ class SQLServerConnector(DBConnector):
                 cursor.execute(
                     "SELECT "
                     "(SELECT count(*) FROM sys.dm_exec_sessions) as total_sessions, "
-                    "(SELECT count(*) FROM sys.dm_exec_sessions WHERE is_user_process = 1) as user_sessions, "
+                    "(SELECT count(*) FROM sys.dm_exec_sessions WHERE is_user_process = 1) as user_session, "
                     "(SELECT count(*) FROM sys.dm_exec_requests WHERE status = 'running') as active_requests, "
                     "(SELECT count(*) FROM sys.dm_exec_sessions WHERE is_user_process = 1 AND status = 'sleeping') as idle_sessions, "
                     "(SELECT count(*) FROM sys.dm_exec_requests WHERE blocking_session_id <> 0) as blocked_requests, "
@@ -125,11 +125,11 @@ class SQLServerConnector(DBConnector):
                 row = cursor.fetchone()
 
                 total_sessions = row[0] if row else 0
-                user_sessions = row[1] if row else 0
+                user_session = row[1] if row else 0
                 active_requests = row[2] if row else 0
                 idle_sessions = row[3] if row else 0
                 blocked_requests = row[4] if row else 0
-                visible_user_sessions = user_sessions
+                visible_user_session = user_session
                 visible_idle_sessions = idle_sessions
 
                 cursor.execute(
@@ -214,8 +214,8 @@ class SQLServerConnector(DBConnector):
                 result = {
                     # 连接指标（兼容前端 fallback 链）
                     "connections_active": active_requests,
-                    "user_sessions": visible_user_sessions,
-                    "connections_total": visible_user_sessions,
+                    "user_session": visible_user_session,
+                    "connections_total": visible_user_session,
                     "max_connections": max_connections,
                     "connections_idle": visible_idle_sessions,
                     "connections_waiting": blocked_requests,

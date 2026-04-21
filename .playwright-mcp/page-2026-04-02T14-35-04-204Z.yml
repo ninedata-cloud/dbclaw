@@ -123,10 +123,10 @@
                   - generic [ref=e305]: 技能完成：read_document · 0ms
                 - generic [ref=e306]:
                   - generic [ref=e307]: 技能
-                  - generic [ref=e308]: 调用技能：list_datasources
+                  - generic [ref=e308]: 调用技能：list_datasource
                 - generic [ref=e309]:
                   - generic [ref=e310]: 结果
-                  - generic [ref=e311]: 技能完成：list_datasources · 7ms
+                  - generic [ref=e311]: 技能完成：list_datasource · 7ms
             - generic [ref=e192]:
               - generic [ref=e193]: 诊断结论
               - generic [ref=e195]: 诊断完成后会在这里展示结构化结论

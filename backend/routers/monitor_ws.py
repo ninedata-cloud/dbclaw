@@ -22,17 +22,17 @@ async def _validate_websocket_origin(websocket: WebSocket) -> bool:
     if not origin:
         return True
 
-    allowed_hosts = {websocket.headers.get("host", "")}
+    allowed_host = {websocket.headers.get("host", "")}
     async with async_session() as db:
         external_base_url = await get_config(db, "app_external_base_url", default="")
 
     if external_base_url:
         parsed = urlparse(external_base_url)
         if parsed.netloc:
-            allowed_hosts.add(parsed.netloc)
+            allowed_host.add(parsed.netloc)
 
     parsed_origin = urlparse(origin)
-    return bool(parsed_origin.scheme in {"http", "https"} and parsed_origin.netloc in allowed_hosts)
+    return bool(parsed_origin.scheme in {"http", "https"} and parsed_origin.netloc in allowed_host)
 
 
 async def _authenticate_websocket(websocket: WebSocket) -> User | None:
@@ -66,13 +66,13 @@ async def monitor_websocket(websocket: WebSocket, conn_id: int):
     logger.info(f"WebSocket client connected for connection {conn_id}, user {user.id}")
 
     try:
-        from backend.models.metric_snapshot import MetricSnapshot
+        from backend.models.datasource_metric import DatasourceMetric
 
         async with async_session() as db:
             result = await db.execute(
-                select(MetricSnapshot)
-                .where(MetricSnapshot.datasource_id == conn_id, MetricSnapshot.metric_type == "db_status")
-                .order_by(MetricSnapshot.id.desc())
+                select(DatasourceMetric)
+                .where(DatasourceMetric.datasource_id == conn_id, DatasourceMetric.metric_type == "db_status")
+                .order_by(DatasourceMetric.id.desc())
                 .limit(1)
             )
             latest_snapshot = result.scalar_one_or_none()

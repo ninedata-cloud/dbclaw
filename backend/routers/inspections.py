@@ -26,7 +26,7 @@ from backend.services.baseline_service import (
 )
 from backend.services.alert_service import DEFAULT_EVENT_AI_CONFIG, normalize_event_ai_config
 from backend.services.alert_template_service import (
-    ensure_default_alert_templates,
+    ensure_default_alert_template,
     get_default_alert_template,
     normalize_alert_template_config,
     reset_inspection_config_to_template,
@@ -53,7 +53,7 @@ async def _ensure_report_completed_at(db: AsyncSession, report: Report) -> bool:
     if report.completed_at is not None or not _is_terminal_report_status(report.status):
         return False
 
-    # Historical reports may be missing terminal timestamps; backfill with created_at
+    # Historical report may be missing terminal timestamps; backfill with created_at
     # so the detail page can render a stable completion time instead of a blank slot.
     report.completed_at = report.created_at or now()
     await db.commit()
@@ -282,15 +282,15 @@ async def validate_threshold_expression(request: ExpressionValidationRequest):
 
 
 @router.get("/templates", response_model=List[AlertTemplateResponse])
-async def list_alert_templates(db: AsyncSession = Depends(get_db)):
-    await ensure_default_alert_templates(db)
+async def list_alert_template(db: AsyncSession = Depends(get_db)):
+    await ensure_default_alert_template(db)
     result = await db.execute(select(AlertTemplate).order_by(AlertTemplate.is_default.desc(), AlertTemplate.name.asc()))
     return [_build_alert_template_response(item) for item in result.scalars().all()]
 
 
 @router.post("/templates", response_model=AlertTemplateResponse)
 async def create_alert_template(data: AlertTemplateSchema, db: AsyncSession = Depends(get_db)):
-    await ensure_default_alert_templates(db)
+    await ensure_default_alert_template(db)
     if data.is_default:
         result = await db.execute(select(AlertTemplate))
         for item in result.scalars().all():
@@ -346,7 +346,7 @@ async def toggle_alert_template(template_id: int, enabled: bool = Body(..., embe
 @router.get("/config/{datasource_id}", response_model=InspectionConfigResponse)
 async def get_config(datasource_id: int, db: AsyncSession = Depends(get_db)):
     """Get inspection configuration for a datasource"""
-    await ensure_default_alert_templates(db)
+    await ensure_default_alert_template(db)
     default_template = await get_default_alert_template(db)
     result = await db.execute(
         select(InspectionConfig).where(InspectionConfig.datasource_id == datasource_id)
@@ -377,7 +377,7 @@ async def get_config(datasource_id: int, db: AsyncSession = Depends(get_db)):
     return InspectionConfigResponse(
         id=config.id,
         datasource_id=config.datasource_id,
-        enabled=config.enabled,
+        enabled=config.is_enabled,
         schedule_interval=config.schedule_interval,
         use_ai_analysis=config.use_ai_analysis,
         ai_model_id=config.ai_model_id,
@@ -537,7 +537,7 @@ async def trigger_manual_inspection(
 
 
 @router.get("/reports", response_model=dict)
-async def list_all_reports(
+async def list_all_report(
     datasource_id: Optional[int] = None,
     trigger_type: Optional[str] = None,
     status: Optional[str] = None,
@@ -547,7 +547,7 @@ async def list_all_reports(
     offset: int = 0,
     db: AsyncSession = Depends(get_db)
 ):
-    """List all inspection reports with filters"""
+    """List all inspection report with filters"""
     from backend.models.datasource import Datasource
 
     query = select(Report, Datasource.name.label('datasource_name')).join(
@@ -586,7 +586,7 @@ async def list_all_reports(
     result = await db.execute(query)
     rows = result.all()
 
-    reports = [
+    report = [
         {
             "report_id": row.Report.id,
             "datasource_name": row.datasource_name,
@@ -600,17 +600,17 @@ async def list_all_reports(
         for row in rows
     ]
 
-    return {"reports": reports, "total": total}
+    return {"report": report, "total": total}
 
 
 @router.get("/reports/{datasource_id}", response_model=List[ReportListItem])
-async def list_reports(
+async def list_report(
     datasource_id: int,
     trigger_type: Optional[str] = None,
     limit: int = 20,
     db: AsyncSession = Depends(get_db)
 ):
-    """List inspection reports for a datasource"""
+    """List inspection report for a datasource"""
     query = select(Report).where(Report.datasource_id == datasource_id, alive_filter(Report))
 
     if trigger_type:
@@ -619,7 +619,7 @@ async def list_reports(
     query = query.order_by(Report.created_at.desc()).limit(limit)
 
     result = await db.execute(query)
-    reports = result.scalars().all()
+    report = result.scalars().all()
 
     return [
         ReportListItem(
@@ -631,7 +631,7 @@ async def list_reports(
             status=r.status,
             error_message=r.error_message
         )
-        for r in reports
+        for r in report
     ]
 
 
@@ -800,7 +800,7 @@ async def export_report_markdown(report_id: int, db: AsyncSession = Depends(get_
 
     # Generate filename
     from datetime import datetime
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = now().strftime("%Y%m%d_%H%M%S")
     filename = f"inspection_report_{report_id}_{timestamp}.md"
 
     return Response(
@@ -830,7 +830,7 @@ async def export_report_pdf(report_id: int, db: AsyncSession = Depends(get_db)):
 
         # Generate filename
         from datetime import datetime
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = now().strftime("%Y%m%d_%H%M%S")
         filename = f"inspection_report_{report_id}_{timestamp}.pdf"
 
         return Response(
@@ -875,20 +875,20 @@ class BatchDeleteRequest(BaseModel):
 
 
 @router.post("/reports/batch-delete")
-async def batch_delete_reports(
+async def batch_delete_report(
     request: BatchDeleteRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    """Batch delete inspection reports"""
+    """Batch delete inspection report"""
     if not request.report_ids:
         raise HTTPException(status_code=400, detail="报告ID列表不能为空")
 
-    # Verify all reports exist
+    # Verify all report exist
     result = await db.execute(
         select(Report).where(Report.id.in_(request.report_ids), alive_filter(Report))
     )
-    reports = result.scalars().all()
-    found_ids = {r.id for r in reports}
+    report = result.scalars().all()
+    found_ids = {r.id for r in report}
     missing_ids = set(request.report_ids) - found_ids
 
     if missing_ids:
@@ -905,7 +905,7 @@ async def batch_delete_reports(
         .values(report_id=None)
     )
 
-    for report in reports:
+    for report in report:
         report.soft_delete(None)
 
     await db.commit()

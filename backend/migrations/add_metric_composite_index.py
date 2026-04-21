@@ -1,5 +1,5 @@
 """
-Add composite index for metric_snapshots query optimization
+Add composite index for datasource_metric query optimization
 """
 import asyncio
 import logging
@@ -18,20 +18,26 @@ async def add_composite_index():
             result = await db.execute(text("""
                 SELECT indexname FROM pg_indexes
                 WHERE schemaname = current_schema()
-                AND tablename = 'metric_snapshots'
-                AND indexname = 'idx_metric_snapshots_composite'
+                AND tablename = 'datasource_metric'
+                AND indexname = 'idx_datasource_metric_composite'
             """))
             if result.scalar_one_or_none():
                 logger.info("Composite index already exists, skipping")
                 return
 
-            # Create composite index
+            # Create composite index (DESC for latest data queries)
             await db.execute(text("""
-                CREATE INDEX idx_metric_snapshots_composite
-                ON metric_snapshots(datasource_id, metric_type, collected_at DESC)
+                CREATE INDEX idx_datasource_metric_composite
+                ON datasource_metric(datasource_id, metric_type, collected_at DESC)
+            """))
+
+            # Create composite index (ASC for historical data queries)
+            await db.execute(text("""
+                CREATE INDEX IF NOT EXISTS ix_datasource_metric_composite_asc
+                ON datasource_metric(datasource_id, metric_type, collected_at ASC)
             """))
             await db.commit()
-            logger.info("Successfully created composite index on metric_snapshots")
+            logger.info("Successfully created composite indexes on datasource_metric")
         except Exception as e:
             logger.error(f"Failed to create composite index: {e}")
             await db.rollback()

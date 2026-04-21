@@ -9,7 +9,7 @@ from backend.models.alert_message import AlertMessage
 from backend.models.datasource import Datasource
 from backend.models.diagnosis_conclusion import DiagnosisConclusion
 from backend.models.host import Host
-from backend.models.metric_snapshot import MetricSnapshot
+from backend.models.datasource_metric import DatasourceMetric
 from backend.models.report import Report
 from backend.models.soft_delete import alive_filter
 
@@ -198,9 +198,9 @@ async def build_diagnostic_brief(
         host = host_result.scalar_one_or_none()
 
     metric_result = await db.execute(
-        select(MetricSnapshot)
-        .where(MetricSnapshot.datasource_id == datasource_id)
-        .order_by(desc(MetricSnapshot.collected_at))
+        select(DatasourceMetric)
+        .where(DatasourceMetric.datasource_id == datasource_id)
+        .order_by(desc(DatasourceMetric.collected_at))
         .limit(8)
     )
     snapshots = metric_result.scalars().all()

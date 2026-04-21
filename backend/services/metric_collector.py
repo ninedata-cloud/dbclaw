@@ -10,11 +10,11 @@ from sqlalchemy import select, and_, desc
 from backend.database import async_session
 from backend.models.datasource import Datasource
 from backend.models.soft_delete import alive_filter
-from backend.models.metric_snapshot import MetricSnapshot
+from backend.models.datasource_metric import DatasourceMetric
 from backend.models.inspection_trigger import InspectionTrigger
 from backend.models.alert_message import AlertMessage
 from backend.services.db_connector import get_connector
-from backend.services.metric_snapshot_merge import (
+from backend.services.datasource_metric_merge import (
     cleanup_obsolete_integration_keys,
     merge_system_metric_data_for_integration,
 )
@@ -170,12 +170,12 @@ async def collect_metrics_for_connection(datasource_id: int):
                 snapshot_data = normalized_status
                 if datasource.metric_source == "integration":
                     latest_result = await db.execute(
-                        select(MetricSnapshot)
+                        select(DatasourceMetric)
                         .where(
-                            MetricSnapshot.datasource_id == datasource_id,
-                            MetricSnapshot.metric_type == "db_status",
+                            DatasourceMetric.datasource_id == datasource_id,
+                            DatasourceMetric.metric_type == "db_status",
                         )
-                        .order_by(desc(MetricSnapshot.collected_at))
+                        .order_by(desc(DatasourceMetric.collected_at))
                         .limit(1)
                     )
                     latest_snapshot = latest_result.scalar_one_or_none()
@@ -187,7 +187,7 @@ async def collect_metrics_for_connection(datasource_id: int):
 
                 # 使用信号量保护数据库写入
                 async with _db_write_semaphore:
-                    snapshot = MetricSnapshot(
+                    snapshot = DatasourceMetric(
                         datasource_id=datasource_id,
                         metric_type="db_status",
                         data=snapshot_data,
@@ -437,7 +437,7 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
         result = await db.execute(
             select(InspectionConfig).where(
                 InspectionConfig.datasource_id == datasource_id,
-                InspectionConfig.enabled == True
+                InspectionConfig.is_enabled == True
             )
         )
         config = result.scalar_one_or_none()
@@ -516,7 +516,7 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
             logger.info(f"Triggering anomaly inspection for datasource {datasource_id}: {reason}")
 
             # Create metric snapshot for the trigger
-            metric_snapshot = {
+            datasource_metric = {
                 "violation": violation,
                 "full_metrics": metrics,
                 "timestamp": now().isoformat()
@@ -550,7 +550,7 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
                 datasource_id=datasource_id,
                 trigger_type="anomaly",
                 reason=reason,
-                metric_snapshot=metric_snapshot,
+                datasource_metric=datasource_metric,
                 alert_id=alert.id
             )
 
@@ -595,7 +595,7 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
                 trigger_reason=reason,
             )
 
-            metric_snapshot = {
+            datasource_metric = {
                 "baseline_violation": violation,
                 "full_metrics": metrics,
                 "timestamp": collected_at.isoformat(),
@@ -605,7 +605,7 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
                 datasource_id=datasource_id,
                 trigger_type="baseline",
                 reason=reason,
-                metric_snapshot=metric_snapshot,
+                datasource_metric=datasource_metric,
                 alert_id=alert.id,
             )
 
@@ -619,7 +619,7 @@ async def _get_enabled_inspection_config(db, datasource_id: int):
     result = await db.execute(
         select(InspectionConfig).where(
             InspectionConfig.datasource_id == datasource_id,
-            InspectionConfig.enabled == True,
+            InspectionConfig.is_enabled == True,
         )
     )
     return result.scalar_one_or_none()
@@ -676,13 +676,13 @@ async def _check_ai_alerts_and_trigger(db, datasource, config, metrics: Dict[str
         collected_at = now()
         sampling_interval_seconds = await get_monitoring_collection_interval_seconds(db)
         snapshots_result = await db.execute(
-            select(MetricSnapshot)
+            select(DatasourceMetric)
             .where(
-                MetricSnapshot.datasource_id == datasource.id,
-                MetricSnapshot.metric_type == "db_status",
-                MetricSnapshot.collected_at >= collected_at - timedelta(hours=24),
+                DatasourceMetric.datasource_id == datasource.id,
+                DatasourceMetric.metric_type == "db_status",
+                DatasourceMetric.collected_at >= collected_at - timedelta(hours=24),
             )
-            .order_by(desc(MetricSnapshot.collected_at))
+            .order_by(desc(DatasourceMetric.collected_at))
             .limit(1440)
         )
         snapshots_desc = snapshots_result.scalars().all()
@@ -840,7 +840,7 @@ async def _handle_connection_failure(db, datasource_id: int, datasource, error_m
         # Trigger AI diagnosis if inspection service is available
         if _inspection_service:
             reason = f"Database connection failed: {datasource.name} ({datasource.db_type})"
-            metric_snapshot = {
+            datasource_metric = {
                 "error": error_message,
                 "datasource_name": datasource.name,
                 "db_type": datasource.db_type,
@@ -854,7 +854,7 @@ async def _handle_connection_failure(db, datasource_id: int, datasource, error_m
                 datasource_id=datasource_id,
                 trigger_type="connection_failure",
                 reason=reason,
-                metric_snapshot=metric_snapshot,
+                datasource_metric=datasource_metric,
                 alert_id=alert.id
             )
 
@@ -917,7 +917,7 @@ async def _auto_resolve_network_probe_alerts():
 
 
 async def collect_all_metrics():
-    """Collect metrics for all active datasources."""
+    """Collect metrics for all active datasource."""
     try:
         # 网络探针：采集前先检测网络连通性
         from backend.services.network_probe import check_network
@@ -928,7 +928,7 @@ async def collect_all_metrics():
 
         network_ok = await check_network(probe_host)
         if not network_ok:
-            logger.warning(f"Network probe failed (host={probe_host}), skipping all datasource collection")
+            logger.error(f"Network probe failed (host={probe_host}), skipping all datasource collection")
             await _handle_network_probe_failure(probe_host)
             return
 

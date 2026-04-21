@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 async def migrate():
     async with engine.begin() as conn:
         await conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS diagnosis_events (
+            CREATE TABLE IF NOT EXISTS diagnosis_event (
                 id SERIAL PRIMARY KEY,
                 session_id INTEGER NOT NULL,
                 run_id VARCHAR(64) NOT NULL,
@@ -21,7 +21,7 @@ async def migrate():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """))
-        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_diagnosis_events_session_id ON diagnosis_events(session_id)"))
-        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_diagnosis_events_run_id ON diagnosis_events(run_id)"))
-        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_diagnosis_events_event_type ON diagnosis_events(event_type)"))
-    logger.info("diagnosis_events table ready")
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_diagnosis_event_session_id ON diagnosis_event(session_id)"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_diagnosis_event_run_id ON diagnosis_event(run_id)"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_diagnosis_event_event_type ON diagnosis_event(event_type)"))
+    logger.info("diagnosis_event table ready")

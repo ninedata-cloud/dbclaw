@@ -9,7 +9,7 @@ from io import StringIO
 
 from backend.models.alert_message import AlertMessage
 from backend.models.alert_subscription import AlertSubscription
-from backend.models.alert_delivery_logs import AlertDeliveryLog
+from backend.models.alert_delivery_log import AlertDeliveryLog
 from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
@@ -237,7 +237,7 @@ class AggregationEngine:
             }
 
             # Get delivery history for this subscription (last 24 hours)
-            cutoff_time = datetime.now() - timedelta(hours=24)
+            cutoff_time = now() - timedelta(hours=24)
             history_result = await db.execute(
                 select(AlertDeliveryLog).where(
                     and_(
@@ -258,7 +258,7 @@ class AggregationEngine:
             ]
 
             # Count similar alerts (same datasource + same alert_type in last 10 minutes)
-            similar_cutoff = datetime.now() - timedelta(minutes=10)
+            similar_cutoff = now() - timedelta(minutes=10)
             similar_result = await db.execute(
                 select(AlertMessage).where(
                     and_(
@@ -271,11 +271,11 @@ class AggregationEngine:
             similar_alerts_count = len(similar_result.scalars().all())
 
             # Prepare current time info
-            now = datetime.now()
+            current_now = now()
             current_time = {
-                "datetime": now,
-                "hour": now.hour,
-                "weekday": now.weekday(),
+                "datetime": current_now,
+                "hour": current_now.hour,
+                "weekday": current_now.weekday(),
                 "is_business_hours": (
                     9 <= now.hour < 18 and now.weekday() < 5
                 )

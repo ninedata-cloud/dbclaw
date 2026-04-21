@@ -37,14 +37,14 @@ async def _table_exists(conn, table_name: str) -> bool:
 
 async def migrate():
     async with engine.begin() as conn:
-        if not await _table_exists(conn, "metric_snapshots"):
+        if not await _table_exists(conn, "datasource_metric"):
             return
 
         legacy_result = await conn.execute(
             text(
                 """
                 SELECT id, datasource_id, collected_at, data
-                FROM metric_snapshots
+                FROM datasource_metric
                 WHERE metric_type = 'integration_metric'
                 ORDER BY datasource_id, collected_at, id
                 """
@@ -74,7 +74,7 @@ async def migrate():
                 text(
                     """
                     SELECT id, data
-                    FROM metric_snapshots
+                    FROM datasource_metric
                     WHERE datasource_id = :datasource_id
                       AND metric_type = 'db_status'
                       AND collected_at = :collected_at
@@ -92,8 +92,8 @@ async def migrate():
                 await conn.execute(
                     text(
                         """
-                        UPDATE metric_snapshots
-                        SET data = CAST(:data AS JSONB)
+                        UPDATE datasource_metric
+                        SET data = CAST(:data AS JSON)
                         WHERE id = :snapshot_id
                         """
                     ),
@@ -108,8 +108,8 @@ async def migrate():
             await conn.execute(
                 text(
                     """
-                    INSERT INTO metric_snapshots (datasource_id, metric_type, data, collected_at)
-                    VALUES (:datasource_id, 'db_status', CAST(:data AS JSONB), :collected_at)
+                    INSERT INTO datasource_metric (datasource_id, metric_type, data, collected_at)
+                    VALUES (:datasource_id, 'db_status', CAST(:data AS JSON), :collected_at)
                     """
                 ),
                 {
@@ -123,7 +123,7 @@ async def migrate():
         await conn.execute(
             text(
                 """
-                DELETE FROM metric_snapshots
+                DELETE FROM datasource_metric
                 WHERE metric_type = 'integration_metric'
                 """
             )

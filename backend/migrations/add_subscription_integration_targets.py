@@ -1,5 +1,5 @@
 """
-Migration: add integration_targets to alert_subscriptions.
+Migration: add integration_targets to alert_subscription.
 """
 
 import asyncio
@@ -16,17 +16,17 @@ async def migrate():
             "SELECT EXISTS ("
             "SELECT 1 FROM information_schema.columns "
             "WHERE table_schema = current_schema() "
-            "AND table_name = 'alert_subscriptions' AND column_name = 'integration_targets'"
+            "AND table_name = 'alert_subscription' AND column_name = 'integration_targets'"
             ")"
         ))
         if result.scalar_one():
-            logger.info("Column integration_targets already exists in alert_subscriptions")
+            logger.info("Column integration_targets already exists in alert_subscription")
             return
 
         await conn.execute(text(
-            "ALTER TABLE alert_subscriptions ADD COLUMN integration_targets JSONB NOT NULL DEFAULT '[]'::jsonb"
+            "ALTER TABLE alert_subscription ADD COLUMN integration_targets JSON NOT NULL DEFAULT '[]'::json"
         ))
-        logger.info("Migration complete: added integration_targets to alert_subscriptions")
+        logger.info("Migration complete: added integration_targets to alert_subscription")
 
 
 if __name__ == '__main__':

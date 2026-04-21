@@ -460,7 +460,7 @@ async def _probe_postgres_endpoint(host: str, port: int, database: str) -> Check
             severity="blocker",
             summary="元数据库主机名无法解析。",
             detail=f"地址: {host}:{port} / 数据库: {database}\n底层错误: {exc}",
-            suggestion="请检查 DATABASE_URL 中的主机名是否正确，或确认 DNS / hosts 配置可解析该地址。",
+            suggestion="请检查 DATABASE_URL 中的主机名是否正确，或确认 DNS / host 配置可解析该地址。",
         )
     except ConnectionRefusedError as exc:
         return CheckResult(

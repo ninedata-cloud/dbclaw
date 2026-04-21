@@ -15,14 +15,14 @@ async def test_export():
         report = result.scalar_one_or_none()
         
         if not report:
-            print("No completed reports found. Creating test report...")
+            print("No completed report found. Creating test report...")
             
             # Get first datasource
             ds_result = await db.execute(select(Datasource).limit(1))
             datasource = ds_result.scalar_one_or_none()
             
             if not datasource:
-                print("No datasources found. Please create a datasource first.")
+                print("No datasource found. Please create a datasource first.")
                 return
             
             # Create test report
@@ -72,14 +72,14 @@ System is healthy and operating normally.
         print(f"  Status: {report.status}")
         print(f"  Has Markdown: {bool(report.content_md)}")
         print(f"\nExport URLs:")
-        print(f"  Markdown: http://localhost:9939/api/inspections/reports/export/{report.id}/markdown")
-        print(f"  PDF: http://localhost:9939/api/inspections/reports/export/{report.id}/pdf")
+        print(f"  Markdown: http://localhost:9939/api/inspections/report/export/{report.id}/markdown")
+        print(f"  PDF: http://localhost:9939/api/inspections/report/export/{report.id}/pdf")
         print(f"\nYou can test these endpoints by:")
         print(f"  1. Start the server: python run.py")
         print(f"  2. Visit the inspection page and click export buttons")
         print(f"  3. Or use curl:")
-        print(f"     curl -O http://localhost:9939/api/inspections/reports/export/{report.id}/markdown")
-        print(f"     curl -O http://localhost:9939/api/inspections/reports/export/{report.id}/pdf")
+        print(f"     curl -O http://localhost:9939/api/inspections/report/export/{report.id}/markdown")
+        print(f"     curl -O http://localhost:9939/api/inspections/report/export/{report.id}/pdf")
 
 
 if __name__ == "__main__":

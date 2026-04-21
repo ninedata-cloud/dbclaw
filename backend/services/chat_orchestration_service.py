@@ -18,6 +18,7 @@ from backend.models.diagnosis_event import DiagnosisEvent
 from backend.models.diagnostic_session import ChatMessage, DiagnosticSession
 from backend.models.soft_delete import alive_filter, alive_select
 from backend.services.knowledge_router import build_knowledge_context
+from backend.utils.json_sanitizer import sanitize_for_json
 from backend.utils.datetime_helper import now as local_now
 
 logger = logging.getLogger(__name__)
@@ -770,7 +771,7 @@ async def _accumulate_usage(db: AsyncSession, session_id: int, user_id: int | No
         session.input_tokens += int(usage.get("input_tokens") or 0)
         session.output_tokens += int(usage.get("output_tokens") or 0)
         session.total_tokens += int(usage.get("total_tokens") or 0)
-        session.updated_at = datetime.now(UTC).replace(tzinfo=None)
+        session.updated_at = local_now()
         await db.commit()
 
 
@@ -887,7 +888,7 @@ async def _upsert_diagnosis_conclusion(
     conclusion.action_items = [{"title": item, "priority": "medium", "description": item} for item in action_items[:10]] if action_items else []
     conclusion.evidence_refs = evidence_refs
     conclusion.knowledge_refs = knowledge_refs
-    conclusion.updated_at = datetime.utcnow()
+    conclusion.updated_at = local_now()
     await db.commit()
     await db.refresh(conclusion)
 
@@ -1049,7 +1050,7 @@ async def process_stream_events(
 ) -> tuple[str, dict[str, int], bool]:
     usage_totals = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
     paused_for_approval = False
-    run_id = run_id or f"chat_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{session_id}"
+    run_id = run_id or f"chat_{local_now().strftime('%Y%m%d%H%M%S')}_{session_id}"
     sequence_no = 0
     terminal_status: str | None = None
 
@@ -1324,7 +1325,7 @@ async def prepare_user_turn(
         if model_id is not None and model_id != session.ai_model_id:
             session.ai_model_id = model_id
         effective_model_id = session.ai_model_id
-        session.updated_at = datetime.now(UTC).replace(tzinfo=None)
+        session.updated_at = datetime.now(UTC)
         kb_ids = session.kb_ids
         intent_analysis = analyze_query_intent(user_message or "")
         knowledge_context = await build_knowledge_context(
@@ -1344,7 +1345,7 @@ async def prepare_user_turn(
                     knowledge_context = {}
                 knowledge_context["host_context"] = host_context
 
-        session.knowledge_snapshot = knowledge_context
+        session.knowledge_snapshot = sanitize_for_json(knowledge_context)
         # 优先使用 payload 中的授权配置，如果没有则从会话中读取
         if payload_skill_authorizations is not None:
             print(f"[DEBUG] Using payload_skill_authorizations: {payload_skill_authorizations}")
@@ -1407,7 +1408,7 @@ async def continue_conversation_after_tool(
         skill_authorizations=skill_authorizations,
         pending_approvals=pending_approvals,
         on_event=on_event,
-        run_id=run_id or f"resume_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{session_id}",
+        run_id=run_id or f"resume_{local_now().strftime('%Y%m%d%H%M%S')}_{session_id}",
         history_window_hours=history_window_hours,
     )
 

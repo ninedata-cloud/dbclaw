@@ -74,10 +74,10 @@ def _extract_where_value(statement, field_name: str):
 
 class FakeAuthDBSession:
     def __init__(self):
-        self.users_by_id = {}
-        self.users_by_username = {}
+        self.user_by_id = {}
+        self.user_by_username = {}
         self.sessions = []
-        self.login_logs = []
+        self.login_log = []
         self._next_login_log_id = 1
         self._next_session_id = 1
 
@@ -91,14 +91,14 @@ class FakeAuthDBSession:
             is_admin=True,
             session_version=1,
         )
-        self.users_by_id[admin.id] = admin
-        self.users_by_username[admin.username] = admin
+        self.user_by_id[admin.id] = admin
+        self.user_by_username[admin.username] = admin
 
     def add(self, obj):
         if isinstance(obj, LoginLog):
             obj.id = self._next_login_log_id
             self._next_login_log_id += 1
-            self.login_logs.append(obj)
+            self.login_log.append(obj)
             return
         if isinstance(obj, UserSession):
             obj.id = self._next_session_id
@@ -106,8 +106,8 @@ class FakeAuthDBSession:
             self.sessions.append(obj)
             return
         if isinstance(obj, User):
-            self.users_by_id[obj.id] = obj
-            self.users_by_username[obj.username] = obj
+            self.user_by_id[obj.id] = obj
+            self.user_by_username[obj.username] = obj
 
     async def commit(self):
         return None
@@ -124,13 +124,13 @@ class FakeAuthDBSession:
             if entity is User:
                 username = _extract_where_value(statement, "username")
                 if username is not None:
-                    user = self.users_by_username.get(username)
+                    user = self.user_by_username.get(username)
                     if user and getattr(user, "deleted_at", None) is None:
                         return FakeResult(value=user)
                     return FakeResult()
 
                 user_id = _extract_where_value(statement, "id")
-                user = self.users_by_id.get(user_id)
+                user = self.user_by_id.get(user_id)
                 if user and getattr(user, "deleted_at", None) is None:
                     return FakeResult(value=user)
                 return FakeResult()

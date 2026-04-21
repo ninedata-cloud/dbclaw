@@ -27,31 +27,31 @@ async def _column_exists(conn, table_name: str, column_name: str) -> bool:
 async def migrate():
     async with engine.begin() as conn:
         inspection_columns = [
-            ("baseline_config", "ALTER TABLE inspection_configs ADD COLUMN baseline_config JSONB NOT NULL DEFAULT '{}'::jsonb"),
-            ("event_ai_config", "ALTER TABLE inspection_configs ADD COLUMN event_ai_config JSONB NOT NULL DEFAULT '{}'::jsonb"),
+            ("baseline_config", "ALTER TABLE inspection_config ADD COLUMN baseline_config JSON NOT NULL DEFAULT '{}'::json"),
+            ("event_ai_config", "ALTER TABLE inspection_config ADD COLUMN event_ai_config JSON NOT NULL DEFAULT '{}'::json"),
         ]
         for column_name, ddl in inspection_columns:
-            if not await _column_exists(conn, "inspection_configs", column_name):
+            if not await _column_exists(conn, "inspection_config", column_name):
                 await conn.execute(text(ddl))
 
         event_columns = [
-            ("event_category", "ALTER TABLE alert_events ADD COLUMN event_category VARCHAR(50) NULL"),
-            ("fault_domain", "ALTER TABLE alert_events ADD COLUMN fault_domain VARCHAR(50) NULL"),
-            ("lifecycle_stage", "ALTER TABLE alert_events ADD COLUMN lifecycle_stage VARCHAR(30) NULL"),
-            ("diagnosis_refresh_needed", "ALTER TABLE alert_events ADD COLUMN diagnosis_refresh_needed BOOLEAN NOT NULL DEFAULT TRUE"),
-            ("diagnosis_trigger_reason", "ALTER TABLE alert_events ADD COLUMN diagnosis_trigger_reason VARCHAR(50) NULL"),
-            ("last_diagnosed_severity", "ALTER TABLE alert_events ADD COLUMN last_diagnosed_severity VARCHAR(20) NULL"),
-            ("last_diagnosed_alert_count", "ALTER TABLE alert_events ADD COLUMN last_diagnosed_alert_count INTEGER NULL"),
-            ("last_diagnosis_requested_at", "ALTER TABLE alert_events ADD COLUMN last_diagnosis_requested_at TIMESTAMP NULL"),
+            ("event_category", "ALTER TABLE alert_event ADD COLUMN event_category VARCHAR(50) NULL"),
+            ("fault_domain", "ALTER TABLE alert_event ADD COLUMN fault_domain VARCHAR(50) NULL"),
+            ("lifecycle_stage", "ALTER TABLE alert_event ADD COLUMN lifecycle_stage VARCHAR(30) NULL"),
+            ("is_diagnosis_refresh_needed", "ALTER TABLE alert_event ADD COLUMN is_diagnosis_refresh_needed BOOLEAN NOT NULL DEFAULT TRUE"),
+            ("diagnosis_trigger_reason", "ALTER TABLE alert_event ADD COLUMN diagnosis_trigger_reason VARCHAR(50) NULL"),
+            ("last_diagnosed_severity", "ALTER TABLE alert_event ADD COLUMN last_diagnosed_severity VARCHAR(20) NULL"),
+            ("last_diagnosed_alert_count", "ALTER TABLE alert_event ADD COLUMN last_diagnosed_alert_count INTEGER NULL"),
+            ("last_diagnosis_requested_at", "ALTER TABLE alert_event ADD COLUMN last_diagnosis_requested_at TIMESTAMP NULL"),
         ]
         for column_name, ddl in event_columns:
-            if not await _column_exists(conn, "alert_events", column_name):
+            if not await _column_exists(conn, "alert_event", column_name):
                 await conn.execute(text(ddl))
 
         await conn.execute(
             text(
                 """
-                CREATE TABLE IF NOT EXISTS metric_baseline_profiles (
+                CREATE TABLE IF NOT EXISTS metric_baseline_profile (
                     id SERIAL PRIMARY KEY,
                     datasource_id INTEGER NOT NULL,
                     metric_name VARCHAR(100) NOT NULL,
@@ -74,26 +74,26 @@ async def migrate():
         )
         await conn.execute(
             text(
-                "CREATE INDEX IF NOT EXISTS ix_metric_baseline_profiles_datasource_metric "
-                "ON metric_baseline_profiles (datasource_id, metric_name)"
+                "CREATE INDEX IF NOT EXISTS ix_metric_baseline_profile_datasource_metric "
+                "ON metric_baseline_profile (datasource_id, metric_name)"
             )
         )
         await conn.execute(
             text(
-                "CREATE INDEX IF NOT EXISTS ix_alert_events_fault_domain "
-                "ON alert_events (fault_domain)"
+                "CREATE INDEX IF NOT EXISTS ix_alert_event_fault_domain "
+                "ON alert_event (fault_domain)"
             )
         )
         await conn.execute(
             text(
-                "CREATE INDEX IF NOT EXISTS ix_alert_events_event_category "
-                "ON alert_events (event_category)"
+                "CREATE INDEX IF NOT EXISTS ix_alert_event_event_category "
+                "ON alert_event (event_category)"
             )
         )
         await conn.execute(
             text(
-                "CREATE INDEX IF NOT EXISTS ix_alert_events_diagnosis_refresh_needed "
-                "ON alert_events (diagnosis_refresh_needed)"
+                "CREATE INDEX IF NOT EXISTS ix_alert_event_is_diagnosis_refresh_needed "
+                "ON alert_event (is_diagnosis_refresh_needed)"
             )
         )
 

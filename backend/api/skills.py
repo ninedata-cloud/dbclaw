@@ -21,7 +21,7 @@ from backend.skills.schema import (
     SkillRatingCreate,
     SkillRatingResponse,
 )
-from backend.skills.models import Skill, SkillRating, SkillExecution
+from backend.models.skill import Skill, SkillRating, SkillExecution
 from sqlalchemy import select, func
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])

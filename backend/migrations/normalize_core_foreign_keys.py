@@ -9,24 +9,24 @@ logger = logging.getLogger(__name__)
 
 FOREIGN_KEYS = [
     {
-        "table": "user_sessions",
+        "table": "user_session",
         "column": "user_id",
-        "name": "user_sessions_user_id_fkey",
-        "reference": "users(id)",
+        "name": "user_session_user_id_fkey",
+        "reference": "user(id)",
         "on_delete": "CASCADE",
     },
     {
-        "table": "doc_categories",
+        "table": "doc_category",
         "column": "parent_id",
-        "name": "doc_categories_parent_id_fkey",
-        "reference": "doc_categories(id)",
+        "name": "doc_category_parent_id_fkey",
+        "reference": "doc_category(id)",
         "on_delete": "SET NULL",
     },
     {
-        "table": "doc_documents",
+        "table": "doc_document",
         "column": "category_id",
-        "name": "doc_documents_category_id_fkey",
-        "reference": "doc_categories(id)",
+        "name": "doc_document_category_id_fkey",
+        "reference": "doc_category(id)",
         "on_delete": "RESTRICT",
     },
 ]

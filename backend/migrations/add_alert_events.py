@@ -1,9 +1,9 @@
 """
-Migration: Add alert_events table and event_id to alert_messages
+Migration: Add alert_event table and event_id to alert_message
 
 This migration creates the alert aggregation system:
-1. Creates alert_events table for aggregated alert events
-2. Adds event_id column to alert_messages table
+1. Creates alert_event table for aggregated alert events
+2. Adds event_id column to alert_message table
 3. Processes existing alerts into events (retroactive aggregation)
 """
 
@@ -30,13 +30,13 @@ from backend.models.alert_message import AlertMessage
 from sqlalchemy import select
 
 
-async def create_alert_events_table(session: AsyncSession):
-    """Create alert_events table with indexes"""
-    print("Creating alert_events table...")
+async def create_alert_event_table(session: AsyncSession):
+    """Create alert_event table with indexes"""
+    print("Creating alert_event table...")
 
     await session.execute(text("""
-        CREATE TABLE IF NOT EXISTS alert_events (
-            id SERIAL PRIMARY KEY,
+        CREATE TABLE IF NOT EXISTS alert_event (
+            id BIGSERIAL PRIMARY KEY,
             datasource_id INTEGER NOT NULL,
             aggregation_key VARCHAR(255) NOT NULL,
             aggregation_type VARCHAR(50) NOT NULL,
@@ -45,62 +45,59 @@ async def create_alert_events_table(session: AsyncSession):
             latest_alert_id INTEGER NOT NULL,
             alert_count INTEGER NOT NULL DEFAULT 1,
 
-            event_start_time TIMESTAMP NOT NULL,
-            event_end_time TIMESTAMP NOT NULL,
-            last_updated TIMESTAMP NOT NULL,
+            event_started_at TIMESTAMPTZ NOT NULL,
+            event_ended_at TIMESTAMPTZ NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
             status VARCHAR(20) NOT NULL,
             severity VARCHAR(20) NOT NULL,
 
             title VARCHAR(255) NOT NULL,
             alert_type VARCHAR(50),
-            metric_name VARCHAR(100),
-
-            FOREIGN KEY (datasource_id) REFERENCES datasources(id),
-            FOREIGN KEY (first_alert_id) REFERENCES alert_messages(id),
-            FOREIGN KEY (latest_alert_id) REFERENCES alert_messages(id)
+            metric_name VARCHAR(100)
         )
     """))
 
-    print("Creating indexes on alert_events...")
+    print("Creating indexes on alert_event...")
     await session.execute(text(
-        "CREATE INDEX IF NOT EXISTS idx_alert_events_datasource_id ON alert_events(datasource_id)"
+        "CREATE INDEX IF NOT EXISTS idx_alert_event_datasource_id ON alert_event(datasource_id)"
     ))
     await session.execute(text(
-        "CREATE INDEX IF NOT EXISTS idx_alert_events_aggregation_key ON alert_events(aggregation_key)"
+        "CREATE INDEX IF NOT EXISTS idx_alert_event_aggregation_key ON alert_event(aggregation_key)"
     ))
     await session.execute(text(
-        "CREATE INDEX IF NOT EXISTS idx_alert_events_status ON alert_events(status)"
+        "CREATE INDEX IF NOT EXISTS idx_alert_event_status ON alert_event(status)"
     ))
     await session.execute(text(
-        "CREATE INDEX IF NOT EXISTS idx_alert_events_event_start_time ON alert_events(event_start_time)"
+        "CREATE INDEX IF NOT EXISTS idx_alert_event_event_started_at ON alert_event(event_started_at)"
     ))
     await session.execute(text(
-        "CREATE INDEX IF NOT EXISTS idx_alert_events_event_end_time ON alert_events(event_end_time)"
+        "CREATE INDEX IF NOT EXISTS idx_alert_event_event_ended_at ON alert_event(event_ended_at)"
     ))
 
     await session.commit()
-    print("alert_events table created")
+    print("alert_event table created")
 
 
-async def add_event_id_to_alert_messages(session: AsyncSession):
-    """Add event_id column to alert_messages table"""
-    print("Adding event_id column to alert_messages...")
+async def add_event_id_to_alert_message(session: AsyncSession):
+    """Add event_id column to alert_message table"""
+    print("Adding event_id column to alert_message...")
 
     # Check if column already exists
     result = await session.execute(text("""
         SELECT column_name FROM information_schema.columns
-        WHERE table_name = 'alert_messages' AND column_name = 'event_id'
+        WHERE table_name = 'alert_message' AND column_name = 'event_id'
     """))
     if result.fetchone():
         print("event_id column already exists")
         return
 
     await session.execute(text(
-        "ALTER TABLE alert_messages ADD COLUMN event_id INTEGER"
+        "ALTER TABLE alert_message ADD COLUMN event_id INTEGER"
     ))
     await session.execute(text(
-        "CREATE INDEX IF NOT EXISTS idx_alert_messages_event_id ON alert_messages(event_id)"
+        "CREATE INDEX IF NOT EXISTS idx_alert_message_event_id ON alert_message(event_id)"
     ))
     await session.commit()
     print("event_id column added")
@@ -137,15 +134,15 @@ async def aggregate_existing_alerts(session: AsyncSession, time_window_minutes: 
         matching_event = None
         if aggregation_key in events:
             event_data = events[aggregation_key]
-            time_gap = alert.created_at - event_data['event_end_time']
+            time_gap = alert.created_at - event_data['event_ended_at']
             if time_gap <= time_window:
                 matching_event = event_data
 
         if matching_event:
             matching_event['latest_alert_id'] = alert.id
             matching_event['alert_count'] += 1
-            matching_event['event_end_time'] = alert.created_at
-            matching_event['last_updated'] = datetime.now()
+            matching_event['event_ended_at'] = alert.created_at
+            matching_event['updated_at'] = datetime.now()
             matching_event['status'] = alert.status
 
             severity_order = {'critical': 4, 'high': 3, 'medium': 2, 'low': 1}
@@ -161,9 +158,10 @@ async def aggregate_existing_alerts(session: AsyncSession, time_window_minutes: 
                 'first_alert_id': alert.id,
                 'latest_alert_id': alert.id,
                 'alert_count': 1,
-                'event_start_time': alert.created_at,
-                'event_end_time': alert.created_at,
-                'last_updated': datetime.now(),
+                'event_started_at': alert.created_at,
+                'event_ended_at': alert.created_at,
+                'updated_at': datetime.now(),
+                'created_at': datetime.now(),
                 'status': alert.status,
                 'severity': alert.severity,
                 'title': alert.title,
@@ -177,15 +175,15 @@ async def aggregate_existing_alerts(session: AsyncSession, time_window_minutes: 
         alert_ids = event_data.pop('alert_ids')
 
         result = await session.execute(text("""
-            INSERT INTO alert_events (
+            INSERT INTO alert_event (
                 datasource_id, aggregation_key, aggregation_type,
                 first_alert_id, latest_alert_id, alert_count,
-                event_start_time, event_end_time, last_updated,
+                event_started_at, event_ended_at, updated_at, created_at,
                 status, severity, title, alert_type, metric_name
             ) VALUES (
                 :datasource_id, :aggregation_key, :aggregation_type,
                 :first_alert_id, :latest_alert_id, :alert_count,
-                :event_start_time, :event_end_time, :last_updated,
+                :event_started_at, :event_ended_at, :updated_at, :created_at,
                 :status, :severity, :title, :alert_type, :metric_name
             ) RETURNING id
         """), event_data)
@@ -194,7 +192,7 @@ async def aggregate_existing_alerts(session: AsyncSession, time_window_minutes: 
 
         for alert_id in alert_ids:
             await session.execute(
-                text("UPDATE alert_messages SET event_id = :event_id WHERE id = :alert_id"),
+                text("UPDATE alert_message SET event_id = :event_id WHERE id = :alert_id"),
                 {'event_id': event_id, 'alert_id': alert_id}
             )
 
@@ -213,8 +211,8 @@ async def main():
 
     async with async_session_factory() as session:
         try:
-            await create_alert_events_table(session)
-            await add_event_id_to_alert_messages(session)
+            await create_alert_event_table(session)
+            await add_event_id_to_alert_message(session)
             await aggregate_existing_alerts(session)
 
             print("=" * 60)

@@ -110,7 +110,7 @@ def _validate_multi_level_threshold(metric_name: str, rule: dict) -> dict:
     for i in range(len(sorted_by_severity) - 1):
         current = sorted_by_severity[i]
         next_level = sorted_by_severity[i + 1]
-        if current["threshold"] >= next_level["threshold"]:
+        if current["threshold"] > next_level["threshold"]:
             raise ValueError(
                 f"Metric '{metric_name}': threshold for '{current['severity']}' "
                 f"({current['threshold']}) must be less than '{next_level['severity']}' "
@@ -174,6 +174,7 @@ DEFAULT_ALERT_TEMPLATES: list[dict[str, Any]] = [
             "threshold_rules": {
                 "cpu_usage": {
                     "levels": [
+                        {"severity": "low", "threshold": 70, "duration": 60},
                         {"severity": "medium", "threshold": 70, "duration": 60},
                         {"severity": "high", "threshold": 75, "duration": 60},
                         {"severity": "critical", "threshold": 80, "duration": 60},
@@ -181,6 +182,7 @@ DEFAULT_ALERT_TEMPLATES: list[dict[str, Any]] = [
                 },
                 "disk_usage": {
                     "levels": [
+                        {"severity": "low", "threshold": 85, "duration": 0},
                         {"severity": "medium", "threshold": 85, "duration": 0},
                         {"severity": "high", "threshold": 90, "duration": 0},
                         {"severity": "critical", "threshold": 95, "duration": 0},
@@ -188,6 +190,7 @@ DEFAULT_ALERT_TEMPLATES: list[dict[str, Any]] = [
                 },
                 "connections": {
                     "levels": [
+                        {"severity": "low", "threshold": 20, "duration": 60},
                         {"severity": "medium", "threshold": 20, "duration": 60},
                         {"severity": "high", "threshold": 30, "duration": 60},
                         {"severity": "critical", "threshold": 40, "duration": 60},
@@ -198,7 +201,7 @@ DEFAULT_ALERT_TEMPLATES: list[dict[str, Any]] = [
                 "enabled": True,
                 "learning_days": 14,
                 "min_samples": 24,
-                "deviation_ratio": 1.35,
+                "deviation_ratio": 3,
                 "min_absolute_delta": 10,
                 "metrics": {
                     "cpu_usage": {"enabled": True},
@@ -223,15 +226,36 @@ DEFAULT_ALERT_TEMPLATES: list[dict[str, Any]] = [
         "template_config": {
             "alert_engine_mode": "ai",
             "threshold_rules": {
-                "cpu_usage": {"threshold": 80, "duration": 60},
-                "disk_usage": {"threshold": 90, "duration": 0},
-                "connections": {"threshold": 20, "duration": 60},
+                "cpu_usage": {
+                    "levels": [
+                        {"severity": "low", "threshold": 70, "duration": 60},
+                        {"severity": "medium", "threshold": 70, "duration": 60},
+                        {"severity": "high", "threshold": 75, "duration": 60},
+                        {"severity": "critical", "threshold": 80, "duration": 60},
+                    ]
+                },
+                "disk_usage": {
+                    "levels": [
+                        {"severity": "low", "threshold": 85, "duration": 0},
+                        {"severity": "medium", "threshold": 85, "duration": 0},
+                        {"severity": "high", "threshold": 90, "duration": 0},
+                        {"severity": "critical", "threshold": 95, "duration": 0},
+                    ]
+                },
+                "connections": {
+                    "levels": [
+                        {"severity": "low", "threshold": 20, "duration": 60},
+                        {"severity": "medium", "threshold": 20, "duration": 60},
+                        {"severity": "high", "threshold": 30, "duration": 60},
+                        {"severity": "critical", "threshold": 40, "duration": 60},
+                    ]
+                },
             },
             "baseline_config": {
                 "enabled": True,
                 "learning_days": 14,
                 "min_samples": 24,
-                "deviation_ratio": 1.3,
+                "deviation_ratio": 2,
                 "min_absolute_delta": 8,
                 "metrics": {
                     "cpu_usage": {"enabled": True},
@@ -257,9 +281,30 @@ DEFAULT_ALERT_TEMPLATES: list[dict[str, Any]] = [
         "template_config": {
             "alert_engine_mode": "threshold",
             "threshold_rules": {
-                "cpu_usage": {"threshold": 90, "duration": 60},
-                "disk_usage": {"threshold": 90, "duration": 0},
-                "connections": {"threshold": 30, "duration": 60},
+                "cpu_usage": {
+                    "levels": [
+                        {"severity": "low", "threshold": 80, "duration": 300},
+                        {"severity": "medium", "threshold": 85, "duration": 300},
+                        {"severity": "high", "threshold": 90, "duration": 300},
+                        {"severity": "critical", "threshold": 95, "duration": 300},
+                    ]
+                },
+                "disk_usage": {
+                    "levels": [
+                        {"severity": "low", "threshold": 90, "duration": 0},
+                        {"severity": "medium", "threshold": 90, "duration": 0},
+                        {"severity": "high", "threshold": 95, "duration": 0},
+                        {"severity": "critical", "threshold": 97, "duration": 0},
+                    ]
+                },
+                "connections": {
+                    "levels": [
+                        {"severity": "low", "threshold": 20, "duration": 300},
+                        {"severity": "medium", "threshold": 20, "duration": 300},
+                        {"severity": "high", "threshold": 30, "duration": 300},
+                        {"severity": "critical", "threshold": 40, "duration": 300},
+                    ]
+                },
             },
             "baseline_config": {"enabled": False},
             "event_ai_config": {
@@ -274,7 +319,7 @@ DEFAULT_ALERT_TEMPLATES: list[dict[str, Any]] = [
 ]
 
 
-async def ensure_default_alert_templates(db: AsyncSession) -> None:
+async def ensure_default_alert_template(db: AsyncSession) -> None:
     result = await db.execute(select(AlertTemplate))
     existing_items = result.scalars().all()
     existing_names = {item.name for item in existing_items}
@@ -299,16 +344,16 @@ async def ensure_default_alert_templates(db: AsyncSession) -> None:
 async def get_alert_template_by_id(db: AsyncSession, template_id: Optional[int]) -> Optional[AlertTemplate]:
     if not template_id:
         return None
-    await ensure_default_alert_templates(db)
+    await ensure_default_alert_template(db)
     result = await db.execute(select(AlertTemplate).where(AlertTemplate.id == template_id))
     return result.scalar_one_or_none()
 
 
 async def get_default_alert_template(db: AsyncSession) -> Optional[AlertTemplate]:
-    await ensure_default_alert_templates(db)
+    await ensure_default_alert_template(db)
     result = await db.execute(
         select(AlertTemplate)
-        .where(AlertTemplate.enabled == True)
+        .where(AlertTemplate.is_enabled == True)
         .order_by(AlertTemplate.is_default.desc(), AlertTemplate.id.asc())
         .limit(1)
     )
@@ -342,7 +387,7 @@ def reset_inspection_config_to_template(config, template: Optional[AlertTemplate
     return changed
 
 
-async def bind_default_template_to_all_inspection_configs(db: AsyncSession) -> int:
+async def bind_default_template_to_all_inspection_config(db: AsyncSession) -> int:
     template = await get_default_alert_template(db)
     if not template:
         return 0
@@ -396,7 +441,7 @@ def summarize_alert_template_config(config: Optional[dict[str, Any]]) -> str:
 
 
 async def resolve_effective_inspection_config(db: AsyncSession, config) -> SimpleNamespace:
-    await ensure_default_alert_templates(db)
+    await ensure_default_alert_template(db)
     bound_template = await get_alert_template_by_id(db, getattr(config, "alert_template_id", None))
     template = bound_template if bound_template is not None and bool(getattr(bound_template, "enabled", False)) else await get_default_alert_template(db)
     uses_template = template is not None

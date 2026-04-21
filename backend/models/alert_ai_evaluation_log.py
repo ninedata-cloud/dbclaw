@@ -1,11 +1,12 @@
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, JSON, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Numeric, Integer, JSON, String, Text
+from sqlalchemy.orm import synonym
 from sqlalchemy.sql import func
 
 from backend.database import Base
 
 
 class AlertAIEvaluationLog(Base):
-    __tablename__ = "alert_ai_evaluation_logs"
+    __tablename__ = "alert_ai_evaluation_log"
 
     id = Column(Integer, primary_key=True, index=True)
     datasource_id = Column(Integer, nullable=False, index=True)
@@ -15,12 +16,12 @@ class AlertAIEvaluationLog(Base):
     model_id = Column(Integer, nullable=True)
     mode = Column(String(20), nullable=False, default="formal", index=True)  # formal, shadow, preview
     decision = Column(String(20), nullable=True, index=True)  # alert, no_alert, recover
-    confidence = Column(Float, nullable=True)
+    confidence = Column(Numeric(22, 4), nullable=True)
     severity = Column(String(20), nullable=True)
     policy_severity_hint = Column(String(20), nullable=True)
     severity_source = Column(String(20), nullable=True, index=True)  # explicit, inferred, invalid
-    trigger_inspection = Column(Boolean, nullable=False, default=False)
-    accepted = Column(Boolean, nullable=False, default=False, index=True)
+    should_trigger_inspection = Column("should_trigger_inspection", Boolean, nullable=False, default=False)
+    is_accepted = Column("is_accepted", Boolean, nullable=False, default=False, index=True)
     error_message = Column(Text, nullable=True)
     reason = Column(Text, nullable=True)
     evidence = Column(JSON, nullable=True)
@@ -30,4 +31,7 @@ class AlertAIEvaluationLog(Base):
     completion_tokens = Column(Integer, nullable=True)
     total_tokens = Column(Integer, nullable=True)
     latency_ms = Column(Integer, nullable=True)
-    created_at = Column(DateTime, server_default=func.now(), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    trigger_inspection = synonym("should_trigger_inspection")
+    accepted = synonym("is_accepted")

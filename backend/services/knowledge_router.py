@@ -637,10 +637,10 @@ def render_knowledge_plan_for_prompt(knowledge_context: dict[str, Any]) -> str:
                     lines.append(f"    - {remote.get('remote_address')} ({remote.get('count')} 个连接)")
 
         # 关联数据源
-        related_datasources = host_context.get("related_datasources", [])
-        if related_datasources:
-            lines.append(f"关联数据源 (共 {len(related_datasources)} 个):")
-            for ds in related_datasources:
+        related_datasource = host_context.get("related_datasource", [])
+        if related_datasource:
+            lines.append(f"关联数据源 (共 {len(related_datasource)} 个):")
+            for ds in related_datasource:
                 lines.append(f"  - {ds.get('name')} ({ds.get('db_type')}) - 状态: {ds.get('connection_status')}")
 
         lines.append("")

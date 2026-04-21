@@ -18,6 +18,7 @@ from backend.models.soft_delete import alive_filter, alive_select, get_alive_by_
 from backend.schemas.integration import IntegrationCreate, IntegrationUpdate
 from backend.services.integration_executor import IntegrationExecutor
 from backend.utils.encryption import encrypt_value
+from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ class IntegrationService:
             is_builtin=data.is_builtin,
             code=data.code,
             config_schema=data.config_schema,
-            enabled=data.enabled,
+            is_enabled=data.enabled,
         )
 
         db.add(integration)
@@ -82,10 +83,10 @@ class IntegrationService:
                 if data.config_schema is not None:
                     integration.config_schema = data.config_schema
                 if data.enabled is not None:
-                    integration.enabled = data.enabled
+                    integration.is_enabled = data.enabled
             else:
                 if data.enabled is not None:
-                    integration.enabled = data.enabled
+                    integration.is_enabled = data.enabled
         else:
             if data.name is not None:
                 integration.name = data.name
@@ -96,9 +97,9 @@ class IntegrationService:
             if data.config_schema is not None:
                 integration.config_schema = data.config_schema
             if data.enabled is not None:
-                integration.enabled = data.enabled
+                integration.is_enabled = data.enabled
 
-        integration.updated_at = datetime.utcnow()
+        integration.updated_at = now()
         await db.commit()
         await db.refresh(integration)
         logger.info("更新 Integration: %s", integration.name)
@@ -118,7 +119,7 @@ class IntegrationService:
         logger.info("删除 Integration: %s", integration.name)
 
     @staticmethod
-    async def list_integrations(
+    async def list_integration(
         db: AsyncSession,
         integration_type: Optional[str] = None,
         category: Optional[str] = None,
@@ -134,7 +135,7 @@ class IntegrationService:
         if category:
             conditions.append(Integration.category == category)
         if enabled is not None:
-            conditions.append(Integration.enabled == enabled)
+            conditions.append(Integration.is_enabled == enabled)
         if is_builtin is not None:
             conditions.append(Integration.is_builtin == is_builtin)
 
@@ -166,7 +167,7 @@ class IntegrationService:
         integration = await get_alive_by_id(db, Integration, integration_id)
         if not integration:
             raise ValueError("Integration 不存在")
-        if not integration.enabled:
+        if not integration.is_enabled:
             raise ValueError("Integration 已禁用")
 
         executor = IntegrationExecutor(db, logger)
@@ -180,7 +181,7 @@ class IntegrationService:
                     "severity": "info",
                     "datasource_name": "测试数据源",
                     "alert_id": 0,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": now().isoformat(),
                 }
 
             return await executor.execute_notification(integration.code, test_params, test_payload)
@@ -201,7 +202,7 @@ class IntegrationService:
                         "message": "没有可用的测试数据源，请先创建数据源或在测试时指定 datasource_id",
                     }
 
-            datasources = [
+            datasource = [
                 {
                     "id": test_datasource.id,
                     "name": test_datasource.name,
@@ -211,7 +212,7 @@ class IntegrationService:
             ]
 
             try:
-                metrics = await executor.execute_metric_collection(integration.code, test_params, datasources)
+                metrics = await executor.execute_metric_collection(integration.code, test_params, datasource)
                 return {"success": True, "message": f"采集到 {len(metrics)} 条指标", "data": {"metrics": metrics[:10]}}
             except Exception as e:
                 return {"success": False, "message": f"测试失败: {str(e)}"}
@@ -313,7 +314,7 @@ class IntegrationService:
                     existing.config_schema = template["config_schema"]
                     existing.description = template["description"]
                     existing.name = template["name"]
-                existing.updated_at = datetime.utcnow()
+                existing.updated_at = now()
                 updated_count += 1
             else:
                 integration = Integration(
@@ -325,7 +326,7 @@ class IntegrationService:
                     is_builtin=True,
                     code=template["code"],
                     config_schema=template["config_schema"],
-                    enabled=True,
+                    is_enabled=True,
                 )
                 db.add(integration)
                 loaded_count += 1

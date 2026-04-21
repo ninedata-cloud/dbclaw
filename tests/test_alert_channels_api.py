@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from backend.config import settings
 from backend.models.user import User
-from backend.routers.integrations import list_channels
+from backend.routers.integration import list_channels
 from backend.database import get_db
 from sqlalchemy import select
 

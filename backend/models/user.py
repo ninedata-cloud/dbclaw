@@ -5,7 +5,7 @@ from backend.models.soft_delete import SoftDeleteMixin
 
 
 class User(SoftDeleteMixin, Base):
-    __tablename__ = "users"
+    __tablename__ = "user"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(50), unique=True, nullable=False, index=True)
@@ -16,6 +16,6 @@ class User(SoftDeleteMixin, Base):
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
     session_version = Column(Integer, nullable=False, default=1)
-    password_changed_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    password_changed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

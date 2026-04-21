@@ -1,9 +1,10 @@
 from pydantic import BaseModel
 from typing import Optional, Any
 from datetime import datetime
+from backend.schemas.base import TimestampSerializerMixin
 
 
-class MetricData(BaseModel):
+class MetricData(TimestampSerializerMixin, BaseModel):
     datasource_id: int
     metric_type: str
     data: dict
@@ -17,7 +18,7 @@ class MetricQuery(BaseModel):
     limit: int = 100
 
 
-class MetricResponse(BaseModel):
+class MetricResponse(TimestampSerializerMixin, BaseModel):
     id: int
     datasource_id: int
     metric_type: str

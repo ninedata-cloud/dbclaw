@@ -16,7 +16,7 @@ from backend.schemas.integration import (
 from backend.services.integration_service import IntegrationService
 from backend.routers.auth import get_current_user
 
-router = APIRouter(prefix="/api", tags=["integrations"])
+router = APIRouter(prefix="/api", tags=["integration"])
 
 
 @router.post("/integrations", response_model=IntegrationResponse)
@@ -40,7 +40,7 @@ async def create_integration(
 
 
 @router.get("/integrations", response_model=List[IntegrationResponse])
-async def list_integrations(
+async def list_integration(
     integration_type: Optional[str] = Query(None, description="集成类型过滤"),
     category: Optional[str] = Query(None, description="分类过滤"),
     enabled: Optional[bool] = Query(None, description="启用状态过滤"),
@@ -49,14 +49,14 @@ async def list_integrations(
     current_user: User = Depends(get_current_user)
 ):
     """查询 Integration 列表"""
-    integrations = await IntegrationService.list_integrations(
+    integration = await IntegrationService.list_integration(
         db,
         integration_type=integration_type,
         category=category,
         enabled=enabled,
         is_builtin=is_builtin
     )
-    return integrations
+    return integration
 
 
 @router.get("/integrations/{integration_id}", response_model=IntegrationResponse)

@@ -47,7 +47,7 @@ def _extract_recommended_action(content_md: str) -> str:
 
 
 class ReportGenerator:
-    """Generate inspection reports"""
+    """Generate inspection report"""
 
     def __init__(self, db):
         self.db = db

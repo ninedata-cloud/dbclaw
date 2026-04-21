@@ -50,13 +50,13 @@ async def _column_exists(conn, table_name: str, column_name: str) -> bool:
 
 async def migrate():
     async with engine.begin() as conn:
-        if not await _table_exists(conn, "alert_subscriptions"):
+        if not await _table_exists(conn, "alert_subscription"):
             return
         if not await _table_exists(conn, "alert_channels"):
             return
-        if not await _column_exists(conn, "alert_subscriptions", "channel_ids"):
+        if not await _column_exists(conn, "alert_subscription", "channel_ids"):
             return
-        if not await _column_exists(conn, "alert_subscriptions", "integration_targets"):
+        if not await _column_exists(conn, "alert_subscription", "integration_targets"):
             return
 
         channel_result = await conn.execute(
@@ -85,7 +85,7 @@ async def migrate():
             text(
                 """
                 SELECT id, channel_ids, integration_targets
-                FROM alert_subscriptions
+                FROM alert_subscription
                 """
             )
         )
@@ -125,8 +125,8 @@ async def migrate():
             await conn.execute(
                 text(
                     """
-                    UPDATE alert_subscriptions
-                    SET integration_targets = CAST(:integration_targets AS JSONB)
+                    UPDATE alert_subscription
+                    SET integration_targets = CAST(:integration_targets AS JSON)
                     WHERE id = :subscription_id
                     """
                 ),

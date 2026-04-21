@@ -72,7 +72,7 @@ STATIC_TOOL_GROUP_MAP = {
 
 LEGACY_DISABLED_TOOL_GROUP_MAP = {
     "manage_alert_settings": GROUP_PLATFORM_OPERATIONS,
-    "list_datasources": GROUP_PLATFORM_OPERATIONS,
+    "list_datasource": GROUP_PLATFORM_OPERATIONS,
     "manage_datasource": GROUP_PLATFORM_OPERATIONS,
     "manage_host": GROUP_PLATFORM_OPERATIONS,
     "manage_skill": GROUP_PLATFORM_OPERATIONS,

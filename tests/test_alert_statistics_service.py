@@ -125,19 +125,19 @@ async def test_query_alert_statistics_events_scope_returns_overview_trend_and_to
 
     assert result["success"] is True
     assert result["overview"]["total"] == 3
-    assert result["overview"]["unique_datasources"] == 2
+    assert result["overview"]["unique_datasource"] == 2
     assert result["time_range"]["bucket"] == "1h"
     assert result["by_severity"][0]["value"] == "critical"
     assert any(item["value"] == "performance" for item in result["by_event_category"])
     assert len(result["trend"]) == 3
-    assert result["top_datasources"][0]["datasource_id"] == ds1.id
+    assert result["top_datasource"][0]["datasource_id"] == ds1.id
     assert result["top_metrics"][0]["value"] == "connections" or result["top_metrics"][0]["value"] == "cpu_usage"
 
 
 @pytest.mark.asyncio
 async def test_query_alert_statistics_alert_scope_applies_filters_and_joins_event_dimensions(db_session):
     ds1 = await _seed_datasource(db_session, "payments", 3310)
-    ds2 = await _seed_datasource(db_session, "reports", 3311)
+    ds2 = await _seed_datasource(db_session, "report", 3311)
 
     event1 = AlertEvent(
         datasource_id=ds1.id,
@@ -236,7 +236,7 @@ async def test_query_alert_statistics_alert_scope_applies_filters_and_joins_even
     assert result["success"] is True
     assert result["overview"]["total"] == 2
     assert result["overview"]["active"] == 2
-    assert result["top_datasources"][0]["datasource_id"] == ds1.id
+    assert result["top_datasource"][0]["datasource_id"] == ds1.id
     assert result["top_metrics"][0]["value"] == "cpu_usage"
     assert result["by_fault_domain"] == [{"value": "performance", "count": 2}]
     assert result["by_event_category"] == [{"value": "performance", "count": 2}]

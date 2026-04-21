@@ -28,12 +28,12 @@ async def test_skill_loading():
             'manage_host',
             'manage_skill',
             'query_monitoring_data',
-            'query_inspection_reports',
+            'query_inspection_report',
             'trigger_inspection',
             'query_system_metadata'
         ]
         
-        from backend.skills.models import Skill
+        from backend.models.skill import Skill
         from sqlalchemy import select
         
         for skill_id in expected_skills:
@@ -128,7 +128,7 @@ async def test_skill_execution():
             )
             
             if result.get('success'):
-                print(f"✓ manage_datasource list: {result.get('count', 0)} datasources")
+                print(f"✓ manage_datasource list: {result.get('count', 0)} datasource")
             else:
                 print(f"✗ manage_datasource list failed: {result.get('error')}")
                 return False
@@ -147,7 +147,7 @@ async def test_skill_execution():
             if result.get('success'):
                 stats = result.get('statistics', {})
                 print(f"✓ query_system_metadata statistics: {len(stats)} metrics")
-                print(f"  Datasources: {stats.get('datasources', 0)}")
+                print(f"  Datasources: {stats.get('datasource', 0)}")
                 print(f"  Skills: {stats.get('skills', 0)}")
             else:
                 print(f"✗ query_system_metadata failed: {result.get('error')}")

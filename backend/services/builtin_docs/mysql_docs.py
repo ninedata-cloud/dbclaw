@@ -531,10 +531,10 @@ WHERE created_at >= '2024-01-01'
 
 ```sql
 -- 差：字符串与数字比较，索引失效
-SELECT * FROM users WHERE phone = 13800138000;
+SELECT * FROM user WHERE phone = 13800138000;
 
 -- 优：类型一致
-SELECT * FROM users WHERE phone = '13800138000';
+SELECT * FROM user WHERE phone = '13800138000';
 ```
 
 ### 优化分页查询
@@ -714,7 +714,7 @@ SHOW GLOBAL STATUS LIKE 'Select_full_join';
 
 ```sql
 EXPLAIN SELECT * FROM orders o
-JOIN users u ON o.user_id = u.id
+JOIN user u ON o.user_id = u.id
 WHERE o.status = 'pending' AND o.created_at > '2024-01-01';
 ```
 
@@ -789,10 +789,10 @@ ALTER TABLE orders ADD INDEX idx_covering (user_id, status, total_amount);
 
 ```sql
 -- 对长文本列使用前缀索引
-ALTER TABLE users ADD INDEX idx_email_prefix (email(20));
+ALTER TABLE user ADD INDEX idx_email_prefix (email(20));
 
 -- 计算合适的前缀长度
-SELECT COUNT(DISTINCT LEFT(email, 10)) / COUNT(*) AS selectivity FROM users;
+SELECT COUNT(DISTINCT LEFT(email, 10)) / COUNT(*) AS selectivity FROM user;
 ```
 
 ## 第五步：在线添加/删除索引
@@ -1125,7 +1125,7 @@ JOIN information_schema.innodb_trx b ON b.trx_id = w.blocking_trx_id;
 ```sql
 -- 查询重复数据
 SELECT email, COUNT(*) AS cnt
-FROM users GROUP BY email HAVING cnt > 1;
+FROM user GROUP BY email HAVING cnt > 1;
 
 -- 查看表约束
 SHOW CREATE TABLE orders\G
@@ -1331,7 +1331,7 @@ pt-table-checksum \
   --user=checker \
   --password=xxx \
   --databases=mydb \
-  --tables=orders,users \
+  --tables=orders,user \
   --replicate=mydb.checksums
 
 # 查看不一致的表

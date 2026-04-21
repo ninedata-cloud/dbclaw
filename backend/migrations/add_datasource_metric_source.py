@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 async def migrate():
-    """添加 metric_source, adapter_id, external_instance_id 字段到 datasources 表"""
+    """添加 metric_source, adapter_id, external_instance_id 字段到 datasource 表"""
     async with engine.begin() as conn:
         logger.info("Starting migration: add datasource metric source fields")
 
@@ -28,7 +28,7 @@ async def migrate():
         result = await conn.execute(text("""
             SELECT column_name
             FROM information_schema.columns
-            WHERE table_name = 'datasources'
+            WHERE table_name = 'datasource'
             AND column_name IN ('metric_source', 'adapter_id', 'external_instance_id')
         """))
         existing_columns = {row[0] for row in result.fetchall()}
@@ -37,7 +37,7 @@ async def migrate():
         if 'metric_source' not in existing_columns:
             logger.info("Adding column: metric_source")
             await conn.execute(text("""
-                ALTER TABLE datasources
+                ALTER TABLE datasource
                 ADD COLUMN metric_source VARCHAR(20) DEFAULT 'system' NOT NULL
             """))
             logger.info("✓ Added metric_source column")
@@ -48,7 +48,7 @@ async def migrate():
         if 'adapter_id' not in existing_columns:
             logger.info("Adding column: adapter_id")
             await conn.execute(text("""
-                ALTER TABLE datasources
+                ALTER TABLE datasource
                 ADD COLUMN adapter_id VARCHAR(100)
             """))
             logger.info("✓ Added adapter_id column")
@@ -59,7 +59,7 @@ async def migrate():
         if 'external_instance_id' not in existing_columns:
             logger.info("Adding column: external_instance_id")
             await conn.execute(text("""
-                ALTER TABLE datasources
+                ALTER TABLE datasource
                 ADD COLUMN external_instance_id VARCHAR(255)
             """))
             logger.info("✓ Added external_instance_id column")

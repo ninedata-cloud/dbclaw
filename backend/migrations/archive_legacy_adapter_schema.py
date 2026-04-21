@@ -53,8 +53,8 @@ async def migrate():
             logger.info("Archiving public.adapter_execution_logs into archive schema")
             await conn.execute(text("ALTER TABLE public.adapter_execution_logs SET SCHEMA archive"))
 
-        if await _column_exists(conn, "datasources", "adapter_id"):
-            logger.info("Archiving datasources.adapter_id values")
+        if await _column_exists(conn, "datasource", "adapter_id"):
+            logger.info("Archiving datasource.adapter_id values")
             await conn.execute(
                 text(
                     """
@@ -71,7 +71,7 @@ async def migrate():
                     """
                     INSERT INTO archive.datasource_adapter_mapping (datasource_id, adapter_id)
                     SELECT id, adapter_id
-                    FROM public.datasources
+                    FROM public.datasource
                     WHERE adapter_id IS NOT NULL
                     ON CONFLICT (datasource_id)
                     DO UPDATE SET
@@ -80,7 +80,7 @@ async def migrate():
                     """
                 )
             )
-            await conn.execute(text("ALTER TABLE public.datasources DROP COLUMN adapter_id"))
+            await conn.execute(text("ALTER TABLE public.datasource DROP COLUMN adapter_id"))
 
     logger.info("Legacy adapter schema archived and removed from public schema")
 

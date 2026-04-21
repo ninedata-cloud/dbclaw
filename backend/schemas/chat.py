@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional, List, Any, Literal
 from datetime import datetime
+from backend.schemas.base import TimestampSerializerMixin
 
 
 class SkillAuthorizationSettings(BaseModel):
@@ -19,7 +20,7 @@ class ChatSessionCreate(BaseModel):
     skill_authorizations: Optional[SkillAuthorizationSettings] = None
 
 
-class ChatSessionResponse(BaseModel):
+class ChatSessionResponse(TimestampSerializerMixin, BaseModel):
     id: int
     datasource_id: Optional[int] = None
     host_id: Optional[int] = None
@@ -39,7 +40,7 @@ class ChatSessionResponse(BaseModel):
         from_attributes = True
 
 
-class ChatMessageResponse(BaseModel):
+class ChatMessageResponse(TimestampSerializerMixin, BaseModel):
     id: int
     session_id: int
     role: str

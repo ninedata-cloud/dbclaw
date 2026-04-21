@@ -14,7 +14,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.metric_baseline_profile import MetricBaselineProfile
-from backend.models.metric_snapshot import MetricSnapshot
+from backend.models.datasource_metric import DatasourceMetric
 from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
@@ -308,13 +308,13 @@ async def rebuild_baseline_profiles_for_datasource(
 
     cutoff = now() - timedelta(days=int(config["learning_days"]))
     result = await db.execute(
-        select(MetricSnapshot)
+        select(DatasourceMetric)
         .where(
-            MetricSnapshot.datasource_id == datasource_id,
-            MetricSnapshot.metric_type == "db_status",
-            MetricSnapshot.collected_at >= cutoff,
+            DatasourceMetric.datasource_id == datasource_id,
+            DatasourceMetric.metric_type == "db_status",
+            DatasourceMetric.collected_at >= cutoff,
         )
-        .order_by(MetricSnapshot.collected_at.asc())
+        .order_by(DatasourceMetric.collected_at.asc())
     )
     snapshots = result.scalars().all()
 

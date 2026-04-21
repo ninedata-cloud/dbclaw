@@ -12,19 +12,19 @@ from backend.utils.security import generate_session_id, hash_session_id
 
 class SessionService:
     @staticmethod
-    def _utc_now_naive() -> datetime:
-        return datetime.now(timezone.utc).replace(tzinfo=None)
+    def _utc_now() -> datetime:
+        return datetime.now(timezone.utc)
 
     @staticmethod
-    def _as_utc_naive(dt: datetime) -> datetime:
+    def _as_utc(dt: datetime) -> datetime:
         if dt.tzinfo is None:
-            return dt
-        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
 
     @staticmethod
     def build_expiry() -> datetime:
         settings = get_settings()
-        return SessionService._utc_now_naive() + timedelta(minutes=settings.session_idle_timeout_minutes)
+        return SessionService._utc_now() + timedelta(minutes=settings.session_idle_timeout_minutes)
 
     @staticmethod
     async def create_session(
@@ -59,10 +59,10 @@ class SessionService:
         session = result.scalar_one_or_none()
         if not session or session.status != "active":
             return None
-        expires_at = SessionService._as_utc_naive(session.expires_at)
-        if expires_at <= SessionService._utc_now_naive():
+        expires_at = SessionService._as_utc(session.expires_at)
+        if expires_at <= SessionService._utc_now():
             session.status = "expired"
-            session.revoked_at = SessionService._utc_now_naive()
+            session.revoked_at = SessionService._utc_now()
             session.revoked_reason = "expired"
             await db.commit()
             return None
@@ -71,20 +71,20 @@ class SessionService:
 
     @staticmethod
     async def touch_session(db: AsyncSession, session: UserSession) -> None:
-        session.last_seen_at = SessionService._utc_now_naive()
+        session.last_seen_at = SessionService._utc_now()
         session.expires_at = SessionService.build_expiry()
         await db.flush()
 
     @staticmethod
     async def revoke_session(db: AsyncSession, session: UserSession, reason: str) -> None:
         session.status = "revoked"
-        session.revoked_at = SessionService._utc_now_naive()
+        session.revoked_at = SessionService._utc_now()
         session.revoked_reason = reason
         await db.flush()
 
     @staticmethod
-    async def revoke_user_sessions(db: AsyncSession, user_id: int, reason: str) -> None:
-        now = SessionService._utc_now_naive()
+    async def revoke_user_session(db: AsyncSession, user_id: int, reason: str) -> None:
+        now = SessionService._utc_now()
         await db.execute(
             update(UserSession)
             .where(UserSession.user_id == user_id, UserSession.status == "active")

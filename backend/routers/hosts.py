@@ -12,7 +12,7 @@ from backend.schemas.host import (
 )
 from backend.utils.encryption import encrypt_value, decrypt_value
 from backend.dependencies import get_current_user
-from backend.utils.datetime_helper import to_utc_isoformat
+from backend.utils.datetime_helper import to_utc_isoformat, now
 
 logger = logging.getLogger(__name__)
 
@@ -45,16 +45,16 @@ async def _get_os_version_via_ssh(host: str, port: int, username: str, password:
 
 
 @router.get("", response_model=List[HostResponse])
-async def list_hosts(db: AsyncSession = Depends(get_db)):
+async def list_host(db: AsyncSession = Depends(get_db)):
     from backend.models.host_metric import HostMetric
     from sqlalchemy import desc
     from datetime import datetime, timezone
 
     result = await db.execute(alive_select(Host).order_by(Host.id.desc()))
-    hosts = result.scalars().all()
+    host = result.scalars().all()
 
     response = []
-    for host in hosts:
+    for host in host:
         host_dict = {
             "id": host.id,
             "name": host.name,
@@ -73,7 +73,7 @@ async def list_hosts(db: AsyncSession = Depends(get_db)):
             "last_check_time": None
         }
 
-        # Get latest metrics from host_metrics
+        # Get latest metrics from host_metric
         metric_result = await db.execute(
             select(HostMetric)
             .where(HostMetric.host_id == host.id)
@@ -90,9 +90,9 @@ async def list_hosts(db: AsyncSession = Depends(get_db)):
 
             # Determine status based on metrics and freshness
             # Use UTC to match PostgreSQL server_default=func.now() which returns UTC
-            now = datetime.utcnow()
+            current_time = now()
             metric_time = metric.collected_at
-            metric_age = (now - metric_time).total_seconds()
+            metric_age = (current_time - metric_time).total_seconds()
 
             # If metrics are older than 5 minutes, consider offline
             if metric_age > 300:
@@ -172,8 +172,8 @@ async def create_host(data: HostCreate, db: AsyncSession = Depends(get_db)):
 
     # Immediately collect metrics for the new host
     try:
-        from backend.services.host_collector import _collect_host_metrics
-        await _collect_host_metrics(db, host)
+        from backend.services.host_collector import _collect_host_metric
+        await _collect_host_metric(db, host)
         await db.commit()
         logger.info(f"Collected initial metrics for new host {host.name}")
     except Exception as e:
@@ -230,8 +230,8 @@ async def update_host(host_id: int, data: HostUpdate, db: AsyncSession = Depends
 
     # Immediately collect metrics after update
     try:
-        from backend.services.host_collector import _collect_host_metrics
-        await _collect_host_metrics(db, host)
+        from backend.services.host_collector import _collect_host_metric
+        await _collect_host_metric(db, host)
         await db.commit()
         logger.info(f"Collected metrics after updating host {host.name}")
     except Exception as e:
@@ -301,7 +301,7 @@ async def get_host_summary(host_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{host_id}/metrics")
-async def get_host_metrics(
+async def get_host_metric(
     host_id: int,
     hours: int = 24,
     db: AsyncSession = Depends(get_db)
@@ -316,7 +316,7 @@ async def get_host_metrics(
         raise HTTPException(status_code=404, detail="SSH host not found")
 
     # 查询指定时间范围内的指标
-    start_time = datetime.utcnow() - timedelta(hours=hours)
+    start_time = now() - timedelta(hours=hours)
     result = await db.execute(
         select(HostMetric)
         .where(
@@ -451,8 +451,8 @@ async def test_host(host_id: int, db: AsyncSession = Depends(get_db)):
 
         # Immediately collect metrics after successful test
         try:
-            from backend.services.host_collector import _collect_host_metrics
-            await _collect_host_metrics(db, host)
+            from backend.services.host_collector import _collect_host_metric
+            await _collect_host_metric(db, host)
             await db.commit()
             logger.info(f"Collected metrics after testing host {host.name}")
         except Exception as e:

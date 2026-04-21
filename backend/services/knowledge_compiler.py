@@ -396,7 +396,7 @@ def compile_document_knowledge(
     return {
         "diagnosis_profile": normalized_profile,
         "compiled_snapshot": compiled_snapshot,
-        "compiled_at": datetime.now(UTC).replace(tzinfo=None),
+        "compiled_at": datetime.now(UTC),
         "quality_status": quality_status,
     }
 

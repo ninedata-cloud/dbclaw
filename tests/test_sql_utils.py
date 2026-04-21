@@ -34,7 +34,7 @@ def test_extract_oracle_bind_variables_ignore_string_literals():
 def test_extract_oracle_bind_variables_complex():
     """测试复杂 SQL"""
     sql = """
-    SELECT * FROM users
+    SELECT * FROM user
     WHERE name = 'user:admin'
       AND id = :user_id
       AND status = :status

@@ -70,7 +70,6 @@ async def get_db() -> AsyncSession:
 async def init_db():
     # Import the model package once so Base.metadata picks up every table definition.
     import backend.models  # noqa: F401
-    import backend.skills.models  # noqa: F401
 
     from backend.migrations.runner import run_post_create_migrations, run_pre_create_migrations
 
@@ -83,7 +82,7 @@ async def init_db():
 
     settings = get_settings()
 
-    # Seed default admin user if no users exist
+    # Seed default admin user if no user exist
     from backend.models.user import User
     from backend.models.soft_delete import alive_filter
     from backend.utils.security import hash_password

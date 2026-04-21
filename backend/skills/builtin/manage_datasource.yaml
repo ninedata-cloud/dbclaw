@@ -3,7 +3,7 @@ name: Manage Datasource
 version: 1.0.0
 author: DBClaw
 category: system
-description: Manage database datasources - create, update, delete, list, get details, and test connections
+description: Manage database datasource - create, update, delete, list, get details, and test connections
 tags: [datasource, management, crud, system]
 
 parameters:
@@ -109,12 +109,12 @@ code: |
           result = await context.db.execute(
               alive_select(Datasource).order_by(Datasource.id.desc())
           )
-          datasources = result.scalars().all()
+          datasource = result.scalars().all()
           
           return {
               "success": True,
               "action": "list",
-              "datasources": [
+              "datasource": [
                   {
                       "id": ds.id,
                       "name": ds.name,
@@ -139,9 +139,9 @@ code: |
                       "created_at": ds.created_at.isoformat() if ds.created_at else None,
                       "updated_at": ds.updated_at.isoformat() if ds.updated_at else None
                   }
-                  for ds in datasources
+                  for ds in datasource
               ],
-              "count": len(datasources)
+              "count": len(datasource)
           }
       
       # Get action

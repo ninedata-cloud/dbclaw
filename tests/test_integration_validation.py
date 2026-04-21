@@ -35,7 +35,7 @@ async def test_aliyun_no_credentials():
     }
 
     # 测试数据源
-    datasources = [{
+    datasource = [{
         "id": 1,
         "name": "测试数据库",
         "db_type": "mysql",
@@ -46,7 +46,7 @@ async def test_aliyun_no_credentials():
         metrics = await executor.execute_metric_collection(
             ALIYUN_RDS_TEMPLATE["code"],
             params,
-            datasources
+            datasource
         )
         print(f"  ✗ 失败: 应该抛出异常但返回了 {len(metrics)} 条指标")
         return False
@@ -83,7 +83,7 @@ async def test_aliyun_invalid_credentials():
     }
 
     # 测试数据源
-    datasources = [{
+    datasource = [{
         "id": 1,
         "name": "测试数据库",
         "db_type": "mysql",
@@ -94,7 +94,7 @@ async def test_aliyun_invalid_credentials():
         metrics = await executor.execute_metric_collection(
             ALIYUN_RDS_TEMPLATE["code"],
             params,
-            datasources
+            datasource
         )
         print(f"  ✗ 失败: 应该抛出异常但返回了 {len(metrics)} 条指标")
         return False
@@ -114,7 +114,7 @@ async def test_aliyun_invalid_credentials():
         return True
 
 
-async def test_aliyun_no_datasources():
+async def test_aliyun_no_datasource():
     """测试阿里云 RDS 集成没有数据源时的行为（应该验证凭证）"""
     print("\n测试 3: 没有数据源但有无效凭证")
     print("-" * 60)
@@ -133,13 +133,13 @@ async def test_aliyun_no_datasources():
     }
 
     # 空数据源列表
-    datasources = []
+    datasource = []
 
     try:
         metrics = await executor.execute_metric_collection(
             ALIYUN_RDS_TEMPLATE["code"],
             params,
-            datasources
+            datasource
         )
         print(f"  ✗ 失败: 应该抛出异常但返回了 {len(metrics)} 条指标")
         return False
@@ -178,7 +178,7 @@ async def test_aliyun_no_external_instance_id():
     }
 
     # 数据源没有 external_instance_id
-    datasources = [{
+    datasource = [{
         "id": 1,
         "name": "测试数据库",
         "db_type": "mysql",
@@ -189,7 +189,7 @@ async def test_aliyun_no_external_instance_id():
         metrics = await executor.execute_metric_collection(
             ALIYUN_RDS_TEMPLATE["code"],
             params,
-            datasources
+            datasource
         )
         print(f"  ✗ 失败: 应该抛出异常但返回了 {len(metrics)} 条指标")
         return False
@@ -217,7 +217,7 @@ async def main():
     results = []
     results.append(await test_aliyun_no_credentials())
     results.append(await test_aliyun_invalid_credentials())
-    results.append(await test_aliyun_no_datasources())
+    results.append(await test_aliyun_no_datasource())
     results.append(await test_aliyun_no_external_instance_id())
 
     print("\n" + "=" * 60)

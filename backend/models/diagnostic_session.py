@@ -1,11 +1,11 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Boolean
+from sqlalchemy import BigInteger, Column, Integer, String, DateTime, Text, JSON, Boolean
 from sqlalchemy.sql import func
 from backend.database import Base
 from backend.models.soft_delete import SoftDeleteMixin
 
 
 class DiagnosticSession(SoftDeleteMixin, Base):
-    __tablename__ = "diagnostic_sessions"
+    __tablename__ = "diagnostic_session"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, nullable=True, index=True)
@@ -21,14 +21,14 @@ class DiagnosticSession(SoftDeleteMixin, Base):
     input_tokens = Column(Integer, nullable=False, default=0)
     output_tokens = Column(Integer, nullable=False, default=0)
     total_tokens = Column(Integer, nullable=False, default=0)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
 class ChatMessage(SoftDeleteMixin, Base):
-    __tablename__ = "chat_messages"
+    __tablename__ = "chat_message"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
     session_id = Column(Integer, nullable=False, index=True)
     role = Column(String(20), nullable=False)  # user, assistant, tool_call, tool_result, approval_request, approval_response
     content = Column(Text, nullable=False)
@@ -41,4 +41,4 @@ class ChatMessage(SoftDeleteMixin, Base):
     input_tokens = Column(Integer, nullable=False, default=0)
     output_tokens = Column(Integer, nullable=False, default=0)
     total_tokens = Column(Integer, nullable=False, default=0)
-    created_at = Column(DateTime, server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

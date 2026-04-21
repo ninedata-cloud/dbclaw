@@ -1,4 +1,4 @@
-"""Add root_cause, recommended_actions, diagnosis_status to alert_events table"""
+"""Add root_cause, recommended_actions, diagnosis_status to alert_event table"""
 import asyncio
 import logging
 
@@ -17,7 +17,7 @@ async def _column_exists(conn, column_name: str) -> bool:
                 SELECT 1
                 FROM information_schema.columns
                 WHERE table_schema = current_schema()
-                  AND table_name = 'alert_events'
+                  AND table_name = 'alert_event'
                   AND column_name = :column_name
             )
             """
@@ -28,23 +28,23 @@ async def _column_exists(conn, column_name: str) -> bool:
 
 
 async def migrate():
-    """Add diagnosis fields to alert_events"""
+    """Add diagnosis fields to alert_event"""
     async with engine.begin() as conn:
         if not await _column_exists(conn, "root_cause"):
-            await conn.execute(text("ALTER TABLE alert_events ADD COLUMN root_cause TEXT"))
-            logger.info("Added root_cause column to alert_events")
+            await conn.execute(text("ALTER TABLE alert_event ADD COLUMN root_cause TEXT"))
+            logger.info("Added root_cause column to alert_event")
         else:
             logger.info("Column root_cause already exists, skipping")
 
         if not await _column_exists(conn, "recommended_actions"):
-            await conn.execute(text("ALTER TABLE alert_events ADD COLUMN recommended_actions TEXT"))
-            logger.info("Added recommended_actions column to alert_events")
+            await conn.execute(text("ALTER TABLE alert_event ADD COLUMN recommended_actions TEXT"))
+            logger.info("Added recommended_actions column to alert_event")
         else:
             logger.info("Column recommended_actions already exists, skipping")
 
         if not await _column_exists(conn, "diagnosis_status"):
-            await conn.execute(text("ALTER TABLE alert_events ADD COLUMN diagnosis_status VARCHAR(20)"))
-            logger.info("Added diagnosis_status column to alert_events")
+            await conn.execute(text("ALTER TABLE alert_event ADD COLUMN diagnosis_status VARCHAR(20)"))
+            logger.info("Added diagnosis_status column to alert_event")
         else:
             logger.info("Column diagnosis_status already exists, skipping")
 

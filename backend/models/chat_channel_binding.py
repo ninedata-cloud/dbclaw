@@ -5,7 +5,7 @@ from backend.database import Base
 
 
 class ChatChannelBinding(Base):
-    __tablename__ = "chat_channel_bindings"
+    __tablename__ = "chat_channel_binding"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     channel_type = Column(String(50), nullable=False, index=True)
@@ -18,6 +18,6 @@ class ChatChannelBinding(Base):
     default_model_id = Column(Integer, nullable=True)
     kb_ids = Column(JSON, nullable=True)
     disabled_tools = Column(JSON, nullable=True)
-    last_message_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, nullable=False, server_default=func.now())
-    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+    last_message_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())

@@ -7,7 +7,7 @@ import json
 import logging
 from decimal import Decimal
 from typing import Dict, Any
-from backend.skills.models import Skill
+from backend.models.skill import Skill
 from backend.skills.context import SkillContext
 from backend.skills.validator import SkillValidator
 
@@ -173,7 +173,7 @@ class SkillExecutor:
         context: SkillContext,
     ):
         """Log skill execution to database"""
-        from backend.skills.models import SkillExecution
+        from backend.models.skill import SkillExecution
 
         try:
             # Serialize result to handle Decimal, timedelta and other non-JSON types

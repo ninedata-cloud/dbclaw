@@ -1,26 +1,27 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, JSON
 from sqlalchemy.sql import func
 from backend.database import Base
 from backend.models.soft_delete import SoftDeleteMixin
 
 
 class DocCategory(Base):
-    __tablename__ = "doc_categories"
+    __tablename__ = "doc_category"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), nullable=False)
     db_type = Column(String(50), nullable=False)  # mysql/postgresql/oracle/sqlserver/general
-    parent_id = Column(Integer, ForeignKey("doc_categories.id", ondelete="SET NULL"), nullable=True)
+    parent_id = Column(Integer, nullable=True)
     sort_order = Column(Integer, default=0)
     icon = Column(String(50), nullable=True)
-    created_at = Column(DateTime, server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
 
 class DocDocument(SoftDeleteMixin, Base):
-    __tablename__ = "doc_documents"
+    __tablename__ = "doc_document"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    category_id = Column(Integer, ForeignKey("doc_categories.id", ondelete="RESTRICT"), nullable=False)
+    category_id = Column(Integer, nullable=False)
     title = Column(String(200), nullable=False)
     content = Column(Text, nullable=False)   # 完整 Markdown，最大约 50K 字符
     summary = Column(Text, nullable=True)    # 100 字内摘要，供 AI 目录使用
@@ -38,11 +39,11 @@ class DocDocument(SoftDeleteMixin, Base):
     enabled_in_diagnosis = Column(Boolean, default=True)
     diagnosis_profile = Column(JSON, nullable=True)
     compiled_snapshot = Column(JSON, nullable=True)
-    compiled_at = Column(DateTime, nullable=True)
+    compiled_at = Column(DateTime(timezone=True), nullable=True)
     quality_status = Column(String(20), default="draft")
     sort_order = Column(Integer, default=0)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     created_by = Column(Integer, nullable=True)  # user id，内置文档为 NULL
 
     @property

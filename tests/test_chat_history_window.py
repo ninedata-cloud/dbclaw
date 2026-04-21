@@ -40,7 +40,7 @@ async def test_load_session_messages_for_llm_filters_history_by_hours():
     assert no_time_msg in messages
     assert old_msg not in messages
     query_text = str(db.execute.await_args.args[0])
-    assert "ORDER BY chat_messages.id" in query_text
+    assert "ORDER BY chat_message.id" in query_text
 
 
 @pytest.mark.asyncio

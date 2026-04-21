@@ -13,6 +13,7 @@ from backend.models.datasource import Datasource
 from backend.models.host import Host
 from backend.models.host_metric import HostMetric
 from backend.models.soft_delete import alive_select, get_alive_by_id
+from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ async def build_host_knowledge_context(db: AsyncSession, host_id: int) -> dict[s
         "metric_trends": [...],  # 指标趋势（最近1小时）
         "top_processes": [...],  # TOP 进程
         "network_summary": {...},  # 网络连接摘要
-        "related_datasources": [...],  # 关联的数据源
+        "related_datasource": [...],  # 关联的数据源
     }
     """
     # 1. 获取主机基本信息
@@ -47,7 +48,7 @@ async def build_host_knowledge_context(db: AsyncSession, host_id: int) -> dict[s
     latest_metric = latest_metric_result.scalar_one_or_none()
 
     # 3. 获取指标趋势（最近1小时）
-    one_hour_ago = datetime.now() - timedelta(hours=1)
+    one_hour_ago = now() - timedelta(hours=1)
     trend_result = await db.execute(
         select(HostMetric)
         .where(HostMetric.host_id == host_id)
@@ -90,10 +91,10 @@ async def build_host_knowledge_context(db: AsyncSession, host_id: int) -> dict[s
         logger.warning(f"Failed to connect to host {host_id} via SSH: {e}")
 
     # 6. 获取关联的数据源
-    datasources_result = await db.execute(
+    datasource_result = await db.execute(
         alive_select(Datasource).where(Datasource.host_id == host_id)
     )
-    related_datasources = datasources_result.scalars().all()
+    related_datasource = datasource_result.scalars().all()
 
     return {
         "host_info": {
@@ -129,13 +130,13 @@ async def build_host_knowledge_context(db: AsyncSession, host_id: int) -> dict[s
             for p in top_processes
         ],
         "network_summary": network_summary,
-        "related_datasources": [
+        "related_datasource": [
             {
                 "id": ds.id,
                 "name": ds.name,
                 "db_type": ds.db_type,
                 "connection_status": ds.connection_status,
             }
-            for ds in related_datasources
+            for ds in related_datasource
         ],
     }

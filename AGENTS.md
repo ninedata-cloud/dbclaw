@@ -65,7 +65,7 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 9. 加载集成模板 + 启动集成调度器（integration_scheduler）
 
 **已注册的 Router**：
-- `backend/routers/`：auth、users、datasources、hosts、metrics、monitor_ws、chat、query、ai_models、documents、inspections、system_configs、alerts、integrations
+- `backend/routers/`：auth、user、datasource、host、metrics、monitor_ws、chat、query、ai_model、documents、inspections、system_config、alerts、integration
 - `backend/api/skills.py`：技能管理 API
 
 **核心架构模式**：

@@ -111,17 +111,17 @@
 
 ## 数据存储
 
-所有新增指标存储在 `host_metrics` 表的 `data` 字段（JSON 类型）中，不影响现有表结构。
+所有新增指标存储在 `host_metric` 表的 `data` 字段（JSON 类型）中，不影响现有表结构。
 
 ## 测试
 
 创建了两个测试文件：
 
-1. **`tests/test_host_metrics_collection.py`**
+1. **`tests/test_host_metric_collection.py`**
    - 测试真实 SSH 连接的指标采集
    - 需要有可用的主机配置
 
-2. **`tests/test_host_metrics_parsing.py`**
+2. **`tests/test_host_metric_parsing.py`**
    - 测试指标解析逻辑（使用模拟数据）
    - 验证所有新增指标的正确性
    - ✅ 所有测试通过（11/11）

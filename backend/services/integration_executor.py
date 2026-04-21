@@ -281,7 +281,7 @@ class IntegrationExecutor:
         self,
         integration_code: str,
         params: Dict[str, Any],
-        datasources: List[Dict[str, Any]]
+        datasource: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         """
         执行入站指标 Integration
@@ -289,7 +289,7 @@ class IntegrationExecutor:
         Args:
             integration_code: Integration Python 代码
             params: 实例化参数（来自 alert_channels.params）
-            datasources: 关联的数据源列表
+            datasource: 关联的数据源列表
 
         Returns:
             MetricPoint 列表
@@ -308,7 +308,7 @@ class IntegrationExecutor:
             # 执行用户代码（带超时）
             metrics = await asyncio.wait_for(
                 self._execute_metric_collection_internal(
-                    context, integration_code, decrypted_params, datasources
+                    context, integration_code, decrypted_params, datasource
                 ),
                 timeout=self.EXECUTION_TIMEOUT
             )
@@ -333,7 +333,7 @@ class IntegrationExecutor:
         context: IntegrationContext,
         integration_code: str,
         params: Dict[str, Any],
-        datasources: List[Dict[str, Any]]
+        datasource: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         """内部执行方法"""
         # 执行用户代码，允许导入标准库模块
@@ -347,7 +347,7 @@ class IntegrationExecutor:
         fetch_metrics = namespace["fetch_metrics"]
 
         # 调用用户函数
-        metrics = await fetch_metrics(context, params, datasources)
+        metrics = await fetch_metrics(context, params, datasource)
 
         # 验证返回格式
         if not isinstance(metrics, list):

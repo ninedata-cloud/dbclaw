@@ -1,8 +1,8 @@
 """
-Migration: extend inspection_configs for dual alert engines.
+Migration: extend inspection_config for dual alert engines.
 
 New AI-specific tables are created by SQLAlchemy create_all once models are imported.
-This migration only backfills columns on the existing inspection_configs table.
+This migration only backfills columns on the existing inspection_config table.
 """
 
 import asyncio
@@ -29,77 +29,77 @@ async def _column_exists(conn, table_name: str, column_name: str) -> bool:
 
 async def migrate():
     async with engine.begin() as conn:
-        if not await _column_exists(conn, "inspection_configs", "alert_engine_mode"):
+        if not await _column_exists(conn, "inspection_config", "alert_engine_mode"):
             await conn.execute(
                 text(
-                    "ALTER TABLE inspection_configs "
+                    "ALTER TABLE inspection_config "
                     "ADD COLUMN alert_engine_mode VARCHAR(20) NOT NULL DEFAULT 'inherit'"
                 )
             )
 
-        if not await _column_exists(conn, "inspection_configs", "ai_policy_source"):
+        if not await _column_exists(conn, "inspection_config", "ai_policy_source"):
             await conn.execute(
                 text(
-                    "ALTER TABLE inspection_configs "
+                    "ALTER TABLE inspection_config "
                     "ADD COLUMN ai_policy_source VARCHAR(20) NOT NULL DEFAULT 'inline'"
                 )
             )
 
-        if not await _column_exists(conn, "inspection_configs", "ai_policy_text"):
+        if not await _column_exists(conn, "inspection_config", "ai_policy_text"):
             await conn.execute(
                 text(
-                    "ALTER TABLE inspection_configs "
+                    "ALTER TABLE inspection_config "
                     "ADD COLUMN ai_policy_text TEXT NULL"
                 )
             )
 
-        if not await _column_exists(conn, "inspection_configs", "ai_policy_id"):
+        if not await _column_exists(conn, "inspection_config", "ai_policy_id"):
             await conn.execute(
                 text(
-                    "ALTER TABLE inspection_configs "
+                    "ALTER TABLE inspection_config "
                     "ADD COLUMN ai_policy_id INTEGER NULL"
                 )
             )
 
-        if not await _column_exists(conn, "inspection_configs", "alert_ai_model_id"):
+        if not await _column_exists(conn, "inspection_config", "alert_ai_model_id"):
             await conn.execute(
                 text(
-                    "ALTER TABLE inspection_configs "
+                    "ALTER TABLE inspection_config "
                     "ADD COLUMN alert_ai_model_id INTEGER NULL"
                 )
             )
 
-        if not await _column_exists(conn, "inspection_configs", "ai_shadow_enabled"):
+        if not await _column_exists(conn, "inspection_config", "ai_shadow_enabled"):
             await conn.execute(
                 text(
-                    "ALTER TABLE inspection_configs "
+                    "ALTER TABLE inspection_config "
                     "ADD COLUMN ai_shadow_enabled BOOLEAN NOT NULL DEFAULT FALSE"
                 )
             )
 
-        if await _column_exists(conn, "alert_ai_evaluation_logs", "id"):
-            if not await _column_exists(conn, "alert_ai_evaluation_logs", "policy_severity_hint"):
+        if await _column_exists(conn, "alert_ai_evaluation_log", "id"):
+            if not await _column_exists(conn, "alert_ai_evaluation_log", "policy_severity_hint"):
                 await conn.execute(
                     text(
-                        "ALTER TABLE alert_ai_evaluation_logs "
+                        "ALTER TABLE alert_ai_evaluation_log "
                         "ADD COLUMN policy_severity_hint VARCHAR(20) NULL"
                     )
                 )
-            if not await _column_exists(conn, "alert_ai_evaluation_logs", "severity_source"):
+            if not await _column_exists(conn, "alert_ai_evaluation_log", "severity_source"):
                 await conn.execute(
                     text(
-                        "ALTER TABLE alert_ai_evaluation_logs "
+                        "ALTER TABLE alert_ai_evaluation_log "
                         "ADD COLUMN severity_source VARCHAR(20) NULL"
                     )
                 )
                 await conn.execute(
                     text(
-                        "CREATE INDEX IF NOT EXISTS ix_alert_ai_evaluation_logs_severity_source "
-                        "ON alert_ai_evaluation_logs (severity_source)"
+                        "CREATE INDEX IF NOT EXISTS ix_alert_ai_evaluation_log_severity_source "
+                        "ON alert_ai_evaluation_log (severity_source)"
                     )
                 )
 
-        logger.info("Migration complete: inspection_configs extended for alert AI engine")
+        logger.info("Migration complete: inspection_config extended for alert AI engine")
 
 
 if __name__ == "__main__":

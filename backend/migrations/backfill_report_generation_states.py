@@ -1,4 +1,4 @@
-"""Backfill historical report generation states for empty/invalid completed reports."""
+"""Backfill historical report generation states for empty/invalid completed report."""
 
 import asyncio
 import logging
@@ -46,7 +46,7 @@ async def migrate():
     async with engine.begin() as conn:
         result = await conn.execute(text(
             "SELECT id, status, summary, content_md, error_message, created_at, completed_at "
-            "FROM reports"
+            "FROM report"
         ))
         rows = result.mappings().all()
 
@@ -105,7 +105,7 @@ async def migrate():
             if changed or (status != "generating" and completed_at is None):
                 await conn.execute(
                     text(
-                        "UPDATE reports SET status=:status, summary=:summary, content_md=:content_md, "
+                        "UPDATE report SET status=:status, summary=:summary, content_md=:content_md, "
                         "error_message=:error_message, completed_at=COALESCE(completed_at, :completed_at) "
                         "WHERE id=:id"
                     ),
@@ -120,7 +120,7 @@ async def migrate():
                 )
                 fixed_count += 1
 
-        logger.info("Backfill complete: updated %s reports", fixed_count)
+        logger.info("Backfill complete: updated %s report", fixed_count)
         if review_candidates:
             logger.info("Manual review candidates: %s", ", ".join(str(item) for item in review_candidates[:100]))
 

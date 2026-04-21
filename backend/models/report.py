@@ -1,11 +1,11 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, JSON
+from sqlalchemy import BigInteger, Column, Integer, String, DateTime, Text, JSON
 from sqlalchemy.sql import func
 from backend.database import Base
 from backend.models.soft_delete import SoftDeleteMixin
 
 
 class Report(SoftDeleteMixin, Base):
-    __tablename__ = "reports"
+    __tablename__ = "report"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     datasource_id = Column(Integer, nullable=False)
@@ -16,8 +16,9 @@ class Report(SoftDeleteMixin, Base):
     content_md = Column(Text, nullable=True)
     content_html = Column(Text, nullable=True)
     findings = Column(JSON, nullable=True)
-    created_at = Column(DateTime, server_default=func.now())
-    completed_at = Column(DateTime, nullable=True)  # Terminal timestamp once report leaves generating state
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)  # Terminal timestamp once report leaves generating state
 
     # AI-related columns
     ai_model_id = Column(Integer, nullable=True)  # Which AI model was used
@@ -28,7 +29,7 @@ class Report(SoftDeleteMixin, Base):
     # Inspection trigger columns
     trigger_type = Column(String(20), nullable=True)  # 'scheduled', 'manual', 'anomaly'
     trigger_id = Column(Integer, nullable=True)
-    alert_id = Column(Integer, nullable=True, index=True)
+    alert_id = Column(BigInteger, nullable=True, index=True)
     trigger_reason = Column(String(500), nullable=True)  # e.g., "CPU 95% > 80% for 60s"
 
     # AI inspection columns

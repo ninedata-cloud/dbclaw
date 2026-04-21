@@ -1,5 +1,5 @@
 """
-修复 metric_snapshots 表中的时区问题
+修复 datasource_metric 表中的时区问题
 将 UTC 时间转换为本地时间（东八区，+8小时）
 """
 import asyncio
@@ -18,7 +18,7 @@ async def fix_timezone():
     async with async_session() as db:
         try:
             result = await db.execute(
-                text("SELECT COUNT(*) FROM metric_snapshots")
+                text("SELECT COUNT(*) FROM datasource_metric")
             )
             total_count = result.scalar()
             print(f"总共有 {total_count} 条记录")
@@ -30,7 +30,7 @@ async def fix_timezone():
             print("开始修复时区...")
             await db.execute(
                 text("""
-                    UPDATE metric_snapshots
+                    UPDATE datasource_metric
                     SET collected_at = collected_at + INTERVAL '8 hours'
                 """)
             )
@@ -43,7 +43,7 @@ async def fix_timezone():
                     SELECT
                         MIN(collected_at) as earliest,
                         MAX(collected_at) as latest
-                    FROM metric_snapshots
+                    FROM datasource_metric
                 """)
             )
             row = result.fetchone()
@@ -59,7 +59,7 @@ async def fix_timezone():
 
 if __name__ == '__main__':
     print("=" * 60)
-    print("修复 metric_snapshots 时区问题")
+    print("修复 datasource_metric 时区问题")
     print("=" * 60)
     asyncio.run(fix_timezone())
     print("=" * 60)

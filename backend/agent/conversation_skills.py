@@ -24,6 +24,7 @@ from backend.agent.context_builder import execute_tool
 from backend.models.diagnostic_session import DiagnosticSession
 from backend.services.knowledge_router import render_knowledge_plan_for_prompt, replan_with_evidence
 from backend.services.ai_agent import get_ai_client, stream_assistant_turn, request_text_response
+from backend.utils.json_sanitizer import sanitize_for_json
 from backend.utils.command_safety import (
     DANGEROUS_COMMAND_PATTERNS,
     DESTRUCTIVE_COMMAND_PATTERNS,
@@ -166,7 +167,7 @@ async def _persist_knowledge_snapshot(db, session_id: Optional[int], knowledge_c
     session = result.scalar_one_or_none()
     if not session:
         return
-    session.knowledge_snapshot = knowledge_context
+    session.knowledge_snapshot = sanitize_for_json(knowledge_context)
     await db.commit()
 
 
@@ -447,7 +448,7 @@ async def execute_skill_call(
     from backend.skills.registry import SkillRegistry
     from backend.skills.executor import SkillExecutor
     from backend.skills.context import SkillContext
-    from backend.skills.models import SkillExecution
+    from backend.models.skill import SkillExecution
     from backend.services.tool_visualization_service import build_tool_result_visualization
     from sqlalchemy import select
     import time
@@ -686,7 +687,7 @@ async def run_conversation_with_skills(
                 f"{host_ssh_port}"
             )
             system_msg += f"\n\nThe user is currently working with datasource ID: {datasource_id} (Type: {datasource.db_type.upper()}, Name: {datasource.name}). Use this ID when calling tools unless they specify otherwise."
-            system_msg += f"\n\nIMPORTANT: This is a {datasource.db_type.upper()} database. You MUST use {skill_prefix}_* skills (e.g., {skill_prefix}_get_db_status, {skill_prefix}_get_slow_queries, {skill_prefix}_get_table_stats, etc.). Do NOT use skills for other database types like mysql_*, pg_*, mssql_*, or oracle_* unless they match this database type. Unless the user explicitly asks to switch datasources, keep all diagnosis and tool calls scoped to this datasource."
+            system_msg += f"\n\nIMPORTANT: This is a {datasource.db_type.upper()} database. You MUST use {skill_prefix}_* skills (e.g., {skill_prefix}_get_db_status, {skill_prefix}_get_slow_queries, {skill_prefix}_get_table_stats, etc.). Do NOT use skills for other database types like mysql_*, pg_*, mssql_*, or oracle_* unless they match this database type. Unless the user explicitly asks to switch datasource, keep all diagnosis and tool calls scoped to this datasource."
 
             if datasource.remark:
                 system_msg += (

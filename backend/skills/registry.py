@@ -4,7 +4,7 @@ Skill registry - central registry for all skills
 from typing import List, Optional, Dict
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, cast, Text
-from backend.skills.models import Skill
+from backend.models.skill import Skill
 from backend.skills.schema import SkillDefinition
 from backend.skills.validator import SkillValidator
 

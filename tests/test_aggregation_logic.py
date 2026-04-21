@@ -13,7 +13,7 @@ from backend.services.aggregation_engine import AggregationEngine
 from sqlalchemy import select
 from backend.models.alert_message import AlertMessage
 from backend.models.alert_event import AlertEvent
-from backend.models.alert_delivery_logs import AlertDeliveryLog
+from backend.models.alert_delivery_log import AlertDeliveryLog
 from backend.models.alert_subscription import AlertSubscription
 
 

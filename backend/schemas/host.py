@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
+from backend.schemas.base import TimestampSerializerMixin
 
 
 class HostCreate(BaseModel):
@@ -23,7 +24,7 @@ class HostUpdate(BaseModel):
     private_key: Optional[str] = None
 
 
-class HostResponse(BaseModel):
+class HostResponse(TimestampSerializerMixin, BaseModel):
     id: int
     name: str
     host: str

@@ -1,9 +1,9 @@
-id: query_inspection_reports
+id: query_inspection_report
 name: Query Inspection Reports
 version: 1.0.0
 author: DBClaw
 category: inspection
-description: Query AI inspection reports - list with filters or get detailed report content
+description: Query AI inspection report - list with filters or get detailed report content
 tags: [inspection, report, query, diagnosis]
 
 parameters:
@@ -101,9 +101,9 @@ code: |
       rows = result.all()
       
       # Format results
-      reports = []
+      report = []
       for row in rows:
-          reports.append({
+          report.append({
               "id": row.Report.id,
               "datasource_id": row.Report.datasource_id,
               "datasource_name": row.datasource_name,
@@ -119,8 +119,8 @@ code: |
       return {
           "success": True,
           "mode": "list",
-          "reports": reports,
-          "count": len(reports),
+          "report": report,
+          "count": len(report),
           "filters": {
               "datasource_id": datasource_id,
               "trigger_type": trigger_type,

@@ -1,20 +1,21 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, JSON, Text
+from sqlalchemy.orm import synonym
 from sqlalchemy.sql import func
 from backend.database import Base
 
 
 class InspectionConfig(Base):
     """Database inspection configuration with threshold rules and scheduling"""
-    __tablename__ = "inspection_configs"
+    __tablename__ = "inspection_config"
 
     id = Column(Integer, primary_key=True, index=True)
     datasource_id = Column(Integer, unique=True, nullable=False)
-    enabled = Column(Boolean, default=True, nullable=False)
+    is_enabled = Column("is_enabled", Boolean, default=True, nullable=False)
 
     # Scheduling
     schedule_interval = Column(Integer, default=86400, nullable=False)  # seconds, default daily
-    last_scheduled_at = Column(DateTime, nullable=True)
-    next_scheduled_at = Column(DateTime, nullable=True)
+    last_scheduled_at = Column(DateTime(timezone=True), nullable=True)
+    next_scheduled_at = Column(DateTime(timezone=True), nullable=True)
 
     # AI analysis
     use_ai_analysis = Column(Boolean, default=True, nullable=False)
@@ -41,5 +42,6 @@ class InspectionConfig(Base):
     event_ai_config = Column(JSON, default=dict, nullable=False)
     alert_template_id = Column(Integer, nullable=True, index=True)
 
-    created_at = Column(DateTime, server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    enabled = synonym("is_enabled")

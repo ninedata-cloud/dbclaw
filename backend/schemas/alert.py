@@ -2,6 +2,8 @@ from pydantic import BaseModel, Field, field_validator, model_serializer
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
+from backend.schemas.base import BaseSchema
+
 
 # Alert Message Schemas
 class AlertMessageBase(BaseModel):
@@ -27,7 +29,7 @@ class AlertMessageUpdate(BaseModel):
     resolved_at: Optional[datetime] = None
 
 
-class AlertLinkedReport(BaseModel):
+class AlertLinkedReport(BaseSchema):
     report_id: int
     title: str
     status: str
@@ -75,12 +77,12 @@ class AlertDiagnosisContext(BaseModel):
     event_category: Optional[str] = None
     fault_domain: Optional[str] = None
     lifecycle_stage: Optional[str] = None
-    diagnosis_refresh_needed: Optional[bool] = None
+    is_diagnosis_refresh_needed: Optional[bool] = None
     diagnosis_trigger_reason: Optional[str] = None
     baseline_comparisons: List[AlertBaselineComparisonItem] = Field(default_factory=list)
 
 
-class AlertMessageResponse(AlertMessageBase):
+class AlertMessageResponse(AlertMessageBase, BaseSchema):
     id: int
     status: str
     acknowledged_by: Optional[int] = None
@@ -89,9 +91,6 @@ class AlertMessageResponse(AlertMessageBase):
     created_at: datetime
     updated_at: datetime
     diagnosis_context: Optional[AlertDiagnosisContext] = None
-
-    class Config:
-        from_attributes = True
 
 
 # Alert Subscription Schemas
@@ -147,7 +146,7 @@ class AlertSubscriptionUpdate(BaseModel):
     aggregation_script: Optional[str] = None
 
 
-class AlertSubscriptionResponse(BaseModel):
+class AlertSubscriptionResponse(BaseSchema):
     id: int
     user_id: int
     datasource_ids: List[int] = Field(default_factory=list)
@@ -158,9 +157,6 @@ class AlertSubscriptionResponse(BaseModel):
     aggregation_script: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 # Alert Delivery Log Schemas
@@ -181,12 +177,9 @@ class AlertDeliveryLogCreate(AlertDeliveryLogBase):
     pass
 
 
-class AlertDeliveryLogResponse(AlertDeliveryLogBase):
+class AlertDeliveryLogResponse(AlertDeliveryLogBase, BaseSchema):
     id: int
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 # Query Schemas
@@ -219,8 +212,8 @@ class AlertEventBase(BaseModel):
     aggregation_key: str
     aggregation_type: str
     alert_count: int
-    event_start_time: datetime
-    event_end_time: datetime
+    event_started_at: datetime
+    event_ended_at: datetime
     status: str
     severity: str
     title: str
@@ -229,7 +222,7 @@ class AlertEventBase(BaseModel):
     event_category: Optional[str] = None
     fault_domain: Optional[str] = None
     lifecycle_stage: Optional[str] = None
-    diagnosis_refresh_needed: Optional[bool] = None
+    is_diagnosis_refresh_needed: Optional[bool] = None
     diagnosis_trigger_reason: Optional[str] = None
     ai_diagnosis_summary: Optional[str] = None
     root_cause: Optional[str] = None
@@ -237,62 +230,16 @@ class AlertEventBase(BaseModel):
     diagnosis_status: Optional[str] = None
 
 
-class AlertEventResponse(AlertEventBase):
+class AlertEventResponse(AlertEventBase, BaseSchema):
     id: int
     first_alert_id: int
     latest_alert_id: int
-    last_updated: datetime
+    updated_at: datetime
     root_cause: Optional[str] = None
     recommended_actions: Optional[str] = None
     diagnosis_status: Optional[str] = None
     datasource_silence_until: Optional[datetime] = None
     datasource_silence_reason: Optional[str] = None
-
-    @model_serializer
-    def serialize_model(self):
-        """Custom serializer to ensure UTC timezone in datetime fields"""
-        from datetime import timezone
-        data = {
-            'id': self.id,
-            'datasource_id': self.datasource_id,
-            'aggregation_key': self.aggregation_key,
-            'aggregation_type': self.aggregation_type,
-            'alert_count': self.alert_count,
-            'event_start_time': self.event_start_time.isoformat() if self.event_start_time else None,
-            'event_end_time': self.event_end_time.isoformat() if self.event_end_time else None,
-            'status': self.status,
-            'severity': self.severity,
-            'title': self.title,
-            'alert_type': self.alert_type,
-            'metric_name': self.metric_name,
-            'event_category': self.event_category,
-            'fault_domain': self.fault_domain,
-            'lifecycle_stage': self.lifecycle_stage,
-            'diagnosis_refresh_needed': self.diagnosis_refresh_needed,
-            'diagnosis_trigger_reason': self.diagnosis_trigger_reason,
-            'ai_diagnosis_summary': self.ai_diagnosis_summary,
-            'root_cause': self.root_cause,
-            'recommended_actions': self.recommended_actions,
-            'diagnosis_status': self.diagnosis_status,
-            'first_alert_id': self.first_alert_id,
-            'latest_alert_id': self.latest_alert_id,
-            'last_updated': self.last_updated.isoformat() if self.last_updated else None,
-            'datasource_silence_reason': self.datasource_silence_reason,
-        }
-
-        # Handle datasource_silence_until with UTC timezone
-        if self.datasource_silence_until:
-            dt = self.datasource_silence_until
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            data['datasource_silence_until'] = dt.isoformat()
-        else:
-            data['datasource_silence_until'] = None
-
-        return data
-
-    class Config:
-        from_attributes = True
 
 
 class AlertEventQueryParams(BaseModel):

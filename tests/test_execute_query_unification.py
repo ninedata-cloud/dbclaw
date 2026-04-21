@@ -90,7 +90,7 @@ async def test_wrapper_adds_success_and_data_for_result_sets():
 
     with patch("backend.utils.db_connector.decrypt_value", return_value="secret"), \
          patch("backend.utils.db_connector.PostgreSQLConnector", FakeConnector):
-        result = await db_connector.execute_query(datasource, "SELECT * FROM users")
+        result = await db_connector.execute_query(datasource, "SELECT * FROM user")
 
     assert result["success"] is True
     assert result["data"] == [[1, "alice"]]
@@ -106,21 +106,21 @@ async def test_db_connector_allows_read_only_explain_select_when_allow_write_fal
         async def execute_query(self, sql: str):
             return {
                 "columns": ["QUERY PLAN"],
-                "rows": [["Seq Scan on users"]],
+                "rows": [["Seq Scan on user"]],
                 "row_count": 1,
                 "execution_time_ms": 3.0,
                 "truncated": False,
             }
 
     datasource = _make_datasource()
-    sql = "EXPLAIN SELECT * FROM users"
+    sql = "EXPLAIN SELECT * FROM user"
 
     with patch("backend.utils.db_connector.decrypt_value", return_value="secret"), \
          patch("backend.utils.db_connector.PostgreSQLConnector", FakeConnector):
         result = await db_connector.execute_query(datasource, sql, allow_write=False)
 
     assert result["success"] is True
-    assert result["rows"] == [["Seq Scan on users"]]
+    assert result["rows"] == [["Seq Scan on user"]]
 
 
 @pytest.mark.asyncio
@@ -130,7 +130,7 @@ async def test_db_connector_rejects_explain_analyze_update_when_allow_write_fals
             raise AssertionError("connector should not be instantiated for blocked EXPLAIN ANALYZE UPDATE")
 
     datasource = _make_datasource()
-    sql = "EXPLAIN ANALYZE UPDATE users SET active = true"
+    sql = "EXPLAIN ANALYZE UPDATE user SET active = true"
 
     with patch("backend.utils.db_connector.decrypt_value", return_value="secret"), \
          patch("backend.utils.db_connector.PostgreSQLConnector", FakeConnector):
@@ -148,9 +148,9 @@ async def test_db_connector_rejects_explain_write_forms_when_allow_write_false()
 
     datasource = _make_datasource()
     queries = [
-        "EXPLAIN DELETE FROM users",
-        "EXPLAIN INSERT INTO users (id) VALUES (1)",
-        "EXPLAIN MERGE INTO users USING staging_users ON users.id = staging_users.id",
+        "EXPLAIN DELETE FROM user",
+        "EXPLAIN INSERT INTO user (id) VALUES (1)",
+        "EXPLAIN MERGE INTO user USING staging_user ON user.id = staging_user.id",
     ]
 
     with patch("backend.utils.db_connector.decrypt_value", return_value="secret"), \
@@ -177,7 +177,7 @@ async def test_db_connector_allows_read_only_with_select_cte_when_allow_write_fa
             }
 
     datasource = _make_datasource()
-    sql = "WITH recent AS (SELECT id FROM users) SELECT id FROM recent"
+    sql = "WITH recent AS (SELECT id FROM user) SELECT id FROM recent"
 
     with patch("backend.utils.db_connector.decrypt_value", return_value="secret"), \
          patch("backend.utils.db_connector.PostgreSQLConnector", FakeConnector):
@@ -194,7 +194,7 @@ async def test_db_connector_blocks_write_cte_when_allow_write_false():
             raise AssertionError("connector should not be instantiated for blocked write CTE")
 
     datasource = _make_datasource()
-    sql = "/* leading comment */\nWITH updated AS (UPDATE users SET active = true RETURNING id) SELECT id FROM updated"
+    sql = "/* leading comment */\nWITH updated AS (UPDATE user SET active = true RETURNING id) SELECT id FROM updated"
 
     with patch("backend.utils.db_connector.decrypt_value", return_value="secret"), \
          patch("backend.utils.db_connector.PostgreSQLConnector", FakeConnector):
@@ -230,7 +230,7 @@ async def test_db_connector_blocks_merge_cte_when_allow_write_false():
             raise AssertionError("connector should not be instantiated for blocked MERGE CTE")
 
     datasource = _make_datasource()
-    sql = "WITH merged AS (MERGE INTO users USING staging_users ON users.id = staging_users.id) SELECT 1"
+    sql = "WITH merged AS (MERGE INTO user USING staging_user ON user.id = staging_user.id) SELECT 1"
 
     with patch("backend.utils.db_connector.decrypt_value", return_value="secret"), \
          patch("backend.utils.db_connector.PostgreSQLConnector", FakeConnector):
@@ -247,7 +247,7 @@ async def test_db_connector_rejects_multi_statement_read_only_bypass_when_allow_
             raise AssertionError("connector should not be instantiated for blocked multi-statement query")
 
     datasource = _make_datasource()
-    sql = "SELECT 1; DELETE FROM users"
+    sql = "SELECT 1; DELETE FROM user"
 
     with patch("backend.utils.db_connector.decrypt_value", return_value="secret"), \
          patch("backend.utils.db_connector.PostgreSQLConnector", FakeConnector):
@@ -314,7 +314,7 @@ async def test_query_router_rejects_multi_statement_bypass_before_connector_exec
     async def fake_get_connector_for(datasource_id: int, db, selected_database=None):
         raise AssertionError("connector should not be created for blocked multi-statement query")
 
-    req = QueryExecuteRequest(datasource_id=1, sql="SELECT 1; DROP TABLE users", max_rows=10)
+    req = QueryExecuteRequest(datasource_id=1, sql="SELECT 1; DROP TABLE user", max_rows=10)
 
     with patch("backend.routers.query._get_connector_for", fake_get_connector_for):
         with pytest.raises(Exception) as exc_info:
@@ -329,7 +329,7 @@ async def test_query_router_explain_rejects_write_operation_before_connector_exe
     async def fake_get_connector_for(datasource_id: int, db, selected_database=None):
         raise AssertionError("connector should not be created for blocked explain write query")
 
-    req = QueryExplainRequest(datasource_id=1, sql="EXPLAIN ANALYZE UPDATE users SET active = true")
+    req = QueryExplainRequest(datasource_id=1, sql="EXPLAIN ANALYZE UPDATE user SET active = true")
 
     with patch("backend.routers.query._get_connector_for", fake_get_connector_for):
         with pytest.raises(Exception) as exc_info:
@@ -364,7 +364,7 @@ async def test_oracle_select_returns_result_set_contract():
     conn.commit = AsyncMock()
     conn.close = AsyncMock()
 
-    sql = "SELECT id, name FROM users"
+    sql = "SELECT id, name FROM user"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql)
 
@@ -391,7 +391,7 @@ async def test_oracle_select_exact_max_rows_is_not_truncated_without_extra_row()
     conn.cursor.return_value = cursor
     conn.close = AsyncMock()
 
-    sql = "SELECT id FROM users ORDER BY id"
+    sql = "SELECT id FROM user ORDER BY id"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql, max_rows=2)
 
@@ -416,7 +416,7 @@ async def test_oracle_select_more_than_max_rows_is_truncated_to_visible_rows():
     conn.cursor.return_value = cursor
     conn.close = AsyncMock()
 
-    sql = "SELECT id FROM users ORDER BY id"
+    sql = "SELECT id FROM user ORDER BY id"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql, max_rows=2)
 
@@ -442,7 +442,7 @@ async def test_oracle_execute_query_closes_cursor_on_fetch_failure():
     conn.commit = AsyncMock()
     conn.close = AsyncMock()
 
-    sql = "SELECT id FROM users ORDER BY id"
+    sql = "SELECT id FROM user ORDER BY id"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         with pytest.raises(RuntimeError, match="fetch failed"):
             await connector.execute_query(sql, max_rows=2)
@@ -463,7 +463,7 @@ async def test_oracle_update_does_not_fetch_without_description():
     conn.commit = AsyncMock()
     conn.close = AsyncMock()
 
-    sql = "UPDATE users SET active = 0"
+    sql = "UPDATE user SET active = 0"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql)
 
@@ -551,7 +551,7 @@ async def test_mysql_update_returns_no_result_set_contract_with_message_and_trun
     conn.commit = AsyncMock()
     conn.close = MagicMock()
 
-    sql = "UPDATE users SET active = 0"
+    sql = "UPDATE user SET active = 0"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql)
 
@@ -578,7 +578,7 @@ async def test_mysql_select_exact_max_rows_is_not_truncated_without_extra_row():
     conn.cursor.return_value = SyncCursorContext(cursor)
     conn.close = MagicMock()
 
-    sql = "SELECT id, name FROM users ORDER BY id"
+    sql = "SELECT id, name FROM user ORDER BY id"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql, max_rows=2)
 
@@ -603,7 +603,7 @@ async def test_mysql_select_more_than_max_rows_is_truncated_to_visible_rows():
     conn.cursor.return_value = SyncCursorContext(cursor)
     conn.close = MagicMock()
 
-    sql = "SELECT id FROM users ORDER BY id"
+    sql = "SELECT id FROM user ORDER BY id"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql, max_rows=2)
 
@@ -624,7 +624,7 @@ async def test_sqlserver_update_returns_unified_no_result_set_contract():
     conn.cursor.return_value = cursor
     conn.close = MagicMock()
 
-    sql = "UPDATE users SET active = 0"
+    sql = "UPDATE user SET active = 0"
     with patch.object(connector, "_connect", MagicMock(return_value=conn)):
         result = await connector.execute_query(sql)
 
@@ -654,7 +654,7 @@ async def test_sqlserver_select_exact_max_rows_is_not_truncated_without_extra_ro
     conn.cursor.return_value = cursor
     conn.close = MagicMock()
 
-    sql = "SELECT id, name FROM users ORDER BY id"
+    sql = "SELECT id, name FROM user ORDER BY id"
     with patch.object(connector, "_connect", MagicMock(return_value=conn)):
         result = await connector.execute_query(sql, max_rows=2)
 
@@ -681,7 +681,7 @@ async def test_sqlserver_select_more_than_max_rows_is_truncated_to_visible_rows(
     conn.cursor.return_value = cursor
     conn.close = MagicMock()
 
-    sql = "SELECT id FROM users ORDER BY id"
+    sql = "SELECT id FROM user ORDER BY id"
     with patch.object(connector, "_connect", MagicMock(return_value=conn)):
         result = await connector.execute_query(sql, max_rows=2)
 
@@ -733,7 +733,7 @@ async def test_postgres_select_returns_result_set_contract():
     conn.prepare.return_value = prepared
     conn.cursor.return_value = cursor
     conn.transaction.return_value = FakeAsyncContextManager()
-    sql = "SELECT id, name FROM users"
+    sql = "SELECT id, name FROM user"
 
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql)
@@ -762,12 +762,12 @@ async def test_postgres_update_returns_no_result_set_contract():
     conn.execute.return_value = "UPDATE 3"
 
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
-        result = await connector.execute_query("UPDATE users SET active = false")
+        result = await connector.execute_query("UPDATE user SET active = false")
 
-    conn.prepare.assert_awaited_once_with("UPDATE users SET active = false")
+    conn.prepare.assert_awaited_once_with("UPDATE user SET active = false")
     prepared.fetch.assert_not_called()
     prepared.cursor.assert_not_called()
-    conn.execute.assert_awaited_once_with("UPDATE users SET active = false")
+    conn.execute.assert_awaited_once_with("UPDATE user SET active = false")
     assert result["columns"] == []
     assert result["rows"] == []
     assert result["row_count"] == 3
@@ -785,7 +785,7 @@ async def test_postgres_create_table_without_numeric_count_returns_zero_row_coun
     conn.prepare.return_value = prepared
     conn.execute.return_value = "CREATE TABLE"
 
-    sql = "CREATE TABLE users (id INT)"
+    sql = "CREATE TABLE user (id INT)"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql)
 
@@ -814,7 +814,7 @@ async def test_postgres_insert_returning_still_uses_bounded_cursor_fetch():
     conn.cursor.return_value = cursor
     conn.transaction.return_value = FakeAsyncContextManager()
 
-    sql = "INSERT INTO users(name) VALUES ('alice') RETURNING id"
+    sql = "INSERT INTO user(name) VALUES ('alice') RETURNING id"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql)
 
@@ -844,7 +844,7 @@ async def test_postgres_select_exact_max_rows_is_not_truncated_without_fetching_
     conn.cursor.return_value = cursor
     conn.transaction.return_value = FakeAsyncContextManager()
 
-    sql = "SELECT id FROM users ORDER BY id"
+    sql = "SELECT id FROM user ORDER BY id"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql, max_rows=2)
 
@@ -875,7 +875,7 @@ async def test_postgres_select_more_than_max_rows_is_truncated_to_visible_rows()
     conn.cursor.return_value = cursor
     conn.transaction.return_value = FakeAsyncContextManager()
 
-    sql = "SELECT id FROM users ORDER BY id"
+    sql = "SELECT id FROM user ORDER BY id"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql, max_rows=2)
 
@@ -902,7 +902,7 @@ async def test_postgres_with_update_without_returning_uses_execute():
     conn.prepare.return_value = prepared
     conn.execute.return_value = "UPDATE 5"
 
-    sql = "/* leading comment */\nWITH updated AS (UPDATE users SET active = true) UPDATE users SET seen_at = now()"
+    sql = "/* leading comment */\nWITH updated AS (UPDATE user SET active = true) UPDATE user SET seen_at = now()"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql)
 
@@ -925,7 +925,7 @@ async def test_postgres_with_nested_returning_but_top_level_update_uses_execute(
 
     sql = (
         "WITH moved AS ("
-        "DELETE FROM users WHERE inactive = true RETURNING id"
+        "DELETE FROM user WHERE inactive = true RETURNING id"
         ") "
         "UPDATE accounts SET archived_user_count = archived_user_count + 1"
     )
@@ -956,7 +956,7 @@ async def test_postgres_with_materialized_cte_select_uses_bounded_cursor_fetch()
     conn.cursor.return_value = cursor
     conn.transaction.return_value = FakeAsyncContextManager()
 
-    sql = "WITH recent AS MATERIALIZED (SELECT id FROM users) SELECT id FROM recent"
+    sql = "WITH recent AS MATERIALIZED (SELECT id FROM user) SELECT id FROM recent"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql)
 
@@ -986,7 +986,7 @@ async def test_postgres_with_not_materialized_cte_select_uses_bounded_cursor_fet
     conn.cursor.return_value = cursor
     conn.transaction.return_value = FakeAsyncContextManager()
 
-    sql = "WITH recent AS NOT MATERIALIZED (SELECT id FROM users) SELECT id FROM recent"
+    sql = "WITH recent AS NOT MATERIALIZED (SELECT id FROM user) SELECT id FROM recent"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql)
 
@@ -1008,7 +1008,7 @@ async def test_postgres_with_not_materialized_cte_select_uses_bounded_cursor_fet
 async def test_postgres_explain_analyze_uses_bounded_cursor_fetch_via_prepared_metadata():
     connector = PostgreSQLConnector(host="localhost", port=5432, username="tester", password="secret", database="dbclaw")
     conn = AsyncMock()
-    rows = [FakeRecord({"QUERY PLAN": "Seq Scan on users"})]
+    rows = [FakeRecord({"QUERY PLAN": "Seq Scan on user"})]
     prepared = _prepared_statement(["QUERY PLAN"], rows)
     cursor = AsyncMock()
     cursor.fetch = AsyncMock(return_value=rows)
@@ -1016,7 +1016,7 @@ async def test_postgres_explain_analyze_uses_bounded_cursor_fetch_via_prepared_m
     conn.cursor.return_value = cursor
     conn.transaction.return_value = FakeAsyncContextManager()
 
-    sql = "EXPLAIN ANALYZE SELECT * FROM users"
+    sql = "EXPLAIN ANALYZE SELECT * FROM user"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql)
 
@@ -1028,7 +1028,7 @@ async def test_postgres_explain_analyze_uses_bounded_cursor_fetch_via_prepared_m
     conn.fetch.assert_not_called()
     conn.execute.assert_not_called()
     assert result["columns"] == ["QUERY PLAN"]
-    assert result["rows"] == [["Seq Scan on users"]]
+    assert result["rows"] == [["Seq Scan on user"]]
     assert result["row_count"] == 1
     assert result["truncated"] is False
     conn.close.assert_awaited_once()
@@ -1062,7 +1062,7 @@ async def test_opengauss_select_returns_result_set_contract():
     conn.cursor.return_value = cursor
     conn.transaction.return_value = FakeAsyncContextManager()
 
-    sql = "SELECT id, name FROM users"
+    sql = "SELECT id, name FROM user"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql)
 
@@ -1089,7 +1089,7 @@ async def test_opengauss_ddl_returns_no_result_set_contract():
     conn.prepare.return_value = prepared
     conn.execute.return_value = "CREATE TABLE"
 
-    sql = "CREATE TABLE users (id INT)"
+    sql = "CREATE TABLE user (id INT)"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql)
 
@@ -1118,7 +1118,7 @@ async def test_opengauss_insert_returning_uses_bounded_cursor_fetch_via_prepared
     conn.cursor.return_value = cursor
     conn.transaction.return_value = FakeAsyncContextManager()
 
-    sql = "INSERT INTO users(name) VALUES ('alice') RETURNING id"
+    sql = "INSERT INTO user(name) VALUES ('alice') RETURNING id"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql)
 
@@ -1148,7 +1148,7 @@ async def test_opengauss_select_exact_max_rows_is_not_truncated_without_fetching
     conn.cursor.return_value = cursor
     conn.transaction.return_value = FakeAsyncContextManager()
 
-    sql = "SELECT id FROM users ORDER BY id"
+    sql = "SELECT id FROM user ORDER BY id"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql, max_rows=2)
 
@@ -1179,7 +1179,7 @@ async def test_opengauss_select_more_than_max_rows_is_truncated_to_visible_rows(
     conn.cursor.return_value = cursor
     conn.transaction.return_value = FakeAsyncContextManager()
 
-    sql = "SELECT id FROM users ORDER BY id"
+    sql = "SELECT id FROM user ORDER BY id"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql, max_rows=2)
 
@@ -1202,11 +1202,11 @@ async def test_opengauss_select_more_than_max_rows_is_truncated_to_visible_rows(
 async def test_opengauss_explain_analyze_uses_fetch_via_prepared_metadata():
     connector = OpenGaussConnector(host="localhost", port=5432, username="tester", password="secret", database="dbclaw")
     conn = AsyncMock()
-    rows = [FakeRecord({"QUERY PLAN": "Seq Scan on users"})]
+    rows = [FakeRecord({"QUERY PLAN": "Seq Scan on user"})]
     prepared = _prepared_statement(["QUERY PLAN"], rows)
     conn.prepare.return_value = prepared
 
-    sql = "EXPLAIN ANALYZE SELECT * FROM users"
+    sql = "EXPLAIN ANALYZE SELECT * FROM user"
     conn.fetch.return_value = rows
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql)
@@ -1216,7 +1216,7 @@ async def test_opengauss_explain_analyze_uses_fetch_via_prepared_metadata():
     prepared.cursor.assert_not_called()
     conn.execute.assert_not_called()
     assert result["columns"] == ["QUERY PLAN"]
-    assert result["rows"] == [["Seq Scan on users"]]
+    assert result["rows"] == [["Seq Scan on user"]]
     assert result["row_count"] == 1
     assert result["truncated"] is False
     conn.close.assert_awaited_once()
@@ -1230,7 +1230,7 @@ async def test_opengauss_with_delete_without_returning_uses_execute():
     conn.prepare.return_value = prepared
     conn.execute.return_value = "DELETE 7"
 
-    sql = "WITH deleted AS (DELETE FROM users WHERE inactive = true) DELETE FROM audit_log WHERE user_id IS NULL"
+    sql = "WITH deleted AS (DELETE FROM user WHERE inactive = true) DELETE FROM audit_log WHERE user_id IS NULL"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql)
 
@@ -1254,7 +1254,7 @@ async def test_opengauss_with_top_level_write_without_returning_uses_execute():
     conn.prepare.return_value = prepared
     conn.execute.return_value = "UPDATE 5"
 
-    sql = "/* leading comment */\nWITH updated AS (UPDATE users SET active = true) UPDATE users SET seen_at = now()"
+    sql = "/* leading comment */\nWITH updated AS (UPDATE user SET active = true) UPDATE user SET seen_at = now()"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql)
 
@@ -1278,7 +1278,7 @@ async def test_opengauss_insert_command_tag_with_multiple_numbers_uses_last_numb
     conn.prepare.return_value = prepared
     conn.execute.return_value = "INSERT 0 1"
 
-    sql = "INSERT INTO users(name) VALUES ('alice')"
+    sql = "INSERT INTO user(name) VALUES ('alice')"
     with patch.object(connector, "_connect", AsyncMock(return_value=conn)):
         result = await connector.execute_query(sql)
 

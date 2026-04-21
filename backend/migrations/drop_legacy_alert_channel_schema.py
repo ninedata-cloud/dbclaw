@@ -53,8 +53,8 @@ async def _column_exists(conn, table_name: str, column_name: str) -> bool:
 async def migrate():
     async with engine.begin() as conn:
         alert_channels_exists = await _table_exists(conn, "alert_channels")
-        subscriptions_exists = await _table_exists(conn, "alert_subscriptions")
-        execution_logs_exists = await _table_exists(conn, "integration_execution_logs")
+        subscriptions_exists = await _table_exists(conn, "alert_subscription")
+        execution_logs_exists = await _table_exists(conn, "integration_execution_log")
 
         channels = {}
         if alert_channels_exists:
@@ -78,14 +78,14 @@ async def migrate():
             }
 
         if subscriptions_exists and channels:
-            has_channel_ids = await _column_exists(conn, "alert_subscriptions", "channel_ids")
-            has_targets = await _column_exists(conn, "alert_subscriptions", "integration_targets")
+            has_channel_ids = await _column_exists(conn, "alert_subscription", "channel_ids")
+            has_targets = await _column_exists(conn, "alert_subscription", "integration_targets")
             if has_channel_ids and has_targets:
                 subscription_result = await conn.execute(
                     text(
                         """
                         SELECT id, channel_ids, integration_targets
-                        FROM alert_subscriptions
+                        FROM alert_subscription
                         """
                     )
                 )
@@ -122,8 +122,8 @@ async def migrate():
                     await conn.execute(
                         text(
                             """
-                            UPDATE alert_subscriptions
-                            SET integration_targets = CAST(:integration_targets AS JSONB)
+                            UPDATE alert_subscription
+                            SET integration_targets = CAST(:integration_targets AS JSON)
                             WHERE id = :subscription_id
                             """
                         ),
@@ -134,12 +134,12 @@ async def migrate():
                     )
 
         if execution_logs_exists and channels:
-            if await _column_exists(conn, "integration_execution_logs", "channel_id"):
+            if await _column_exists(conn, "integration_execution_log", "channel_id"):
                 log_result = await conn.execute(
                     text(
                         """
                         SELECT id, channel_id, target_type, target_ref, target_name, params_snapshot
-                        FROM integration_execution_logs
+                        FROM integration_execution_log
                         WHERE channel_id IS NOT NULL
                         """
                     )
@@ -157,11 +157,11 @@ async def migrate():
                     await conn.execute(
                         text(
                             """
-                            UPDATE integration_execution_logs
+                            UPDATE integration_execution_log
                             SET target_type = :target_type,
                                 target_ref = :target_ref,
                                 target_name = :target_name,
-                                params_snapshot = CAST(:params_snapshot AS JSONB)
+                                params_snapshot = CAST(:params_snapshot AS JSON)
                             WHERE id = :log_id
                             """
                         ),
@@ -174,21 +174,21 @@ async def migrate():
                         },
                     )
 
-        if execution_logs_exists and await _column_exists(conn, "integration_execution_logs", "channel_id"):
+        if execution_logs_exists and await _column_exists(conn, "integration_execution_log", "channel_id"):
             await conn.execute(
                 text(
                     """
-                    ALTER TABLE integration_execution_logs
+                    ALTER TABLE integration_execution_log
                     DROP COLUMN IF EXISTS channel_id
                     """
                 )
             )
 
-        if subscriptions_exists and await _column_exists(conn, "alert_subscriptions", "channel_ids"):
+        if subscriptions_exists and await _column_exists(conn, "alert_subscription", "channel_ids"):
             await conn.execute(
                 text(
                     """
-                    ALTER TABLE alert_subscriptions
+                    ALTER TABLE alert_subscription
                     DROP COLUMN IF EXISTS channel_ids
                     """
                 )

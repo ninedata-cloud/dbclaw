@@ -184,7 +184,7 @@ async def test_huaweicloud_rds_template_supports_multiple_engines(
             return _build_metric_response(remote_metric_values)
         raise AssertionError(f"Unexpected request: {url}")
 
-    datasources = [
+    datasource = [
         {
             "id": 1,
             "name": f"test-{db_type}",
@@ -202,7 +202,7 @@ async def test_huaweicloud_rds_template_supports_multiple_engines(
         "backend.services.integration_executor.IntegrationContext.get_system_config",
         new=_fake_get_system_config,
     ):
-        metrics = await executor.execute_metric_collection(HUAWEI_CLOUD_RDS_TEMPLATE["code"], params, datasources)
+        metrics = await executor.execute_metric_collection(HUAWEI_CLOUD_RDS_TEMPLATE["code"], params, datasource)
 
     metrics_by_name = {item["metric_name"]: item for item in metrics}
     for metric_name, expected_value in expected_metrics.items():
@@ -237,7 +237,7 @@ async def test_huaweicloud_rds_template_rejects_unsupported_db_type():
             return _build_projects_response()
         raise AssertionError(f"Unexpected request: {url}")
 
-    datasources = [
+    datasource = [
         {
             "id": 1,
             "name": "test-oracle",
@@ -256,11 +256,11 @@ async def test_huaweicloud_rds_template_rejects_unsupported_db_type():
         new=_fake_get_system_config,
     ):
         with pytest.raises(ValueError, match="暂不支持华为云 RDS 外部采集"):
-            await executor.execute_metric_collection(HUAWEI_CLOUD_RDS_TEMPLATE["code"], params, datasources)
+            await executor.execute_metric_collection(HUAWEI_CLOUD_RDS_TEMPLATE["code"], params, datasource)
 
 
 @pytest.mark.asyncio
-async def test_huaweicloud_rds_template_validates_credentials_without_datasources():
+async def test_huaweicloud_rds_template_validates_credentials_without_datasource():
     executor = IntegrationExecutor(AsyncMock(), logging.getLogger(__name__))
     recorded_urls = []
 
@@ -308,7 +308,7 @@ async def test_huaweicloud_postgresql_dimension_fallback_to_rds_cluster_id():
             )
         raise AssertionError(f"Unexpected request: {url}")
 
-    datasources = [
+    datasource = [
         {
             "id": 9,
             "name": "test-postgresql-fallback",
@@ -326,7 +326,7 @@ async def test_huaweicloud_postgresql_dimension_fallback_to_rds_cluster_id():
         "backend.services.integration_executor.IntegrationContext.get_system_config",
         new=_fake_get_system_config,
     ):
-        metrics = await executor.execute_metric_collection(HUAWEI_CLOUD_RDS_TEMPLATE["code"], params, datasources)
+        metrics = await executor.execute_metric_collection(HUAWEI_CLOUD_RDS_TEMPLATE["code"], params, datasource)
 
     metrics_by_name = {item["metric_name"]: item for item in metrics}
     assert dimension_attempts == ["postgresql_cluster_id", "rds_cluster_id"]

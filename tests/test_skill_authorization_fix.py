@@ -24,7 +24,7 @@ def test_skill_authorization_filtering():
     # Create mock skills
     skills = [
         MockSkill("manage_alert_settings", "平台操作"),
-        MockSkill("list_datasources", "平台操作"),
+        MockSkill("list_datasource", "平台操作"),
         MockSkill("execute_any_sql", "高权限操作"),
         MockSkill("execute_any_os_command", "高权限操作"),
         MockSkill("fetch_webpage", "知识检索"),
@@ -55,7 +55,7 @@ def test_skill_authorization_filtering():
     print(f"Filtered skills: {[s.id for s in filtered]}")
     assert len(filtered) == 4, f"Expected 4 skills, got {len(filtered)}"
     assert "manage_alert_settings" in [s.id for s in filtered]
-    assert "list_datasources" in [s.id for s in filtered]
+    assert "list_datasource" in [s.id for s in filtered]
     assert "fetch_webpage" in [s.id for s in filtered]
     assert "mysql_check_status" in [s.id for s in filtered]
     print("✓ Test 2 passed")

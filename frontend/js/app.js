@@ -24,14 +24,18 @@
     Router.register('instance-detail', (routeParam) => InstanceDetailPage.render(routeParam));
     Router.register('host-detail', (routeParam) => HostDetailPage.render(routeParam));
 
-    try {
-        const currentUser = await API.getMe();
-        Store.set('currentUser', currentUser);
-        Sidebar.render();
-        API.getDatasources().then(datasources => {
-            Store.set('datasources', datasources);
-        }).catch(() => {});
-    } catch (e) {
+    if (API.shouldRestoreSession()) {
+        try {
+            const currentUser = await API.getMe();
+            Store.set('currentUser', currentUser);
+            Sidebar.render();
+            API.getDatasources().then(datasources => {
+                Store.set('datasources', datasources);
+            }).catch(() => {});
+        } catch (e) {
+            Store.set('currentUser', null);
+        }
+    } else {
         Store.set('currentUser', null);
     }
 

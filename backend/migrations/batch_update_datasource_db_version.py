@@ -27,18 +27,18 @@ async def batch_update_db_versions():
     """批量更新所有数据源的数据库版本"""
     async with async_session() as db:
         result = await db.execute(alive_select(Datasource))
-        datasources = result.scalars().all()
+        datasource = result.scalars().all()
 
-        if not datasources:
-            logger.info("No datasources found")
+        if not datasource:
+            logger.info("No datasource found")
             return
 
-        logger.info(f"Found {len(datasources)} datasources, starting DB version collection...")
+        logger.info(f"Found {len(datasource)} datasource, starting DB version collection...")
 
         success_count = 0
         fail_count = 0
 
-        for ds in datasources:
+        for ds in datasource:
             try:
                 # 获取密码
                 password = decrypt_value(ds.password_encrypted) if ds.password_encrypted else None

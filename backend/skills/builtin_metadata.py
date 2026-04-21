@@ -49,12 +49,12 @@ SYSTEM_MANAGEMENT_SKILL_IDS = {
 }
 
 SYSTEM_QUERY_SKILL_IDS = {
-    "list_datasources",
+    "list_datasource",
     "query_system_metadata",
     "query_monitoring_data",
     "query_monitoring_history",
     "get_metric_history",
-    "query_inspection_reports",
+    "query_inspection_report",
     "query_alert_statistics",
 }
 
@@ -95,12 +95,12 @@ DB_CATEGORY_BY_PREFIX: list[tuple[str, str]] = [
 ]
 
 BUILTIN_PERMISSION_OVERRIDES: dict[str, list[str]] = {
-    "list_datasources": ["read_datasource"],
+    "list_datasource": ["read_datasource"],
     "query_system_metadata": ["read_datasource"],
     "query_monitoring_data": ["read_datasource"],
     "query_monitoring_history": ["read_datasource"],
     "get_metric_history": ["read_datasource"],
-    "query_inspection_reports": ["read_datasource"],
+    "query_inspection_report": ["read_datasource"],
     "query_alert_statistics": ["read_datasource"],
     "manage_datasource": ["admin"],
     "manage_host": ["admin"],

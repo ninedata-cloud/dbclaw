@@ -9,23 +9,23 @@ from backend.database import engine
 async def migrate():
     async with engine.begin() as conn:
         await conn.execute(text("""
-            ALTER TABLE doc_documents
+            ALTER TABLE doc_document
             ADD COLUMN IF NOT EXISTS diagnosis_profile JSON
         """))
         await conn.execute(text("""
-            ALTER TABLE doc_documents
+            ALTER TABLE doc_document
             ADD COLUMN IF NOT EXISTS compiled_snapshot JSON
         """))
         await conn.execute(text("""
-            ALTER TABLE doc_documents
+            ALTER TABLE doc_document
             ADD COLUMN IF NOT EXISTS compiled_at TIMESTAMP NULL
         """))
         await conn.execute(text("""
-            ALTER TABLE doc_documents
+            ALTER TABLE doc_document
             ADD COLUMN IF NOT EXISTS quality_status VARCHAR(20) DEFAULT 'draft'
         """))
         await conn.execute(text("""
-            UPDATE doc_documents
+            UPDATE doc_document
             SET diagnosis_profile = COALESCE(
                 diagnosis_profile,
                 json_build_object(
@@ -39,7 +39,7 @@ async def migrate():
             )
         """))
         await conn.execute(text("""
-            UPDATE doc_documents
+            UPDATE doc_document
             SET quality_status = COALESCE(
                 quality_status,
                 CASE

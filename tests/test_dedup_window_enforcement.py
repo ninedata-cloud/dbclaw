@@ -32,9 +32,9 @@ async def test_trigger_inspection_skips_recent_connection_failure_trigger():
     db.add.assert_not_called()
 
     query_text = str(db.execute.call_args.args[0])
-    assert "inspection_triggers.datasource_id =" in query_text
-    assert "inspection_triggers.trigger_type =" in query_text
-    assert "inspection_triggers.triggered_at >=" in query_text
+    assert "inspection_trigger.datasource_id =" in query_text
+    assert "inspection_trigger.trigger_type =" in query_text
+    assert "inspection_trigger.triggered_at >=" in query_text
 
 
 @pytest.mark.asyncio
@@ -68,8 +68,8 @@ async def test_aggregation_rule_suppresses_recent_recurrence_within_cooldown():
     assert should_send is False
 
     query_text = str(db.execute.call_args.args[0])
-    assert "alert_messages.alert_type =" in query_text
-    assert "alert_messages.metric_name =" in query_text
+    assert "alert_message.alert_type =" in query_text
+    assert "alert_message.metric_name =" in query_text
 
 
 @pytest.mark.asyncio

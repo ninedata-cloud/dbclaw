@@ -5,7 +5,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 
 from backend.database import get_db
-from backend.models.metric_snapshot import MetricSnapshot
+from backend.models.datasource_metric import DatasourceMetric
 from backend.models.soft_delete import alive_filter, get_alive_by_id
 from backend.models.inspection_config import InspectionConfig
 from backend.schemas.metrics import MetricResponse
@@ -132,7 +132,7 @@ async def _build_ai_health(db: AsyncSession, datasource_id: int, config) -> Dict
         return _healthy_payload("正常（未配置 AI 告警规则）", alert_engine="ai")
 
     runtime_state = await get_latest_runtime_state_for_config(db, datasource_id, config)
-    if not runtime_state or not runtime_state.active:
+    if not runtime_state or not runtime_state.is_active:
         last_reason = getattr(runtime_state, "last_reason", None) if runtime_state else None
         return _healthy_payload(last_reason or "正常", alert_engine="ai")
 
@@ -178,14 +178,14 @@ async def _get_db_status_snapshots(
     conn_id: int,
     limit: int,
     datasource=None,
-) -> List[MetricSnapshot]:
+) -> List[DatasourceMetric]:
     result = await db.execute(
-        select(MetricSnapshot)
+        select(DatasourceMetric)
         .where(
-            MetricSnapshot.datasource_id == conn_id,
-            MetricSnapshot.metric_type == 'db_status',
+            DatasourceMetric.datasource_id == conn_id,
+            DatasourceMetric.metric_type == 'db_status',
         )
-        .order_by(desc(MetricSnapshot.id))
+        .order_by(desc(DatasourceMetric.id))
         .limit(limit)
     )
     return result.scalars().all()
@@ -220,24 +220,24 @@ async def get_metrics(
     )
     datasource = ds_result.scalar_one_or_none()
 
-    query = select(MetricSnapshot).where(MetricSnapshot.datasource_id == conn_id)
+    query = select(DatasourceMetric).where(DatasourceMetric.datasource_id == conn_id)
 
     if metric_type and metric_type != 'db_status':
-        query = query.where(MetricSnapshot.metric_type == metric_type)
+        query = query.where(DatasourceMetric.metric_type == metric_type)
 
     # 时间范围过滤
     if minutes:
         # 使用 minutes 参数
         start = now() - timedelta(minutes=minutes)
-        query = query.where(MetricSnapshot.collected_at >= start)
+        query = query.where(DatasourceMetric.collected_at >= start)
     elif start_time or end_time:
         # 使用 start_time/end_time 参数
         if start_time:
-            query = query.where(MetricSnapshot.collected_at >= start_time)
+            query = query.where(DatasourceMetric.collected_at >= start_time)
         if end_time:
-            query = query.where(MetricSnapshot.collected_at <= end_time)
+            query = query.where(DatasourceMetric.collected_at <= end_time)
 
-    query = query.order_by(desc(MetricSnapshot.collected_at)).limit(limit)
+    query = query.order_by(desc(DatasourceMetric.collected_at)).limit(limit)
     result = await db.execute(query)
     snapshots = result.scalars().all()
 
@@ -276,12 +276,12 @@ async def get_latest_metric(
         return snapshots[0] if snapshots else None
 
     result = await db.execute(
-        select(MetricSnapshot)
+        select(DatasourceMetric)
         .where(
-            MetricSnapshot.datasource_id == conn_id,
-            MetricSnapshot.metric_type == metric_type,
+            DatasourceMetric.datasource_id == conn_id,
+            DatasourceMetric.metric_type == metric_type,
         )
-        .order_by(desc(MetricSnapshot.id))
+        .order_by(desc(DatasourceMetric.id))
         .limit(1)
     )
     return result.scalar_one_or_none()
@@ -305,7 +305,7 @@ async def get_batch_dashboard(
     ds_result = await db.execute(
         select(Datasource).where(Datasource.id.in_(conn_ids), alive_filter(Datasource))
     )
-    datasources = {ds.id: ds for ds in ds_result.scalars().all()}
+    datasource_map = {ds.id: ds for ds in ds_result.scalars().all()}
 
     # 批量查询巡检配置
     config_result = await db.execute(
@@ -313,10 +313,10 @@ async def get_batch_dashboard(
     )
     configs = {c.datasource_id: c for c in config_result.scalars().all()}
 
-    latest_metrics: Dict[int, Any] = {}  # conn_id -> MetricSnapshot or None
+    latest_metrics: Dict[int, Any] = {}  # conn_id -> DatasourceMetric or None
 
     for cid in conn_ids:
-        latest_snaps = await _get_db_status_snapshots(db, cid, 1, datasources.get(cid))
+        latest_snaps = await _get_db_status_snapshots(db, cid, 1, datasource_map.get(cid))
         latest_metrics[cid] = latest_snaps[0] if latest_snaps else None
 
     # 组装结果
@@ -324,7 +324,7 @@ async def get_batch_dashboard(
     stale_threshold = 300  # 5分钟
     for cid in conn_ids:
         snap = latest_metrics.get(cid)
-        datasource = datasources.get(cid)
+        datasource = datasource_map.get(cid)
 
         # --- 构建 metric 部分 ---
         if snap:

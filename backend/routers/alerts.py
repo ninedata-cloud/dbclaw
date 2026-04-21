@@ -21,7 +21,7 @@ from backend.config import get_settings
 from backend.models.report import Report
 from backend.models.datasource import Datasource
 from backend.models.inspection_trigger import InspectionTrigger
-from backend.models.metric_snapshot import MetricSnapshot
+from backend.models.datasource_metric import DatasourceMetric
 from backend.models.alert_message import AlertMessage
 from backend.services.alert_event_service import hydrate_event_strategy_fields
 from backend.services.baseline_service import (
@@ -83,12 +83,12 @@ def _build_datasource_info(datasource: Optional[Datasource]) -> Optional[AlertDa
 
 async def _build_event_baseline_comparisons(db: AsyncSession, event) -> list[AlertBaselineComparisonItem]:
     snapshot_result = await db.execute(
-        select(MetricSnapshot)
+        select(DatasourceMetric)
         .where(
-            MetricSnapshot.datasource_id == event.datasource_id,
-            MetricSnapshot.metric_type == "db_status",
+            DatasourceMetric.datasource_id == event.datasource_id,
+            DatasourceMetric.metric_type == "db_status",
         )
-        .order_by(MetricSnapshot.collected_at.desc())
+        .order_by(DatasourceMetric.collected_at.desc())
         .limit(1)
     )
     latest_snapshot = snapshot_result.scalar_one_or_none()
@@ -322,7 +322,7 @@ async def _build_event_context(db: AsyncSession, event) -> AlertDiagnosisContext
         event_category=event.event_category,
         fault_domain=event.fault_domain,
         lifecycle_stage=event.lifecycle_stage,
-        diagnosis_refresh_needed=event.diagnosis_refresh_needed,
+        is_diagnosis_refresh_needed=event.is_diagnosis_refresh_needed,
         diagnosis_trigger_reason=event.diagnosis_trigger_reason,
         baseline_comparisons=baseline_comparisons,
     )
@@ -373,7 +373,7 @@ async def list_alerts(
 
 # Alert Event Endpoints (must be before /{alert_id} to avoid route conflicts)
 @router.get("/events", response_model=dict)
-async def list_alert_events(
+async def list_alert_event(
     datasource_ids: Optional[str] = Query(None, description="Comma-separated datasource IDs"),
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
@@ -394,7 +394,7 @@ async def list_alert_events(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid datasource_ids format")
 
-    events_with_datasources, total = await AlertEventService.get_events(
+    events_with_datasource, total = await AlertEventService.get_events(
         db=db,
         datasource_ids=datasource_id_list,
         start_time=start_time,
@@ -407,13 +407,13 @@ async def list_alert_events(
     )
 
     # Extract events for loading trigger reasons
-    events = [event for event, _ in events_with_datasources]
+    events = [event for event, _ in events_with_datasource]
     latest_trigger_reason_map = await _load_latest_alert_trigger_reasons(db, events)
 
     return {
         "events": [
             _build_event_response(event, datasource, latest_trigger_reason_map.get(getattr(event, "latest_alert_id", 0)))
-            for event, datasource in events_with_datasources
+            for event, datasource in events_with_datasource
         ],
         "total": total,
         "limit": limit,
@@ -532,8 +532,8 @@ async def get_public_alert(
             "report_id": report.id,
             "title": report.title,
             "status": report.status,
-            "share_url": f"/api/inspections/reports/public/{report.id}?token={report_token}",
-            "page_url": f"/api/inspections/reports/public/{report.id}/page?token={report_token}"
+            "share_url": f"/api/inspections/report/public/{report.id}?token={report_token}",
+            "page_url": f"/api/inspections/report/public/{report.id}/page?token={report_token}"
         }
 
     return payload
@@ -650,7 +650,7 @@ async def public_alert_page(
                         <span class="report-title">{escape_html(report.title or f"报告 #{report.id}")}</span>
                         <span class="report-status">{report_status_label}</span>
                     </div>
-                    <a class="btn btn-secondary" href="/api/inspections/reports/public/{report.id}/page?token={report_token}">查看报告</a>
+                    <a class="btn btn-secondary" href="/api/inspections/report/public/{report.id}/page?token={report_token}">查看报告</a>
                 </div>
             </div>
         </div>'''

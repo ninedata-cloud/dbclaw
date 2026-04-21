@@ -89,18 +89,18 @@ async def test_full_workflow():
         print("-" * 80)
 
         result = await db.execute(select(Datasource).limit(5))
-        datasources = result.scalars().all()
+        datasource = result.scalars().all()
 
-        if datasources:
-            print(f"✓ 找到 {len(datasources)} 个数据源")
-            for ds in datasources:
+        if datasource:
+            print(f"✓ 找到 {len(datasource)} 个数据源")
+            for ds in datasource:
                 ext_id = getattr(ds, "external_instance_id", None)
                 print(f"  - {ds.name} ({ds.db_type})")
                 print(f"    ID: {ds.id}, external_instance_id: {ext_id or '未配置'}")
 
             # 找一个有 external_instance_id 的数据源
             test_ds = None
-            for ds in datasources:
+            for ds in datasource:
                 if getattr(ds, "external_instance_id", None):
                     test_ds = ds
                     break
@@ -122,7 +122,7 @@ async def test_full_workflow():
             print("当前 AccessKey 未配置，测试预期行为...")
 
             test_params = {"region_id": "cn-hangzhou"}
-            test_datasource_id = datasources[0].id if datasources else None
+            test_datasource_id = datasource[0].id if datasource else None
 
             if test_datasource_id:
                 try:
@@ -156,7 +156,7 @@ async def test_full_workflow():
 
         # 找一个没有 external_instance_id 的数据源
         no_ext_id_ds = None
-        for ds in datasources:
+        for ds in datasource:
             if not getattr(ds, "external_instance_id", None):
                 no_ext_id_ds = ds
                 break

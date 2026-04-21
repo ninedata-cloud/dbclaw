@@ -44,7 +44,7 @@ def test_informational_queries():
 def test_administrative_queries():
     """Test administrative intent detection"""
     test_cases = [
-        ("执行 SELECT * FROM users", "administrative"),
+        ("执行 SELECT * FROM user", "administrative"),
         ("创建索引", "administrative"),
         ("修改配置参数", "administrative"),
         ("删除旧数据", "administrative"),

@@ -643,7 +643,7 @@ const AlertTemplatesPage = {
                 });
 
                 for (let i = 0; i < sortedLevels.length - 1; i++) {
-                    if (sortedLevels[i].threshold >= sortedLevels[i + 1].threshold) {
+                    if (sortedLevels[i].threshold > sortedLevels[i + 1].threshold) {
                         Toast.error(`${fieldName === 'cpu' ? 'CPU' : fieldName === 'disk' ? '磁盘' : '连接数'}：${sortedLevels[i].severity} 的阈值必须小于 ${sortedLevels[i + 1].severity}`);
                         return null;
                     }

@@ -2,7 +2,7 @@ import asyncio
 import logging
 import re
 from datetime import timedelta
-from typing import List, Optional, Dict, Any
+from typing import TYPE_CHECKING, List, Optional, Dict, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, desc, case
@@ -12,7 +12,7 @@ from backend.utils.datetime_helper import now
 from backend.models.alert_message import AlertMessage
 from backend.models.alert_subscription import AlertSubscription
 from backend.models.soft_delete import alive_filter, alive_select, get_alive_by_id
-from backend.models.alert_delivery_logs import AlertDeliveryLog
+from backend.models.alert_delivery_log import AlertDeliveryLog
 from backend.schemas.alert import (
     AlertMessageCreate,
     AlertMessageResponse,
@@ -23,6 +23,9 @@ from backend.schemas.alert import (
 )
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from backend.models.alert_event import AlertEvent
 
 SUMMARY_SECTION_KEYS = ["告警摘要", "诊断摘要", "摘要", "核心结论", "结论概述", "summary"]
 ROOT_CAUSE_SECTION_KEYS = ["根本原因", "root cause", "原因分析", "问题原因", "可能原因", "causes", "cause"]
@@ -472,7 +475,7 @@ def should_refresh_event_diagnosis(event, event_ai_config: Optional[dict[str, An
         return True
 
     trigger_reason = getattr(event, "diagnosis_trigger_reason", None)
-    refresh_needed = bool(getattr(event, "diagnosis_refresh_needed", False))
+    refresh_needed = bool(getattr(event, "is_diagnosis_refresh_needed", False))
     if refresh_needed:
         if trigger_reason == "event_created":
             return bool(config.get("trigger_on_create"))
@@ -498,7 +501,7 @@ def mark_event_diagnosis_requested(event) -> None:
 def mark_event_diagnosis_completed(event) -> None:
     if not event:
         return
-    event.diagnosis_refresh_needed = False
+    event.is_diagnosis_refresh_needed = False
     event.last_diagnosed_severity = getattr(event, "severity", None)
     event.last_diagnosed_alert_count = getattr(event, "alert_count", None)
     event.last_diagnosis_requested_at = now()
@@ -582,12 +585,12 @@ def _build_alert_diagnosis_draft(
     alert_content = _normalize_prompt_field(getattr(latest_alert, "content", None), max_chars=320)
     datasource_info = _format_datasource_prompt(datasource)
 
-    if event.event_start_time:
-        duration_minutes = max((now() - event.event_start_time).total_seconds() / 60, 0)
+    if event.event_started_at:
+        duration_minutes = max((now() - event.event_started_at).total_seconds() / 60, 0)
         duration_text = f"{duration_minutes:.0f} 分钟"
         if include_now_suffix:
             duration_text = f"{duration_text}（截至目前）"
-        first_seen = event.event_start_time.isoformat()
+        first_seen = event.event_started_at.isoformat()
     else:
         duration_text = "未知"
         first_seen = "未知"
@@ -897,7 +900,7 @@ class AlertService:
     async def get_all_subscriptions(db: AsyncSession) -> List[AlertSubscription]:
         """Get all active subscriptions"""
         result = await db.execute(
-            alive_select(AlertSubscription).where(AlertSubscription.enabled == True)
+            alive_select(AlertSubscription).where(AlertSubscription.is_enabled == True)
         )
         return result.scalars().all()
 
@@ -927,7 +930,7 @@ class AlertService:
             severity_levels=subscription_data.severity_levels,
             time_ranges=time_ranges_dict,
             integration_targets=[target.model_dump() for target in subscription_data.integration_targets],
-            enabled=subscription_data.enabled,
+            is_enabled=subscription_data.enabled,
             aggregation_script=subscription_data.aggregation_script
         )
 
@@ -1137,7 +1140,7 @@ class AlertService:
             return None
 
         # Skip if diagnosis already completed and no refresh is pending
-        if event.diagnosis_status == "completed" and event.ai_diagnosis_summary and not event.diagnosis_refresh_needed:
+        if event.diagnosis_status == "completed" and event.ai_diagnosis_summary and not event.is_diagnosis_refresh_needed:
             logger.info(f"Auto-diagnosis skipped for event {alert_event_id}: already completed")
             normalized = normalize_alert_diagnosis_fields(
                 root_cause=event.root_cause,
@@ -1236,7 +1239,7 @@ async def _run_auto_diagnosis(session_id: int, alert_event_id: int, datasource_i
                         diagnosis_status="completed",
                         diagnosis_completed_at=now(),
                         diagnosis_source_event_id=None,
-                        diagnosis_refresh_needed=False,
+                        is_diagnosis_refresh_needed=False,
                         last_diagnosed_severity=select(AlertEvent.severity).where(AlertEvent.id == alert_event_id).scalar_subquery(),
                         last_diagnosed_alert_count=select(AlertEvent.alert_count).where(AlertEvent.id == alert_event_id).scalar_subquery(),
                         last_diagnosis_requested_at=now(),
@@ -1412,7 +1415,7 @@ async def run_sync_diagnosis(
         return {"root_cause": None, "recommended_actions": None, "summary": None, "status": "failed"}
 
     # If diagnosis already completed and this event has not reached a refresh point, return cached result
-    if event.diagnosis_status == "completed" and event.ai_diagnosis_summary and not event.diagnosis_refresh_needed:
+    if event.diagnosis_status == "completed" and event.ai_diagnosis_summary and not event.is_diagnosis_refresh_needed:
         logger.info(f"Using cached diagnosis for alert event {alert_event_id}")
         normalized = normalize_alert_diagnosis_fields(
             root_cause=event.root_cause,

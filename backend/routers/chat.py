@@ -21,6 +21,7 @@ from backend.schemas.chat import ChatSessionCreate, ChatSessionResponse, ChatMes
 from backend.skills.registry import SkillRegistry
 
 from backend.dependencies import get_current_user
+from backend.utils.datetime_helper import now
 from backend.services.chat_orchestration_service import (
     apply_render_segments_event,
     clone_render_segments,
@@ -213,17 +214,17 @@ async def _validate_websocket_origin(websocket: WebSocket) -> bool:
     if not origin:
         return True
 
-    allowed_hosts = {websocket.headers.get("host", "")}
+    allowed_host = {websocket.headers.get("host", "")}
     async with async_session() as db:
         external_base_url = await get_config(db, "app_external_base_url", default="")
 
     if external_base_url:
         parsed = urlparse(external_base_url)
         if parsed.netloc:
-            allowed_hosts.add(parsed.netloc)
+            allowed_host.add(parsed.netloc)
 
     parsed_origin = urlparse(origin)
-    return bool(parsed_origin.scheme in {"http", "https"} and parsed_origin.netloc in allowed_hosts)
+    return bool(parsed_origin.scheme in {"http", "https"} and parsed_origin.netloc in allowed_host)
 
 
 async def _authenticate_websocket_session(websocket: WebSocket, session_id: int) -> tuple[User, DiagnosticSession] | tuple[None, None]:
@@ -378,7 +379,7 @@ async def clear_session_messages(session_id: int, db: AsyncSession = Depends(get
     session.input_tokens = 0
     session.output_tokens = 0
     session.total_tokens = 0
-    session.updated_at = datetime.utcnow()
+    session.updated_at = now()
     PENDING_APPROVALS.pop(session_id, None)
     await db.commit()
     return {"message": "Messages cleared"}

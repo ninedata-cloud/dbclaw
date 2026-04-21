@@ -94,18 +94,18 @@ class SkillContext:
         self, datasource_id: int, minutes: int = 60
     ) -> List[Dict[str, Any]]:
         """Get historical metrics for a datasource"""
-        from backend.models.metric_snapshot import MetricSnapshot
+        from backend.models.datasource_metric import DatasourceMetric
         from sqlalchemy import select
         from datetime import datetime, timedelta
 
         cutoff = now() - timedelta(minutes=minutes)
         result = await self.db.execute(
-            select(MetricSnapshot)
+            select(DatasourceMetric)
             .where(
-                MetricSnapshot.datasource_id == datasource_id,
-                MetricSnapshot.collected_at >= cutoff,
+                DatasourceMetric.datasource_id == datasource_id,
+                DatasourceMetric.collected_at >= cutoff,
             )
-            .order_by(MetricSnapshot.collected_at.desc())
+            .order_by(DatasourceMetric.collected_at.desc())
         )
         snapshots = result.scalars().all()
 

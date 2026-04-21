@@ -28,14 +28,14 @@ async def _column_exists(conn, table_name: str, column_name: str) -> bool:
 
 
 async def migrate():
-    """Add is_hidden to diagnostic_sessions and ai_diagnosis_summary to alert_events"""
+    """Add is_hidden to diagnostic_session and ai_diagnosis_summary to alert_event"""
     async with engine.begin() as conn:
-        if not await _column_exists(conn, "diagnostic_sessions", "is_hidden"):
-            await conn.execute(text("ALTER TABLE diagnostic_sessions ADD COLUMN is_hidden BOOLEAN DEFAULT FALSE"))
-            logger.info("Added is_hidden column to diagnostic_sessions")
+        if not await _column_exists(conn, "diagnostic_session", "is_hidden"):
+            await conn.execute(text("ALTER TABLE diagnostic_session ADD COLUMN is_hidden BOOLEAN DEFAULT FALSE"))
+            logger.info("Added is_hidden column to diagnostic_session")
 
-        if not await _column_exists(conn, "alert_events", "ai_diagnosis_summary"):
-            await conn.execute(text("ALTER TABLE alert_events ADD COLUMN ai_diagnosis_summary TEXT"))
-            logger.info("Added ai_diagnosis_summary column to alert_events")
+        if not await _column_exists(conn, "alert_event", "ai_diagnosis_summary"):
+            await conn.execute(text("ALTER TABLE alert_event ADD COLUMN ai_diagnosis_summary TEXT"))
+            logger.info("Added ai_diagnosis_summary column to alert_event")
 
-    logger.info("Migration complete: diagnostic_sessions.is_hidden + alert_events.ai_diagnosis_summary")
+    logger.info("Migration complete: diagnostic_session.is_hidden + alert_event.ai_diagnosis_summary")
