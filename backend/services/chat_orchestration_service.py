@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, AsyncGenerator, Awaitable, Callable, Optional
 
 from sqlalchemy import desc, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agent.skill_authorization import normalize_skill_authorizations
@@ -591,7 +592,14 @@ async def _store_diagnosis_event(
         payload=sanitize_for_json(payload),
     )
     db.add(event_row)
-    await db.commit()
+    try:
+        await db.commit()
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        logger.warning(
+            "Skip diagnosis_event persistence due to DB schema mismatch or write error: %s",
+            exc,
+        )
 
 
 async def _store_tool_call(db: AsyncSession, session_id: int, event: dict[str, Any]) -> None:

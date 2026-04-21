@@ -177,6 +177,10 @@ POST_CREATE_MIGRATIONS = (
         "fix_alert_event_last_updated_column",
         "backend.migrations.fix_alert_event_last_updated_column",
     ),
+    MigrationSpec(
+        "ensure_diagnosis_event_soft_delete_columns",
+        "backend.migrations.ensure_diagnosis_event_soft_delete_columns",
+    ),
 )
 
 
