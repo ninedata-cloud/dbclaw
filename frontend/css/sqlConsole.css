@@ -11,8 +11,8 @@
 .sql-console-toolbar {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px 0;
+    gap: 10px;
+    padding: 6px 0;
     flex-wrap: wrap;
     width: 100%;
     min-width: 0;
@@ -22,7 +22,7 @@
 .sql-console-toolbar-main-actions {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
     flex-wrap: wrap;
     min-width: 0;
 }
@@ -30,7 +30,7 @@
 .sql-console-toolbar-context {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
     flex-wrap: wrap;
     margin-left: auto;
     min-width: 0;
@@ -40,12 +40,12 @@
 .sql-console-context-group {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     min-width: 0;
 }
 
 .sql-console-context-group label {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     color: var(--text-secondary);
     white-space: nowrap;
@@ -58,13 +58,27 @@
 }
 
 .sql-console-toolbar select {
-    padding: 7px 12px;
+    padding: 5px 10px;
     background: var(--bg-input);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     color: var(--text-primary);
-    font-size: 13px;
+    font-size: 12px;
+    min-height: 30px;
     min-width: 0;
+}
+
+.sql-console-toolbar .btn {
+    min-height: 30px;
+    padding: 4px 10px;
+    font-size: 12px;
+    gap: 6px;
+}
+
+.sql-console-toolbar .btn svg,
+.sql-console-toolbar .btn i {
+    width: 14px;
+    height: 14px;
 }
 
 .sql-console-editor-wrapper {
@@ -73,7 +87,7 @@
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     overflow: hidden;
-    margin: 12px 0 0 0;
+    margin: 8px 0 0 0;
     min-width: 0;
     order: 1;
 }
@@ -298,8 +312,9 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 0;
-    font-size: 12px;
+    padding: 5px 0 4px;
+    font-size: 11px;
+    min-height: 24px;
     color: var(--text-muted);
     flex-shrink: 0;
     order: 5;

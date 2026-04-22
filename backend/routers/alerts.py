@@ -456,11 +456,16 @@ async def acknowledge_event(
     try:
         del request
         event = await AlertEventService.acknowledge_event(db, event_id, current_user.id)
-        await db.commit()
         latest_alert = await db.get(AlertMessage, event.latest_alert_id) if getattr(event, "latest_alert_id", None) else None
-        return _build_event_response(event, getattr(latest_alert, "trigger_reason", None))
+        datasource = await get_alive_by_id(db, Datasource, event.datasource_id) if event.datasource_id else None
+        await db.commit()
+        return _build_event_response(event, datasource, getattr(latest_alert, "trigger_reason", None))
     except ValueError as e:
+        await db.rollback()
         raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        await db.rollback()
+        raise
 
 
 @router.post("/events/{event_id}/resolve", response_model=AlertEventResponse)
@@ -472,11 +477,16 @@ async def resolve_event(
     """Resolve event and all its alerts"""
     try:
         event = await AlertEventService.resolve_event(db, event_id)
-        await db.commit()
         latest_alert = await db.get(AlertMessage, event.latest_alert_id) if getattr(event, "latest_alert_id", None) else None
-        return _build_event_response(event, getattr(latest_alert, "trigger_reason", None))
+        datasource = await get_alive_by_id(db, Datasource, event.datasource_id) if event.datasource_id else None
+        await db.commit()
+        return _build_event_response(event, datasource, getattr(latest_alert, "trigger_reason", None))
     except ValueError as e:
+        await db.rollback()
         raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        await db.rollback()
+        raise
 
 
 @router.get("/events/{event_id}/context", response_model=AlertDiagnosisContext)

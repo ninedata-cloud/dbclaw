@@ -101,7 +101,7 @@ const DataTable = {
         } catch (err) {
             console.error('[DataTable] agGrid.createGrid failed:', err);
             container.style.display = '';
-            container.innerHTML = `<div style="padding:20px;color:var(--accent-red)">表格渲染失败: ${err.message}</div>`;
+            container.innerHTML = `<div style="padding:20px;color:var(--accent-red)">表格渲染失败: ${Utils.escapeHtml(err.message)}</div>`;
         }
 
         return container;

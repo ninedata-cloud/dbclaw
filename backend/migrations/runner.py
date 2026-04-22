@@ -16,9 +16,16 @@ PRE_CREATE_MIGRATIONS: List[Callable[[], Awaitable[None]]] = [
 
 # 在 create_all() 之后执行的迁移脚本
 POST_CREATE_MIGRATIONS: List[Callable[[], Awaitable[None]]] = [
-    # 示例：
-    # lambda: some_post_migration_function(),
+    # 添加 inspection_trigger.error_message 字段
+    lambda: _run_add_inspection_trigger_error_message(),
 ]
+
+
+async def _run_add_inspection_trigger_error_message():
+    """添加 inspection_trigger.error_message 字段"""
+    from backend.migrations.add_inspection_trigger_error_message import upgrade
+    await upgrade()
+
 
 
 async def run_pre_create_migrations():

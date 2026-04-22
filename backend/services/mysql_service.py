@@ -483,11 +483,119 @@ class MySQLConnector(DBConnector):
         conn = await self._connect()
         try:
             async with conn.cursor() as cur:
+                def _enabled(value: Any) -> bool:
+                    text = str(value or "").strip().lower()
+                    return text in {"1", "on", "yes", "true", "enabled"}
+
                 # 检查 performance_schema 是否启用
                 await cur.execute("SHOW VARIABLES LIKE 'performance_schema'")
                 ps_row = await cur.fetchone()
-                if not ps_row or ps_row[1].upper() != 'ON':
-                    return []
+                if not ps_row or not _enabled(ps_row[1]):
+                    raise RuntimeError("当前实例未启用 performance_schema，无法获取 TOP SQL。")
+
+                # 尝试校验 digest 汇总消费者是否开启（低权限账号可能无 setup_consumers 的读取权限）
+                try:
+                    await cur.execute(
+                        "SELECT NAME, ENABLED FROM performance_schema.setup_consumers "
+                        "WHERE NAME IN ('events_statements_summary_by_digest', 'statements_digest')"
+                    )
+                    consumer_rows = await cur.fetchall()
+                    consumer_status = {str(row[0]).strip().lower(): _enabled(row[1]) for row in consumer_rows or []}
+                    if (
+                        "events_statements_summary_by_digest" in consumer_status
+                        and not consumer_status["events_statements_summary_by_digest"]
+                    ) or (
+                        "statements_digest" in consumer_status
+                        and not consumer_status["statements_digest"]
+                    ):
+                        raise RuntimeError(
+                            "performance_schema 已开启，但 digest 统计消费者未启用。"
+                            "请执行：UPDATE performance_schema.setup_consumers "
+                            "SET ENABLED='YES' WHERE NAME IN "
+                            "('events_statements_summary_by_digest','statements_digest');"
+                        )
+                except Exception as e:
+                    err = str(e).lower()
+                    if (
+                        "setup_consumers" in err
+                        and ("command denied" in err or "access denied" in err or "permission denied" in err)
+                    ):
+                        # 无权限时跳过消费者检查，继续尝试读取 digest 汇总表
+                        pass
+                    else:
+                        raise
+
+                # 兼容不同 MySQL 版本字段差异（如 AVG_ROWS_EXAMINED 可能不存在）
+                await cur.execute(
+                    "SELECT COLUMN_NAME "
+                    "FROM information_schema.COLUMNS "
+                    "WHERE TABLE_SCHEMA = 'performance_schema' "
+                    "AND TABLE_NAME = 'events_statements_summary_by_digest'"
+                )
+                digest_columns = {str(row[0]).upper() for row in (await cur.fetchall() or [])}
+                if not digest_columns:
+                    raise RuntimeError(
+                        "未找到 performance_schema.events_statements_summary_by_digest，"
+                        "可能你的数据库版本太老或者是不兼容的标准mysql版本，请确认实例版本与 performance_schema 配置。"
+                    )
+
+                has_sum_timer_wait = "SUM_TIMER_WAIT" in digest_columns
+                has_sum_rows_examined = "SUM_ROWS_EXAMINED" in digest_columns
+                has_sum_lock_time = "SUM_LOCK_TIME" in digest_columns
+                has_avg_timer_wait = "AVG_TIMER_WAIT" in digest_columns
+                has_avg_rows_examined = "AVG_ROWS_EXAMINED" in digest_columns
+                has_avg_lock_time = "AVG_LOCK_TIME" in digest_columns
+                has_last_seen = "LAST_SEEN" in digest_columns
+                has_first_seen = "FIRST_SEEN" in digest_columns
+
+                total_time_expr = (
+                    "ROUND(SUM_TIMER_WAIT / 1000000000000, 6)"
+                    if has_sum_timer_wait else
+                    "0"
+                )
+                total_rows_expr = (
+                    "ROUND(SUM_ROWS_EXAMINED, 0)"
+                    if has_sum_rows_examined else
+                    "0"
+                )
+                total_wait_expr = (
+                    "ROUND(SUM_LOCK_TIME / 1000000000000, 6)"
+                    if has_sum_lock_time else
+                    "0"
+                )
+                avg_time_expr = (
+                    "ROUND(AVG_TIMER_WAIT / 1000000000000, 6)"
+                    if has_avg_timer_wait else
+                    (
+                        "ROUND((SUM_TIMER_WAIT / GREATEST(COUNT_STAR, 1)) / 1000000000000, 6)"
+                        if has_sum_timer_wait else
+                        "0"
+                    )
+                )
+                avg_rows_expr = (
+                    "ROUND(AVG_ROWS_EXAMINED, 2)"
+                    if has_avg_rows_examined else
+                    (
+                        "ROUND(SUM_ROWS_EXAMINED / GREATEST(COUNT_STAR, 1), 2)"
+                        if has_sum_rows_examined else
+                        "0"
+                    )
+                )
+                avg_wait_expr = (
+                    "ROUND(AVG_LOCK_TIME / 1000000000000, 6)"
+                    if has_avg_lock_time else
+                    (
+                        "ROUND((SUM_LOCK_TIME / GREATEST(COUNT_STAR, 1)) / 1000000000000, 6)"
+                        if has_sum_lock_time else
+                        "0"
+                    )
+                )
+                last_exec_expr = (
+                    "FROM_UNIXTIME(UNIX_TIMESTAMP(LAST_SEEN))"
+                    if has_last_seen else
+                    ("FROM_UNIXTIME(UNIX_TIMESTAMP(FIRST_SEEN))" if has_first_seen else "NULL")
+                )
+                order_expr = "SUM_TIMER_WAIT DESC" if has_sum_timer_wait else "COUNT_STAR DESC"
 
                 # 从 events_statements_summary_by_digest 获取 SQL 统计
                 await cur.execute(f"""
@@ -495,19 +603,24 @@ class MySQLConnector(DBConnector):
                         DIGEST_TEXT as sql_text,
                         DIGEST as sql_id,
                         COUNT_STAR as exec_count,
-                        ROUND(SUM_TIMER_WAIT / 1000000000000, 6) as total_time_sec,
-                        ROUND(SUM_ROWS_EXAMINED, 0) as total_rows_scanned,
-                        ROUND(SUM_LOCK_TIME / 1000000000000, 6) as total_wait_time_sec,
-                        ROUND(AVG_TIMER_WAIT / 1000000000000, 6) as avg_time_sec,
-                        ROUND(AVG_ROWS_EXAMINED, 2) as avg_rows_scanned,
-                        ROUND(AVG_LOCK_TIME / 1000000000000, 6) as avg_wait_time_sec,
-                        FROM_UNIXTIME(UNIX_TIMESTAMP(LAST_SEEN)) as last_exec_time
+                        {total_time_expr} as total_time_sec,
+                        {total_rows_expr} as total_rows_scanned,
+                        {total_wait_expr} as total_wait_time_sec,
+                        {avg_time_expr} as avg_time_sec,
+                        {avg_rows_expr} as avg_rows_scanned,
+                        {avg_wait_expr} as avg_wait_time_sec,
+                        {last_exec_expr} as last_exec_time
                     FROM performance_schema.events_statements_summary_by_digest
                     WHERE DIGEST_TEXT IS NOT NULL
-                    ORDER BY SUM_TIMER_WAIT DESC
+                    ORDER BY {order_expr}
                     LIMIT {int(limit)}
                 """)
                 rows = await cur.fetchall()
+                if not rows:
+                    raise RuntimeError(
+                        "未采集到 TOP SQL 数据。请先在实例上执行一段业务 SQL，"
+                        "并确认账号具备 performance_schema 读取权限。"
+                    )
                 return [
                     {
                         "sql_text": r[0],
@@ -523,10 +636,23 @@ class MySQLConnector(DBConnector):
                     }
                     for r in rows
                 ]
+        except RuntimeError:
+            raise
         except Exception as e:
             import logging
+            err = str(e)
+            err_lower = err.lower()
+            if "access denied" in err_lower or "permission denied" in err_lower:
+                raise RuntimeError(
+                    f"读取 performance_schema 权限不足，请为监控账号授予对应读取权限。原始错误: {err}"
+                ) from e
+            if "unknown column" in err_lower:
+                raise RuntimeError(
+                    "当前数据库版本的 performance_schema 字段与 TOP SQL 查询不兼容，"
+                    f"请升级版本或调整采集 SQL。原始错误: {err}"
+                ) from e
             logging.getLogger(__name__).warning(f"Failed to get TOP SQL: {e}")
-            return []
+            raise RuntimeError(f"读取 MySQL TOP SQL 失败: {e}") from e
         finally:
             conn.close()
 

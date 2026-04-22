@@ -13,7 +13,12 @@ class UTCDateTimeSerializerMixin:
     def serialize_datetime(self, value: Any, _info) -> Any:
         """Serialize datetime fields to ISO format with 'Z' suffix"""
         if isinstance(value, datetime):
-            return value.isoformat() + 'Z'
+            iso_value = value.isoformat()
+            if iso_value.endswith("+00:00"):
+                return iso_value[:-6] + "Z"
+            if value.tzinfo is None:
+                return iso_value + "Z"
+            return iso_value
         return value
 
 

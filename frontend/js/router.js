@@ -59,7 +59,7 @@ const Router = {
             }
         } else {
             const content = DOM.$('#page-content');
-            content.innerHTML = `<div class="empty-state"><h3>Page not found</h3><p>The page "${page}" does not exist.</p></div>`;
+            content.innerHTML = `<div class="empty-state"><h3>Page not found</h3><p>The page "${Utils.escapeHtml(page)}" does not exist.</p></div>`;
         }
 
         // Update sidebar active state

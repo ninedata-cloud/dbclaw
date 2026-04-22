@@ -380,9 +380,15 @@ const HostDetailPage = {
                             <h2>${Utils.escapeHtml(this.currentHost.name)}</h2>
                             <p>${Utils.escapeHtml(config.system.hostname)} · ${Utils.escapeHtml(config.system.os_name)} ${Utils.escapeHtml(config.system.os_version)}</p>
                         </div>
-                        <button class="btn btn-secondary btn-sm" id="refresh-config-btn">
-                            <i data-lucide="refresh-cw"></i> 刷新配置
-                        </button>
+                        <div class="host-config-header-actions">
+                            <button class="btn btn-secondary btn-sm" id="refresh-config-btn">
+                                <i data-lucide="refresh-cw"></i> 刷新配置
+                            </button>
+                            <div class="host-config-collected-at">
+                                <i data-lucide="clock"></i>
+                                <span>采集时间: ${this._formatDateTime(config.collected_at)}</span>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="host-config-grid">
@@ -558,10 +564,6 @@ const HostDetailPage = {
                         </div>
                     </div>
 
-                    <div class="host-config-footer">
-                        <i data-lucide="clock"></i>
-                        <span>采集时间: ${this._formatDateTime(config.collected_at)}</span>
-                    </div>
                 </div>
             `;
 

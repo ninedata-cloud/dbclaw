@@ -1683,34 +1683,34 @@ const InstanceDetailPage = {
                         <thead>
                             <tr>
                                 <th style="width: 60px;">序号</th>
-                                <th style="width: 140px;" data-sort="sql_id">
+                                <th style="width: 140px;" data-sort="sql_id" data-label="SQL ID">
                                     SQL ID ${this._getSortIcon('sql_id')}
                                 </th>
-                                <th style="min-width: 300px;" data-sort="sql_text">
+                                <th style="min-width: 300px;" data-sort="sql_text" data-label="SQL 文本">
                                     SQL 文本 ${this._getSortIcon('sql_text')}
                                 </th>
-                                <th style="width: 100px;" data-sort="exec_count">
+                                <th style="width: 100px;" data-sort="exec_count" data-label="执行次数">
                                     执行次数 ${this._getSortIcon('exec_count')}
                                 </th>
-                                <th style="width: 130px;" data-sort="total_time_sec">
+                                <th style="width: 130px;" data-sort="total_time_sec" data-label="总执行时间(s)">
                                     总执行时间(s) ${this._getSortIcon('total_time_sec')}
                                 </th>
-                                <th style="width: 120px;" data-sort="total_rows_scanned">
+                                <th style="width: 120px;" data-sort="total_rows_scanned" data-label="总扫描行数">
                                     总扫描行数 ${this._getSortIcon('total_rows_scanned')}
                                 </th>
-                                <th style="width: 130px;" data-sort="total_wait_time_sec">
+                                <th style="width: 130px;" data-sort="total_wait_time_sec" data-label="总等待时间(s)">
                                     总等待时间(s) ${this._getSortIcon('total_wait_time_sec')}
                                 </th>
-                                <th style="width: 130px;" data-sort="avg_time_sec">
+                                <th style="width: 130px;" data-sort="avg_time_sec" data-label="平均执行时间(s)">
                                     平均执行时间(s) ${this._getSortIcon('avg_time_sec')}
                                 </th>
-                                <th style="width: 120px;" data-sort="avg_rows_scanned">
+                                <th style="width: 120px;" data-sort="avg_rows_scanned" data-label="平均扫描行数">
                                     平均扫描行数 ${this._getSortIcon('avg_rows_scanned')}
                                 </th>
-                                <th style="width: 130px;" data-sort="avg_wait_time_sec">
+                                <th style="width: 130px;" data-sort="avg_wait_time_sec" data-label="平均等待时间(s)">
                                     平均等待时间(s) ${this._getSortIcon('avg_wait_time_sec')}
                                 </th>
-                                <th style="width: 160px;" data-sort="last_exec_time">
+                                <th style="width: 160px;" data-sort="last_exec_time" data-label="最后执行时间">
                                     最后执行时间 ${this._getSortIcon('last_exec_time')}
                                 </th>
                             </tr>
@@ -1860,8 +1860,8 @@ const InstanceDetailPage = {
         headers.forEach(th => {
             const column = th.dataset.sort;
             const iconHtml = this._getSortIcon(column);
-            const textContent = th.textContent.split(' ')[0] + ' ';
-            th.innerHTML = textContent + iconHtml;
+            const label = th.dataset.label || th.textContent.replace(/\s+/g, ' ').trim();
+            th.innerHTML = `${this._escapeHtml(label)} ${iconHtml}`;
         });
 
         DOM.createIcons();

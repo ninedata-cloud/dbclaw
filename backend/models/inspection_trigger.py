@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Column, Integer, String, Boolean, DateTime, JSON
+from sqlalchemy import BigInteger, Column, Integer, String, Boolean, DateTime, JSON, Text
 from sqlalchemy.orm import synonym
 from sqlalchemy.sql import func
 from backend.database import Base
@@ -17,6 +17,7 @@ class InspectionTrigger(Base):
     is_processed = Column("is_processed", Boolean, default=False, nullable=False)
     report_id = Column(Integer, nullable=True)
     alert_id = Column(BigInteger, nullable=True, index=True)
+    error_message = Column(Text, nullable=True)  # 报告生成失败时的错误信息
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     processed = synonym("is_processed")

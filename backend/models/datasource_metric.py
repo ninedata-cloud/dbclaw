@@ -7,7 +7,6 @@ class DatasourceMetric(Base):
     __tablename__ = "datasource_metric"
     __table_args__ = (
         Index('idx_datasource_metric_composite', 'datasource_id', 'metric_type', 'collected_at'),
-        Index('ix_datasource_metric_composite_asc', 'datasource_id', 'metric_type', 'collected_at'),
     )
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)

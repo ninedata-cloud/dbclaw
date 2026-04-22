@@ -5,7 +5,7 @@ from backend.models.soft_delete import SoftDeleteMixin
 
 
 class User(SoftDeleteMixin, Base):
-    __tablename__ = "user"
+    __tablename__ = "app_user"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(50), unique=True, nullable=False, index=True)

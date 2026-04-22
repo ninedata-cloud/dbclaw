@@ -6,6 +6,7 @@ class IntegrationsPage {
     constructor() {
         this.integrations = [];
         this.currentIntegration = null;
+        this.botBindings = [];
     }
 
     _displayDescription(integration) {
@@ -263,59 +264,17 @@ class IntegrationsPage {
         const content = document.getElementById('page-content');
         content.innerHTML = `
             <div class="integrations-page">
-                <div id="bot-bindings-summary"></div>
                 <div id="integrations-list"></div>
             </div>
         `;
     }
 
     async loadBotBindings() {
-        const container = document.getElementById('bot-bindings-summary');
-        if (!container) return;
         try {
-            const bindings = await API.getWeixinBotBindings();
-            const rows = bindings.map(b => {
-                const rawParams = b.params || {};
-                const statusMeta = this._bindingStatusMeta(this._resolveBindingStatus(b));
-                const bindingMeta = this._bindingMeta(b);
-                const isWeixin = b.code === 'weixin_bot';
-                const configureBtn = isWeixin
-                    ? `<button class="btn btn-sm btn-secondary" onclick="integrationsPage.showWeixinBotModal()">配置机器人</button>`
-                    : '';
-                return `
-                    <article class="integration-binding-card">
-                        <div class="integration-binding-icon">
-                            <i data-lucide="${bindingMeta.icon}"></i>
-                        </div>
-                        <div class="integration-binding-body">
-                            <div class="integration-binding-name">${this.escapeHtml(b.name || bindingMeta.label)}</div>
-                            <div class="integration-binding-meta">
-                                <span class="integration-status-chip ${statusMeta.className}">${statusMeta.label}</span>
-                                ${rawParams.last_error ? `<span class="integration-binding-error">${this.escapeHtml(rawParams.last_error)}</span>` : ''}
-                            </div>
-                        </div>
-                        ${configureBtn}
-                    </article>
-                `;
-            }).join('');
-            if (rows) {
-                container.innerHTML = `
-                    <section class="integrations-section-card integrations-summary-card">
-                        <div class="integrations-section-heading">
-                            <div>
-                                <div class="integrations-eyebrow">机器人接入</div>
-                                <h2>Bot 绑定状态</h2>
-                                <p>统一查看当前机器人接入状态，包括是否已配置、是否已连上后端监听。</p>
-                            </div>
-                        </div>
-                        <div class="integration-binding-grid">
-                            ${rows}
-                        </div>
-                    </section>
-                `;
-            }
-            DOM.createIcons();
+            this.botBindings = await API.getWeixinBotBindings();
+            this.renderIntegrations();
         } catch (error) {
+            this.botBindings = [];
             // Bot bindings not critical; silent fail
         }
     }
@@ -388,8 +347,25 @@ class IntegrationsPage {
         const typeMeta = this._typeMeta(integration.integration_type);
         const statusMeta = this._integrationStatusMeta(integration.enabled);
         const isWeixinBot = integration.integration_id === 'builtin_weixin_bot';
+        const botBinding = integration.integration_type === 'bot'
+            ? this._getBindingForIntegration(integration)
+            : null;
+        const botRawParams = botBinding?.params || {};
+        const botStatusMeta = botBinding
+            ? this._bindingStatusMeta(this._resolveBindingStatus(botBinding))
+            : null;
+        const botBindingMeta = botBinding ? this._bindingMeta(botBinding) : null;
         const configureBotButton = isWeixinBot
             ? `<button class="btn btn-sm btn-secondary integration-config-btn" onclick="integrationsPage.showWeixinBotModal()">配置机器人</button>`
+            : '';
+        const botStatusHtml = botBinding
+            ? `
+                <div class="integration-binding-meta">
+                    <span class="integration-chip">${this.escapeHtml(botBindingMeta.label)} 绑定状态</span>
+                    <span class="integration-status-chip ${botStatusMeta.className}">${botStatusMeta.label}</span>
+                    ${botRawParams.last_error ? `<span class="integration-binding-error">${this.escapeHtml(botRawParams.last_error)}</span>` : ''}
+                </div>
+            `
             : '';
 
         return `
@@ -410,6 +386,7 @@ class IntegrationsPage {
                     <span class="integration-chip">${typeMeta.label}</span>
                     <span class="integration-chip">${categoryMeta.label}</span>
                 </div>
+                ${botStatusHtml}
                 <div class="integration-card-footer">
                     <span class="integration-status-chip ${statusMeta.className}">
                         ${statusMeta.label}
@@ -438,6 +415,14 @@ class IntegrationsPage {
                 </div>
             </div>
         `;
+    }
+
+    _getBindingForIntegration(integration) {
+        if (!integration || integration.integration_type !== 'bot' || !Array.isArray(this.botBindings)) {
+            return null;
+        }
+        const bindingCode = (integration.integration_id || '').replace(/^builtin_/, '');
+        return this.botBindings.find(b => b.code === bindingCode) || null;
     }
 
     escapeHtml(text) {

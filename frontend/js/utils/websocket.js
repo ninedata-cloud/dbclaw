@@ -11,7 +11,11 @@ class WSManager {
     }
 
     connect() {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
+        // 检查是否已经在连接或已连接状态，避免创建多个连接
+        if (this.ws && (this.ws.readyState === WebSocket.OPEN ||
+                        this.ws.readyState === WebSocket.CONNECTING)) {
+            return;
+        }
 
         const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${location.host}${this.url}`;
@@ -35,7 +39,9 @@ class WSManager {
             this._emit('close', event);
             if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
                 this.reconnectAttempts++;
-                setTimeout(() => this.connect(), this.reconnectDelay * this.reconnectAttempts);
+                // 使用指数退避策略：2s, 4s, 8s, 16s, 32s
+                const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), 32000);
+                setTimeout(() => this.connect(), delay);
             }
         };
 

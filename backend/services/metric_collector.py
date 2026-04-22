@@ -102,18 +102,20 @@ async def collect_metrics_for_connection(datasource_id: int):
                 if not datasource:
                     return
 
-                # 检查是否在静默期内，如果是则跳过采集
+                # 对于使用外部集成采集的数据源，跳过直连采集，避免数据竞争
+                if datasource.metric_source == "integration":
+                    logger.debug(f"Skipping direct collection for integration datasource {datasource_id}")
+                    return
+
+                # 检查静默期是否已过期，如果过期则自动清除（但不影响指标采集）
                 if datasource.silence_until:
                     current_time = now()
-                    if current_time < datasource.silence_until:
-                        logger.debug(f"Skipping metrics collection for datasource {datasource_id}: in silence period until {datasource.silence_until}")
-                        return
-                    else:
+                    if current_time >= datasource.silence_until:
                         # 静默已过期，自动清除
                         datasource.silence_until = None
                         datasource.silence_reason = None
                         await db.commit()
-                        logger.info(f"Silence period expired for datasource {datasource_id}, resuming monitoring")
+                        logger.info(f"Silence period expired for datasource {datasource_id}, resuming alerts")
 
                 password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
                 connector = get_connector(
@@ -164,26 +166,14 @@ async def collect_metrics_for_connection(datasource_id: int):
                             normalized_status.update(os_metrics)
                     except asyncio.TimeoutError:
                         logger.warning(f"SSH metrics collection timeout for datasource {datasource_id} (host_id={datasource.host_id})")
+                        # 标记连接为不健康，触发重建
+                        from backend.services.ssh_connection_pool import get_ssh_pool
+                        ssh_pool = get_ssh_pool()
+                        ssh_pool.mark_connection_unhealthy(datasource.host_id)
                     except Exception as e:
                         logger.warning(f"Failed to collect SSH metrics for datasource {datasource_id}: {e}")
 
                 snapshot_data = normalized_status
-                if datasource.metric_source == "integration":
-                    latest_result = await db.execute(
-                        select(DatasourceMetric)
-                        .where(
-                            DatasourceMetric.datasource_id == datasource_id,
-                            DatasourceMetric.metric_type == "db_status",
-                        )
-                        .order_by(desc(DatasourceMetric.collected_at))
-                        .limit(1)
-                    )
-                    latest_snapshot = latest_result.scalar_one_or_none()
-                    snapshot_data = merge_system_metric_data_for_integration(
-                        latest_snapshot.data if latest_snapshot and latest_snapshot.data else {},
-                        normalized_status,
-                    )
-                    snapshot_data = cleanup_obsolete_integration_keys(datasource.db_type, snapshot_data)
 
                 # 使用信号量保护数据库写入
                 async with _db_write_semaphore:

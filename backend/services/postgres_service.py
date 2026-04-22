@@ -390,29 +390,67 @@ class PostgreSQLConnector(DBConnector):
         """Get TOP SQL statistics from pg_stat_statements."""
         conn = await self._connect()
         try:
+            extension_row = await conn.fetchrow(
+                "SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'pg_stat_statements') AS installed"
+            )
+            if not extension_row or not extension_row["installed"]:
+                raise RuntimeError(
+                    "当前连接的数据库未安装 pg_stat_statements 扩展，请在该库执行 CREATE EXTENSION pg_stat_statements。"
+                )
+
             try:
+                wait_time_column_row = await conn.fetchrow(
+                    """
+                    SELECT EXISTS(
+                        SELECT 1
+                        FROM information_schema.columns
+                        WHERE table_name = 'pg_stat_statements'
+                          AND column_name = 'blk_read_time'
+                    ) AS has_blk_time
+                    """
+                )
+                has_blk_time = bool(wait_time_column_row and wait_time_column_row["has_blk_time"])
+                total_wait_expr = (
+                    "ROUND(((blk_read_time + blk_write_time) / 1000)::numeric, 6)"
+                    if has_blk_time else
+                    "NULL::numeric"
+                )
+                avg_wait_expr = (
+                    "ROUND((((blk_read_time + blk_write_time) / GREATEST(calls, 1) / 1000)::numeric), 6)"
+                    if has_blk_time else
+                    "NULL::numeric"
+                )
+
                 rows = await conn.fetch(f"""
-                    SELECT
-                        query as sql_text,
-                        queryid::text as sql_id,
-                        calls as exec_count,
-                        ROUND(total_exec_time / 1000, 6) as total_time_sec,
-                        rows as total_rows_scanned,
-                        ROUND((blk_read_time + blk_write_time) / 1000, 6) as total_wait_time_sec,
-                        ROUND(mean_exec_time / 1000, 6) as avg_time_sec,
-                        ROUND(rows::numeric / GREATEST(calls, 1), 2) as avg_rows_scanned,
-                        ROUND((blk_read_time + blk_write_time) / GREATEST(calls, 1) / 1000, 6) as avg_wait_time_sec,
-                        NULL as last_exec_time
-                    FROM pg_stat_statements
-                    WHERE query IS NOT NULL
-                    ORDER BY total_exec_time DESC
-                    LIMIT {int(limit)}
-                """)
+                        SELECT
+                            query as sql_text,
+                            queryid::text as sql_id,
+                            calls as exec_count,
+                            ROUND((total_exec_time / 1000)::numeric, 6) as total_time_sec,
+                            rows as total_rows_scanned,
+                            {total_wait_expr} as total_wait_time_sec,
+                            ROUND((mean_exec_time / 1000)::numeric, 6) as avg_time_sec,
+                            ROUND((rows::numeric / GREATEST(calls, 1)::numeric), 2) as avg_rows_scanned,
+                            {avg_wait_expr} as avg_wait_time_sec,
+                            NULL as last_exec_time
+                        FROM pg_stat_statements
+                        WHERE query IS NOT NULL
+                        ORDER BY total_exec_time DESC
+                        LIMIT {int(limit)}
+                    """)
                 return [dict(r) for r in rows]
             except Exception as e:
-                import logging
-                logging.getLogger(__name__).warning(f"pg_stat_statements not available: {e}")
-                return []
+                err = str(e)
+                err_lower = err.lower()
+                if "must be loaded via shared_preload_libraries" in err_lower:
+                    raise RuntimeError(
+                        "实例未启用 shared_preload_libraries=pg_stat_statements，请修改配置并重启数据库。"
+                    ) from e
+                if "permission denied" in err.lower():
+                    raise RuntimeError(
+                        "查询 pg_stat_statements 权限不足，请为监控账号授予 pg_read_all_stats 或使用更高权限账号。"
+                    ) from e
+                raise RuntimeError(f"读取 pg_stat_statements 失败: {err}") from e
         finally:
             await conn.close()
 

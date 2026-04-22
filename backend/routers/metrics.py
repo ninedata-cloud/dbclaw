@@ -27,6 +27,13 @@ def _build_connection_failure_health(datasource) -> Dict[str, Any]:
         "value": 0,
         "threshold": 1,
     }
+    return {
+        "healthy": False,
+        "status": "critical",
+        "violations": [violation],
+        "message": message,
+        "alert_engine": "system"
+    }
 
 
 def _healthy_payload(message: str, *, alert_engine: str) -> Dict[str, Any]:

@@ -6,8 +6,9 @@ const MonitorPage = {
     _container: null,
     chartIds: ['connections', 'qps', 'cache_hit', 'tps', 'network', 'latency'],
     osChartIds: ['cpu_usage', 'memory_usage', 'disk_usage', 'load_avg', 'disk_io', 'network_io'],
-    dbNetworkState: { rx: null, tx: null, time: null },
-    hostNetworkState: { rx: null, tx: null, time: null },
+    // 按数据源隔离网络状态，避免多数据源切换时互相干扰
+    networkStates: new Map(), // datasource_id -> { db: {...}, host: {...} }
+    currentDatasourceId: null,
     // Time range state
     currentTimeRange: 60, // default 1 hour in minutes
     isRealtime: true,
@@ -43,9 +44,27 @@ const MonitorPage = {
         return this._getSelectedDatasource()?.id || null;
     },
 
+    _getNetworkState(datasourceId, type) {
+        if (!datasourceId) return { rx: null, tx: null, time: null };
+        if (!this.networkStates.has(datasourceId)) {
+            this.networkStates.set(datasourceId, {
+                db: { rx: null, tx: null, time: null },
+                host: { rx: null, tx: null, time: null }
+            });
+        }
+        return this.networkStates.get(datasourceId)[type];
+    },
+
     _resetNetworkStates() {
-        this.dbNetworkState = { rx: null, tx: null, time: null };
-        this.hostNetworkState = { rx: null, tx: null, time: null };
+        // 清空所有数据源的网络状态
+        this.networkStates.clear();
+    },
+
+    _resetNetworkStateForDatasource(datasourceId) {
+        // 重置特定数据源的网络状态
+        if (datasourceId) {
+            this.networkStates.delete(datasourceId);
+        }
     },
 
     _resetChartMaxPoints() {
@@ -181,18 +200,19 @@ const MonitorPage = {
         };
     },
 
-    _extractDatabaseNetworkRates(data, timestamp) {
+    _extractDatabaseNetworkRates(data, timestamp, datasourceId) {
         const directRx = this._toNumeric(data.network_rx_rate);
         const directTx = this._toNumeric(data.network_tx_rate);
         if (directRx !== null && directTx !== null) {
-            this.dbNetworkState = { rx: null, tx: null, time: null };
+            // 直接速率，重置状态
+            this._resetNetworkStateForDatasource(datasourceId);
             return { rx: directRx, tx: directTx };
         }
 
         const cloudRx = this._toNumeric(data.network_in);
         const cloudTx = this._toNumeric(data.network_out);
         if (cloudRx !== null && cloudTx !== null) {
-            this.dbNetworkState = { rx: null, tx: null, time: null };
+            this._resetNetworkStateForDatasource(datasourceId);
             return {
                 rx: Math.round(cloudRx * 1024 * 100) / 100,
                 tx: Math.round(cloudTx * 1024 * 100) / 100
@@ -202,7 +222,7 @@ const MonitorPage = {
         const inputRx = this._toNumeric(data.input_kbps);
         const inputTx = this._toNumeric(data.output_kbps);
         if (inputRx !== null && inputTx !== null) {
-            this.dbNetworkState = { rx: null, tx: null, time: null };
+            this._resetNetworkStateForDatasource(datasourceId);
             return {
                 rx: Math.round(inputRx * 1024 * 100) / 100,
                 tx: Math.round(inputTx * 1024 * 100) / 100
@@ -212,7 +232,8 @@ const MonitorPage = {
         const cumulativeRx = this._toNumeric(data.bytes_received) ?? this._toNumeric(data.network_bytes_in);
         const cumulativeTx = this._toNumeric(data.bytes_sent) ?? this._toNumeric(data.network_bytes_out);
         if (cumulativeRx !== null && cumulativeTx !== null) {
-            return this._calculateRateFromCounters(cumulativeRx, cumulativeTx, timestamp, this.dbNetworkState);
+            const state = this._getNetworkState(datasourceId, 'db');
+            return this._calculateRateFromCounters(cumulativeRx, cumulativeTx, timestamp, state);
         }
 
         const aliasRx = this._toNumeric(data.network_rx_bytes);
@@ -220,30 +241,32 @@ const MonitorPage = {
         if (aliasRx !== null && aliasTx !== null) {
             const looksCumulative = aliasRx > 10 * 1024 * 1024 || aliasTx > 10 * 1024 * 1024;
             if (looksCumulative) {
-                return this._calculateRateFromCounters(aliasRx, aliasTx, timestamp, this.dbNetworkState);
+                const state = this._getNetworkState(datasourceId, 'db');
+                return this._calculateRateFromCounters(aliasRx, aliasTx, timestamp, state);
             }
-            this.dbNetworkState = { rx: null, tx: null, time: null };
+            this._resetNetworkStateForDatasource(datasourceId);
             return {
                 rx: Math.round(aliasRx * 1024 * 100) / 100,
                 tx: Math.round(aliasTx * 1024 * 100) / 100
             };
         }
 
-        this.dbNetworkState = { rx: null, tx: null, time: null };
+        this._resetNetworkStateForDatasource(datasourceId);
         return null;
     },
 
-    _extractHostNetworkRates(data, timestamp) {
+    _extractHostNetworkRates(data, timestamp, datasourceId) {
         const hostRx = this._toNumeric(data.host_network_rx_bytes);
         const hostTx = this._toNumeric(data.host_network_tx_bytes);
         if (hostRx !== null && hostTx !== null) {
-            return this._calculateRateFromCounters(hostRx, hostTx, timestamp, this.hostNetworkState);
+            const state = this._getNetworkState(datasourceId, 'host');
+            return this._calculateRateFromCounters(hostRx, hostTx, timestamp, state);
         }
 
         const normalizedRx = this._toNumeric(data.network_rx_rate);
         const normalizedTx = this._toNumeric(data.network_tx_rate);
         if (normalizedRx !== null && normalizedTx !== null) {
-            this.hostNetworkState = { rx: null, tx: null, time: null };
+            this._resetNetworkStateForDatasource(datasourceId);
             return { rx: normalizedRx, tx: normalizedTx };
         }
 
@@ -252,16 +275,17 @@ const MonitorPage = {
         if (aliasRx !== null && aliasTx !== null) {
             const looksCumulative = aliasRx > 10 * 1024 * 1024 || aliasTx > 10 * 1024 * 1024;
             if (looksCumulative) {
-                return this._calculateRateFromCounters(aliasRx, aliasTx, timestamp, this.hostNetworkState);
+                const state = this._getNetworkState(datasourceId, 'host');
+                return this._calculateRateFromCounters(aliasRx, aliasTx, timestamp, state);
             }
-            this.hostNetworkState = { rx: null, tx: null, time: null };
+            this._resetNetworkStateForDatasource(datasourceId);
             return {
                 rx: Math.round(aliasRx * 1024 * 100) / 100,
                 tx: Math.round(aliasTx * 1024 * 100) / 100
             };
         }
 
-        this.hostNetworkState = { rx: null, tx: null, time: null };
+        this._resetNetworkStateForDatasource(datasourceId);
         return null;
     },
 
@@ -631,7 +655,9 @@ const MonitorPage = {
             ChartPanel.clear(id);
         }
 
-        this._resetNetworkStates();
+        // 重置当前数据源的网络状态
+        this._resetNetworkStateForDatasource(connId);
+        this.currentDatasourceId = connId;
 
         // Load health status
         this._loadHealthStatus(connId);
@@ -931,10 +957,12 @@ const MonitorPage = {
             }
             if (data.type === 'db_status' && data.data) {
                 console.log('[Monitor] Received metric data:', data.data);
-                const now = Date.now();
-                const time = this._formatChartLabel(now);
+                // 使用服务器采集时间而非本地时间
+                const collectedAt = data.collected_at || new Date().toISOString();
+                const timestamp = this._parseUTCDateTime(collectedAt).getTime();
+                const time = this._formatChartLabel(collectedAt);
                 this._updateMetricCards(data.data);
-                this._updateCharts(data.data, time, now);
+                this._updateCharts(data.data, time, timestamp);
             }
         });
         this.ws.connect();
@@ -991,19 +1019,26 @@ const MonitorPage = {
     },
 
     _updateCharts(data, time, timestamp) {
+        const datasourceId = this.currentDatasourceId || this._getSelectedDatasourceId();
         const active = data.connections_active ?? data.threads_running ?? data.active_connections ?? data.connected_clients ?? data.user_sessions ?? data.connections_current ?? data.active_sessions ?? 0;
         const total = data.connections_total ?? data.threads_connected ?? data.total_connections;
         const qps = data.qps ?? data.ops_per_sec ?? data.batch_requests_sec ?? 0;
         const hitRate = data.buffer_pool_hit_rate ?? data.cache_hit_rate ?? data.hit_rate;
         const tps = data.tps || 0;
         const slow = data.slow_queries || data.deadlocks || 0;
-        const dbNetworkRates = this._extractDatabaseNetworkRates(data, timestamp);
-        const hostNetworkRates = this._extractHostNetworkRates(data, timestamp);
+        const dbNetworkRates = this._extractDatabaseNetworkRates(data, timestamp, datasourceId);
+        const hostNetworkRates = this._extractHostNetworkRates(data, timestamp, datasourceId);
         const maxPoints = this._getChartMaxPoints();
 
         ChartPanel.update('connections', time, [parseFloat(active) || 0, parseFloat(total) || 0], maxPoints);
         ChartPanel.update('qps', time, parseFloat(qps) || 0, maxPoints);
-        ChartPanel.update('cache_hit', time, hitRate !== undefined && hitRate !== null ? (parseFloat(hitRate) || 0) : null, maxPoints);
+
+        // 限制缓存命中率在 0-100 范围内
+        const normalizedHitRate = hitRate !== undefined && hitRate !== null
+            ? Math.min(Math.max(parseFloat(hitRate) || 0, 0), 100)
+            : null;
+        ChartPanel.update('cache_hit', time, normalizedHitRate, maxPoints);
+
         ChartPanel.update('tps', time, parseFloat(tps) || 0, maxPoints);
         if (dbNetworkRates) {
             ChartPanel.update('network', time, [dbNetworkRates.rx, dbNetworkRates.tx], maxPoints);
@@ -1037,6 +1072,7 @@ const MonitorPage = {
     },
 
     _batchUpdateCharts(metrics) {
+        const datasourceId = this.currentDatasourceId || this._getSelectedDatasourceId();
         const maxPoints = this._getChartMaxPoints();
         // Prepare batch data for all charts
         const batchData = {
@@ -1075,11 +1111,15 @@ const MonitorPage = {
             batchData.qps.push(parseFloat(data.qps ?? data.ops_per_sec ?? data.batch_requests_sec ?? 0));
 
             const hitRate = data.buffer_pool_hit_rate ?? data.cache_hit_rate ?? data.hit_rate;
-            batchData.cache_hit.push(hitRate !== undefined && hitRate !== null ? (parseFloat(hitRate) || 0) : null);
+            // 限制缓存命中率在 0-100 范围内
+            const normalizedHitRate = hitRate !== undefined && hitRate !== null
+                ? Math.min(Math.max(parseFloat(hitRate) || 0, 0), 100)
+                : null;
+            batchData.cache_hit.push(normalizedHitRate);
             batchData.tps.push(parseFloat(data.tps || 0));
             batchData.latency.push(data.slow_queries || data.deadlocks || 0);
 
-            const dbNetworkRates = this._extractDatabaseNetworkRates(data, timestamp);
+            const dbNetworkRates = this._extractDatabaseNetworkRates(data, timestamp, datasourceId);
             batchData.network_rx.push(dbNetworkRates ? dbNetworkRates.rx : null);
             batchData.network_tx.push(dbNetworkRates ? dbNetworkRates.tx : null);
 
@@ -1093,7 +1133,7 @@ const MonitorPage = {
             batchData.disk_io_reads.push(data.disk_reads_per_sec !== undefined ? parseFloat(data.disk_reads_per_sec) || 0 : null);
             batchData.disk_io_writes.push(data.disk_writes_per_sec !== undefined ? parseFloat(data.disk_writes_per_sec) || 0 : null);
 
-            const hostNetworkRates = this._extractHostNetworkRates(data, timestamp);
+            const hostNetworkRates = this._extractHostNetworkRates(data, timestamp, datasourceId);
             batchData.network_io_rx.push(hostNetworkRates ? hostNetworkRates.rx : null);
             batchData.network_io_tx.push(hostNetworkRates ? hostNetworkRates.tx : null);
         }

@@ -326,6 +326,10 @@ async def delete_datasource(
     await db.commit()
     await unschedule_datasource(datasource_id)
 
+    # 清理指标标准化器缓存，防止内存泄漏
+    from backend.services.metric_normalizer import MetricNormalizer
+    MetricNormalizer.clear_cache(datasource_id)
+
     logger.info(f"Soft deleted datasource {datasource_id}")
     return {"message": "Datasource deleted"}
 

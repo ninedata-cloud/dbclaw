@@ -92,6 +92,12 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     logger.info(f"Starting {settings.app_name}...")
 
+    # 初始化任务管理器
+    from backend.services.task_manager import get_task_manager
+    task_manager = get_task_manager()
+    app.state.task_manager = task_manager
+    logger.info("Task manager initialized")
+
     startup_report = await run_startup_self_check(settings, include_app_port_check=False)
     set_last_startup_report(startup_report)
     app.state.startup_self_check_report = startup_report.to_dict()
@@ -273,12 +279,12 @@ async def lifespan(app: FastAPI):
 
     # Start SSH host metrics collector
     from backend.services.host_collector import collect_host_metric
-    asyncio.create_task(collect_host_metric())
+    await task_manager.register_task("host_metrics_collector", collect_host_metric())
     logger.info("Host metrics collector started")
 
     # Start notification dispatcher
     from backend.services.notification_dispatcher import start_notification_dispatcher
-    asyncio.create_task(start_notification_dispatcher())
+    await task_manager.register_task("notification_dispatcher", start_notification_dispatcher())
     logger.info("Notification dispatcher started")
 
     # Load builtin integration templates
@@ -289,7 +295,7 @@ async def lifespan(app: FastAPI):
 
     # Start integration scheduler
     from backend.services.integration_scheduler import start_integration_scheduler
-    asyncio.create_task(start_integration_scheduler())
+    await task_manager.register_task("integration_scheduler", start_integration_scheduler())
     logger.info("Integration scheduler started")
 
     # Start Feishu bot long connection client
@@ -307,6 +313,12 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
+    logger.info("Starting graceful shutdown...")
+
+    # 取消所有后台任务
+    await task_manager.cancel_all(timeout=10.0)
+    logger.info("Background tasks cancelled")
+
     from backend.services.metric_collector import stop_scheduler
     from backend.services.ssh_connection_pool import stop_ssh_pool
     from backend.services.integration_scheduler import stop_integration_scheduler

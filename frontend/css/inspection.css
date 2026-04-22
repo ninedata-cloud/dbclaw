@@ -3,40 +3,10 @@
     padding: 8px 4px 24px;
 }
 
-.inspection-list-shell {
+#reportList {
     display: flex;
     flex-direction: column;
     gap: 18px;
-    background:
-        radial-gradient(circle at top right, rgba(88,166,255,0.08), transparent 34%),
-        linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 16px;
-    padding: 20px;
-    box-shadow: var(--shadow-md);
-}
-
-.inspection-list-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 16px;
-}
-
-.inspection-list-eyebrow {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-bottom: 6px;
-}
-
-.inspection-list-header h2 {
-    margin: 0;
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--text-primary);
 }
 
 .inspection-list-meta {
@@ -44,7 +14,7 @@
     font-size: 12px;
     color: var(--text-secondary);
     font-variant-numeric: tabular-nums;
-    text-align: right;
+    text-align: left;
 }
 
 .inspection-header-filters {
@@ -319,7 +289,15 @@
 .inspection-pagination {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.inspection-pagination-controls {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
     gap: 10px;
     flex-wrap: wrap;
 }
@@ -682,8 +660,7 @@
 }
 
 @media (max-width: 1024px) {
-    .inspection-report-header,
-    .inspection-list-header {
+    .inspection-report-header {
         flex-direction: column;
     }
 
@@ -702,7 +679,6 @@
 }
 
 @media (max-width: 768px) {
-    .inspection-list-shell,
     .inspection-report-header,
     .inspection-report-section {
         padding: 16px;

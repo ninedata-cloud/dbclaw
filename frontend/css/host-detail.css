@@ -578,6 +578,26 @@
     color: var(--text-secondary);
 }
 
+.host-config-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.host-config-collected-at {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.host-config-collected-at i {
+    width: 16px;
+    height: 16px;
+}
+
 .host-config-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
@@ -757,24 +777,6 @@
     font-size: 14px;
 }
 
-.host-config-footer {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 16px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    font-size: 13px;
-    color: var(--text-secondary);
-}
-
-.host-config-footer i {
-    width: 16px;
-    height: 16px;
-}
-
 /* 响应式调整 */
 @media (max-width: 1200px) {
     .host-config-grid {
@@ -791,6 +793,16 @@
         flex-direction: column;
         align-items: flex-start;
         gap: 12px;
+    }
+
+    .host-config-header-actions {
+        width: 100%;
+        justify-content: space-between;
+        flex-wrap: wrap;
+    }
+
+    .host-config-collected-at {
+        white-space: normal;
     }
 
     .host-config-item {

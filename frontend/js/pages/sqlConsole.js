@@ -1,5 +1,7 @@
 /* SQL Console page */
 const SqlConsolePage = {
+    sqlDraftStoragePrefix: 'dbclaw:sql-console:draft:',
+    sqlDraftTtlMs: 30 * 24 * 60 * 60 * 1000,
     currentAbortController: null,
     currentQueryRequestId: null,
     currentQueryDatasourceId: null,
@@ -18,6 +20,7 @@ const SqlConsolePage = {
     isResizing: false,
     startY: 0,
     startHeight: 0,
+    beforeUnloadHandler: null,
 
     _getSelectedDatasource() {
         return this.datasourceSelector?.getValue() || Store.get('currentConnection') || null;
@@ -25,6 +28,67 @@ const SqlConsolePage = {
 
     _getSelectedDatasourceId() {
         return this._getSelectedDatasource()?.id || null;
+    },
+
+    _getDraftStorageKey(datasource = null) {
+        const target = datasource || this._getSelectedDatasource();
+        if (!target || !target.id) return null;
+        const host = String(target.host || '').trim().toLowerCase();
+        const port = String(target.port || '').trim();
+        const serviceAddress = port ? `${host}:${port}` : host;
+        const username = String(target.username || '').trim().toLowerCase();
+        const identity = [
+            serviceAddress || '-',
+            username || '-',
+            String(target.id)
+        ].join('|');
+        return `${this.sqlDraftStoragePrefix}${encodeURIComponent(identity)}`;
+    },
+
+    _readSqlDraft(datasource = null) {
+        const key = this._getDraftStorageKey(datasource);
+        if (!key) return null;
+        try {
+            const raw = window.localStorage.getItem(key);
+            if (!raw) return null;
+            const payload = JSON.parse(raw);
+            if (!payload || typeof payload !== 'object') {
+                window.localStorage.removeItem(key);
+                return null;
+            }
+            const expiresAt = Number(payload.expiresAt || 0);
+            if (!expiresAt || Date.now() > expiresAt) {
+                window.localStorage.removeItem(key);
+                return null;
+            }
+            return typeof payload.sql === 'string' ? payload.sql : null;
+        } catch (error) {
+            console.warn('[SqlConsole] Failed to read SQL draft:', error);
+            return null;
+        }
+    },
+
+    _saveSqlDraft(datasource = null) {
+        const key = this._getDraftStorageKey(datasource);
+        if (!key) return;
+        const sql = QueryEditor.getValue();
+        if (typeof sql !== 'string') return;
+        const now = Date.now();
+        const payload = {
+            sql,
+            savedAt: now,
+            expiresAt: now + this.sqlDraftTtlMs,
+        };
+        try {
+            window.localStorage.setItem(key, JSON.stringify(payload));
+        } catch (error) {
+            console.warn('[SqlConsole] Failed to persist SQL draft:', error);
+        }
+    },
+
+    _applySqlDraftForDatasource(datasource = null) {
+        const draftSql = this._readSqlDraft(datasource);
+        QueryEditor.setValue(draftSql ?? 'SELECT 1;');
     },
 
     async render() {
@@ -58,6 +122,7 @@ const SqlConsolePage = {
         if (currentConn) {
             Store.set('currentConnection', currentConn);
         }
+        const initialSql = this._readSqlDraft(currentConn) ?? 'SELECT 1;';
 
         const headerActions = DOM.el('div', { className: 'flex gap-8', style: { flex: '1', minWidth: '0' } });
         this.datasourceSelector?.destroy();
@@ -89,6 +154,7 @@ const SqlConsolePage = {
                     currentConn = datasource;
                     this.currentDatabase = null;
                     this.currentSchema = null;
+                    this._applySqlDraftForDatasource(datasource);
                     this._loadQueryContext(datasource.id, { resetSelections: true });
                 }
             });
@@ -158,8 +224,14 @@ const SqlConsolePage = {
         const resizer = DOM.el('div', { className: 'sql-console-resizer', id: 'sql-console-resizer' });
         resizer.addEventListener('mousedown', (e) => this._startResize(e));
 
-        QueryEditor.create(container, 'SELECT 1;');
+        QueryEditor.create(container, initialSql);
         QueryEditor.onExecute = () => this._executeQuery();
+
+        if (this.beforeUnloadHandler) {
+            window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+        }
+        this.beforeUnloadHandler = () => this._saveSqlDraft();
+        window.addEventListener('beforeunload', this.beforeUnloadHandler);
 
         setTimeout(() => {
             const connId = this._getSelectedDatasourceId();
@@ -191,6 +263,11 @@ const SqlConsolePage = {
             if (this.resizeHandler) {
                 window.removeEventListener('resize', this.resizeHandler);
                 this.resizeHandler = null;
+            }
+            this._saveSqlDraft();
+            if (this.beforeUnloadHandler) {
+                window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+                this.beforeUnloadHandler = null;
             }
             this.datasourceSelector?.destroy();
             this.datasourceSelector = null;
@@ -435,7 +512,7 @@ const SqlConsolePage = {
         const toolbar = DOM.$('.sql-console-toolbar');
         const resizer = DOM.$('#sql-console-resizer');
         const statusBar = DOM.$('#sql-console-status');
-        const minEditorHeight = 150;
+        const minEditorHeight = 0;
         const preferredResultsHeight = 140;
 
         if (!container) {
@@ -479,6 +556,7 @@ const SqlConsolePage = {
             Toast.warning('请先选择数据源');
             return;
         }
+        this._saveSqlDraft();
 
         const status = DOM.$('#sql-console-status');
         const results = DOM.$('#sql-console-results');

@@ -180,24 +180,44 @@ class SSHConnectionPool:
         except Exception as e:
             logger.error(f"Failed to create SSH connection for host {host_id}: {e}")
             return None
-    
-    def _check_connection_health(self, conn: SSHConnection) -> bool:
-        """检查连接健康状态"""
+
+    def _sync_check_connection_health(self, conn: SSHConnection) -> bool:
+        """同步健康检查（在线程池中执行）"""
         try:
             transport = conn.client.get_transport()
             if transport is None or not transport.is_active():
                 return False
             return True
+        except Exception:
+            return False
+
+    async def _check_connection_health(self, conn: SSHConnection) -> bool:
+        """检查连接健康状态（异步）"""
+        loop = asyncio.get_event_loop()
+        try:
+            # 在线程池中执行同步检查，避免阻塞事件循环
+            is_active = await loop.run_in_executor(
+                None,
+                self._sync_check_connection_health,
+                conn
+            )
+            return is_active
         except Exception as e:
             logger.debug(f"Health check failed for host {conn.host_id}: {e}")
             return False
-    
+
+    def mark_connection_unhealthy(self, host_id: int):
+        """标记连接为不健康（用于超时等异常情况）"""
+        if host_id in self._connections:
+            self._connections[host_id].is_healthy = False
+            logger.info(f"Marked SSH connection as unhealthy for host {host_id}")
+
     async def _health_check_loop(self):
         """定期健康检查循环"""
         while self._running:
             try:
                 await asyncio.sleep(self._health_check_interval)
-                
+
                 for host_id, conn in list(self._connections.items()):
                     # 检查是否过期
                     if conn.is_expired(self._max_idle_seconds):
@@ -209,12 +229,13 @@ class SSHConnectionPool:
                                 logger.debug("Error closing SSH connection during health check: %s", e)
                             del self._connections[host_id]
                         continue
-                    
-                    # 健康检查
-                    if not self._check_connection_health(conn):
+
+                    # 健康检查（异步）
+                    is_healthy = await self._check_connection_health(conn)
+                    if not is_healthy:
                         logger.warning(f"SSH connection for host {host_id} is unhealthy, marking for reconnection")
                         conn.is_healthy = False
-                        
+
             except asyncio.CancelledError:
                 break
             except Exception as e:

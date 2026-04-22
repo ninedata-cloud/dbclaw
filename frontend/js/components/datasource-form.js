@@ -1,5 +1,9 @@
 /* Datasource form component */
 const DatasourceForm = {
+    _escapeHtml(text) {
+        return Utils.escapeHtml(text);
+    },
+
     _normalizeTags(rawValue) {
         if (!rawValue) return [];
 
@@ -33,7 +37,7 @@ const DatasourceForm = {
         form.innerHTML = `
             <div class="form-group">
                 <label>数据源名称</label>
-                <input type="text" class="form-input" name="name" value="${datasource?.name || ''}" required placeholder="我的数据库">
+                <input type="text" class="form-input" name="name" value="${this._escapeHtml(datasource?.name || '')}" required placeholder="我的数据库">
             </div>
             <div class="form-row">
                 <div class="form-group">
@@ -50,17 +54,17 @@ const DatasourceForm = {
                 </div>
                 <div class="form-group">
                     <label>Port</label>
-                    <input type="number" class="form-input" name="port" value="${datasource?.port || this._defaultPort('mysql')}" required>
+                    <input type="number" class="form-input" name="port" value="${this._escapeHtml(String(datasource?.port || this._defaultPort('mysql')))}" required>
                 </div>
             </div>
             <div class="form-group">
                 <label>Host</label>
-                <input type="text" class="form-input" name="host" value="${datasource?.host || 'localhost'}" required placeholder="localhost">
+                <input type="text" class="form-input" name="host" value="${this._escapeHtml(datasource?.host || 'localhost')}" required placeholder="localhost">
             </div>
             <div class="form-row">
                 <div class="form-group">
                     <label>Username</label>
-                    <input type="text" class="form-input" name="username" value="${datasource?.username || ''}" placeholder="root">
+                    <input type="text" class="form-input" name="username" value="${this._escapeHtml(datasource?.username || '')}" placeholder="root">
                 </div>
                 <div class="form-group">
                     <label>Password</label>
@@ -69,16 +73,16 @@ const DatasourceForm = {
             </div>
             <div class="form-group">
                 <label>Database</label>
-                <input type="text" class="form-input" name="database" value="${datasource?.database || ''}" placeholder="mydb">
+                <input type="text" class="form-input" name="database" value="${this._escapeHtml(datasource?.database || '')}" placeholder="mydb">
             </div>
             <div class="form-group">
                 <label>标签</label>
-                <input type="text" class="form-input" name="tags" value="${(datasource?.tags || []).join(', ')}" placeholder="例如：生产, 会员, 核心系统">
+                <input type="text" class="form-input" name="tags" value="${this._escapeHtml((datasource?.tags || []).join(', '))}" placeholder="例如：生产, 会员, 核心系统">
                 <small class="text-muted">多个标签请用逗号分隔</small>
             </div>
             <div class="form-group">
                 <label>备注</label>
-                <textarea class="form-input" name="remark" rows="2" placeholder="可选备注信息，如业务背景、特殊配置等">${datasource?.remark || ''}</textarea>
+                <textarea class="form-input" name="remark" rows="2" placeholder="可选备注信息，如业务背景、特殊配置等">${this._escapeHtml(datasource?.remark || '')}</textarea>
                 <small class="text-muted">AI 诊断时会自动附带此备注</small>
             </div>
             <div class="form-group" id="oracle-conn-mode-group" style="display: ${datasource?.db_type === 'oracle' ? 'block' : 'none'};">

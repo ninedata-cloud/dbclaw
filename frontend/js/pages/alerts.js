@@ -530,12 +530,15 @@ const AlertsPage = {
             const typeMetric = event.metric_name || this.getAlertTypeLabel(event.alert_type);
             row.appendChild(DOM.el('td', { textContent: typeMetric || '-' }));
             row.appendChild(DOM.el('td', { textContent: event.title || '-' }));
-            row.appendChild(DOM.el('td', { textContent: event.event_start_time ? new Date(event.event_start_time).toLocaleString('zh-CN') : '-' }));
+            const eventStartTime = event.event_started_at || event.event_start_time || null;
+            row.appendChild(DOM.el('td', {
+                textContent: eventStartTime ? Format.datetime(eventStartTime) : '-'
+            }));
 
-            const endTime = event.status === 'resolved' && event.event_end_time
-                ? new Date(event.event_end_time).toLocaleString('zh-CN')
-                : '-';
-            row.appendChild(DOM.el('td', { textContent: endTime }));
+            const eventEndTime = event.event_ended_at || event.event_end_time || null;
+            row.appendChild(DOM.el('td', {
+                textContent: eventEndTime ? Format.datetime(eventEndTime) : '-'
+            }));
 
             const countCell = DOM.el('td');
             countCell.appendChild(DOM.el('span', {
@@ -672,10 +675,15 @@ const AlertsPage = {
 
                     const alertsTbody = DOM.el('tbody');
                     for (const alert of alerts) {
+                        const alertTime = this._resolveAlertTime(alert);
+                        const metricValue = this._resolveAlertMetricValue(alert);
+                        const thresholdValue = this._resolveAlertThresholdValue(alert);
                         const alertRow = DOM.el('tr');
-                        alertRow.appendChild(DOM.el('td', { textContent: alert.created_at ? new Date(alert.created_at).toLocaleString('zh-CN') : '-' }));
-                        alertRow.appendChild(DOM.el('td', { textContent: this.formatNumber(alert.metric_value) }));
-                        alertRow.appendChild(DOM.el('td', { textContent: this.formatNumber(alert.threshold_value) }));
+                        alertRow.appendChild(DOM.el('td', {
+                            textContent: alertTime ? Format.datetime(alertTime) : '-'
+                        }));
+                        alertRow.appendChild(DOM.el('td', { textContent: this.formatNumber(metricValue) }));
+                        alertRow.appendChild(DOM.el('td', { textContent: this.formatNumber(thresholdValue) }));
 
                         const alertStatusCell = DOM.el('td');
                         alertStatusCell.appendChild(DOM.el('span', {
@@ -850,6 +858,9 @@ const AlertsPage = {
         const diagCtx = alert.diagnosis_context || {};
         const dsInfo = diagCtx.datasource_info || {};
         const linkedReport = diagCtx.linked_report || {};
+        const alertTime = this._resolveAlertTime(alert);
+        const metricValue = this._resolveAlertMetricValue(alert);
+        const thresholdValue = this._resolveAlertThresholdValue(alert);
 
         // ========== 1. 数据库配置信息区块 ==========
         const dsCard = DOM.el('div', { className: 'detail-card' });
@@ -927,7 +938,7 @@ const AlertsPage = {
                     </div>
                     <div class="detail-row-item">
                         <span class="detail-label">时间</span>
-                        <span class="detail-value">${alert.created_at ? new Date(alert.created_at).toLocaleString('zh-CN') : '-'}</span>
+                        <span class="detail-value">${alertTime ? Format.datetime(alertTime) : '-'}</span>
                     </div>
                 </div>
                 ${alert.metric_name ? `
@@ -938,12 +949,12 @@ const AlertsPage = {
                     </div>
                     <div class="detail-row-item">
                         <span class="detail-label">当前值</span>
-                        <span class="detail-value">${this.formatNumber(alert.metric_value)}</span>
+                        <span class="detail-value">${this.formatNumber(metricValue)}</span>
                     </div>
-                    ${alert.threshold_value !== null && alert.threshold_value !== undefined ? `
+                    ${thresholdValue !== null && thresholdValue !== undefined ? `
                     <div class="detail-row-item">
                         <span class="detail-label">阈值</span>
-                        <span class="detail-value">${this.formatNumber(alert.threshold_value)}</span>
+                        <span class="detail-value">${this.formatNumber(thresholdValue)}</span>
                     </div>` : ''}
                 </div>` : ''}
                 ${alert.trigger_reason ? `
@@ -1502,6 +1513,39 @@ const AlertsPage = {
     formatNumber(value) {
         if (value === null || value === undefined || Number.isNaN(Number(value))) return '-';
         return Number(value).toFixed(2);
+    },
+
+    _pickFirstDefined(...values) {
+        for (const value of values) {
+            if (value !== null && value !== undefined && value !== '') return value;
+        }
+        return null;
+    },
+
+    _resolveAlertTime(alert) {
+        return this._pickFirstDefined(
+            alert?.created_at,
+            alert?.event_time,
+            alert?.alert_time,
+            alert?.triggered_at,
+            alert?.occurred_at
+        );
+    },
+
+    _resolveAlertMetricValue(alert) {
+        return this._pickFirstDefined(
+            alert?.metric_value,
+            alert?.current_value,
+            alert?.value
+        );
+    },
+
+    _resolveAlertThresholdValue(alert) {
+        return this._pickFirstDefined(
+            alert?.threshold_value,
+            alert?.threshold,
+            alert?.rule_threshold
+        );
     },
 
     _escapeHtml(text) {

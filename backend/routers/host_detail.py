@@ -272,23 +272,16 @@ async def get_host_config(
     if not host:
         raise HTTPException(status_code=404, detail="主机不存在")
 
-    # 如果有缓存且未过期（24小时内），直接返回
-    # 但网络接口为空时不复用缓存，避免旧缓存掩盖采集兼容性问题
+    # 如果有缓存且未过期（30天内），直接返回
+    # 仅在用户显式 force_refresh 时才强制重新采集，避免每次进入页面都走 SSH。
     if not force_refresh and host.config_data and host.config_collected_at:
         cache_age = (now() - host.config_collected_at).total_seconds()
-        cached_network = []
-        if isinstance(host.config_data, dict):
-            candidate = host.config_data.get("network")
-            if isinstance(candidate, list):
-                cached_network = candidate
-        if cache_age < 86400 and cached_network:  # 24小时
+        if cache_age < 30 * 24 * 60 * 60:  # 30天
             logger.info(f"返回主机 {host_id} 的缓存配置（{cache_age:.0f}秒前采集）")
             return HostConfigResponse(
                 **host.config_data,
                 collected_at=host.config_collected_at
             )
-        if cache_age < 86400 and not cached_network:
-            logger.info(f"主机 {host_id} 缓存配置网络接口为空，触发重新采集")
 
     # 实时采集配置
     try:

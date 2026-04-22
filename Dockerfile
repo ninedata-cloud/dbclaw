@@ -42,6 +42,8 @@ RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debia
     vim-tiny \
     freetds-bin \
     freetds-dev \
+    openssh-client \
+    sshpass \
     && . /etc/os-release \
     && curl -fsSL -O https://packages.microsoft.com/config/debian/${VERSION_ID}/packages-microsoft-prod.deb \
     && dpkg -i packages-microsoft-prod.deb \
@@ -90,16 +92,19 @@ RUN mkdir -p \
     /app/data/logs/postgresql \
     /var/log/supervisor \
     /etc/supervisor/conf.d \
+    /home/dbclaw/.ssh \
     && chmod +x /app/docker/entrypoint.sh /app/docker/init-db.sh /app/docker/tee-log.sh \
     && useradd -m -u 1000 dbclaw \
     && chown -R dbclaw:dbclaw /app \
+    && chown -R dbclaw:dbclaw /home/dbclaw/.ssh \
+    && chmod 700 /home/dbclaw/.ssh \
     && chown -R postgres:postgres /var/lib/postgresql
 
 # supervisor 配置
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# 数据卷：PostgreSQL 数据、应用运行数据、上传附件
-VOLUME ["/var/lib/postgresql/data", "/app/data", "/app/uploads"]
+# 数据卷：PostgreSQL 数据、应用运行数据、上传附件、SSH 密钥
+VOLUME ["/var/lib/postgresql/data", "/app/uploads"]
 
 EXPOSE 9939
 

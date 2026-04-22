@@ -70,16 +70,12 @@ const InspectionPage = {
 
         content.innerHTML = `
             <div class="inspection-page">
-                <section class="inspection-list-shell" id="reportList">
-                    <div class="inspection-list-header">
-                        <div>
-                            <div class="inspection-list-eyebrow">Inspection Center</div>
-                            <h2>巡检报告</h2>
-                        </div>
-                        <div id="inspection-list-meta" class="inspection-list-meta">正在加载最新报告...</div>
-                    </div>
+                <section id="reportList">
                     <div id="reports"></div>
-                    <div id="pagination" class="inspection-pagination"></div>
+                    <div class="inspection-pagination">
+                        <div id="inspection-list-meta" class="inspection-list-meta">正在加载最新报告...</div>
+                        <div id="pagination" class="inspection-pagination-controls"></div>
+                    </div>
                 </section>
             </div>
         `;

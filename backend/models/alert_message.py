@@ -8,6 +8,10 @@ class AlertMessage(Base):
     __table_args__ = (
         Index('idx_alert_message_event_created_at', 'event_id', 'created_at'),
         Index('idx_alert_message_status_created_at_id', 'status', 'created_at', 'id'),
+        # 新增：支持按数据源和状态查询（优化告警列表查询）
+        Index('idx_alert_message_datasource_status', 'datasource_id', 'status', 'created_at'),
+        # 新增：支持按类型和状态查询（优化告警统计查询）
+        Index('idx_alert_message_type_status', 'alert_type', 'status', 'created_at'),
     )
 
     id = Column(BigInteger, primary_key=True, index=True)

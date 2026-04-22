@@ -1,40 +1,95 @@
 """Host metrics collector - collects CPU, memory, disk usage from SSH host"""
 import asyncio
 import logging
+import time
 from datetime import datetime, timedelta, timezone
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from backend.database import async_session
 from backend.models.host import Host
 from backend.models.host_metric import HostMetric
+from backend.models.soft_delete import alive_filter
 from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
 
+MAX_CONCURRENT_HOST_COLLECTIONS = 10
+
 
 async def collect_host_metric():
-    """Collect metrics from all SSH host every minute"""
+    """Collect metrics from all SSH hosts on a fixed cadence."""
     while True:
+        round_started_at = time.monotonic()
+        collection_interval_seconds = 60
         try:
+            network_ok = True
             async with async_session() as db:
-                result = await db.execute(select(Host))
-                host = result.scalars().all()
+                from backend.services.monitoring_scheduler_service import (
+                    get_monitoring_collection_interval_seconds,
+                )
+                from backend.services.config_service import get_config
+                from backend.services.network_probe import check_network
 
-                for host in host:
+                collection_interval_seconds = await get_monitoring_collection_interval_seconds(db)
+                probe_host = await get_config(db, "network_probe_host", default="127.0.0.1")
+                network_ok = await check_network(probe_host)
+                if not network_ok:
+                    logger.error(
+                        "Network probe failed (host=%s), skipping host metrics collection round",
+                        probe_host,
+                    )
                     try:
-                        await _collect_host_metric(db, host)
-                    except Exception as e:
-                        logger.error(f"Failed to collect metrics for host {host.name}: {e}")
+                        from backend.services.metric_collector import _handle_network_probe_failure
+                        await _handle_network_probe_failure(probe_host)
+                    except Exception as probe_alert_error:
+                        logger.warning("Failed to create network probe alert: %s", probe_alert_error)
+                    host_ids = []
+                else:
+                    try:
+                        from backend.services.metric_collector import _auto_resolve_network_probe_alerts
+                        await _auto_resolve_network_probe_alerts()
+                    except Exception as resolve_error:
+                        logger.warning("Failed to auto-resolve network probe alerts: %s", resolve_error)
 
-                await db.commit()
+                    result = await db.execute(select(Host.id).where(alive_filter(Host)))
+                    host_ids = [row[0] for row in result.fetchall()]
+
+            if host_ids:
+                semaphore = asyncio.Semaphore(MAX_CONCURRENT_HOST_COLLECTIONS)
+
+                async def _collect_with_limit(host_id: int):
+                    async with semaphore:
+                        await _collect_host_metric_by_host_id(host_id)
+
+                await asyncio.gather(
+                    *(_collect_with_limit(host_id) for host_id in host_ids),
+                    return_exceptions=True,
+                )
         except Exception as e:
             logger.error(f"SSH host metrics collection error: {e}")
 
-        await asyncio.sleep(60)
+        elapsed_seconds = time.monotonic() - round_started_at
+        sleep_seconds = max(0.0, collection_interval_seconds - elapsed_seconds)
+        if sleep_seconds > 0:
+            await asyncio.sleep(sleep_seconds)
 
 
-async def _collect_host_metric(db: AsyncSession, host: Host):
-    """Collect metrics for a single SSH host using connection pool + OSMetricsCollector"""
+async def _collect_host_metric_by_host_id(host_id: int):
+    """Collect metrics for one host with short-lived DB sessions."""
+    try:
+        host = None
+        async with async_session() as db:
+            result = await db.execute(select(Host).where(Host.id == host_id, alive_filter(Host)))
+            host = result.scalar_one_or_none()
+        if not host:
+            return
+
+        await _collect_host_metric(host)
+    except Exception as e:
+        logger.error(f"Failed to collect metrics for host_id={host_id}: {e}")
+
+
+async def _collect_host_metric(host: Host):
+    """Collect metrics for a single SSH host without long DB hold time."""
     try:
         from backend.services.ssh_connection_pool import get_ssh_pool
         from backend.services.os_metrics_collector import OSMetricsCollector
@@ -42,56 +97,67 @@ async def _collect_host_metric(db: AsyncSession, host: Host):
         from backend.models.host_metric import HostMetric
 
         ssh_pool = get_ssh_pool()
+        os_metrics = None
 
         try:
-            async with ssh_pool.get_connection(db, host.id) as ssh_client:
+            # Use a dedicated short-lived session for SSH connection bootstrap only.
+            async with async_session() as ssh_db:
+                async with ssh_pool.get_connection(ssh_db, host.id) as ssh_client:
                 # 使用 OSMetricsCollector 采集完整指标
-                os_metrics = await asyncio.wait_for(
-                    OSMetricsCollector.collect_via_ssh(ssh_client, os_type='linux'),
-                    timeout=30.0
-                )
-
-                # 获取上一次采集的指标，用于计算速率
-                result = await db.execute(
-                    select(HostMetric)
-                    .where(HostMetric.host_id == host.id)
-                    .order_by(desc(HostMetric.collected_at))
-                    .limit(1)
-                )
-                last_metric = result.scalar_one_or_none()
-                collection_time = now()
-
-                # 计算磁盘 IO 速率
-                if last_metric and last_metric.data:
-                    _calculate_disk_io_rates(
-                        os_metrics,
-                        last_metric.data,
-                        last_metric.collected_at,
-                        current_time=collection_time,
+                    os_metrics = await asyncio.wait_for(
+                        OSMetricsCollector.collect_via_ssh(ssh_client, os_type='linux'),
+                        timeout=30.0
                     )
-
-                # 提取核心指标，带安全的类型转换
-                cpu_usage = _safe_float(os_metrics.get('cpu_usage'))
-                memory_usage = _safe_float(os_metrics.get('memory_usage'))
-                disk_usage = _safe_float(os_metrics.get('disk_usage'))
-
-                # Save to host_metric table
-                metric = HostMetric(
-                    host_id=host.id,
-                    cpu_usage=cpu_usage,
-                    memory_usage=memory_usage,
-                    disk_usage=disk_usage,
-                    data=os_metrics if os_metrics else None,
-                    collected_at=collection_time,
-                )
-                db.add(metric)
 
         except asyncio.TimeoutError:
             logger.warning(f"SSH metrics collection timeout for host {host.name} (id={host.id})")
+            return
         except ConnectionError as e:
             logger.warning(f"Failed to get SSH connection for host {host.name}: {e}")
+            return
         except Exception as e:
             logger.error(f"Failed to collect metrics for {host.name}: {e}")
+            return
+
+        if not os_metrics:
+            return
+
+        async with async_session() as db:
+            # 获取上一次采集的指标，用于计算速率
+            result = await db.execute(
+                select(HostMetric)
+                .where(HostMetric.host_id == host.id)
+                .order_by(desc(HostMetric.collected_at))
+                .limit(1)
+            )
+            last_metric = result.scalar_one_or_none()
+            collection_time = now()
+
+            # 计算磁盘 IO 速率
+            if last_metric and last_metric.data:
+                _calculate_disk_io_rates(
+                    os_metrics,
+                    last_metric.data,
+                    last_metric.collected_at,
+                    current_time=collection_time,
+                )
+
+            # 提取核心指标，带安全的类型转换
+            cpu_usage = _safe_float(os_metrics.get('cpu_usage'))
+            memory_usage = _safe_float(os_metrics.get('memory_usage'))
+            disk_usage = _safe_float(os_metrics.get('disk_usage'))
+
+            # Save to host_metric table
+            metric = HostMetric(
+                host_id=host.id,
+                cpu_usage=cpu_usage,
+                memory_usage=memory_usage,
+                disk_usage=disk_usage,
+                data=os_metrics if os_metrics else None,
+                collected_at=collection_time,
+            )
+            db.add(metric)
+            await db.commit()
 
     except Exception as e:
         logger.error(f"Error in _collect_host_metric: {e}")

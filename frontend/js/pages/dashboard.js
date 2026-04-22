@@ -78,6 +78,21 @@ const DashboardPage = {
         Router.navigate(`instance-detail?datasource=${datasourceId}&tab=monitor`);
     },
 
+    openHostFromDashboard(hostId) {
+        Router.navigate(`host-detail?host=${hostId}&tab=monitor`);
+    },
+
+    _hostAnomalyReason(host) {
+        const reason = String(host?.status_message || '').trim();
+        if (reason) return reason;
+
+        const status = host?.status;
+        if (status === 'offline') return '连接失败或监控数据中断';
+        if (status === 'error') return '核心指标超过阈值';
+        if (status === 'warning') return '核心指标接近阈值';
+        return '状态异常';
+    },
+
     // ── Main render ──────────────────────────────────────────
     async render() {
         const content = DOM.$('#page-content');
@@ -177,7 +192,10 @@ const DashboardPage = {
         const listHtml = anomaly.length === 0
             ? `<div class="all-healthy-text">✓ 全部在线</div>`
             : `<div class="anomaly-host-list">${anomaly.slice(0,3).map(h =>
-                `<div class="anomaly-host-item"><span class="status-dot ${h.status}"></span>${h.name || h.host}</div>`
+                `<div class="anomaly-host-item clickable" onclick="DashboardPage.openHostFromDashboard(${h.id})">
+                    <div class="anomaly-host-main"><span class="status-dot ${h.status}"></span>${Utils.escapeHtml(h.name || h.host)}</div>
+                    <div class="anomaly-host-reason" title="${Utils.escapeHtml(this._hostAnomalyReason(h))}">${Utils.escapeHtml(this._hostAnomalyReason(h))}</div>
+                </div>`
               ).join('')}${anomaly.length > 3 ? `<div class="anomaly-host-item" style="color:rgba(255,255,255,0.3)">+${anomaly.length - 3} 台异常</div>` : ''}</div>`;
 
         const panel = DOM.$('#panel-hosts');

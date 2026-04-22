@@ -4,33 +4,33 @@
 
 ## 1. 适用范围
 - 适用于 DBClaw 元数据库（PostgreSQL）及所有新增/变更表结构。
-- 以 `backend/models/` 为主结构来源，`backend/migrations/` 为增量修正来源。
+- 以 backend/models/ 为主结构来源，backend/migrations/ 为增量修正来源。
 
 ## 2. 命名规范
-- 表名：使用单数小写下划线（如 `datasource_metric`）。
-- 主键：统一 `id`，类型优先 `BIGINT`（自增）。
-- 关联字段：统一 `{entity}_id`（如 `datasource_id`、`user_id`），仅作逻辑关联。
-- 时间字段：统一 `*_at`（如 `created_at`、`updated_at`、`deleted_at`），数据库类型统一为带时区时间（PostgreSQL `TIMESTAMPTZ`）。
+- 表名：使用单数小写下划线（如 datasource_metric）。
+- 主键：统一 id，默认使用整数自增类型，小表使用 INT，大表使用 BIGINT，特殊情况可以使用varchar。
+- 关联字段：统一 {entity}_id（如 datasource_id、user_id），仅作逻辑关联。
+- 时间字段：统一 *_at（如 created_at、updated_at、deleted_at），数据库类型统一为带时区时间（PostgreSQL TIMESTAMPTZ）。
 - 所有表都需要有created_at，updated_at字段
-- 布尔字段：使用 `is_*` / `has_*` 前缀（如 `is_deleted`）。
+- 布尔字段：使用 is_* / has_* 前缀（如 is_deleted）。
 - 字段统一命名，相同含义的字段在不同表需要使用相同名字。
 
 ## 3. 字段与类型规范
-- 金额/精度敏感数值：使用 `NUMERIC(22,4)`，避免 `FLOAT`。
-- 结构化扩展数据：统一使用 `JSON`，并定义稳定键名。
-- 严禁使用非常用字段类型；优先使用 `BIGINT`、`INTEGER`、`BOOLEAN`、`VARCHAR/TEXT`、`NUMERIC`、`TIMESTAMPTZ`、`JSON`。
+- 金额/精度敏感数值：使用 NUMERIC(22,4)，避免 FLOAT。
+- 结构化扩展数据：统一使用 JSON，并定义稳定键名。
+- 严禁使用非常用字段类型；优先使用 BIGINT、INTEGER、BOOLEAN、VARCHAR/TEXT、NUMERIC、TIMESTAMPTZ、JSON。
 - 密码/API Key 等敏感信息：仅存密文，禁止明文落库。
 - 根据业务需求设置字段是否为空。
 
 ## 4. 审计与软删除规范
-- 业务表默认包含：`created_at`、`updated_at`。
-- 需要可恢复删除的表使用软删除：`is_deleted`、`deleted_at`、`deleted_by`。
+- 业务表默认包含：created_at、updated_at。
+- 需要可恢复删除的表使用软删除：is_deleted、deleted_at、deleted_by。
 - 日志/事件类表原则上不做软删除，保留完整审计链路。
 
 ## 5. 约束与索引规范
 - 每张表必须定义主键。
 - 业务唯一性必须通过唯一约束体现（不要仅靠代码判断）。
-- 高频查询条件（如 `datasource_id`、`status`、时间列）必须建索引。
+- 高频查询条件（如 datasource_id、status、时间列）必须建索引。
 - 复合索引按“最常用过滤条件顺序”设计，避免冗余重复索引。
 
 ## 6. 关联关系规范
