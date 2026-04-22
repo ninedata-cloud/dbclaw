@@ -71,14 +71,8 @@ async def init_db():
     # Import the model package once so Base.metadata picks up every table definition.
     import backend.models  # noqa: F401
 
-    from backend.migrations.runner import run_post_create_migrations, run_pre_create_migrations
-
-    await run_pre_create_migrations()
-
     async with get_engine().begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-
-    await run_post_create_migrations()
 
     settings = get_settings()
 
