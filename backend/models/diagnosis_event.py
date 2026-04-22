@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Column, Integer, String, DateTime, JSON
+from sqlalchemy import BigInteger, Column, Integer, String, DateTime, JSON, Index
 from sqlalchemy.sql import func
 
 from backend.database import Base
@@ -7,6 +7,9 @@ from backend.models.soft_delete import SoftDeleteMixin
 
 class DiagnosisEvent(SoftDeleteMixin, Base):
     __tablename__ = "diagnosis_event"
+    __table_args__ = (
+        Index('idx_diagnosis_event_session_run_sequence_id', 'session_id', 'run_id', 'sequence_no', 'id'),
+    )
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     session_id = Column(Integer, nullable=False, index=True)

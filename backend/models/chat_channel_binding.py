@@ -1,11 +1,21 @@
-from sqlalchemy import Column, Integer, String, DateTime, JSON
+from sqlalchemy import Column, Integer, String, DateTime, JSON, Index
 from sqlalchemy.sql import func
+from sqlalchemy.sql.expression import func as sql_func
 
 from backend.database import Base
 
 
 class ChatChannelBinding(Base):
     __tablename__ = "chat_channel_binding"
+    __table_args__ = (
+        Index(
+            'uq_chat_channel_binding_channel_chat_user',
+            'channel_type',
+            'external_chat_id',
+            sql_func.coalesce('external_user_id', ''),
+            unique=True
+        ),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     channel_type = Column(String(50), nullable=False, index=True)

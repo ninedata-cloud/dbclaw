@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Column, Integer, Numeric, DateTime, JSON
+from sqlalchemy import BigInteger, Column, Integer, Numeric, DateTime, JSON, Index
 from sqlalchemy.sql import func
 from backend.database import Base
 from backend.utils.datetime_helper import now
@@ -6,6 +6,9 @@ from backend.utils.datetime_helper import now
 
 class HostMetric(Base):
     __tablename__ = "host_metric"
+    __table_args__ = (
+        Index('idx_host_metric_host_id_collected_at', 'host_id', 'collected_at'),
+    )
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     host_id = Column(Integer, nullable=False, index=True)

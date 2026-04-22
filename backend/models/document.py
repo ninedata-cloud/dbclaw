@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, JSON
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, JSON, Index
 from sqlalchemy.sql import func
 from backend.database import Base
 from backend.models.soft_delete import SoftDeleteMixin
@@ -6,6 +6,9 @@ from backend.models.soft_delete import SoftDeleteMixin
 
 class DocCategory(Base):
     __tablename__ = "doc_category"
+    __table_args__ = (
+        Index('idx_doc_category_parent_sort', 'parent_id', 'sort_order'),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), nullable=False)
@@ -19,6 +22,9 @@ class DocCategory(Base):
 
 class DocDocument(SoftDeleteMixin, Base):
     __tablename__ = "doc_document"
+    __table_args__ = (
+        Index('idx_doc_document_category_active_sort', 'category_id', 'is_active', 'is_deleted', 'sort_order'),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     category_id = Column(Integer, nullable=False)

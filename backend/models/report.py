@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Column, Integer, String, DateTime, Text, JSON
+from sqlalchemy import BigInteger, Column, Integer, String, DateTime, Text, JSON, Index
 from sqlalchemy.sql import func
 from backend.database import Base
 from backend.models.soft_delete import SoftDeleteMixin
@@ -6,6 +6,14 @@ from backend.models.soft_delete import SoftDeleteMixin
 
 class Report(SoftDeleteMixin, Base):
     __tablename__ = "report"
+    __table_args__ = (
+        Index('idx_report_datasource_id', 'datasource_id'),
+        Index('idx_report_datasource_created_at', 'datasource_id', 'created_at'),
+        Index('idx_report_status', 'status'),
+        Index('idx_report_trigger_type', 'trigger_type'),
+        Index('idx_report_created_at', 'created_at'),
+        Index('idx_report_composite', 'datasource_id', 'status', 'trigger_type', 'created_at'),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     datasource_id = Column(Integer, nullable=False)

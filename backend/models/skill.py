@@ -9,6 +9,7 @@ from sqlalchemy import (
     JSON,
     CheckConstraint,
     UniqueConstraint,
+    Index,
 )
 from sqlalchemy.sql import func
 
@@ -38,6 +39,9 @@ class Skill(Base):
 
 class SkillExecution(Base):
     __tablename__ = "skill_execution"
+    __table_args__ = (
+        Index('idx_skill_executions_skill_id_created_at', 'skill_id', 'created_at'),
+    )
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     skill_id = Column(String(100), nullable=False, index=True)

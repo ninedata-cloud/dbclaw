@@ -1,10 +1,14 @@
-from sqlalchemy import BigInteger, Column, Integer, String, Numeric, Text, DateTime
+from sqlalchemy import BigInteger, Column, Integer, String, Numeric, Text, DateTime, Index
 from sqlalchemy.sql import func
 from backend.database import Base
 
 
 class AlertMessage(Base):
     __tablename__ = "alert_message"
+    __table_args__ = (
+        Index('idx_alert_message_event_created_at', 'event_id', 'created_at'),
+        Index('idx_alert_message_status_created_at_id', 'status', 'created_at', 'id'),
+    )
 
     id = Column(BigInteger, primary_key=True, index=True)
     datasource_id = Column(Integer, nullable=False, index=True)

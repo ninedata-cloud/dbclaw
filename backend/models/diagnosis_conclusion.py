@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Boolean, Numeric
+from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Boolean, Numeric, Index
 from sqlalchemy.sql import func
 from backend.database import Base
 
@@ -6,6 +6,9 @@ from backend.database import Base
 class DiagnosisConclusion(Base):
     """Structured diagnosis conclusion for sessions"""
     __tablename__ = "diagnosis_conclusion"
+    __table_args__ = (
+        Index('idx_diagnosis_conclusion_session_updated_at_id', 'session_id', 'updated_at', 'id'),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(Integer, nullable=False, index=True)
