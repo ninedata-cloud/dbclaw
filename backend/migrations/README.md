@@ -11,11 +11,35 @@
 ```python
 # backend/database.py
 async def init_db():
+    await run_pre_create_migrations()  # 在 create_all 之前执行的迁移
+    
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    
+    await run_post_create_migrations()  # 在 create_all 之后执行的迁移
 ```
 
 所有表结构、索引、约束都已在模型定义中声明（`backend/models/`），无需手动运行迁移脚本。
+
+### 添加新的迁移脚本
+
+如果需要执行无法通过模型定义实现的数据库操作（如数据迁移、复杂的 schema 变更等），可以在 `runner.py` 中添加迁移函数：
+
+```python
+# backend/migrations/runner.py
+
+# 在 create_all() 之前执行（如：删除旧表、重命名表等）
+PRE_CREATE_MIGRATIONS = [
+    lambda: some_pre_migration(),
+]
+
+# 在 create_all() 之后执行（如：数据迁移、种子数据等）
+POST_CREATE_MIGRATIONS = [
+    lambda: some_post_migration(),
+]
+```
+
+迁移函数应该是幂等的（可以安全地重复执行）。
 
 ### 验证部署
 
