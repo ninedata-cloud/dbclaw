@@ -828,6 +828,15 @@ const HostDetailPage = {
             return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
         });
 
+        // 控制横轴标签密度，避免时间标签过密重叠
+        const xAxisTickConfig = {
+            color: '#9ca3af',
+            maxRotation: 0,
+            minRotation: 0,
+            autoSkip: true,
+            maxTicksLimit: 6
+        };
+
         // 通用单线图表配置
         const createLineChart = (canvasId, label, data, color, yAxisConfig = {}) => {
             const canvas = DOM.$(`#${canvasId}`);
@@ -863,7 +872,7 @@ const HostDetailPage = {
                     scales: {
                         x: {
                             grid: { color: 'rgba(255,255,255,0.05)' },
-                            ticks: { color: '#9ca3af', maxRotation: 0 }
+                            ticks: xAxisTickConfig
                         },
                         y: {
                             beginAtZero: true,
@@ -925,7 +934,7 @@ const HostDetailPage = {
                     scales: {
                         x: {
                             grid: { color: 'rgba(255,255,255,0.05)' },
-                            ticks: { color: '#9ca3af', maxRotation: 0 }
+                            ticks: xAxisTickConfig
                         },
                         y: {
                             beginAtZero: true,
