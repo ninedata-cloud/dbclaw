@@ -755,7 +755,7 @@ const SqlConsolePage = {
     _buildSqlDiagnosisPrompt(sql, datasource) {
         const dbTypeLabel = this._getDbTypeLabel(datasource?.db_type) || datasource?.db_type || '未知';
         const hostText = datasource?.host ? `${datasource.host}:${datasource.port || '-'}` : '-';
-        const versionText = datasource?.db_version || '-';
+        const versionText = datasource?.db_version ? this._simplifyVersion(datasource.db_version, datasource.db_type).short : '-';
         const databaseText = this.currentDatabase || datasource?.database || '-';
         const schemaText = this.currentSchema || '-';
 
@@ -874,5 +874,53 @@ const SqlConsolePage = {
             `;
             DOM.createIcons();
         }
+    },
+
+    _simplifyVersion(fullVersion, dbType) {
+        if (!fullVersion) return { short: '未知版本', full: '', details: '' };
+
+        const patterns = {
+            'postgresql': /PostgreSQL\s+([\d.]+)/i,
+            'mysql': /([\d.]+)/,
+            'oracle': /Oracle Database ([\d.]+)/i,
+            'sqlserver': /Microsoft SQL Server\s+([\d.]+)/i,
+            'opengauss': /openGauss\s+([\d.]+)/i,
+            'hana': /HDB\s+([\d.]+)/i,
+            'tdsql': /([\d.]+)/
+        };
+
+        const dbTypeNormalized = (dbType || '').toLowerCase().replace(/[_-]/g, '');
+        const pattern = patterns[dbTypeNormalized];
+
+        if (pattern) {
+            const match = fullVersion.match(pattern);
+            if (match) {
+                const versionNum = match[1];
+                const dbDisplayNames = {
+                    'postgresql': 'PostgreSQL',
+                    'mysql': 'MySQL',
+                    'oracle': 'Oracle',
+                    'sqlserver': 'SQL Server',
+                    'opengauss': 'openGauss',
+                    'hana': 'SAP HANA',
+                    'tdsql': 'TDSQL-C'
+                };
+                const displayName = dbDisplayNames[dbTypeNormalized] || dbType.toUpperCase();
+                const short = `${displayName} ${versionNum}`;
+                const details = fullVersion.substring(match.index + match[0].length).trim().replace(/^[,\s]+/, '');
+
+                return { short, full: fullVersion, details };
+            }
+        }
+
+        if (fullVersion.length > 50) {
+            return {
+                short: fullVersion.substring(0, 50) + '...',
+                full: fullVersion,
+                details: fullVersion.substring(50)
+            };
+        }
+
+        return { short: fullVersion, full: fullVersion, details: '' };
     }
 };

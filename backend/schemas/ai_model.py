@@ -5,6 +5,7 @@ from backend.schemas.base import TimestampSerializerMixin
 
 AIModelProvider = Literal["openai", "dashscope", "anthropic", "other"]
 AIModelProtocol = Literal["openai", "anthropic"]
+AIModelReasoningEffort = Literal["low", "medium", "high"]
 
 
 class AIModelCreate(BaseModel):
@@ -15,6 +16,7 @@ class AIModelCreate(BaseModel):
     base_url: str
     model_name: str
     context_window: Optional[int] = Field(default=None, ge=1)
+    reasoning_effort: Optional[AIModelReasoningEffort] = None
 
 
 class AIModelUpdate(BaseModel):
@@ -25,6 +27,7 @@ class AIModelUpdate(BaseModel):
     base_url: Optional[str] = None
     model_name: Optional[str] = None
     context_window: Optional[int] = Field(default=None, ge=1)
+    reasoning_effort: Optional[AIModelReasoningEffort] = None
 
 
 class AIModelResponse(TimestampSerializerMixin, BaseModel):
@@ -36,6 +39,7 @@ class AIModelResponse(TimestampSerializerMixin, BaseModel):
     base_url: str
     model_name: str
     context_window: Optional[int] = None
+    reasoning_effort: Optional[AIModelReasoningEffort] = None
     is_default: bool
     is_active: bool
     created_at: datetime

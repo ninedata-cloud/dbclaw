@@ -759,6 +759,15 @@ const MonitorPage = {
         }
     },
 
+    _formatDateTimeLocal(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    },
+
     _showCustomTimeDialog() {
         const dialog = DOM.el('div', { className: 'modal-overlay' });
         const modal = DOM.el('div', { className: 'modal', style: { maxWidth: '500px' } });
@@ -776,13 +785,21 @@ const MonitorPage = {
 
         const body = DOM.el('div', { className: 'modal-body' });
 
+        // Calculate default time range based on current selection
+        // Use local time for datetime-local input
+        const now = new Date();
+        const endTime = this._formatDateTimeLocal(now);
+        const startDate = new Date(now.getTime() - this.currentTimeRange * 60 * 1000);
+        const startTime = this._formatDateTimeLocal(startDate);
+
         // Start time
         const startGroup = DOM.el('div', { className: 'form-group' });
         startGroup.appendChild(DOM.el('label', { textContent: '开始时间' }));
         const startInput = DOM.el('input', {
             type: 'datetime-local',
-            className: 'form-input',
-            id: 'custom-start-time'
+            className: 'filter-input inspection-date-input',
+            id: 'custom-start-time',
+            value: startTime
         });
         startGroup.appendChild(startInput);
         body.appendChild(startGroup);
@@ -792,9 +809,9 @@ const MonitorPage = {
         endGroup.appendChild(DOM.el('label', { textContent: '结束时间' }));
         const endInput = DOM.el('input', {
             type: 'datetime-local',
-            className: 'form-input',
+            className: 'filter-input inspection-date-input',
             id: 'custom-end-time',
-            value: new Date().toISOString().slice(0, 16)
+            value: endTime
         });
         endGroup.appendChild(endInput);
         body.appendChild(endGroup);
@@ -819,16 +836,24 @@ const MonitorPage = {
                 alert('开始时间必须早于结束时间');
                 return;
             }
-            document.body.removeChild(dialog);
             this.isRealtime = false;
             const selectedDatasourceId = this._getSelectedDatasourceId();
             if (!selectedDatasourceId) {
                 alert('请先选择数据源');
+                document.body.removeChild(dialog);
+                DOM.$('#time-range-select').value = this.currentTimeRange;
                 return;
             }
-            this._loadCustomRange(selectedDatasourceId, start, end);
-            DOM.$('#realtime-toggle').textContent = '暂停实时';
-            DOM.$('#realtime-toggle').className = 'btn btn-outline';
+            this._loadCustomRange(selectedDatasourceId, start, end).then((hasData) => {
+                if (hasData) {
+                    document.body.removeChild(dialog);
+                    DOM.$('#realtime-toggle').textContent = '暂停实时';
+                    DOM.$('#realtime-toggle').className = 'btn btn-outline';
+                } else {
+                    // Keep dialog open when no data
+                    DOM.$('#time-range-select').value = this.currentTimeRange;
+                }
+            });
         });
         footer.appendChild(cancelBtn);
         footer.appendChild(confirmBtn);
@@ -856,7 +881,7 @@ const MonitorPage = {
 
             if (metrics.length === 0) {
                 alert('所选时间范围内没有数据');
-                return;
+                return false;
             }
 
             this._setChartMaxPoints(metrics.length);
@@ -877,9 +902,11 @@ const MonitorPage = {
 
             // Batch populate charts
             this._batchUpdateCharts(reversed);
+            return true;
         } catch (e) {
             console.error('[Monitor] Failed to load custom range:', e);
             alert('加载数据失败: ' + e.message);
+            return false;
         }
     },
 

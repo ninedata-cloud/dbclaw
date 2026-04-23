@@ -110,18 +110,32 @@ def _build_threshold_health(config, metrics: Dict[str, Any]) -> Dict[str, Any]:
             pass
     else:
         for metric_name, rule in config.threshold_rules.items():
-            threshold = rule.get("threshold")
-            if threshold is None:
+            if "levels" not in rule or not isinstance(rule["levels"], list):
                 continue
 
             current_value = _extract_metric_value(metrics, metric_name)
-            if current_value is not None and current_value > threshold:
-                violations.append({
-                    "type": "threshold",
-                    "metric": metric_name,
-                    "value": current_value,
-                    "threshold": threshold,
-                })
+            if current_value is None:
+                continue
+
+            # Find the highest severity level that is violated
+            from backend.services.threshold_checker import SEVERITY_ORDER
+            sorted_levels = sorted(
+                rule["levels"],
+                key=lambda x: SEVERITY_ORDER.get(x.get("severity", "low"), 1),
+                reverse=True
+            )
+
+            for level in sorted_levels:
+                threshold = level.get("threshold")
+                if threshold is not None and current_value > threshold:
+                    violations.append({
+                        "type": "threshold",
+                        "metric": metric_name,
+                        "value": current_value,
+                        "threshold": threshold,
+                        "severity": level.get("severity", "medium"),
+                    })
+                    break
 
     if not violations:
         return _healthy_payload("正常", alert_engine="threshold")

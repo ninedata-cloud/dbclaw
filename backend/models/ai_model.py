@@ -14,6 +14,7 @@ class AIModel(Base):
     base_url = Column(String, nullable=False)
     model_name = Column(String, nullable=False)
     context_window = Column(Integer, nullable=True)
+    reasoning_effort = Column(String, nullable=True)
     is_default = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

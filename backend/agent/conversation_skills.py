@@ -548,6 +548,7 @@ async def run_conversation_with_skills(
                 base_url=model.base_url,
                 model_name=model.model_name,
                 protocol=getattr(model, "protocol", "openai"),
+                reasoning_effort=getattr(model, "reasoning_effort", None),
             )
     if not client and db:
         result = await db.execute(
@@ -562,6 +563,7 @@ async def run_conversation_with_skills(
                 base_url=model.base_url,
                 model_name=model.model_name,
                 protocol=getattr(model, "protocol", "openai"),
+                reasoning_effort=getattr(model, "reasoning_effort", None),
             )
     if not client:
         yield {"type": "error", "message": "AI model not configured. Please add an AI model in the AI Model Management page."}

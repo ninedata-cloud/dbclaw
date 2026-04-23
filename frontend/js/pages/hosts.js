@@ -27,8 +27,8 @@ const HostsPage = {
                 content.innerHTML = `
                     <div class="empty-state">
                         <i data-lucide="terminal"></i>
-                        <h3>No Hosts</h3>
-                        <p>Add your first host to enable tunnel connections to databases.</p>
+                        <h3>暂无主机</h3>
+                        <p>添加第一台主机后，即可启用数据库隧道连接。</p>
                     </div>
                 `;
                 DOM.createIcons();
@@ -58,7 +58,7 @@ const HostsPage = {
 
         const addBtn = DOM.el('button', {
             className: 'btn btn-primary',
-            innerHTML: '<i data-lucide="plus"></i> New Host',
+            innerHTML: '<i data-lucide="plus"></i> 新建主机',
             onClick: () => this._showForm(null)
         });
 
@@ -188,13 +188,16 @@ const HostsPage = {
                 <td class="${diskColor}">${host.disk_usage != null ? host.disk_usage.toFixed(1) + '%' : '-'}</td>
                 <td>
                     <div style="display:flex;gap:4px;">
-                        <button class="btn btn-sm btn-secondary" onclick="HostsPage._testHost(${host.id})" title="Test">
+                        <button class="btn btn-sm btn-primary" onclick="HostsPage._viewDetail(${host.id})" title="详情">
+                            <i data-lucide="eye"></i>
+                        </button>
+                        <button class="btn btn-sm btn-secondary" onclick="HostsPage._testHost(${host.id})" title="测试连接">
                             <i data-lucide="plug"></i>
                         </button>
-                        <button class="btn btn-sm btn-secondary" onclick="HostsPage._editHost(${host.id})" title="Edit">
+                        <button class="btn btn-sm btn-secondary" onclick="HostsPage._editHost(${host.id})" title="编辑">
                             <i data-lucide="pencil"></i>
                         </button>
-                        <button class="btn btn-sm btn-danger" onclick="HostsPage._deleteHost(${host.id})" title="Delete">
+                        <button class="btn btn-sm btn-danger" onclick="HostsPage._deleteHost(${host.id})" title="删除">
                             <i data-lucide="trash-2"></i>
                         </button>
                     </div>
@@ -235,17 +238,21 @@ const HostsPage = {
             if (result.success) {
                 Toast.success('连接成功!');
             } else {
-                Toast.error(`Connection test failed: ${result.message}`);
+                Toast.error(`连接测试失败: ${result.message}`);
             }
             // 重新加载主机列表以更新状态和指标
             await this.render();
         } catch (err) {
-            Toast.error('Test failed: ' + err.message);
+            Toast.error('测试失败: ' + err.message);
         } finally {
             btn.innerHTML = '<i data-lucide="plug"></i>';
             btn.disabled = false;
             DOM.createIcons();
         }
+    },
+
+    _viewDetail(id) {
+        Router.navigate(`host-detail?host=${id}`);
     },
 
     _editHost(id) {
@@ -255,13 +262,13 @@ const HostsPage = {
 
     async _deleteHost(id) {
         const host = this.allHosts.find(h => h.id === id);
-        if (!host || !confirm(`Delete host "${host.name}"? This cannot be undone.`)) return;
+        if (!host || !confirm(`确认删除主机 "${host.name}"？此操作无法撤销。`)) return;
         try {
             await API.deleteHost(id);
-            Toast.success('Host deleted');
+            Toast.success('主机已删除');
             this.render();
         } catch (err) {
-            Toast.error('Failed to delete: ' + err.message);
+            Toast.error('删除失败: ' + err.message);
         }
     },
 
@@ -272,14 +279,14 @@ const HostsPage = {
             <div class="form-group"><label>名称</label><input type="text" class="form-input" name="name" required placeholder="生产服务器" value="${host?.name || ''}"></div>
             <div class="form-row">
                 <div class="form-group"><label>主机</label><input type="text" class="form-input" name="host" required placeholder="10.0.0.1" value="${host?.host || ''}"></div>
-                <div class="form-group"><label>Port</label><input type="number" class="form-input" name="port" value="${host?.port || 22}"></div>
+                <div class="form-group"><label>端口</label><input type="number" class="form-input" name="port" value="${host?.port || 22}"></div>
             </div>
             <div class="form-row">
                 <div class="form-group"><label>用户名</label><input type="text" class="form-input" name="username" required placeholder="root" value="${host?.username || ''}"></div>
-                <div class="form-group"><label>Auth Type</label>
+                <div class="form-group"><label>认证方式</label>
                     <select class="form-select" name="auth_type">
                         <option value="password" ${host?.auth_type === 'password' || !host ? 'selected' : ''}>密码</option>
-                        <option value="key" ${host?.auth_type === 'key' ? 'selected' : ''}>Private Key</option>
+                        <option value="key" ${host?.auth_type === 'key' ? 'selected' : ''}>私钥</option>
                     </select>
                 </div>
             </div>
@@ -305,18 +312,49 @@ const HostsPage = {
             onClick: () => form.requestSubmit()
         });
 
-        DOM.bindAsyncSubmit(form, async () => {
+        const getFormData = () => {
             const data = Object.fromEntries(new FormData(form).entries());
-            data.port = parseInt(data.port);
+            data.port = parseInt(data.port, 10);
             if (!data.password) delete data.password;
             if (!data.private_key) delete data.private_key;
+            return data;
+        };
+
+        const testBtn = DOM.el('button', {
+            className: 'btn btn-secondary',
+            innerHTML: '<i data-lucide="plug"></i> 测试连接',
+            type: 'button',
+            onClick: async (e) => {
+                const btn = e.currentTarget;
+                const rawText = btn.textContent;
+                btn.innerHTML = '<div class="spinner"></div>';
+                btn.disabled = true;
+                try {
+                    const result = await API.testHostConnection(getFormData());
+                    if (result.success) {
+                        Toast.success('连接成功!');
+                    } else {
+                        Toast.error(`连接测试失败: ${result.message}`);
+                    }
+                } catch (err) {
+                    Toast.error('测试失败: ' + err.message);
+                } finally {
+                    btn.innerHTML = `<i data-lucide="plug"></i> ${rawText}`;
+                    btn.disabled = false;
+                    DOM.createIcons();
+                }
+            }
+        });
+
+        DOM.bindAsyncSubmit(form, async () => {
+            const data = getFormData();
             try {
                 if (isEdit) {
                     await API.updateHost(host.id, data);
-                    Toast.success('Host updated');
+                    Toast.success('主机已更新');
                 } else {
                     await API.createHost(data);
-                    Toast.success('Host created');
+                    Toast.success('主机已创建');
                 }
                 Modal.hide();
                 this.render();
@@ -326,40 +364,17 @@ const HostsPage = {
         }, { submitControls: [submitBtn] });
 
         const footer = DOM.el('div');
-        footer.appendChild(DOM.el('button', { className: 'btn btn-secondary', textContent: '取消', type: 'button', onClick: () => Modal.hide() }));
-        if (isEdit) {
-            footer.appendChild(DOM.el('button', {
-                className: 'btn btn-secondary',
-                innerHTML: '<i data-lucide="plug"></i> Test',
-                type: 'button',
-                onClick: async (e) => {
-                    const btn = e.currentTarget;
-                    btn.innerHTML = '<div class="spinner"></div>';
-                    btn.disabled = true;
-                    try {
-                        const result = await API.testHost(host.id);
-                        if (result.success) {
-                            Toast.success('连接成功!');
-                            // 测试成功后更新主机列表数据（不关闭弹窗）
-                            this.allHosts = await API.getHosts();
-                            this.filteredHosts = [...this.allHosts];
-                            this._applySort();
-                            Store.set('hosts', this.allHosts);
-                        } else {
-                            Toast.error(`Connection test failed: ${result.message}`);
-                        }
-                    } catch (err) {
-                        Toast.error('Test failed: ' + err.message);
-                    } finally {
-                        btn.innerHTML = '<i data-lucide="plug"></i> Test';
-                        btn.disabled = false;
-                        DOM.createIcons();
-                    }
-                }
-            }));
-        }
-        
-        footer.appendChild(submitBtn);
+        footer.style.width = '100%';
+        footer.style.justifyContent = 'space-between';
+
+        const footerLeft = DOM.el('div');
+        const footerRight = DOM.el('div', { style: 'display:flex;gap:8px;' });
+        footerLeft.appendChild(testBtn);
+        footerRight.appendChild(DOM.el('button', { className: 'btn btn-secondary', textContent: '取消', type: 'button', onClick: () => Modal.hide() }));
+        footerRight.appendChild(submitBtn);
+        footer.appendChild(footerLeft);
+        footer.appendChild(footerRight);
+
         Modal.show({ title: isEdit ? '编辑主机' : '新建主机', content: form, footer });
     },
 };

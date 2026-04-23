@@ -474,7 +474,15 @@ const InstanceDetailPage = {
             return;
         }
         const health = this.currentSummary?.health || {};
-        const metaText = `${datasource.host}:${datasource.port}${datasource.database ? ` / ${datasource.database}` : ''}${datasource.db_version ? ` · ${datasource.db_version}` : ''}`;
+
+        // 精简版本信息
+        const versionInfo = datasource.db_version ? this._simplifyVersion(datasource.db_version, datasource.db_type) : null;
+        const versionDisplay = versionInfo ? versionInfo.short : '';
+        const versionTooltip = versionInfo ? versionInfo.full : '';
+
+        const metaText = `${datasource.host}:${datasource.port}${datasource.database ? ` / ${datasource.database}` : ''}${versionDisplay ? ` · ${versionDisplay}` : ''}`;
+        const metaTooltip = `${datasource.host}:${datasource.port}${datasource.database ? ` / ${datasource.database}` : ''}${versionTooltip ? ` · ${versionTooltip}` : ''}`;
+
         const headerInfo = DOM.el('div', {
             className: 'instance-page-header-info',
             innerHTML: `
@@ -482,7 +490,7 @@ const InstanceDetailPage = {
                     <span class="instance-page-header-name" title="${this._escapeAttr(datasource.name)}">${this._escapeHtml(datasource.name)}</span>
                     <span class="badge badge-info">${this._escapeHtml(this._getDbTypeLabel(datasource.db_type))}</span>
                     <span class="badge badge-${this._healthBadgeClass(health.status)}">${this._escapeHtml(this._healthStatusLabel(health))}</span>
-                    <span class="instance-page-header-meta" title="${this._escapeAttr(metaText)}">${this._escapeHtml(metaText)}</span>
+                    <span class="instance-page-header-meta" title="${this._escapeAttr(metaTooltip)}">${this._escapeHtml(metaText)}</span>
                 </div>
             `
         });
@@ -665,7 +673,7 @@ const InstanceDetailPage = {
                                 </div>
                                 <div class="instance-summary-meta">
                                     ${this._escapeHtml(datasource.host)}:${datasource.port}${datasource.database ? ` / ${this._escapeHtml(datasource.database)}` : ''}
-                                    ${datasource.db_version ? ` · ${this._escapeHtml(datasource.db_version)}` : ''}
+                                    ${datasource.db_version ? ` · ${this._escapeHtml(this._simplifyVersion(datasource.db_version, datasource.db_type).short)}` : ''}
                                 </div>
                             </div>
                             <div class="instance-summary-actions">
@@ -1023,7 +1031,9 @@ const InstanceDetailPage = {
         const hostText = datasource.host
             ? `${datasource.host}:${datasource.port || '-'}`
             : '-';
-        const versionText = this._formatSessionAnalysisValue(datasource.db_version);
+        const versionText = datasource.db_version
+            ? this._simplifyVersion(datasource.db_version, datasource.db_type).short
+            : '-';
         const datasourceDatabaseText = this._formatSessionAnalysisValue(datasource.database);
         const sessionDatabaseText = this._formatSessionAnalysisValue(sessionDatabase);
         const sessionSummaryParts = [
@@ -1316,7 +1326,10 @@ const InstanceDetailPage = {
         try {
             const result = await API.testDatasource(this.currentInstance.id);
             if (result.success) {
-                Toast.success(`连接成功 ${result.version ? `(${result.version})` : ''}`);
+                const versionDisplay = result.version
+                    ? `(${this._simplifyVersion(result.version, this.currentInstance.db_type).short})`
+                    : '';
+                Toast.success(`连接成功 ${versionDisplay}`);
             } else {
                 Toast.error(result.message || '连接失败');
             }
@@ -2154,7 +2167,9 @@ const InstanceDetailPage = {
         const hostText = datasource.host
             ? `${datasource.host}:${datasource.port || '-'}`
             : '-';
-        const versionText = this._formatSessionAnalysisValue(datasource.db_version);
+        const versionText = datasource.db_version
+            ? this._simplifyVersion(datasource.db_version, datasource.db_type).short
+            : '-';
         const datasourceDatabaseText = this._formatSessionAnalysisValue(datasource.database);
 
         const sqlText = this._truncateSessionAnalysisBlock(sql.sql_text || '', 2400);
@@ -2211,5 +2226,54 @@ const InstanceDetailPage = {
     _truncate(text, maxLength) {
         if (!text) return '-';
         return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+    },
+
+    _simplifyVersion(fullVersion, dbType) {
+        if (!fullVersion) return { short: '未知版本', full: '', details: '' };
+
+        const patterns = {
+            'postgresql': /PostgreSQL\s+([\d.]+)/i,
+            'mysql': /([\d.]+)/,
+            'oracle': /Oracle Database ([\d.]+)/i,
+            'sqlserver': /Microsoft SQL Server\s+([\d.]+)/i,
+            'opengauss': /openGauss\s+([\d.]+)/i,
+            'hana': /HDB\s+([\d.]+)/i,
+            'tdsql': /([\d.]+)/
+        };
+
+        const dbTypeNormalized = (dbType || '').toLowerCase().replace(/[_-]/g, '');
+        const pattern = patterns[dbTypeNormalized];
+
+        if (pattern) {
+            const match = fullVersion.match(pattern);
+            if (match) {
+                const versionNum = match[1];
+                const dbDisplayNames = {
+                    'postgresql': 'PostgreSQL',
+                    'mysql': 'MySQL',
+                    'oracle': 'Oracle',
+                    'sqlserver': 'SQL Server',
+                    'opengauss': 'openGauss',
+                    'hana': 'SAP HANA',
+                    'tdsql': 'TDSQL-C'
+                };
+                const displayName = dbDisplayNames[dbTypeNormalized] || dbType.toUpperCase();
+                const short = `${displayName} ${versionNum}`;
+                const details = fullVersion.substring(match.index + match[0].length).trim().replace(/^[,\s]+/, '');
+
+                return { short, full: fullVersion, details };
+            }
+        }
+
+        // 兜底：截断到50字符
+        if (fullVersion.length > 50) {
+            return {
+                short: fullVersion.substring(0, 50) + '...',
+                full: fullVersion,
+                details: fullVersion.substring(50)
+            };
+        }
+
+        return { short: fullVersion, full: fullVersion, details: '' };
     }
 };

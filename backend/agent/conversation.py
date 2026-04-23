@@ -37,6 +37,7 @@ async def run_conversation(
                 base_url=model.base_url,
                 model_name=model.model_name,
                 protocol=getattr(model, "protocol", "openai"),
+                reasoning_effort=getattr(model, "reasoning_effort", None),
             )
     # Fallback: use default model, or first active model by ID
     if not client and db:
@@ -52,6 +53,7 @@ async def run_conversation(
                 base_url=model.base_url,
                 model_name=model.model_name,
                 protocol=getattr(model, "protocol", "openai"),
+                reasoning_effort=getattr(model, "reasoning_effort", None),
             )
     if not client:
         yield {"type": "error", "content": "AI model not configured. Please add an AI model in the AI Model Management page."}

@@ -255,16 +255,24 @@ const InstanceTrafficPage = {
     _renderStats() {
         if (!this.refs.stats || !this.data) return;
 
-        const maxSessionCount = Number.isFinite(Number(this.data.max_session_count))
-            ? String(this.data.max_session_count)
-            : '--';
+        // 处理最大连接数：null、undefined、"null" 都显示为 --
+        let maxSessionCount = '--';
+        if (this.data.max_session_count != null && String(this.data.max_session_count).toLowerCase() !== 'null') {
+            const parsed = Number(this.data.max_session_count);
+            if (Number.isFinite(parsed) && parsed > 0) {
+                maxSessionCount = String(parsed);
+            }
+        }
+
         const activeSessionCount = String(this.data.active_session_count || 0);
         const totalSessionCount = String(this.data.total_session_count || 0);
         const totalClientCount = String(this.data.total_client_count || 0);
-        const txRate = this.data.total_tx_rate != null ? Format.networkRate(this.data.total_tx_rate) : '--';
-        const rxRate = this.data.total_rx_rate != null ? Format.networkRate(this.data.total_rx_rate) : '--';
 
-        this.refs.stats.innerHTML = `
+        const hasTrafficData = this.data.rate_mode === 'measured';
+        const txRate = hasTrafficData && this.data.total_tx_rate != null ? Format.networkRate(this.data.total_tx_rate) : '--';
+        const rxRate = hasTrafficData && this.data.total_rx_rate != null ? Format.networkRate(this.data.total_rx_rate) : '--';
+
+        let statsHtml = `
             <div class="instance-traffic-stat-card compact">
                 <div class="instance-traffic-stat-label">客户端数量</div>
                 <div class="instance-traffic-stat-value">${this._escapeHtml(totalClientCount)}</div>
@@ -277,18 +285,27 @@ const InstanceTrafficPage = {
                     <span><strong>${this._escapeHtml(maxSessionCount)}</strong><em>最大</em></span>
                 </div>
             </div>
-            <div class="instance-traffic-stat-card compact">
-                <div class="instance-traffic-stat-label">网络流量</div>
-                <div class="instance-traffic-stat-pairs">
-                    <span>发送 <strong>${this._escapeHtml(txRate)}</strong></span>
-                    <span>接收 <strong>${this._escapeHtml(rxRate)}</strong></span>
-                </div>
-            </div>
         `;
+
+        // 只有在有实测流量数据时才显示网络流量卡片
+        if (hasTrafficData) {
+            statsHtml += `
+                <div class="instance-traffic-stat-card compact">
+                    <div class="instance-traffic-stat-label">网络流量</div>
+                    <div class="instance-traffic-stat-pairs">
+                        <span>发送 <strong>${this._escapeHtml(txRate)}</strong></span>
+                        <span>接收 <strong>${this._escapeHtml(rxRate)}</strong></span>
+                    </div>
+                </div>
+            `;
+        }
+
+        this.refs.stats.innerHTML = statsHtml;
 
         if (this.refs.modePill) {
             this.refs.modePill.className = `instance-traffic-mode-pill mode-${this._escapeHtml(this.data.rate_mode || 'unavailable')}`;
-            this.refs.modePill.textContent = `${this._rateModeLabel(this.data.rate_mode)} · ${this.data.rate_mode === 'measured' ? '链路实测' : this.data.rate_mode === 'estimated' ? '热度估算' : '等待会话'}`;
+            const modeText = this.data.rate_mode === 'measured' ? '链路实测' : '无流量数据';
+            this.refs.modePill.textContent = `${this._rateModeLabel(this.data.rate_mode)} · ${modeText}`;
         }
     },
 
@@ -460,10 +477,21 @@ const InstanceTrafficPage = {
     _renderHistoryChart() {
         if (!this.refs.chartCanvas) return;
 
-        const validPoints = this.historyPoints.filter(point => point.totalRate != null);
+        // 判断是否支持流量采集
+        const supportsTraffic = this.data && this.data.rate_mode === 'measured';
+        const validPoints = supportsTraffic ? this.historyPoints.filter(point => point.totalRate != null && point.mode === 'measured') : [];
+
         if (!validPoints.length) {
             if (this.refs.chartEmpty) {
                 this.refs.chartEmpty.classList.remove('hidden');
+                // 根据数据源类型显示不同提示
+                if (this.data && this.data.rate_mode === 'unavailable') {
+                    this.refs.chartEmpty.textContent = '当前数据库类型不支持网络流量采集';
+                } else if (supportsTraffic) {
+                    this.refs.chartEmpty.textContent = '等待趋势数据...';
+                } else {
+                    this.refs.chartEmpty.textContent = '等待趋势数据...';
+                }
             }
             if (this.historyChart) {
                 this.historyChart.data.labels = [];
@@ -827,6 +855,7 @@ const InstanceTrafficPage = {
     },
 
     _clientRateLabel(client) {
+        // 只有在有实测流量时才显示流量值，否则显示热度
         if (client.estimated_total_rate != null) {
             return Format.networkRate(client.estimated_total_rate);
         }
@@ -835,7 +864,6 @@ const InstanceTrafficPage = {
 
     _rateModeLabel(mode) {
         if (mode === 'measured') return '实测流量';
-        if (mode === 'estimated') return '估算流量';
         return '暂无流量';
     },
 

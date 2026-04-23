@@ -80,6 +80,9 @@ class ReportGenerator:
         )
         self.db.add(report)
         await self.db.flush()
+        report_id = report.id
+        # Persist the initial row so rollback in later steps won't lose the report record.
+        await self.db.commit()
 
         try:
             # Select appropriate system prompt based on trigger type
@@ -258,10 +261,21 @@ class ReportGenerator:
 
         except Exception as e:
             logger.error(f"Error generating inspection report: {e}", exc_info=True)
-            report.status = "failed"
-            report.error_message = str(e)
-            if report.completed_at is None:
-                report.completed_at = now()
+            # The upstream failure may leave current transaction aborted; rollback first.
+            await self.db.rollback()
+            result = await self.db.execute(select(Report).where(Report.id == report_id))
+            report = result.scalar_one_or_none()
+            if report:
+                report.status = "failed"
+                report.summary = report.summary or "报告生成失败，未产出有效内容。"
+                report.content_md = report.content_md or ""
+                report.content_html = report.content_html if report.content_html else None
+                report.error_message = str(e)
+                report.skill_executions = report.skill_executions or []
+                if report.completed_at is None:
+                    report.completed_at = now()
+                await self.db.commit()
+            else:
+                raise
 
-        await self.db.commit()
-        return report.id
+        return report_id

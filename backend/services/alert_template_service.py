@@ -57,7 +57,7 @@ def _validate_multi_level_threshold(metric_name: str, rule: dict) -> dict:
         ValueError: If validation fails
     """
     if "levels" not in rule or not isinstance(rule["levels"], list):
-        return rule
+        raise ValueError(f"Metric '{metric_name}': must have 'levels' array configuration")
 
     levels = rule["levels"]
     if not levels:

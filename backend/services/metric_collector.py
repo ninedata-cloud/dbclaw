@@ -789,6 +789,7 @@ async def _handle_connection_failure(db, datasource_id: int, datasource, error_m
                 return
 
         from backend.services.alert_service import AlertService
+        from backend.services.alert_event_service import AlertEventService
 
         # Skip duplicate alerts only when the connection failure is still active
         active_alert_result = await db.execute(
@@ -804,6 +805,19 @@ async def _handle_connection_failure(db, datasource_id: int, datasource, error_m
         active_alert = active_alert_result.scalar_one_or_none()
 
         if active_alert:
+            # Update the event's latest occurrence time to reflect ongoing failure
+            updated_event = await AlertEventService.update_active_event_time(
+                db=db,
+                datasource_id=datasource_id,
+                alert_type="system_error",
+                metric_name="connection_status"
+            )
+            if updated_event:
+                logger.debug(
+                    f"Updated event {updated_event.id} latest time for ongoing connection failure "
+                    f"(datasource {datasource_id})"
+                )
+
             logger.debug(
                 f"Skipping duplicate connection_failure trigger for datasource {datasource_id} - "
                 f"active alert {active_alert.id} exists"
@@ -858,6 +872,7 @@ async def _handle_network_probe_failure(host: str):
     """创建全局网络探针失败告警（若尚无活跃告警）"""
     try:
         from backend.services.alert_service import AlertService
+        from backend.services.alert_event_service import AlertEventService
         async with async_session() as db:
             # 检查是否已存在活跃的网络告警，避免重复
             result = await db.execute(
@@ -868,8 +883,17 @@ async def _handle_network_probe_failure(host: str):
                     )
                 )
             )
-            if result.scalars().first():
-                logger.debug("Network probe alert already active, skipping creation")
+            existing_alert = result.scalars().first()
+            if existing_alert:
+                # Update event time for ongoing network probe failure
+                await AlertEventService.update_active_event_time(
+                    db=db,
+                    datasource_id=0,
+                    alert_type="system_error",
+                    metric_name="network_probe"
+                )
+                await db.commit()
+                logger.debug("Network probe alert already active, updated event time")
                 return
 
             await AlertService.create_alert(

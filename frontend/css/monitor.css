@@ -83,11 +83,22 @@
     padding: 8px 12px;
     border-radius: 6px;
     width: 100%;
+    color-scheme: dark;
 }
 
 .form-input[type="datetime-local"]:focus {
     outline: none;
     border-color: #2f81f7;
+}
+
+.form-input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    filter: invert(1) brightness(1.5);
+    cursor: pointer;
+    opacity: 1;
+}
+
+.form-input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
+    filter: invert(1) brightness(1.8);
 }
 
 /* === Health Status Banner === */

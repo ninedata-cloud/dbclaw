@@ -397,27 +397,20 @@ def _aggregate_traffic_clients(
     total_client_count = len(grouped)
     measured_mode = total_rx_rate is not None and total_tx_rate is not None
 
-    distributed_rx_rate = total_rx_rate
-    distributed_tx_rate = total_tx_rate
+    distributed_rx_rate = total_rx_rate if measured_mode else None
+    distributed_tx_rate = total_tx_rate if measured_mode else None
     rate_mode = "measured" if measured_mode else "unavailable"
-    rate_label = "链路带宽来自最近监控快照"
 
-    total_weight = sum(max(bucket["weight"], 1.0) for bucket in grouped.values())
-    if not measured_mode and total_session_count > 0 and total_weight > 0:
-        estimated_total_rate = min(
-            max(total_weight * 6144.0, total_session_count * 2048.0),
-            96.0 * 1024 * 1024,
-        )
-        distributed_rx_rate = round(estimated_total_rate * 0.46, 2)
-        distributed_tx_rate = round(estimated_total_rate * 0.54, 2)
-        rate_mode = "estimated"
-        rate_label = "实例未提供网络字节指标，链路速率按会话活跃度实时估算"
+    if measured_mode:
+        rate_label = "链路带宽来自最近监控快照"
     elif total_session_count == 0:
         rate_label = "当前没有活跃客户端连接"
-    elif not measured_mode:
-        rate_label = "当前未获取到可用流量指标"
+    else:
+        rate_label = "当前数据库类型不支持网络流量采集"
 
     max_weight = max((bucket["weight"] for bucket in grouped.values()), default=0.0)
+    total_weight = sum(max(bucket["weight"], 1.0) for bucket in grouped.values())
+
     clients: list[InstanceTrafficClientItem] = []
     for bucket in grouped.values():
         share = (max(bucket["weight"], 1.0) / total_weight) if total_weight else 0.0
@@ -429,6 +422,7 @@ def _aggregate_traffic_clients(
         elif bucket["idle_session_count"] == 0 and bucket["session_count"] > 0:
             status = "other"
 
+        # 只有在有实测流量时才分配流量值
         estimated_rx_rate = round((distributed_rx_rate or 0.0) * share, 2) if distributed_rx_rate is not None else None
         estimated_tx_rate = round((distributed_tx_rate or 0.0) * share, 2) if distributed_tx_rate is not None else None
         estimated_total_rate = None
@@ -457,9 +451,10 @@ def _aggregate_traffic_clients(
             )
         )
 
+    # 排序：有流量时按流量排序，无流量时按热度排序
     clients.sort(
         key=lambda item: (
-            item.estimated_total_rate or 0.0,
+            item.estimated_total_rate if item.estimated_total_rate is not None else -1,
             item.heat_score,
             item.session_count,
             item.client_label.lower(),

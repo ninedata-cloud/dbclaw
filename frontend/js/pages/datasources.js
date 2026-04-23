@@ -162,7 +162,7 @@ const DatasourcesPage = {
         `;
 
         const newBtn = DOM.el('button', { className: 'btn btn-primary' });
-        newBtn.innerHTML = '<i data-lucide="plus"></i> New Datasource';
+        newBtn.innerHTML = '<i data-lucide="plus"></i> 新建数据源';
         newBtn.onclick = () => DatasourceForm.show(null, () => this.render());
 
         setTimeout(() => {
@@ -427,14 +427,9 @@ const DatasourcesPage = {
                                                     onClick: `DatasourcesPage._testDatasource(${conn.id})`
                                                 })}
                                                 ${this._renderActionMenuItem({
-                                                    label: '巡检配置',
+                                                    label: '巡检与告警配置',
                                                     icon: 'settings',
                                                     onClick: `DatasourcesPage._showInspectionConfig(${conn.id})`
-                                                })}
-                                                ${this._renderActionMenuItem({
-                                                    label: '打开监控',
-                                                    icon: 'activity',
-                                                    onClick: `DatasourcesPage._monitorDatasource(${conn.id})`
                                                 })}
                                                 ${silenceMenuItems}
                                                 ${this._renderActionMenuItem({
@@ -508,9 +503,13 @@ const DatasourcesPage = {
 
     async _testDatasource(id) {
         try {
+            const datasource = this.allDatasources.find(d => d.id === id);
             const result = await API.testDatasource(id);
             if (result.success) {
-                Toast.success(`连接成功! ${result.version || ''}`);
+                const versionDisplay = result.version && datasource
+                    ? this._simplifyVersion(result.version, datasource.db_type).short
+                    : result.version || '';
+                Toast.success(`连接成功! ${versionDisplay}`);
             } else {
                 Toast.error(`连接失败: ${result.message}`);
             }
@@ -647,15 +646,6 @@ const DatasourcesPage = {
         }
     },
 
-    _monitorDatasource(id) {
-        const conn = this.allDatasources.find(c => c.id === id);
-        if (conn) {
-            Store.set('currentConnection', conn);
-            Store.set('currentDatasource', conn);
-            Router.navigate('monitor');
-        }
-    },
-
     async _triggerInspection(datasourceId, triggerEvent = null) {
         if (!confirm('触发手动巡检? 这将生成一份全面的诊断报告')) {
             return;
@@ -761,7 +751,7 @@ const DatasourcesPage = {
 
             this._setupInspectionConfigListeners(datasourceId);
         } catch (error) {
-            Toast.error('加载巡检配置失败: ' + error.message);
+            Toast.error('加载巡检与告警配置失败: ' + error.message);
         }
     },
 
@@ -1187,7 +1177,55 @@ const DatasourcesPage = {
             Modal.hide();
             Toast.success('巡检与告警配置已保存');
         } catch (error) {
-            Toast.error('保存巡检配置失败: ' + error.message);
+            Toast.error('保存巡检与告警配置失败: ' + error.message);
         }
+    },
+
+    _simplifyVersion(fullVersion, dbType) {
+        if (!fullVersion) return { short: '未知版本', full: '', details: '' };
+
+        const patterns = {
+            'postgresql': /PostgreSQL\s+([\d.]+)/i,
+            'mysql': /([\d.]+)/,
+            'oracle': /Oracle Database ([\d.]+)/i,
+            'sqlserver': /Microsoft SQL Server\s+([\d.]+)/i,
+            'opengauss': /openGauss\s+([\d.]+)/i,
+            'hana': /HDB\s+([\d.]+)/i,
+            'tdsql': /([\d.]+)/
+        };
+
+        const dbTypeNormalized = (dbType || '').toLowerCase().replace(/[_-]/g, '');
+        const pattern = patterns[dbTypeNormalized];
+
+        if (pattern) {
+            const match = fullVersion.match(pattern);
+            if (match) {
+                const versionNum = match[1];
+                const dbDisplayNames = {
+                    'postgresql': 'PostgreSQL',
+                    'mysql': 'MySQL',
+                    'oracle': 'Oracle',
+                    'sqlserver': 'SQL Server',
+                    'opengauss': 'openGauss',
+                    'hana': 'SAP HANA',
+                    'tdsql': 'TDSQL-C'
+                };
+                const displayName = dbDisplayNames[dbTypeNormalized] || dbType.toUpperCase();
+                const short = `${displayName} ${versionNum}`;
+                const details = fullVersion.substring(match.index + match[0].length).trim().replace(/^[,\s]+/, '');
+
+                return { short, full: fullVersion, details };
+            }
+        }
+
+        if (fullVersion.length > 50) {
+            return {
+                short: fullVersion.substring(0, 50) + '...',
+                full: fullVersion,
+                details: fullVersion.substring(50)
+            };
+        }
+
+        return { short: fullVersion, full: fullVersion, details: '' };
     }
 };

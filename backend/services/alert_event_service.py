@@ -413,6 +413,56 @@ class AlertEventService:
         return event
 
     @staticmethod
+    async def update_active_event_time(
+        db: AsyncSession,
+        datasource_id: int,
+        alert_type: Optional[str] = None,
+        metric_name: Optional[str] = None
+    ) -> Optional[AlertEvent]:
+        """
+        Update the event_ended_at time for an active event matching the criteria.
+        Used when an alert condition persists but no new alert is created due to deduplication.
+
+        Args:
+            db: Database session
+            datasource_id: Datasource ID
+            alert_type: Alert type (optional, used if metric_name is not provided)
+            metric_name: Metric name (optional, preferred over alert_type)
+
+        Returns:
+            Updated event if found and updated, None otherwise
+        """
+        # Calculate aggregation key (prefer metric_name)
+        if metric_name:
+            aggregation_key = f"{datasource_id}:{metric_name}"
+        elif alert_type:
+            aggregation_key = f"{datasource_id}:{alert_type}"
+        else:
+            return None
+
+        # Find active event with this key
+        result = await db.execute(
+            select(AlertEvent)
+            .where(
+                and_(
+                    AlertEvent.aggregation_key == aggregation_key,
+                    AlertEvent.status.in_(["active", "acknowledged"])
+                )
+            )
+            .order_by(AlertEvent.event_ended_at.desc())
+            .limit(1)
+        )
+        event = result.scalar_one_or_none()
+
+        if event:
+            event.event_ended_at = now()
+            event.updated_at = now()
+            await db.flush()
+            return event
+
+        return None
+
+    @staticmethod
     async def check_and_auto_resolve_event(
         db: AsyncSession,
         event_id: int

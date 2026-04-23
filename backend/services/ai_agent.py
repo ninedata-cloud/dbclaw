@@ -73,6 +73,7 @@ class AIClient:
     client: Any
     model_name: str
     base_url: Optional[str] = None
+    reasoning_effort: Optional[str] = None
 
 
 def get_ai_client(
@@ -80,6 +81,7 @@ def get_ai_client(
     base_url: Optional[str] = None,
     model_name: Optional[str] = None,
     protocol: str = OPENAI_PROTOCOL,
+    reasoning_effort: Optional[str] = None,
 ) -> Optional[AIClient]:
     protocol = protocol or OPENAI_PROTOCOL
 
@@ -93,6 +95,7 @@ def get_ai_client(
             client=client,
             model_name=model_name or DEFAULT_MODEL,
             base_url=base_url,
+            reasoning_effort=reasoning_effort,
         )
 
     if not model_name:
@@ -104,7 +107,17 @@ def get_ai_client(
         client=client,
         model_name=model_name,
         base_url=base_url,
+        reasoning_effort=reasoning_effort,
     )
+
+
+def _get_anthropic_reasoning_payload(reasoning_effort: Optional[str]) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    effort = (reasoning_effort or "").strip().lower()
+    if effort not in {"low", "medium", "high", "max"}:
+        return None, None
+    # Keep Anthropic path simple and aligned with verified sample:
+    # thinking uses adaptive mode, effort is carried in output_config.
+    return {"type": "adaptive"}, {"effort": effort}
 
 
 def _extract_system_message(messages: List[Dict[str, Any]]) -> Tuple[Optional[str], List[Dict[str, Any]]]:
@@ -253,13 +266,26 @@ async def request_text_response(
 ) -> str:
     if ai_client.protocol == ANTHROPIC_PROTOCOL:
         system, anthropic_messages = convert_messages_for_anthropic(messages)
-        response = await ai_client.client.messages.create(
-            model=ai_client.model_name or DEFAULT_MODEL,
-            system=system,
-            messages=anthropic_messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+        request_kwargs: Dict[str, Any] = {
+            "model": ai_client.model_name or DEFAULT_MODEL,
+            "system": system,
+            "messages": anthropic_messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        thinking_config, output_config = _get_anthropic_reasoning_payload(ai_client.reasoning_effort)
+        if thinking_config:
+            request_kwargs["thinking"] = thinking_config
+        if output_config:
+            request_kwargs["output_config"] = output_config
+        if thinking_config or output_config:
+            logger.info(
+                "Anthropic reasoning enabled for model=%s thinking=%s effort=%s",
+                ai_client.model_name,
+                (thinking_config or {}).get("type"),
+                (output_config or {}).get("effort"),
+            )
+        response = await ai_client.client.messages.create(**request_kwargs)
         texts = [block.text for block in response.content if getattr(block, "type", None) == "text"]
         return "".join(texts).strip()
 
@@ -270,6 +296,8 @@ async def request_text_response(
     }
     if temperature is not None:
         request_kwargs["temperature"] = float(temperature)
+    if ai_client.reasoning_effort:
+        request_kwargs["reasoning_effort"] = ai_client.reasoning_effort
 
     response = await ai_client.client.chat.completions.create(**request_kwargs)
     return (response.choices[0].message.content if response.choices else "") or ""
@@ -283,13 +311,26 @@ async def request_text_response_with_usage(
 ) -> Tuple[str, Dict[str, int]]:
     if ai_client.protocol == ANTHROPIC_PROTOCOL:
         system, anthropic_messages = convert_messages_for_anthropic(messages)
-        response = await ai_client.client.messages.create(
-            model=ai_client.model_name or DEFAULT_MODEL,
-            system=system,
-            messages=anthropic_messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+        request_kwargs: Dict[str, Any] = {
+            "model": ai_client.model_name or DEFAULT_MODEL,
+            "system": system,
+            "messages": anthropic_messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        thinking_config, output_config = _get_anthropic_reasoning_payload(ai_client.reasoning_effort)
+        if thinking_config:
+            request_kwargs["thinking"] = thinking_config
+        if output_config:
+            request_kwargs["output_config"] = output_config
+        if thinking_config or output_config:
+            logger.info(
+                "Anthropic reasoning enabled for model=%s thinking=%s effort=%s",
+                ai_client.model_name,
+                (thinking_config or {}).get("type"),
+                (output_config or {}).get("effort"),
+            )
+        response = await ai_client.client.messages.create(**request_kwargs)
         texts = [block.text for block in response.content if getattr(block, "type", None) == "text"]
         usage = _normalize_usage(
             getattr(getattr(response, "usage", None), "input_tokens", None),
@@ -304,6 +345,8 @@ async def request_text_response_with_usage(
     }
     if temperature is not None:
         request_kwargs["temperature"] = float(temperature)
+    if ai_client.reasoning_effort:
+        request_kwargs["reasoning_effort"] = ai_client.reasoning_effort
 
     response = await ai_client.client.chat.completions.create(**request_kwargs)
     usage = _normalize_usage(
@@ -363,6 +406,8 @@ async def _stream_openai_turn(
     }
     if temperature is not None:
         request_kwargs["temperature"] = float(temperature)
+    if ai_client.reasoning_effort:
+        request_kwargs["reasoning_effort"] = ai_client.reasoning_effort
 
     response = await ai_client.client.chat.completions.create(**request_kwargs)
 
@@ -439,6 +484,18 @@ async def _stream_anthropic_turn(
     }
     if temperature is not None:
         request_kwargs["temperature"] = temperature
+    thinking_config, output_config = _get_anthropic_reasoning_payload(ai_client.reasoning_effort)
+    if thinking_config:
+        request_kwargs["thinking"] = thinking_config
+    if output_config:
+        request_kwargs["output_config"] = output_config
+    if thinking_config or output_config:
+        logger.info(
+            "Anthropic reasoning enabled for model=%s thinking=%s effort=%s",
+            ai_client.model_name,
+            (thinking_config or {}).get("type"),
+            (output_config or {}).get("effort"),
+        )
     if anthropic_tools:
         request_kwargs["tools"] = anthropic_tools
         request_kwargs["tool_choice"] = {"type": "auto"} if tool_choice == "auto" else {"type": "any"}

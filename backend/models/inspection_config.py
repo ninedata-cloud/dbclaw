@@ -22,13 +22,40 @@ class InspectionConfig(Base):
     ai_model_id = Column(Integer, nullable=True)
     kb_ids = Column(JSON, default=list, nullable=False)  # array of KB IDs
 
-    # Threshold rules
+    # Threshold rules (multi-level configuration)
     threshold_rules = Column(JSON, default=dict, nullable=False)
     # Example: {
-    #   "cpu_usage": {"threshold": 80, "duration": 60},
-    #   "disk_usage": {"threshold": 80, "duration": 300},
-    #   "memory_usage": {"threshold": 85, "duration": 60},
-    #   "connections": {"threshold": 100, "duration": 120}
+    #   "cpu_usage": {
+    #       "levels": [
+    #           {"severity": "low", "threshold": 60, "duration": 300},
+    #           {"severity": "medium", "threshold": 80, "duration": 60},
+    #           {"severity": "high", "threshold": 85, "duration": 60},
+    #           {"severity": "critical", "threshold": 90, "duration": 60}
+    #       ]
+    #   },
+    #   "disk_usage": {
+    #       "levels": [
+    #           {"severity": "low", "threshold": 80, "duration": 0},
+    #           {"severity": "medium", "threshold": 85, "duration": 0},
+    #           {"severity": "high", "threshold": 90, "duration": 0},
+    #           {"severity": "critical", "threshold": 95, "duration": 0}
+    #       ]
+    #   },
+    #   "memory_usage": {
+    #       "levels": [
+    #           {"severity": "medium", "threshold": 85, "duration": 60},
+    #           {"severity": "high", "threshold": 90, "duration": 60},
+    #           {"severity": "critical", "threshold": 95, "duration": 60}
+    #       ]
+    #   },
+    #   "connections": {
+    #       "levels": [
+    #           {"severity": "low", "threshold": 20, "duration": 60},
+    #           {"severity": "medium", "threshold": 30, "duration": 60},
+    #           {"severity": "high", "threshold": 40, "duration": 60},
+    #           {"severity": "critical", "threshold": 50, "duration": 60}
+    #       ]
+    #   }
     # }
 
     # Alert engine routing

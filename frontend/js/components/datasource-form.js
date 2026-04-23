@@ -53,26 +53,26 @@ const DatasourceForm = {
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Port</label>
+                    <label>端口</label>
                     <input type="number" class="form-input" name="port" value="${this._escapeHtml(String(datasource?.port || this._defaultPort('mysql')))}" required>
                 </div>
             </div>
             <div class="form-group">
-                <label>Host</label>
-                <input type="text" class="form-input" name="host" value="${this._escapeHtml(datasource?.host || 'localhost')}" required placeholder="localhost">
+                <label>主机地址</label>
+                <input type="text" class="form-input" name="host" value="${this._escapeHtml(datasource?.host || '')}" required placeholder="127.0.0.1">
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label>Username</label>
+                    <label>用户名</label>
                     <input type="text" class="form-input" name="username" value="${this._escapeHtml(datasource?.username || '')}" placeholder="root">
                 </div>
                 <div class="form-group">
-                    <label>Password</label>
+                    <label>密码</label>
                     <input type="password" class="form-input" name="password" value="" placeholder="${isEdit ? '(保持不变)' : ''}">
                 </div>
             </div>
             <div class="form-group">
-                <label>Database</label>
+                <label>数据库名</label>
                 <input type="text" class="form-input" name="database" value="${this._escapeHtml(datasource?.database || '')}" placeholder="mydb">
             </div>
             <div class="form-group">
@@ -88,14 +88,14 @@ const DatasourceForm = {
             <div class="form-group" id="oracle-conn-mode-group" style="display: ${datasource?.db_type === 'oracle' ? 'block' : 'none'};">
                 <label>连接模式</label>
                 <select class="form-select" name="oracle_conn_mode">
-                    <option value="default" ${this._getExtraParam(datasource, 'oracle_conn_mode', 'default') === 'default' ? 'selected' : ''}>Default</option>
+                    <option value="default" ${this._getExtraParam(datasource, 'oracle_conn_mode', 'default') === 'default' ? 'selected' : ''}>默认</option>
                     <option value="sysdba" ${this._getExtraParam(datasource, 'oracle_conn_mode', 'default') === 'sysdba' ? 'selected' : ''}>SYSDBA</option>
                     <option value="sysoper" ${this._getExtraParam(datasource, 'oracle_conn_mode', 'default') === 'sysoper' ? 'selected' : ''}>SYSOPER</option>
                 </select>
                 <small class="text-muted">以 SYSDBA/SYSOPER 身份连接（需要对应权限）</small>
             </div>
             <div class="form-group">
-                <label>Host (可选)</label>
+                <label>关联主机（可选）</label>
                 <select class="form-select" name="host_id">
                     <option value="">无</option>
                 </select>
@@ -103,10 +103,10 @@ const DatasourceForm = {
             <div class="form-group">
                 <label>重要性级别</label>
                 <select class="form-select" name="importance_level" required>
-                    <option value="core" ${datasource?.importance_level === 'core' ? 'selected' : ''}>核心系统 (Core)</option>
-                    <option value="production" ${datasource?.importance_level === 'production' || !datasource ? 'selected' : ''}>生产系统 (Production)</option>
-                    <option value="development" ${datasource?.importance_level === 'development' ? 'selected' : ''}>开发测试 (Development)</option>
-                    <option value="temporary" ${datasource?.importance_level === 'temporary' ? 'selected' : ''}>临时 (Temporary)</option>
+                    <option value="core" ${datasource?.importance_level === 'core' ? 'selected' : ''}>核心系统</option>
+                    <option value="production" ${datasource?.importance_level === 'production' || !datasource ? 'selected' : ''}>生产系统</option>
+                    <option value="development" ${datasource?.importance_level === 'development' ? 'selected' : ''}>开发测试</option>
+                    <option value="temporary" ${datasource?.importance_level === 'temporary' ? 'selected' : ''}>临时</option>
                 </select>
             </div>
             <div class="form-group">
@@ -119,11 +119,11 @@ const DatasourceForm = {
             </div>
             <div id="integration-config-section" style="display: ${datasource?.metric_source === 'integration' ? 'block' : 'none'};">
                 <div class="form-group">
-                    <label>入站 Integration</label>
+                    <label>入站集成</label>
                     <select class="form-select" id="inbound-integration-select">
                         <option value="">加载中...</option>
                     </select>
-                    <small class="text-muted">选择 inbound_metric 类型的 Integration，用于拉取外部监控指标</small>
+                    <small class="text-muted">选择 inbound_metric 类型的集成，用于拉取外部监控指标</small>
                 </div>
                 <div class="form-group">
                     <label id="external-instance-id-label">外部实例 ID</label>
@@ -237,7 +237,7 @@ const DatasourceForm = {
 
         const submitBtn = DOM.el('button', {
             className: 'btn btn-primary',
-            textContent: isEdit ? 'Update' : 'Create',
+            textContent: isEdit ? '更新' : '创建',
             type: 'button',
             onClick: () => form.requestSubmit()
         });
@@ -266,7 +266,7 @@ const DatasourceForm = {
             } else if (data.metric_source === 'integration') {
                 const integrationId = form.querySelector('#inbound-integration-select')?.value;
                 if (!integrationId) {
-                    Toast.error('使用集成采集时，必须选择入站 Integration');
+                    Toast.error('使用集成采集时，必须选择入站集成');
                     return;
                 }
 
@@ -313,14 +313,14 @@ const DatasourceForm = {
         const footer = DOM.el('div');
         footer.appendChild(DOM.el('button', {
             className: 'btn btn-secondary',
-            textContent: 'Cancel',
+            textContent: '取消',
             type: 'button',
             onClick: () => Modal.hide()
         }));
 
         footer.appendChild(DOM.el('button', {
             className: 'btn btn-secondary',
-            innerHTML: '<i data-lucide="plug"></i> Test',
+            innerHTML: '<i data-lucide="plug"></i> 测试连接',
             type: 'button',
             onClick: async (e) => {
                 const btn = e.currentTarget;
@@ -354,7 +354,7 @@ const DatasourceForm = {
                 } catch (err) {
                     Toast.error('测试失败: ' + err.message);
                 } finally {
-                    btn.innerHTML = '<i data-lucide="plug"></i> Test';
+                    btn.innerHTML = '<i data-lucide="plug"></i> 测试连接';
                     btn.disabled = false;
                     DOM.createIcons();
                 }
@@ -364,7 +364,7 @@ const DatasourceForm = {
         footer.appendChild(submitBtn);
 
         Modal.show({
-            title: isEdit ? 'Edit Datasource' : 'New Datasource',
+            title: isEdit ? '编辑数据源' : '新建数据源',
             content: form,
             footer: footer,
             closeOnOverlayClick: false,
@@ -420,7 +420,7 @@ const DatasourceForm = {
         return {
             label: '外部实例 ID',
             placeholder: '例如：云厂商或外部监控系统中的实例 ID',
-            help: '外部监控系统中的实例标识。是否必填取决于所选入站 Integration。',
+            help: '外部监控系统中的实例标识。是否必填取决于所选入站集成。',
             required: false,
         };
     },

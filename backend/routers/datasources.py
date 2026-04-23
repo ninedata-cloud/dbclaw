@@ -782,6 +782,7 @@ async def diagnose_sql(
             base_url=model.base_url,
             model_name=model.model_name,
             protocol=getattr(model, "protocol", "openai"),
+            reasoning_effort=getattr(model, "reasoning_effort", None),
         )
         if not ai_client:
             raise HTTPException(status_code=500, detail="AI 客户端初始化失败")

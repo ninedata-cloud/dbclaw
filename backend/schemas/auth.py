@@ -62,10 +62,10 @@ class ResetPasswordRequest(BaseModel):
 class LoginLogResponse(TimestampSerializerMixin, BaseModel):
     id: int
     user_id: int
-    logged_in_at: Optional[datetime] = None
+    login_time: Optional[datetime] = None
     ip_address: Optional[str] = None
     user_agent: Optional[str] = None
-    is_success: bool
+    success: bool
 
     class Config:
         from_attributes = True

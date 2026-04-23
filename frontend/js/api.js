@@ -167,6 +167,7 @@ const API = {
     createHost(data) { return this.post('/api/hosts', data); },
     updateHost(id, data) { return this.put(`/api/hosts/${id}`, data); },
     deleteHost(id) { return this.delete(`/api/hosts/${id}`); },
+    testHostConnection(data) { return this.post('/api/hosts/test', data); },
     testHost(id) { return this.post(`/api/hosts/${id}/test`); },
 
     // Host detail endpoints

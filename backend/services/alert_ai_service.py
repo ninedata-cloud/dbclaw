@@ -1441,6 +1441,7 @@ async def resolve_alert_ai_client(db: AsyncSession, preferred_model_id: Optional
         base_url=model.base_url,
         model_name=model.model_name,
         protocol=getattr(model, "protocol", "openai"),
+        reasoning_effort=getattr(model, "reasoning_effort", None),
     )
     return client, model
 
@@ -2076,6 +2077,19 @@ async def apply_alert_ai_result(
     state.last_reason = judge_result.reason
     state.last_evidence = judge_result.evidence
     state.last_evaluated_at = current_time
+
+    # Update event time if alert is active but no action taken (cooldown/confirmation pending)
+    if action == "noop" and state.is_active and state.alert_id and mode == "formal":
+        from backend.services.alert_event_service import AlertEventService
+        try:
+            await AlertEventService.update_active_event_time(
+                db=db,
+                datasource_id=datasource.id,
+                alert_type="ai_policy_violation",
+                metric_name=binding.display_name[:100]
+            )
+        except Exception as e:
+            logger.warning(f"Failed to update event time for AI alert noop: {e}")
 
     accepted = action in {"trigger_alert", "recover_alert"}
     if evaluation_log is not None:

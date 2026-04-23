@@ -17,6 +17,32 @@ const DiagnosisPage = {
     _pendingAutoAsk: null,
     _initialAskSent: false,
     _sessionSidebarCollapsed: false,
+    _streamingSessionIds: new Set(),
+
+    _isSessionStreaming(sessionId) {
+        if (!sessionId) return false;
+        return this._streamingSessionIds.has(sessionId);
+    },
+
+    _markSessionStreaming(sessionId) {
+        if (!sessionId) return;
+        this._streamingSessionIds.add(sessionId);
+        this._syncChatStreamingState();
+    },
+
+    _clearSessionStreaming(sessionId) {
+        if (!sessionId) return;
+        this._streamingSessionIds.delete(sessionId);
+        this._syncChatStreamingState();
+    },
+
+    _syncChatStreamingState() {
+        const isCurrentStreaming = this._isSessionStreaming(this.currentSessionId);
+        ChatWidget.isStreaming = isCurrentStreaming;
+        if (typeof ChatWidget._updateSendButton === 'function') {
+            ChatWidget._updateSendButton(isCurrentStreaming);
+        }
+    },
 
     _getSelectedDatasource() {
         return this.datasourceSelector?.getValue() || Store.get('currentDatasource') || null;
@@ -296,7 +322,44 @@ const DiagnosisPage = {
         requestAnimationFrame(() => DOM.createIcons());
     },
 
+    _getWelcomeContextMeta(options = this._renderOptions || {}) {
+        const isHostContext = Boolean(options.fixedHostId) && !options.fixedDatasourceId;
+        const displayName = options.contextEntityName || options.hostName || options.datasourceName || '';
+        return {
+            isHostContext,
+            displayName: String(displayName || '').trim()
+        };
+    },
+
     _getWelcomeQuickAsks() {
+        const { isHostContext, displayName } = this._getWelcomeContextMeta();
+
+        if (isHostContext) {
+            const hostReference = displayName ? `主机 ${displayName}` : '当前主机';
+            return [
+                {
+                    icon: 'activity',
+                    label: '运行总览',
+                    prompt: `请结合 ${hostReference} 的当前状态，给我一个主机运行健康总览，说明 CPU、内存、磁盘、网络和进程层面的整体情况、主要风险与优先排查项。`
+                },
+                {
+                    icon: 'gauge',
+                    label: '性能诊断',
+                    prompt: `请从 CPU 负载、内存压力、磁盘 I/O、网络吞吐和关键进程资源占用几个角度，帮我分析 ${hostReference} 的性能风险。`
+                },
+                {
+                    icon: 'shield-alert',
+                    label: '异常排查',
+                    prompt: `请帮我识别 ${hostReference} 当前最值得关注的异常信号，并按严重程度排序给出处置建议。`
+                },
+                {
+                    icon: 'sliders-horizontal',
+                    label: '配置检查',
+                    prompt: `请检查 ${hostReference} 的操作系统与运行环境配置，指出明显不合理项、潜在风险和优化建议。`
+                },
+            ];
+        }
+
         return [
             {
                 icon: 'activity',
@@ -324,6 +387,27 @@ const DiagnosisPage = {
     _buildWelcomeStateHtml() {
         const options = this._renderOptions || {};
         const isCompactEmbedded = Boolean(options.embedded);
+        const { isHostContext, displayName } = this._getWelcomeContextMeta(options);
+        const welcomeTitle = isCompactEmbedded ? '开始 AI 诊断' : 'DBClaw AI';
+        const embeddedDescription = isHostContext
+            ? `可直接提问，或先使用下面的快捷入口对${displayName ? `主机 ${displayName}` : '当前主机'}进行诊断。`
+            : '可直接提问，或先使用下面的快捷入口。';
+        const pageDescription = isHostContext
+            ? '围绕主机的 CPU、内存、磁盘、网络、进程与系统配置，快速给出可落地的诊断建议。'
+            : '围绕实例状态、连接、慢 SQL、锁等待与关键参数，快速给出可落地的诊断建议。';
+        const highlightPills = isHostContext
+            ? `
+                    <div class="diagnosis-welcome-pill"><i data-lucide="server"></i><span>主机运行概览</span></div>
+                    <div class="diagnosis-welcome-pill"><i data-lucide="cpu"></i><span>CPU 与内存分析</span></div>
+                    <div class="diagnosis-welcome-pill"><i data-lucide="hard-drive"></i><span>磁盘与网络排查</span></div>
+                    <div class="diagnosis-welcome-pill"><i data-lucide="settings-2"></i><span>系统与进程建议</span></div>
+                `
+            : `
+                    <div class="diagnosis-welcome-pill"><i data-lucide="database"></i><span>实例运行概览</span></div>
+                    <div class="diagnosis-welcome-pill"><i data-lucide="timer"></i><span>慢查询与等待分析</span></div>
+                    <div class="diagnosis-welcome-pill"><i data-lucide="network"></i><span>连接与会话画像</span></div>
+                    <div class="diagnosis-welcome-pill"><i data-lucide="settings-2"></i><span>参数与容量建议</span></div>
+                `;
         const quickAsks = isCompactEmbedded
             ? this._getWelcomeQuickAsks().slice(0, 3)
             : this._getWelcomeQuickAsks();
@@ -349,16 +433,13 @@ const DiagnosisPage = {
                         </div>
                         <div class="diagnosis-welcome-copy">
                             ${isCompactEmbedded ? '' : '<div class="diagnosis-welcome-eyebrow">AI Diagnosis Workspace</div>'}
-                            <h3>${isCompactEmbedded ? '开始 AI 诊断' : 'DBClaw AI'}</h3>
-                            <p>${isCompactEmbedded ? '可直接提问，或先使用下面的快捷入口。' : '围绕实例状态、连接、慢 SQL、锁等待与关键参数，快速给出可落地的诊断建议。'}</p>
+                            <h3>${welcomeTitle}</h3>
+                            <p>${isCompactEmbedded ? embeddedDescription : pageDescription}</p>
                         </div>
                     </div>
                     ${isCompactEmbedded ? '' : `
                     <div class="diagnosis-welcome-highlights">
-                        <div class="diagnosis-welcome-pill"><i data-lucide="database"></i><span>实例运行概览</span></div>
-                        <div class="diagnosis-welcome-pill"><i data-lucide="timer"></i><span>慢查询与等待分析</span></div>
-                        <div class="diagnosis-welcome-pill"><i data-lucide="network"></i><span>连接与会话画像</span></div>
-                        <div class="diagnosis-welcome-pill"><i data-lucide="settings-2"></i><span>参数与容量建议</span></div>
+                        ${highlightPills}
                     </div>
                     `}
                     <div class="diagnosis-welcome-actions">
@@ -998,6 +1079,7 @@ const DiagnosisPage = {
     async _switchSession(sessionId) {
         const isActuallySwitching = this.currentSessionId !== sessionId;
         this.currentSessionId = sessionId;
+        this._syncChatStreamingState();
         this._pendingResumeState = null;
         // 只在真正切换会话时重置授权配置为默认值
         this._restoreSessionContext(sessionId, !isActuallySwitching);
@@ -1132,7 +1214,7 @@ const DiagnosisPage = {
     async _sendMessage(text, attachments = [], messageOptions = {}) {
         const resolvedAttachments = Array.isArray(attachments) ? attachments : (ChatWidget.attachments || []);
         if (!text && (!resolvedAttachments || resolvedAttachments.length === 0)) return;
-        if (ChatWidget.isStreaming) return;
+        if (this._isSessionStreaming(this.currentSessionId)) return;
         if (!this.ws || !this.currentSessionId) {
             Toast.warning('No active session');
             return;
@@ -1146,7 +1228,7 @@ const DiagnosisPage = {
             ChatWidget.setDraft('');
         }
         ChatWidget.startAssistantMessage();
-        ChatWidget.isStreaming = true;
+        this._markSessionStreaming(this.currentSessionId);
         this._pendingResumeState = {
             content: '',
             thinking_phase: null,
@@ -1448,6 +1530,7 @@ const DiagnosisPage = {
                     run_id: data.run_id || this._pendingResumeState?.run_id || null,
                     status: 'awaiting_approval',
                 });
+                this._clearSessionStreaming(this.currentSessionId);
                 ChatWidget.finishAssistantMessage();
                 break;
             case 'confirmation_resolved':
@@ -1468,6 +1551,7 @@ const DiagnosisPage = {
                 break;
             case 'done':
                 ChatWidget.finishAssistantMessage();
+                this._clearSessionStreaming(this.currentSessionId);
                 this._clearResumeState();
                 // Refresh session list to update title after first message
                 if (!this._renderOptions?.hideSessionSidebar && !this._renderOptions?.autoCreateSession) {
@@ -1483,13 +1567,20 @@ const DiagnosisPage = {
                     run_id: data.run_id || null,
                     status: data.status || 'partial',
                 };
+                if (this._pendingResumeState.status === 'awaiting_approval') {
+                    this._clearSessionStreaming(this.currentSessionId);
+                } else {
+                    this._markSessionStreaming(this.currentSessionId);
+                }
                 this._applyPendingStreamResume();
                 break;
             case 'cancel_ack':
                 // Server acknowledged cancel, UI already handled in _stopGeneration
+                this._clearSessionStreaming(this.currentSessionId);
                 break;
             case 'error':
                 ChatWidget.showError(data.content);
+                this._clearSessionStreaming(this.currentSessionId);
                 this._clearResumeState();
                 break;
         }
@@ -1631,6 +1722,7 @@ const DiagnosisPage = {
         if (this.ws) {
             this.ws.send({ type: 'cancel' });
         }
+        this._clearSessionStreaming(this.currentSessionId);
         ChatWidget.finishAssistantMessage();
         Toast.info('已停止生成');
     },
@@ -1707,6 +1799,7 @@ const DiagnosisPage = {
         this._modelSelectEl = null;
         this._pendingAutoAsk = null;
         this._initialAskSent = false;
+        this._streamingSessionIds.clear();
         this._renderOptions = null;
         this._container = null;
     }

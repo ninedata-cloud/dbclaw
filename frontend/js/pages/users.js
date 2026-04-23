@@ -304,12 +304,14 @@ const UsersPage = {
                 `;
                 const tbody = DOM.el('tbody');
                 for (const log of logs) {
+                    const loginTime = log.login_time || log.logged_in_at;
+                    const isSuccess = log.success ?? log.is_success;
                     const tr = DOM.el('tr');
                     tr.innerHTML = `
-                        <td style="white-space:nowrap">${Format.datetime(log.login_time)}</td>
+                        <td style="white-space:nowrap">${Format.datetime(loginTime)}</td>
                         <td>${Utils.escapeHtml(log.ip_address || '-')}</td>
                         <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${Utils.escapeHtml(log.user_agent || '')}">${Utils.escapeHtml(log.user_agent || '-')}</td>
-                        <td><span class="badge ${log.success ? 'badge-success' : 'badge-danger'}">${log.success ? 'Success' : 'Failed'}</span></td>
+                        <td><span class="badge ${isSuccess ? 'badge-success' : 'badge-danger'}">${isSuccess ? 'Success' : 'Failed'}</span></td>
                     `;
                     tbody.appendChild(tr);
                 }

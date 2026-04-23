@@ -44,6 +44,18 @@ async def _get_os_version_via_ssh(host: str, port: int, username: str, password:
     return None
 
 
+def _build_ssh_service(*, host: str, port: int, username: str, password: str = None, private_key: str = None, auth_type: str = "password"):
+    from backend.services.ssh_service import SSHService
+    return SSHService(
+        host=host,
+        port=port,
+        username=username,
+        password=password,
+        private_key=private_key,
+        use_agent=(auth_type == "agent"),
+    )
+
+
 @router.get("", response_model=List[HostResponse])
 async def list_host(db: AsyncSession = Depends(get_db)):
     from backend.models.host_metric import HostMetric
@@ -51,10 +63,10 @@ async def list_host(db: AsyncSession = Depends(get_db)):
     from datetime import datetime, timezone
 
     result = await db.execute(alive_select(Host).order_by(Host.id.desc()))
-    host = result.scalars().all()
+    hosts = result.scalars().all()
 
     response = []
-    for host in host:
+    for host in hosts:
         host_dict = {
             "id": host.id,
             "name": host.name,
@@ -123,7 +135,7 @@ async def list_host(db: AsyncSession = Depends(get_db)):
                 if issues:
                     # Determine severity
                     has_critical = any([cpu >= 90, mem >= 90, disk >= 90])
-                    host_dict["status"] = "error" if has_critical else "warning"
+                    host_dict["status"] = "critical" if has_critical else "warning"
                     host_dict["status_message"] = "；".join(issues)
                 else:
                     host_dict["status"] = "normal"
@@ -409,6 +421,24 @@ async def get_process_detail(host_id: int, pid: int, db: AsyncSession = Depends(
         raise HTTPException(status_code=500, detail=f"Failed to get process detail: {str(e)}")
 
 
+@router.post("/test", response_model=SSHTestResult)
+async def test_host_connection(data: HostCreate):
+    try:
+        ssh = _build_ssh_service(
+            host=data.host,
+            port=data.port,
+            username=data.username,
+            password=data.password,
+            private_key=data.private_key,
+            auth_type=data.auth_type,
+        )
+        output = ssh.execute("echo 'SSH connection successful'")
+        return SSHTestResult(success=True, message=output.strip())
+    except Exception as e:
+        logger.error(f"Failed to test SSH host {data.host}:{data.port} ({data.username}): {e}", exc_info=True)
+        return SSHTestResult(success=False, message=str(e))
+
+
 @router.post("/{host_id}/test", response_model=SSHTestResult)
 async def test_host(host_id: int, db: AsyncSession = Depends(get_db)):
     host = await get_alive_by_id(db, Host, host_id)
@@ -416,17 +446,15 @@ async def test_host(host_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="SSH host not found")
 
     try:
-        from backend.services.ssh_service import SSHService
         password = decrypt_value(host.password_encrypted) if host.password_encrypted else None
         private_key = decrypt_value(host.private_key_encrypted) if host.private_key_encrypted else None
-        use_agent = (host.auth_type == "agent")
-        ssh = SSHService(
+        ssh = _build_ssh_service(
             host=host.host,
             port=host.port,
             username=host.username,
             password=password,
             private_key=private_key,
-            use_agent=use_agent,
+            auth_type=host.auth_type,
         )
         output = ssh.execute("echo 'SSH connection successful'")
 
@@ -438,7 +466,7 @@ async def test_host(host_id: int, db: AsyncSession = Depends(get_db)):
                 username=host.username,
                 password=password,
                 private_key=private_key,
-                use_agent=use_agent,
+                use_agent=(host.auth_type == "agent"),
             )
             if os_version:
                 host.os_version = os_version

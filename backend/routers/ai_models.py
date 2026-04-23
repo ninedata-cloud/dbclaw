@@ -67,6 +67,7 @@ async def create_model(data: AIModelCreate, db: AsyncSession = Depends(get_db)):
         base_url=data.base_url,
         model_name=data.model_name,
         context_window=data.context_window,
+        reasoning_effort=data.reasoning_effort,
     )
     db.add(model)
     await db.commit()
@@ -98,6 +99,8 @@ async def update_model(model_id: int, data: AIModelUpdate, db: AsyncSession = De
         model.model_name = data.model_name
     if "context_window" in data.model_fields_set:
         model.context_window = data.context_window
+    if "reasoning_effort" in data.model_fields_set:
+        model.reasoning_effort = data.reasoning_effort
 
     await db.commit()
     await db.refresh(model)
@@ -141,6 +144,7 @@ async def test_model_chat(model_id: int, data: AIModelTestChatRequest, db: Async
         base_url=model.base_url,
         model_name=model.model_name,
         protocol=model.protocol,
+        reasoning_effort=getattr(model, "reasoning_effort", None),
     )
     if not client:
         raise HTTPException(status_code=400, detail="模型配置无效，请检查 API Key、Base URL 和模型名称")
