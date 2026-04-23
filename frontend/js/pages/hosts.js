@@ -237,6 +237,8 @@ const HostsPage = {
             } else {
                 Toast.error(`Connection test failed: ${result.message}`);
             }
+            // 重新加载主机列表以更新状态和指标
+            await this.render();
         } catch (err) {
             Toast.error('Test failed: ' + err.message);
         } finally {
@@ -338,6 +340,11 @@ const HostsPage = {
                         const result = await API.testHost(host.id);
                         if (result.success) {
                             Toast.success('连接成功!');
+                            // 测试成功后更新主机列表数据（不关闭弹窗）
+                            this.allHosts = await API.getHosts();
+                            this.filteredHosts = [...this.allHosts];
+                            this._applySort();
+                            Store.set('hosts', this.allHosts);
                         } else {
                             Toast.error(`Connection test failed: ${result.message}`);
                         }

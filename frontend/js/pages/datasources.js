@@ -514,6 +514,8 @@ const DatasourcesPage = {
             } else {
                 Toast.error(`连接失败: ${result.message}`);
             }
+            // 重新加载数据源列表以更新连接状态
+            await this._reloadWithFilters();
         } catch (err) {
             Toast.error('测试失败: ' + err.message);
         }
