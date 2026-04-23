@@ -10,6 +10,7 @@ const HostDetailPage = {
     processFilters: { search: '', user: '' },
     processSort: { field: 'cpu_percent', direction: 'desc' },
     processPollTimer: null,
+    currentTimeRange: 1440, // default 24 hours in minutes
 
     validTabs: ['info', 'monitor', 'ai', 'processes', 'network', 'terminal'],
 
@@ -667,11 +668,14 @@ const HostDetailPage = {
                     <div class="instance-embedded-title">性能监控</div>
                     <div style="display: flex; gap: 12px; align-items: center;">
                         <select id="monitor-time-range" class="filter-select">
-                            <option value="1">最近 1 小时</option>
-                            <option value="6">最近 6 小时</option>
-                            <option value="24" selected>最近 24 小时</option>
-                            <option value="72">最近 3 天</option>
-                            <option value="168">最近 7 天</option>
+                            <option value="1">最近 1 分钟</option>
+                            <option value="10">最近 10 分钟</option>
+                            <option value="60">最近 1 小时</option>
+                            <option value="360">最近 6 小时</option>
+                            <option value="1440" selected>最近 1 天</option>
+                            <option value="10080">最近 7 天</option>
+                            <option value="43200">最近 1 个月</option>
+                            <option value="custom">自定义时间</option>
                         </select>
                     </div>
                 </div>
@@ -769,11 +773,17 @@ const HostDetailPage = {
             </div>
         `;
 
-        await this._loadMonitorData(24);
+        await this._loadMonitorData(this.currentTimeRange);
 
         // 时间范围切换
         DOM.$('#monitor-time-range')?.addEventListener('change', async (e) => {
-            await this._loadMonitorData(parseInt(e.target.value));
+            const value = e.target.value;
+            if (value === 'custom') {
+                this._showCustomTimeDialog();
+            } else {
+                this.currentTimeRange = parseInt(value);
+                await this._loadMonitorData(this.currentTimeRange);
+            }
         });
 
         this.tabCleanup = () => {
@@ -785,9 +795,9 @@ const HostDetailPage = {
         };
     },
 
-    async _loadMonitorData(hours) {
+    async _loadMonitorData(minutes) {
         try {
-            const metrics = await API.getHostMetrics(this.currentHost.id, `minutes=${hours * 60}`);
+            const metrics = await API.getHostMetrics(this.currentHost.id, `minutes=${minutes}`);
             this._renderMonitorCharts(metrics);
         } catch (error) {
             console.error('Failed to load monitor data:', error);
@@ -1326,8 +1336,10 @@ const HostDetailPage = {
             container,
             embedded: true,
             fixedHostId: hostId,
+            contextEntityName: this.currentHost?.name || this.currentHost?.host || '',
             sessionFilterHostId: hostId,
             defaultSidebarCollapsed: true,
+            initialSessionTitle: `主机诊断 ${this.currentHost?.name || this.currentHost?.host || hostId}`.trim(),
             initialAsk: null,
             preferFreshSession: false,
         });
@@ -1346,6 +1358,118 @@ const HostDetailPage = {
         const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
+    },
+
+    _formatDateTimeLocal(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    },
+
+    _showCustomTimeDialog() {
+        const modal = Modal.show({
+            title: '自定义时间范围',
+            width: '480px',
+            content: `
+                <div class="form-group">
+                    <label>开始时间</label>
+                    <input type="datetime-local" class="filter-input" id="custom-start-time" />
+                </div>
+                <div class="form-group">
+                    <label>结束时间</label>
+                    <input type="datetime-local" class="filter-input" id="custom-end-time" />
+                </div>
+            `,
+            buttons: [
+                { text: '取消', variant: 'secondary', onClick: () => {
+                    Modal.hide();
+                    DOM.$('#monitor-time-range').value = this.currentTimeRange;
+                }},
+                { text: '确定', variant: 'primary', onClick: () => {
+                    this._applyCustomTimeRange();
+                }}
+            ],
+            onHide: () => {
+                // 如果用户直接关闭对话框，重置选择器
+                const select = DOM.$('#monitor-time-range');
+                if (select && select.value === 'custom') {
+                    select.value = this.currentTimeRange;
+                }
+            }
+        });
+
+        // 设置默认时间范围
+        const now = new Date();
+        const endTime = this._formatDateTimeLocal(now);
+        const startDate = new Date(now.getTime() - this.currentTimeRange * 60 * 1000);
+        const startTime = this._formatDateTimeLocal(startDate);
+
+        setTimeout(() => {
+            const startInput = DOM.$('#custom-start-time');
+            const endInput = DOM.$('#custom-end-time');
+            if (startInput) startInput.value = startTime;
+            if (endInput) endInput.value = endTime;
+        }, 0);
+    },
+
+    async _applyCustomTimeRange() {
+        const startInput = DOM.$('#custom-start-time');
+        const endInput = DOM.$('#custom-end-time');
+
+        if (!startInput || !endInput) return;
+
+        const start = startInput.value;
+        const end = endInput.value;
+
+        if (!start || !end) {
+            Toast.warning('请选择开始和结束时间');
+            return;
+        }
+
+        const startDate = new Date(start);
+        const endDate = new Date(end);
+
+        if (startDate >= endDate) {
+            Toast.warning('开始时间必须早于结束时间');
+            return;
+        }
+
+        Modal.hide();
+
+        try {
+            await this._loadCustomRangeData(start, end);
+        } catch (error) {
+            console.error('Failed to load custom range data:', error);
+            Toast.error('加载数据失败: ' + error.message);
+            DOM.$('#monitor-time-range').value = this.currentTimeRange;
+        }
+    },
+
+    async _loadCustomRangeData(startTime, endTime) {
+        try {
+            // 转换为 ISO 格式
+            const start = new Date(startTime).toISOString();
+            const end = new Date(endTime).toISOString();
+
+            const metrics = await API.getHostMetrics(
+                this.currentHost.id,
+                `start_time=${encodeURIComponent(start)}&end_time=${encodeURIComponent(end)}`
+            );
+
+            if (metrics.length === 0) {
+                Toast.warning('所选时间范围内没有数据');
+                DOM.$('#monitor-time-range').value = this.currentTimeRange;
+                return;
+            }
+
+            this._renderMonitorCharts(metrics);
+            Toast.success('已加载自定义时间范围数据');
+        } catch (error) {
+            throw error;
+        }
     },
 
     _bindEvents() {
