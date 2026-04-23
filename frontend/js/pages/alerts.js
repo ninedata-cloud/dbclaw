@@ -460,8 +460,8 @@ const AlertsPage = {
         headerRow.appendChild(DOM.el('th', { textContent: '类型/指标' }));
         headerRow.appendChild(DOM.el('th', { textContent: '标题' }));
         headerRow.appendChild(DOM.el('th', { textContent: '开始时间' }));
-        headerRow.appendChild(DOM.el('th', { textContent: '恢复时间' }));
-        headerRow.appendChild(DOM.el('th', { textContent: '数量' }));
+        headerRow.appendChild(DOM.el('th', { textContent: '最近时间' }));
+        headerRow.appendChild(DOM.el('th', { textContent: '持续时间' }));
         headerRow.appendChild(DOM.el('th', { textContent: '状态' }));
         headerRow.appendChild(DOM.el('th', { textContent: '操作' }));
         thead.appendChild(headerRow);
@@ -536,16 +536,45 @@ const AlertsPage = {
             }));
 
             const eventEndTime = event.event_ended_at || event.event_end_time || null;
-            row.appendChild(DOM.el('td', {
-                textContent: eventEndTime ? Format.datetime(eventEndTime) : '-'
-            }));
+            const endTimeCell = DOM.el('td');
+            if (event.status === 'resolved' && eventEndTime) {
+                // 已解决：显示恢复时间
+                endTimeCell.textContent = Format.datetime(eventEndTime);
+                endTimeCell.title = '恢复时间';
+            } else if (eventEndTime) {
+                // 活跃/已确认：显示最后触发时间
+                endTimeCell.textContent = Format.datetime(eventEndTime);
+                endTimeCell.title = '最后触发时间';
+            } else {
+                endTimeCell.textContent = '-';
+            }
+            row.appendChild(endTimeCell);
 
-            const countCell = DOM.el('td');
-            countCell.appendChild(DOM.el('span', {
-                className: 'count-badge',
-                textContent: event.alert_count ?? 0
-            }));
-            row.appendChild(countCell);
+            const durationCell = DOM.el('td');
+            if (eventStartTime && eventEndTime) {
+                const start = new Date(eventStartTime);
+                const end = new Date(eventEndTime);
+                const durationMs = end - start;
+                const durationMinutes = Math.floor(durationMs / 60000);
+                const durationHours = Math.floor(durationMinutes / 60);
+                const durationDays = Math.floor(durationHours / 24);
+
+                let durationText = '';
+                if (durationDays > 0) {
+                    durationText = `${durationDays}天${durationHours % 24}小时`;
+                } else if (durationHours > 0) {
+                    durationText = `${durationHours}小时${durationMinutes % 60}分`;
+                } else if (durationMinutes > 0) {
+                    durationText = `${durationMinutes}分钟`;
+                } else {
+                    durationText = '< 1分钟';
+                }
+                durationCell.textContent = durationText;
+                durationCell.title = `从 ${Format.datetime(eventStartTime)} 到 ${Format.datetime(eventEndTime)}`;
+            } else {
+                durationCell.textContent = '-';
+            }
+            row.appendChild(durationCell);
 
             const statusCell = DOM.el('td');
             statusCell.appendChild(DOM.el('span', {
