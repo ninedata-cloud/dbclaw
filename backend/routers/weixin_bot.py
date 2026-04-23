@@ -144,6 +144,9 @@ async def create_weixin_login_qrcode(
         if qrcode_img.startswith("http"):
             try:
                 qrcode_img_proxied = weixin_service.generate_qrcode_as_base64(qrcode_img)
+            except ImportError as exc:
+                logger.error(f"生成二维码图片失败（缺少依赖）: {exc}")
+                qrcode_img_proxied = None
             except Exception as exc:
                 logger.warning(f"生成二维码图片失败，将使用原始 URL: {exc}")
                 qrcode_img_proxied = qrcode_img

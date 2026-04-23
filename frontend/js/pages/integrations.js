@@ -824,7 +824,16 @@ class IntegrationsPage {
             const hint = document.getElementById('weixin-qrcode-hint');
 
             if (resp.qrcode_img_content) {
-                display.innerHTML = `<img src="${resp.qrcode_img_content}" alt="QR Code">`;
+                // 使用 JavaScript 动态创建 img 元素，避免 innerHTML 转义问题
+                display.innerHTML = '';
+                const img = document.createElement('img');
+                img.src = resp.qrcode_img_content;
+                img.alt = 'QR Code';
+                img.onerror = () => {
+                    // 图片加载失败时显示文本二维码
+                    display.innerHTML = `<div class="integration-qr-placeholder">${this.escapeHtml(resp.qrcode)}</div>`;
+                };
+                display.appendChild(img);
             } else {
                 display.innerHTML = `<div class="integration-qr-placeholder">${this.escapeHtml(resp.qrcode)}</div>`;
             }

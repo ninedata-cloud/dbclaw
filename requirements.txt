@@ -24,6 +24,7 @@ requests>=2.31.0
 apscheduler>=3.10.0
 lark-oapi>=1.5.3
 dingtalk-stream>=0.20.0
+qrcode>=7.4.0
 
 # Infrastructure integrations
 paramiko>=3.0.0

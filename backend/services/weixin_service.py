@@ -58,7 +58,12 @@ class WeixinService:
 
     def generate_qrcode_as_base64(self, qrcode_string: str, size: int = 8) -> str:
         """用 Python qrcode 库从字符串生成 QR 码图片 base64（绕过 CORS）。"""
-        import qrcode
+        try:
+            import qrcode
+        except ImportError:
+            logger.error("qrcode 库未安装，无法生成二维码图片。请运行: pip install qrcode")
+            raise ImportError("qrcode 库未安装，请运行: pip install qrcode")
+
         qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=size, border=2)
         qr.add_data(qrcode_string)
         qr.make(fit=True)

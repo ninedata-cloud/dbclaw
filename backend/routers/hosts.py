@@ -173,8 +173,7 @@ async def create_host(data: HostCreate, db: AsyncSession = Depends(get_db)):
     # Immediately collect metrics for the new host
     try:
         from backend.services.host_collector import _collect_host_metric
-        await _collect_host_metric(db, host)
-        await db.commit()
+        await _collect_host_metric(host)
         logger.info(f"Collected initial metrics for new host {host.name}")
     except Exception as e:
         logger.warning(f"Failed to collect initial metrics for host {host.name}: {e}")
@@ -231,8 +230,7 @@ async def update_host(host_id: int, data: HostUpdate, db: AsyncSession = Depends
     # Immediately collect metrics after update
     try:
         from backend.services.host_collector import _collect_host_metric
-        await _collect_host_metric(db, host)
-        await db.commit()
+        await _collect_host_metric(host)
         logger.info(f"Collected metrics after updating host {host.name}")
     except Exception as e:
         logger.warning(f"Failed to collect metrics after update for host {host.name}: {e}")
@@ -452,8 +450,7 @@ async def test_host(host_id: int, db: AsyncSession = Depends(get_db)):
         # Immediately collect metrics after successful test
         try:
             from backend.services.host_collector import _collect_host_metric
-            await _collect_host_metric(db, host)
-            await db.commit()
+            await _collect_host_metric(host)
             logger.info(f"Collected metrics after testing host {host.name}")
         except Exception as e:
             logger.warning(f"Failed to collect metrics after test for host {host.name}: {e}")
