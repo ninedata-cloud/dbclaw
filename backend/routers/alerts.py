@@ -380,6 +380,8 @@ async def list_alert_event(
     status: Optional[str] = Query("all", pattern="^(active|acknowledged|resolved|all)$"),
     severity: Optional[str] = Query(None, pattern="^(critical|high|medium|low)$"),
     search: Optional[str] = None,
+    sort_by: Optional[str] = Query(None, description="Sort field"),
+    sort_order: Optional[str] = Query(None, pattern="^(asc|desc)$", description="Sort order"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
@@ -402,6 +404,8 @@ async def list_alert_event(
         status=status,
         severity=severity,
         search=search,
+        sort_by=sort_by,
+        sort_order=sort_order,
         limit=limit,
         offset=offset
     )

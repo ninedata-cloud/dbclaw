@@ -21,6 +21,8 @@ const AlertsPage = {
         start_time: null,
         end_time: null
     },
+    sortBy: null,
+    sortOrder: 'desc',
     currentPage: {
         events: 1
     },
@@ -89,6 +91,8 @@ const AlertsPage = {
             if (this.filters.search) params.append('search', this.filters.search);
             if (this.filters.start_time) params.append('start_time', this.filters.start_time);
             if (this.filters.end_time) params.append('end_time', this.filters.end_time);
+            if (this.sortBy) params.append('sort_by', this.sortBy);
+            if (this.sortOrder) params.append('sort_order', this.sortOrder);
             params.append('limit', this.pageSize.events);
             params.append('offset', offset);
 
@@ -450,19 +454,36 @@ const AlertsPage = {
         });
         const thead = DOM.el('thead');
         const headerRow = DOM.el('tr');
+
+        // Helper function to create sortable header
+        const createSortableHeader = (text, sortKey) => {
+            const th = DOM.el('th', {
+                textContent: text,
+                style: 'cursor: pointer; user-select: none;',
+                onClick: () => this.toggleSort(sortKey)
+            });
+
+            if (this.sortBy === sortKey) {
+                const arrow = this.sortOrder === 'asc' ? ' ↑' : ' ↓';
+                th.textContent = text + arrow;
+            }
+
+            return th;
+        };
+
         headerRow.appendChild(DOM.el('th', { textContent: '', style: 'width: 40px' }));
-        headerRow.appendChild(DOM.el('th', { textContent: '严重程度' }));
+        headerRow.appendChild(createSortableHeader('严重程度', 'severity'));
         if (showDatasourceColumn) {
-            headerRow.appendChild(DOM.el('th', { textContent: '数据源' }));
+            headerRow.appendChild(createSortableHeader('数据源', 'datasource_id'));
         }
-        headerRow.appendChild(DOM.el('th', { textContent: '故障域' }));
-        headerRow.appendChild(DOM.el('th', { textContent: '生命周期' }));
+        headerRow.appendChild(createSortableHeader('故障域', 'fault_domain'));
+        headerRow.appendChild(createSortableHeader('生命周期', 'lifecycle_stage'));
         headerRow.appendChild(DOM.el('th', { textContent: '类型/指标' }));
         headerRow.appendChild(DOM.el('th', { textContent: '标题' }));
-        headerRow.appendChild(DOM.el('th', { textContent: '开始时间' }));
-        headerRow.appendChild(DOM.el('th', { textContent: '最近时间' }));
-        headerRow.appendChild(DOM.el('th', { textContent: '持续时间' }));
-        headerRow.appendChild(DOM.el('th', { textContent: '状态' }));
+        headerRow.appendChild(createSortableHeader('开始时间', 'event_started_at'));
+        headerRow.appendChild(createSortableHeader('最近时间', 'event_ended_at'));
+        headerRow.appendChild(createSortableHeader('持续时间', 'duration'));
+        headerRow.appendChild(createSortableHeader('状态', 'status'));
         headerRow.appendChild(DOM.el('th', { textContent: '操作' }));
         thead.appendChild(headerRow);
         table.appendChild(thead);
@@ -1616,6 +1637,18 @@ const AlertsPage = {
 
     resetPagination() {
         this.currentPage.events = 1;
+    },
+
+    async toggleSort(sortKey) {
+        if (this.sortBy === sortKey) {
+            this.sortOrder = this.sortOrder === 'asc' ? 'desc' : 'asc';
+        } else {
+            this.sortBy = sortKey;
+            this.sortOrder = 'desc';
+        }
+        this.resetPagination();
+        await this.loadEvents();
+        this.updateAlertsList();
     },
 
     // Silence-related methods

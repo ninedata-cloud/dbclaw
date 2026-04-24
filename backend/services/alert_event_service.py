@@ -237,6 +237,8 @@ class AlertEventService:
         status: Optional[str] = None,
         severity: Optional[str] = None,
         search: Optional[str] = None,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None,
         limit: int = 100,
         offset: int = 0
     ) -> Tuple[List[Tuple[AlertEvent, Optional[Datasource]]], int]:
@@ -283,12 +285,41 @@ class AlertEventService:
         count_result = await db.execute(count_query)
         total = count_result.scalar()
 
-        # Apply ordering and pagination
-        query = query.order_by(
-            AlertEventService._status_priority_expr().asc(),
-            AlertEvent.event_started_at.desc(),
-            AlertEvent.id.desc(),
-        )
+        # Apply ordering
+        if sort_by and sort_order:
+            # Map sort fields to model attributes
+            sort_field_map = {
+                'severity': AlertEvent.severity,
+                'datasource_id': AlertEvent.datasource_id,
+                'fault_domain': AlertEvent.fault_domain,
+                'lifecycle_stage': AlertEvent.lifecycle_stage,
+                'event_started_at': AlertEvent.event_started_at,
+                'event_ended_at': AlertEvent.event_ended_at,
+                'duration': (AlertEvent.event_ended_at - AlertEvent.event_started_at),
+                'status': AlertEvent.status,
+            }
+
+            sort_field = sort_field_map.get(sort_by)
+            if sort_field is not None:
+                if sort_order.lower() == 'asc':
+                    query = query.order_by(sort_field.asc())
+                else:
+                    query = query.order_by(sort_field.desc())
+            else:
+                # Fallback to default ordering
+                query = query.order_by(
+                    AlertEventService._status_priority_expr().asc(),
+                    AlertEvent.event_started_at.desc(),
+                    AlertEvent.id.desc(),
+                )
+        else:
+            # Default ordering
+            query = query.order_by(
+                AlertEventService._status_priority_expr().asc(),
+                AlertEvent.event_started_at.desc(),
+                AlertEvent.id.desc(),
+            )
+
         query = query.limit(limit).offset(offset)
 
         # Execute query
@@ -458,6 +489,7 @@ class AlertEventService:
             event.event_ended_at = now()
             event.updated_at = now()
             await db.flush()
+            # 不在这里 commit，由调用方的 async_session 上下文管理器自动处理
             return event
 
         return None
