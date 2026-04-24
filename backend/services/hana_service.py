@@ -240,7 +240,7 @@ class HANAConnector(DBConnector):
                 cursor = conn.cursor()
                 try:
                     cursor.execute(sql)
-                    rows = cursor.fetchmany(max_rows)
+                    rows = cursor.fetchmany(max_rows + 1)
                     columns = [desc[0] for desc in cursor.description] if cursor.description else []
                     return columns, rows
                 finally:
@@ -249,10 +249,14 @@ class HANAConnector(DBConnector):
             loop = asyncio.get_event_loop()
             columns, rows = await loop.run_in_executor(None, _sync_execute)
 
+            truncated = len(rows) > max_rows
+            visible_rows = rows[:max_rows]
+
             return {
                 "columns": columns,
-                "rows": [list(r) for r in rows],
-                "row_count": len(rows),
+                "rows": [list(r) for r in visible_rows],
+                "row_count": len(visible_rows),
+                "truncated": truncated,
             }
         except QueryCancelledError:
             raise

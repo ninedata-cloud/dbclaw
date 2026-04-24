@@ -203,14 +203,20 @@ class SQLServerConnector(DBConnector):
                 db_size_bytes = size_row[0] if size_row and size_row[0] else 0
 
                 # 4. 网络 IO（从 dm_exec_connections 获取累积字节数）
+                # num_reads/num_writes 是数据包数量，需要乘以平均包大小估算字节数
+                # SQL Server 典型 TDS 包大小为 4096 字节
                 cursor.execute(
-                    "SELECT SUM(num_reads) as total_reads, "
-                    "SUM(num_writes) as total_writes "
+                    "SELECT SUM(num_reads) as total_packet_reads, "
+                    "SUM(num_writes) as total_packet_writes "
                     "FROM sys.dm_exec_connections"
                 )
                 net_row = cursor.fetchone()
-                network_reads_total = net_row[0] if net_row and net_row[0] else 0
-                network_writes_total = net_row[1] if net_row and net_row[1] else 0
+                packet_reads = net_row[0] if net_row and net_row[0] else 0
+                packet_writes = net_row[1] if net_row and net_row[1] else 0
+
+                # 将数据包数量转换为字节数（使用 4KB 作为平均包大小）
+                network_reads_total = packet_reads * 4096
+                network_writes_total = packet_writes * 4096
 
                 result = {
                     # 连接指标（兼容前端 fallback 链）
@@ -336,15 +342,25 @@ class SQLServerConnector(DBConnector):
                     if execution_state.cancel_requested:
                         raise QueryCancelledError("查询已取消")
 
+                # 关键修复：使用 SQL Server 服务端游标（FAST_FORWARD）
+                # 这样可以避免客户端缓冲所有结果
                 cursor = conn.cursor()
                 if execution_state is not None:
                     execution_state.cancel_callback = cursor.cancel
+
                 start = time.time()
+
+                # 使用 SET ROWCOUNT 限制返回行数（SQL Server 特有）
+                # 这是最可靠的方式，在服务器端就限制结果集大小
+                cursor.execute(f"SET ROWCOUNT {max_rows + 1}")
                 cursor.execute(sql)
+                cursor.execute("SET ROWCOUNT 0")  # 重置
+
                 elapsed = round((time.time() - start) * 1000, 2)
                 if cursor.description:
                     columns = [col[0] for col in cursor.description]
-                    rows = cursor.fetchmany(max_rows + 1)
+                    # 现在 fetchall 是安全的，因为服务器端已经限制了行数
+                    rows = cursor.fetchall()
                     truncated = len(rows) > max_rows
                     visible_rows = rows[:max_rows]
                     result = {

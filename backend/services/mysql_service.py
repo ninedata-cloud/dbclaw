@@ -1,7 +1,10 @@
 import asyncio
+import logging
 from typing import Any, Dict, List, Optional
 from backend.services.db_connector import DBConnector
 from backend.services.query_execution_state import QueryCancelledError
+
+logger = logging.getLogger(__name__)
 
 
 class MySQLConnector(DBConnector):
@@ -52,12 +55,36 @@ class MySQLConnector(DBConnector):
                 max_connections = int(max_conn_row[1]) if max_conn_row and max_conn_row[1] is not None else 0
 
                 uptime = max(int(status.get("Uptime", 1)), 1)
-                visible_threads_running = int(process_stats[1] or 0) if process_stats else 0
-                visible_threads_connected = int(process_stats[0] or 0) if process_stats else 0
-                global_threads_running = int(status.get("Threads_running", 0))
-                global_threads_connected = int(status.get("Threads_connected", 0))
-                threads_running = max(visible_threads_running, global_threads_running)
-                threads_connected = max(visible_threads_connected, global_threads_connected)
+
+                # 优先使用 SHOW GLOBAL STATUS 的值（更准确且不受权限限制）
+                # 安全转换：处理字符串、None、空值等情况
+                def safe_int(value, default=0):
+                    if value is None or value == '':
+                        return default
+                    try:
+                        return int(value)
+                    except (ValueError, TypeError):
+                        return default
+
+                global_threads_running = safe_int(status.get("Threads_running"))
+                global_threads_connected = safe_int(status.get("Threads_connected"))
+
+                # 只在 GLOBAL STATUS 无效时才使用 PROCESSLIST（可能受权限限制）
+                visible_threads_running = safe_int(process_stats[1]) if process_stats else 0
+                visible_threads_connected = safe_int(process_stats[0]) if process_stats else 0
+
+                # 优先使用全局状态值，只在为 0 时才考虑可见连接数
+                threads_running = global_threads_running if global_threads_running > 0 else visible_threads_running
+                threads_connected = global_threads_connected if global_threads_connected > 0 else visible_threads_connected
+
+                # 调试日志：记录连接数采集情况
+                if threads_connected == 0 or threads_running == 0:
+                    logger.warning(
+                        f"MySQL connection metrics may be incorrect - "
+                        f"global: connected={global_threads_connected}, running={global_threads_running}; "
+                        f"visible: connected={visible_threads_connected}, running={visible_threads_running}; "
+                        f"final: connected={threads_connected}, running={threads_running}"
+                    )
 
                 return {
                     "connections_active": threads_running,
@@ -219,37 +246,49 @@ class MySQLConnector(DBConnector):
         execution_state: Optional[Any] = None,
     ) -> Dict[str, Any]:
         import time
+        # 使用普通连接，通过 SQL_SELECT_LIMIT 限制结果
         conn = await self._connect()
         try:
             await self._register_execution_session(conn, execution_state)
             async with conn.cursor() as cur:
                 start = time.time()
-                await cur.execute(sql)
-                elapsed = round((time.time() - start) * 1000, 2)
 
-                if cur.description:
-                    columns = [d[0] for d in cur.description]
-                    fetched_rows = await cur.fetchmany(max_rows + 1)
-                    truncated = len(fetched_rows) > max_rows
-                    visible_rows = fetched_rows[:max_rows]
-                    return {
-                        "columns": columns,
-                        "rows": [list(r) for r in visible_rows],
-                        "row_count": len(visible_rows),
-                        "execution_time_ms": elapsed,
-                        "truncated": truncated,
-                    }
-                else:
-                    row_count = cur.rowcount if cur.rowcount >= 0 else 0
-                    await conn.commit()
-                    return {
-                        "columns": [],
-                        "rows": [],
-                        "row_count": row_count,
-                        "execution_time_ms": elapsed,
-                        "truncated": False,
-                        "message": f"Query OK, {row_count} rows affected",
-                    }
+                # 使用 SQL_SELECT_LIMIT 在服务器端限制结果行数
+                # 这类似于 JDBC 的 statement.setMaxRows()
+                await cur.execute(f"SET SQL_SELECT_LIMIT = {max_rows + 1}")
+                try:
+                    await cur.execute(sql)
+                    elapsed = round((time.time() - start) * 1000, 2)
+
+                    if cur.description:
+                        columns = [d[0] for d in cur.description]
+                        # 先获取结果，再重置 SQL_SELECT_LIMIT
+                        fetched_rows = await cur.fetchall()
+                        truncated = len(fetched_rows) > max_rows
+                        visible_rows = fetched_rows[:max_rows]
+                        result = {
+                            "columns": columns,
+                            "rows": [list(r) for r in visible_rows],
+                            "row_count": len(visible_rows),
+                            "execution_time_ms": elapsed,
+                            "truncated": truncated,
+                        }
+                    else:
+                        row_count = cur.rowcount if cur.rowcount >= 0 else 0
+                        await conn.commit()
+                        result = {
+                            "columns": [],
+                            "rows": [],
+                            "row_count": row_count,
+                            "execution_time_ms": elapsed,
+                            "truncated": False,
+                            "message": f"Query OK, {row_count} rows affected",
+                        }
+                    return result
+                finally:
+                    # 无论成功或失败，都要重置 SQL_SELECT_LIMIT
+                    await cur.execute("SET SQL_SELECT_LIMIT = DEFAULT")
+
         except QueryCancelledError:
             raise
         except Exception as exc:
