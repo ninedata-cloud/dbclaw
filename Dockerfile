@@ -1,7 +1,7 @@
 # DBClaw - 单容器部署（内置 PostgreSQL + FastAPI + 静态前端）
 FROM python:3.11-slim
 
-ARG APP_VERSION=dev
+ARG APP_VERSION=
 ARG BUILD_COMMIT=
 ARG BUILD_TIME=
 ARG TARGETARCH
@@ -9,9 +9,6 @@ ARG TARGETARCH
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    APP_VERSION=${APP_VERSION} \
-    BUILD_COMMIT=${BUILD_COMMIT} \
-    BUILD_TIME=${BUILD_TIME} \
     APP_HOST=0.0.0.0 \
     APP_PORT=9939 \
     DEBUG=false
@@ -81,6 +78,11 @@ COPY frontend ./frontend
 COPY docker ./docker
 COPY run.py ./
 COPY .env.example ./
+
+RUN set -eux; \
+    default_app_version="$(python -c 'from backend.version import APP_VERSION; print(APP_VERSION)')"; \
+    app_version="${APP_VERSION:-$default_app_version}"; \
+    printf 'APP_VERSION=%s\nBUILD_COMMIT=%s\nBUILD_TIME=%s\n' "$app_version" "$BUILD_COMMIT" "$BUILD_TIME" > /app/.build-info
 
 RUN printf "\n# DBClaw convenience aliases\nalias ll='ls -l --color=auto'\n" >> /etc/bash.bashrc
 

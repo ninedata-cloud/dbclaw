@@ -22,7 +22,7 @@ from backend.models.user import User
 from backend.models.system_config import SystemConfig
 from backend.models.datasource import Datasource
 from backend.models.soft_delete import alive_filter
-from backend.utils.datetime_helper import now
+from backend.utils.datetime_helper import now, format_local_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -201,7 +201,7 @@ class NotificationService:
 {ds_info}
 {alert.content}
 
-创建时间：{alert.created_at.strftime('%Y-%m-%d %H:%M:%S')}
+创建时间：{format_local_datetime(alert.created_at)}
 """
             msg.attach(MIMEText(body, 'plain'))
             if smtp_use_tls:
@@ -424,7 +424,7 @@ class NotificationService:
             lines.append(f'**阈值：** {alert.threshold_value:.2f}')
         if alert.trigger_reason:
             lines.append(f'**触发原因：** {alert.trigger_reason}')
-        lines.append(f'**时间：** {alert.created_at.strftime("%Y-%m-%d %H:%M:%S")}')
+        lines.append(f'**时间：** {format_local_datetime(alert.created_at)}')
         return {
             'msgtype': 'markdown',
             'markdown': {
@@ -465,7 +465,7 @@ class NotificationService:
             alert_info.append(f"**阈值：** {alert.threshold_value:.2f}")
         if alert.trigger_reason:
             alert_info.append(f"**触发原因：** {alert.trigger_reason}")
-        alert_info.append(f"**触发时间：** {alert.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
+        alert_info.append(f"**触发时间：** {format_local_datetime(alert.created_at)}")
         elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(alert_info)}})
 
         root_cause_markdown = NotificationService._format_diagnosis_markdown(getattr(alert, "root_cause", None))

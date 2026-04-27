@@ -161,6 +161,13 @@ python run.py
 ```bash
 docker build -t dbclaw:latest .
 
+# 发布或测试指定版本时，可注入构建信息
+docker build \
+  --build-arg APP_VERSION=0.9.10 \
+  --build-arg BUILD_COMMIT=$(git rev-parse --short HEAD) \
+  --build-arg BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  -t dbclaw:0.9.10 .
+
 docker run -d \
   --name dbclaw \
   -p 9939:9939 \
@@ -207,6 +214,14 @@ python -m pytest
 
 # 运行特定测试
 python -m pytest tests/test_skills.py
+
+# 按分层运行（推荐）
+python -m pytest -m unit
+python -m pytest -m service
+python -m pytest -m api
+
+# 覆盖率门禁（见 pytest.ini）
+python -m pytest --cov=backend --cov-report=term-missing
 
 # 生成加密密钥
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"

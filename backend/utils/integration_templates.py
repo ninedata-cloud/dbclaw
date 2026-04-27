@@ -824,8 +824,9 @@ async def fetch_metrics(context, params, datasource):
                 "rds001_cpu_util": {"name": "cpu_usage", "unit": "%"},
                 "rds002_mem_util": {"name": "memory_usage", "unit": "%"},
                 "rds003_iops": {"name": "iops", "unit": "count/s"},
-                "rds004_bytes_in": {"name": "network_in", "unit": "KiB/s", "aliases": ["network_rx_bytes"]},
-                "rds005_bytes_out": {"name": "network_out", "unit": "KiB/s", "aliases": ["network_tx_bytes"]},
+                # 华为云该指标返回 Bytes/s，这里统一归一化为系统内部使用的 KB/s
+                "rds004_bytes_in": {"name": "network_in", "unit": "KB/s", "scale": 1.0 / 1024.0, "aliases": ["network_rx_bytes"]},
+                "rds005_bytes_out": {"name": "network_out", "unit": "KB/s", "scale": 1.0 / 1024.0, "aliases": ["network_tx_bytes"]},
                 "rds006_conn_count": {"name": "connections_total", "unit": "count", "aliases": ["total_connections"]},
                 "rds007_conn_active_count": {"name": "connections_active", "unit": "count", "aliases": ["active_connections"]},
                 "rds008_qps": {"name": "qps", "unit": "count/s"},
@@ -863,8 +864,9 @@ async def fetch_metrics(context, params, datasource):
                 "rds001_cpu_util": {"name": "cpu_usage", "unit": "%"},
                 "rds002_mem_util": {"name": "memory_usage", "unit": "%"},
                 "rds003_iops": {"name": "iops", "unit": "count/s"},
-                "rds004_bytes_in": {"name": "network_in", "unit": "KiB/s", "aliases": ["network_rx_bytes"]},
-                "rds005_bytes_out": {"name": "network_out", "unit": "KiB/s", "aliases": ["network_tx_bytes"]},
+                # 华为云该指标返回 Bytes/s，这里统一归一化为系统内部使用的 KB/s
+                "rds004_bytes_in": {"name": "network_in", "unit": "KB/s", "scale": 1.0 / 1024.0, "aliases": ["network_rx_bytes"]},
+                "rds005_bytes_out": {"name": "network_out", "unit": "KB/s", "scale": 1.0 / 1024.0, "aliases": ["network_tx_bytes"]},
                 "rds039_disk_util": {"name": "disk_usage", "unit": "%"},
                 "rds042_database_connections": {"name": "connections_total", "unit": "count", "aliases": ["total_connections"]},
                 "rds047_disk_total_size": {"name": "disk_total", "unit": "GiB"},
@@ -899,8 +901,9 @@ async def fetch_metrics(context, params, datasource):
                 "rds001_cpu_util": {"name": "cpu_usage", "unit": "%"},
                 "rds002_mem_util": {"name": "memory_usage", "unit": "%"},
                 "rds003_iops": {"name": "iops", "unit": "count/s"},
-                "rds004_bytes_in": {"name": "network_in", "unit": "KiB/s", "aliases": ["network_rx_bytes"]},
-                "rds005_bytes_out": {"name": "network_out", "unit": "KiB/s", "aliases": ["network_tx_bytes"]},
+                # 华为云该指标返回 Bytes/s，这里统一归一化为系统内部使用的 KB/s
+                "rds004_bytes_in": {"name": "network_in", "unit": "KB/s", "scale": 1.0 / 1024.0, "aliases": ["network_rx_bytes"]},
+                "rds005_bytes_out": {"name": "network_out", "unit": "KB/s", "scale": 1.0 / 1024.0, "aliases": ["network_tx_bytes"]},
                 "rds039_disk_util": {"name": "disk_usage", "unit": "%"},
                 "rds047_disk_total_size": {"name": "disk_total", "unit": "GiB"},
                 "rds048_disk_used_size": {"name": "disk_used", "unit": "GiB"},
@@ -1444,8 +1447,8 @@ async def fetch_metrics(context, params, datasource):
                 {"remote_name": "Qps", "metric_name": "qps", "unit": "count/s"},
                 {"remote_name": "Tps", "metric_name": "tps", "unit": "count/s"},
                 {"remote_name": "Iops", "metric_name": "iops", "unit": "count/s"},
-                {"remote_name": "BytesReceived", "metric_name": "network_in", "unit": "Bytes/s", "aliases": ["network_rx_bytes"]},
-                {"remote_name": "BytesSent", "metric_name": "network_out", "unit": "Bytes/s", "aliases": ["network_tx_bytes"]},
+                {"remote_name": "BytesReceived", "metric_name": "network_in", "unit": "KB/s", "scale": 1.0 / 1024.0, "aliases": ["network_rx_bytes"]},
+                {"remote_name": "BytesSent", "metric_name": "network_out", "unit": "KB/s", "scale": 1.0 / 1024.0, "aliases": ["network_tx_bytes"]},
                 {"remote_name": "RealCapacity", "metric_name": "disk_used", "unit": "MB"},
                 {"remote_name": "VolumeRate", "metric_name": "disk_usage", "unit": "%"},
                 {"remote_name": "ThreadsConnected", "metric_name": "connections_total", "unit": "count", "aliases": ["threads_connected"]},
@@ -1491,8 +1494,8 @@ async def fetch_metrics(context, params, datasource):
                 {"remote_name": "Iops", "metric_name": "iops", "unit": "count/s"},
                 {"remote_name": "DiskReadsSec", "metric_name": "disk_reads_per_sec", "unit": "count/s"},
                 {"remote_name": "DiskWritesSec", "metric_name": "disk_writes_per_sec", "unit": "count/s"},
-                {"remote_name": "InFlow", "metric_name": "network_in", "unit": "Bytes/s", "scale": 1024.0, "aliases": ["network_rx_bytes"]},
-                {"remote_name": "OutFlow", "metric_name": "network_out", "unit": "Bytes/s", "scale": 1024.0, "aliases": ["network_tx_bytes"]},
+                {"remote_name": "InFlow", "metric_name": "network_in", "unit": "KB/s", "aliases": ["network_rx_bytes"]},
+                {"remote_name": "OutFlow", "metric_name": "network_out", "unit": "KB/s", "aliases": ["network_tx_bytes"]},
                 {"remote_name": "Storage", "metric_name": "disk_used", "unit": "MB", "scale": 1024.0},
                 {"remote_name": "FreeStorage", "metric_name": "free_storage_pct", "unit": "%"},
                 {"remote_name": "BufferCacheHitRatio", "metric_name": "cache_hit_rate", "unit": "%", "aliases": ["buffer_pool_hit_rate"]},
@@ -1508,8 +1511,8 @@ async def fetch_metrics(context, params, datasource):
                 {"remote_name": "Tps", "metric_name": "tps", "unit": "count/s"},
                 {"remote_name": "Readiops", "metric_name": "disk_reads_per_sec", "unit": "count/s"},
                 {"remote_name": "Writeiops", "metric_name": "disk_writes_per_sec", "unit": "count/s"},
-                {"remote_name": "BytesReceived", "metric_name": "network_in", "unit": "Bytes/s", "scale": 1024.0 * 1024.0, "aliases": ["network_rx_bytes"]},
-                {"remote_name": "BytesSent", "metric_name": "network_out", "unit": "Bytes/s", "scale": 1024.0 * 1024.0, "aliases": ["network_tx_bytes"]},
+                {"remote_name": "BytesReceived", "metric_name": "network_in", "unit": "KB/s", "scale": 1024.0, "aliases": ["network_rx_bytes"]},
+                {"remote_name": "BytesSent", "metric_name": "network_out", "unit": "KB/s", "scale": 1024.0, "aliases": ["network_tx_bytes"]},
                 {"remote_name": "Storageuserate", "metric_name": "disk_usage", "unit": "%"},
                 {"remote_name": "DataVolumeUsage", "metric_name": "disk_data", "unit": "MB", "scale": 1024.0},
                 {"remote_name": "TmpVolumeUsage", "metric_name": "disk_temp", "unit": "MB", "scale": 1024.0},
@@ -1686,6 +1689,32 @@ async def fetch_metrics(context, params, datasource):
         return body
 
     async def validate_credentials():
+        def is_network_error(error):
+            error_name = type(error).__name__
+            error_text = str(error).lower()
+            network_error_names = {
+                "ClientConnectorError",
+                "ClientConnectorDNSError",
+                "ClientConnectionError",
+                "ClientOSError",
+                "ServerTimeoutError",
+                "TimeoutError",
+            }
+            if error_name in network_error_names:
+                return True
+            network_keywords = [
+                "timeout while contacting dns servers",
+                "name or service not known",
+                "temporary failure in name resolution",
+                "nodename nor servname provided",
+                "failed to resolve",
+                "cannot connect to host",
+                "connection timeout",
+                "connection timed out",
+                "dns",
+            ]
+            return any(keyword in error_text for keyword in network_keywords)
+
         try:
             await call_api("DescribeAllNamespaces", {
                 "Module": "monitor",
@@ -1693,6 +1722,8 @@ async def fetch_metrics(context, params, datasource):
                 "SceneType": "ST_ALARM",
             })
         except Exception as e:
+            if is_network_error(e):
+                raise ValueError("腾讯云 API 网络连接失败，请检查 DNS/网络配置: " + str(e))
             raise ValueError("腾讯云 SecretId/SecretKey 验证失败，请检查配置: " + str(e))
 
     def build_dimensions(mode, instance_id):

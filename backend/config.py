@@ -2,12 +2,17 @@ from pydantic_settings import BaseSettings
 from functools import lru_cache
 from urllib.parse import quote
 
+from backend.version import APP_VERSION, load_build_info
+
+
+_BUILD_INFO = load_build_info()
+
 
 class Settings(BaseSettings):
     app_name: str = "DBClaw"
-    app_version: str = "0.9.10"
-    build_commit: str = ""
-    build_time: str = "2026-04-22"
+    app_version: str = _BUILD_INFO.get("APP_VERSION") or APP_VERSION
+    build_commit: str = _BUILD_INFO.get("BUILD_COMMIT") or ""
+    build_time: str = _BUILD_INFO.get("BUILD_TIME") or ""
     app_host: str = "0.0.0.0"
     app_port: int = 9939
     debug: bool = True
@@ -55,11 +60,23 @@ class Settings(BaseSettings):
         extra = "ignore"
 
     @property
+    def resolved_app_version(self) -> str:
+        return self.app_version.strip() or APP_VERSION
+
+    @property
+    def resolved_build_commit(self) -> str:
+        return self.build_commit.strip()
+
+    @property
+    def resolved_build_time(self) -> str:
+        return self.build_time.strip()
+
+    @property
     def frontend_asset_version(self) -> str:
-        raw_version = self.build_commit.strip()
+        raw_version = self.resolved_build_commit
         if not raw_version:
-            app_version = self.app_version.strip() or "dev"
-            build_time = self.build_time.strip()
+            app_version = self.resolved_app_version
+            build_time = self.resolved_build_time
             raw_version = f"{app_version}-{build_time}" if build_time else app_version
         return quote(raw_version, safe="-._~")
 

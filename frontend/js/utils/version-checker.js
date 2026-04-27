@@ -18,7 +18,7 @@
 
     function getDisplayVersion(appInfo, assetVersion) {
         const appVersion = String(appInfo?.app_version || '').trim();
-        return appVersion ? `v${appVersion}` : assetVersion;
+        return appVersion ? (appVersion.startsWith('v') ? appVersion : `v${appVersion}`) : assetVersion;
     }
 
     function removeExistingPrompt() {

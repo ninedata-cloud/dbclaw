@@ -1003,24 +1003,29 @@ class AlertService:
         minutes: int = 10
     ) -> List[AlertMessage]:
         """
-        Get active alerts that haven't been notified yet.
+        Get active alerts that are due for notification.
 
-        Only returns alerts where notified_at is NULL, meaning they have
-        never been successfully notified. This prevents the same alert
-        from being sent repeatedly across dispatcher cycles.
+        Returns active alerts when:
+        - notified_at is NULL (never successfully notified), or
+        - notified_at is older than the cooldown window.
 
         Args:
             db: Database session
-            minutes: Time window (kept for API compatibility, no longer used for filtering)
+            minutes: Notification cooldown window
 
         Returns:
             List of alerts that need notification
         """
+        cutoff_time = now() - timedelta(minutes=max(int(minutes or 0), 0))
+
         result = await db.execute(
             select(AlertMessage).where(
                 and_(
                     AlertMessage.status == "active",
-                    AlertMessage.notified_at.is_(None)
+                    or_(
+                        AlertMessage.notified_at.is_(None),
+                        AlertMessage.notified_at <= cutoff_time,
+                    ),
                 )
             )
         )

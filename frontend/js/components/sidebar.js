@@ -146,17 +146,22 @@ const Sidebar = {
 
         if (this._appInfoLoaded) return;
 
-        try {
-            const appInfo = await API.getAppInfo();
+        const renderVersion = (appInfo = {}) => {
             const version = (appInfo?.app_version || 'dev').trim();
             const commit = (appInfo?.build_commit || '').trim();
-            versionNode.textContent = `v${version}`;
+            const displayVersion = version.startsWith('v') ? version : `v${version}`;
+            versionNode.textContent = displayVersion;
             versionNode.title = commit ? `版本 ${version} (${commit})` : `版本 ${version}`;
+        };
+
+        try {
+            const appInfo = await API.getAppInfo();
+            renderVersion(appInfo);
             this._appInfoLoaded = true;
         } catch (error) {
             console.error('Failed to load app version:', error);
-            versionNode.textContent = 'vdev';
-            versionNode.title = '版本信息加载失败';
+            renderVersion(window.DBCLAW_APP_INFO || {});
+            versionNode.title = `${versionNode.title}（接口加载失败，使用页面内置版本）`;
         }
     },
 

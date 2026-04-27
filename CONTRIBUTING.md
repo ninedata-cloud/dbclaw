@@ -196,6 +196,11 @@ python -m pytest tests/test_skills.py -k test_function_name
 
 # 查看测试覆盖率
 python -m pytest --cov=backend tests/
+
+# 按分层运行测试
+python -m pytest -m unit
+python -m pytest -m service
+python -m pytest -m api
 ```
 
 ### 编写测试
@@ -205,6 +210,10 @@ python -m pytest --cov=backend tests/
 - 测试文件放在 `tests/` 目录
 - 测试文件命名：`test_*.py`
 - 测试函数命名：`test_*`
+- 使用 marker 标记测试层级：
+  - `@pytest.mark.unit`：纯逻辑单元测试
+  - `@pytest.mark.service`：服务层流程测试（依赖 mock）
+  - `@pytest.mark.api`：API 路由行为测试
 
 ## 代码审查
 
@@ -222,7 +231,7 @@ python -m pytest --cov=backend tests/
 
 发布由项目维护者负责：
 
-1. 更新版本号（`backend/config.py`）
+1. 更新版本号（`backend/version.py`）
 2. 更新 `CHANGELOG.md`
 3. 创建 Git Tag
 4. 构建 Docker 镜像

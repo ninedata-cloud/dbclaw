@@ -188,11 +188,21 @@ async def collect_metrics_for_connection(datasource_id: int):
 
                 # Handle connection failure - create alert and trigger diagnosis
                 if connection_failed:
+                    # Even when DB connection fails, we may still have host/OS metrics.
+                    # Run recovery check to close stale threshold alerts that already recovered.
+                    await _auto_resolve_threshold_alerts_on_connection_failure(
+                        db=db,
+                        datasource_id=datasource_id,
+                        metrics=snapshot_data,
+                    )
                     await _handle_connection_failure(db, datasource_id, datasource, status.get("error", "Unknown error"))
 
                 # Route alert engine after metrics are persisted
                 if not connection_failed:
                     await _route_alert_engine(db, datasource, snapshot_data)
+
+                # Commit all alert/inspection changes
+                await db.commit()
 
                 # Push to WebSocket subscribers
                 await _push_to_subscribers(datasource_id, {
@@ -263,6 +273,41 @@ async def _auto_resolve_recovered_alerts(
         threshold_rules: Configured threshold rules
         current_violations: List of current violations (to avoid resolving alerts that are still active)
     """
+    def _resolve_recovery_threshold(rule: Dict[str, Any]) -> Optional[float]:
+        """Resolve recovery threshold for both legacy and multi-level rules.
+
+        For multi-level rules, recovery is judged against the *lowest* threshold.
+        """
+        if not isinstance(rule, dict):
+            return None
+
+        direct_threshold = rule.get("threshold")
+        if direct_threshold is not None:
+            try:
+                return float(direct_threshold)
+            except (TypeError, ValueError):
+                return None
+
+        levels = rule.get("levels")
+        if not isinstance(levels, list):
+            return None
+
+        level_thresholds: List[float] = []
+        for level in levels:
+            if not isinstance(level, dict):
+                continue
+            threshold_value = level.get("threshold")
+            if threshold_value is None:
+                continue
+            try:
+                level_thresholds.append(float(threshold_value))
+            except (TypeError, ValueError):
+                continue
+
+        if not level_thresholds:
+            return None
+        return min(level_thresholds)
+
     try:
         normalized_threshold_rules: Dict[str, Any] = {}
         if isinstance(threshold_rules, dict):
@@ -314,8 +359,9 @@ async def _auto_resolve_recovered_alerts(
             if not threshold_rule:
                 continue
 
-            # Check if metric has recovered (is now below threshold)
-            threshold = threshold_rule.get('threshold')
+            # Check if metric has recovered (is now below threshold).
+            # For multi-level threshold rules, use the lowest level threshold.
+            threshold = _resolve_recovery_threshold(threshold_rule)
             if threshold is None:
                 continue
 
@@ -330,6 +376,60 @@ async def _auto_resolve_recovered_alerts(
 
     except Exception as e:
         logger.error(f"Error auto-resolving recovered alerts for datasource {datasource_id}: {e}", exc_info=True)
+
+
+async def _auto_resolve_threshold_alerts_on_connection_failure(
+    db,
+    datasource_id: int,
+    metrics: Dict[str, Any],
+):
+    """
+    Try to auto-resolve recovered threshold alerts even if DB connection failed.
+
+    Connection failures route to a dedicated alert path and normally skip threshold
+    routing; this fallback avoids leaving stale threshold events active when
+    host-level metrics already show recovery.
+    """
+    try:
+        if not isinstance(metrics, dict) or not metrics:
+            return
+
+        from backend.models.inspection_config import InspectionConfig
+
+        result = await db.execute(
+            select(InspectionConfig).where(
+                InspectionConfig.datasource_id == datasource_id,
+                InspectionConfig.is_enabled == True,
+            )
+        )
+        config = result.scalar_one_or_none()
+        if not config:
+            return
+
+        effective_config = await resolve_effective_inspection_config(db, config)
+        threshold_rules = getattr(effective_config, "threshold_rules", None) or {}
+        if not threshold_rules:
+            return
+
+        current_violations = _threshold_checker.check_thresholds(
+            datasource_id=datasource_id,
+            metrics=metrics,
+            threshold_rules=threshold_rules,
+        )
+        await _auto_resolve_recovered_alerts(
+            db=db,
+            datasource_id=datasource_id,
+            metrics=metrics,
+            threshold_rules=threshold_rules,
+            current_violations=current_violations,
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to run threshold recovery on connection failure for datasource %s: %s",
+            datasource_id,
+            e,
+            exc_info=True,
+        )
 
 
 async def _auto_resolve_recovered_baseline_alerts(
@@ -501,6 +601,17 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
                     f"Skipping duplicate anomaly trigger for datasource {datasource_id} metric {metric_name} - "
                     f"active alert {active_alert.id} exists"
                 )
+                # Update event end time to reflect ongoing violation
+                from backend.services.alert_event_service import AlertEventService
+                try:
+                    await AlertEventService.update_active_event_time(
+                        db=db,
+                        datasource_id=datasource_id,
+                        metric_name=metric_name,
+                        alert_type="threshold_violation"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to update event time for threshold violation: {e}")
                 continue
 
             logger.info(f"Triggering anomaly inspection for datasource {datasource_id}: {reason}")
@@ -570,6 +681,17 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
                     metric_name,
                     active_alert.id,
                 )
+                # Update event end time to reflect ongoing violation
+                from backend.services.alert_event_service import AlertEventService
+                try:
+                    await AlertEventService.update_active_event_time(
+                        db=db,
+                        datasource_id=datasource_id,
+                        metric_name=metric_name,
+                        alert_type="baseline_deviation"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to update event time for baseline deviation: {e}")
                 continue
 
             from backend.services.alert_service import AlertService
@@ -806,17 +928,20 @@ async def _handle_connection_failure(db, datasource_id: int, datasource, error_m
 
         if active_alert:
             # Update the event's latest occurrence time to reflect ongoing failure
-            updated_event = await AlertEventService.update_active_event_time(
-                db=db,
-                datasource_id=datasource_id,
-                alert_type="system_error",
-                metric_name="connection_status"
-            )
-            if updated_event:
-                logger.debug(
-                    f"Updated event {updated_event.id} latest time for ongoing connection failure "
-                    f"(datasource {datasource_id})"
+            try:
+                updated_event = await AlertEventService.update_active_event_time(
+                    db=db,
+                    datasource_id=datasource_id,
+                    alert_type="system_error",
+                    metric_name="connection_status"
                 )
+                if updated_event:
+                    logger.debug(
+                        f"Updated event {updated_event.id} latest time for ongoing connection failure "
+                        f"(datasource {datasource_id})"
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to update event time for connection failure: {e}")
 
             logger.debug(
                 f"Skipping duplicate connection_failure trigger for datasource {datasource_id} - "
@@ -886,14 +1011,17 @@ async def _handle_network_probe_failure(host: str):
             existing_alert = result.scalars().first()
             if existing_alert:
                 # Update event time for ongoing network probe failure
-                await AlertEventService.update_active_event_time(
-                    db=db,
-                    datasource_id=0,
-                    alert_type="system_error",
-                    metric_name="network_probe"
-                )
-                await db.commit()
-                logger.debug("Network probe alert already active, updated event time")
+                try:
+                    await AlertEventService.update_active_event_time(
+                        db=db,
+                        datasource_id=0,
+                        alert_type="system_error",
+                        metric_name="network_probe"
+                    )
+                    await db.commit()
+                    logger.debug("Network probe alert already active, updated event time")
+                except Exception as e:
+                    logger.warning(f"Failed to update event time for network probe: {e}")
                 return
 
             await AlertService.create_alert(

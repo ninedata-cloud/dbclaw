@@ -30,6 +30,59 @@ scheduler: Optional[AsyncIOScheduler] = None
 GLOBAL_INTEGRATION_JOB_ID = "integration_global_collector"
 
 
+async def _collect_direct_metrics_supplement(datasource: Datasource) -> dict:
+    """
+    补充采集云 API 不提供的关键字段（max_connections、uptime、cache_hit_rate 等）
+
+    Args:
+        datasource: 数据源对象
+
+    Returns:
+        补充的指标字典
+    """
+    from backend.services.db_connector import get_connector
+    from backend.utils.encryption import decrypt_value
+
+    supplement = {}
+    connector = None
+
+    try:
+        password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
+        connector = get_connector(
+            db_type=datasource.db_type,
+            host=datasource.host,
+            port=datasource.port,
+            username=datasource.username,
+            password=password,
+            database=datasource.database,
+            extra_params=datasource.extra_params,
+        )
+
+        status = await connector.get_status()
+
+        # 只提取云 API 不提供的字段
+        if 'max_connections' in status:
+            supplement['max_connections'] = status['max_connections']
+        if 'uptime' in status:
+            supplement['uptime'] = status['uptime']
+        if 'cache_hit_rate' in status:
+            supplement['cache_hit_rate'] = status['cache_hit_rate']
+        if 'buffer_pool_hit_rate' in status:
+            supplement['buffer_pool_hit_rate'] = status['buffer_pool_hit_rate']
+
+    except Exception as e:
+        logger.warning(f"补充采集数据源 {datasource.id} 失败: {e}")
+    finally:
+        if connector is not None:
+            try:
+                await connector.close()
+            except Exception:
+                pass
+
+    return supplement
+
+
+
 def _ensure_scheduler_started():
     global scheduler
 
@@ -163,6 +216,16 @@ async def execute_integration(datasource_id: int):
                         metric_data,
                     )
                     merged_data = cleanup_obsolete_integration_keys(datasource.db_type, merged_data)
+
+                    # 补充直连采集的关键字段（max_connections、uptime、cache_hit_rate 等）
+                    # 这些字段会强制覆盖集成采集的值，因为直连采集更准确
+                    logger.info(f"[补充采集] 开始补充采集数据源 {datasource.id}")
+                    direct_metrics = await _collect_direct_metrics_supplement(datasource)
+                    logger.info(f"[补充采集] 数据源 {datasource.id} 补充采集结果: {direct_metrics}")
+                    if direct_metrics:
+                        for key, value in direct_metrics.items():
+                            logger.info(f"[补充采集] 覆盖字段 {key}: {merged_data.get(key)} -> {value}")
+                            merged_data[key] = value  # 强制覆盖
                     snapshot = DatasourceMetric(
                         datasource_id=datasource.id,
                         metric_type="db_status",

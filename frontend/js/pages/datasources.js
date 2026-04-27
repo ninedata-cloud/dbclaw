@@ -757,11 +757,11 @@ const DatasourcesPage = {
 
     _buildScheduleIntervalOptions(currentValue) {
         const presets = [
-            { value: 300, label: '每 5 分钟' },
-            { value: 900, label: '每 15 分钟' },
             { value: 3600, label: '每小时' },
             { value: 21600, label: '每 6 小时' },
             { value: 86400, label: '每天' },
+            { value: 604800, label: '每周' },
+            { value: 2592000, label: '每月' },
         ];
         const numericCurrent = parseInt(currentValue, 10) || 86400;
         const hasCurrent = presets.some((item) => item.value === numericCurrent);

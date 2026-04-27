@@ -6,6 +6,7 @@ Processes pending alerts and sends notifications based on subscriptions
 import asyncio
 import logging
 import re
+from datetime import timedelta
 from typing import List
 from sqlalchemy import select
 
@@ -18,7 +19,7 @@ from backend.services.alert_service import (
 from backend.services.notification_service import NotificationService
 from backend.services.aggregation_engine import AggregationEngine
 from backend.models.soft_delete import alive_filter, get_alive_by_id
-from backend.utils.datetime_helper import now
+from backend.utils.datetime_helper import now, format_local_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,8 @@ AI_ALERT_METRIC_ALIASES = {
 
 AI_ALERT_PERCENT_METRICS = {"cpu_usage", "memory_usage", "disk_usage", "cache_hit_rate"}
 AI_ALERT_INTEGER_METRICS = {"connections_active", "connections_total", "connections_waiting", "lock_waiting"}
+NETWORK_PROBE_METRIC_NAME = "network_probe"
+MAX_ALERT_HISTORY_DAYS = 3
 
 
 def _get_required_integration_params(integration) -> list[str]:
@@ -243,7 +246,7 @@ def _build_active_alert_payload(
     native_metric_summary: str | None = None,
 ) -> dict:
     datasource_name = datasource.name if datasource else "未知数据源"
-    timestamp = alert.created_at.strftime('%Y-%m-%d %H:%M:%S') if alert.created_at else now().strftime('%Y-%m-%d %H:%M:%S')
+    timestamp = format_local_datetime(alert.created_at) if alert.created_at else format_local_datetime(now())
 
     payload = {
         "title": f"【{alert.severity.upper()}】{datasource_name} 告警",
@@ -293,8 +296,8 @@ def _build_active_alert_payload(
 
 def _build_recovery_alert_payload(alert, datasource, diagnosis_summary: str | None = None) -> dict:
     datasource_name = datasource.name if datasource else "未知数据源"
-    created_at_str = alert.created_at.strftime('%Y-%m-%d %H:%M:%S') if alert.created_at else None
-    resolved_at_str = alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else now().strftime('%Y-%m-%d %H:%M:%S')
+    created_at_str = format_local_datetime(alert.created_at) if alert.created_at else None
+    resolved_at_str = format_local_datetime(alert.resolved_at) if alert.resolved_at else format_local_datetime(now())
     diagnosis_summary_line = f"AI 总结：{diagnosis_summary}\n" if diagnosis_summary else ""
 
     recovery_metric_line = ""
@@ -374,11 +377,13 @@ async def start_notification_dispatcher():
 async def _process_pending_alerts():
     """Process all pending alerts and send notifications"""
     async with async_session() as db:
-        # Get active alerts that haven't been notified recently (last 10 minutes)
-        alerts = await AlertService.get_pending_notifications(db, minutes=10)
+        cooldown_minutes = await AggregationEngine._get_notification_cooldown_minutes(db)
+        # Get active alerts that are due for notification (based on cooldown window)
+        alerts = await AlertService.get_pending_notifications(db, minutes=cooldown_minutes)
 
         if alerts:
             logger.debug(f"Processing {len(alerts)} pending alerts")
+            has_probe_failure = await _has_active_network_probe_failure(db)
 
             # Get all active subscriptions
             subscriptions = await AlertService.get_all_subscriptions(db)
@@ -388,6 +393,22 @@ async def _process_pending_alerts():
             else:
                 # Process each alert
                 for alert in alerts:
+                    if _is_historical_alert(alert):
+                        logger.info(
+                            "Skipping alert %s: historical alert older than %s days",
+                            alert.id,
+                            MAX_ALERT_HISTORY_DAYS,
+                        )
+                        continue
+
+                    if _should_skip_for_probe_failure(alert, has_probe_failure):
+                        logger.info(
+                            "Skipping alert %s: active network probe failure, only %s alert can be sent",
+                            alert.id,
+                            NETWORK_PROBE_METRIC_NAME,
+                        )
+                        continue
+
                     # Check if datasource is in silence period
                     if await _is_datasource_silenced(db, alert.datasource_id):
                         logger.debug(f"Skipping alert {alert.id}: datasource {alert.datasource_id} is silenced")
@@ -457,7 +478,12 @@ async def _process_pending_alerts():
                                 continue
 
                             # Pre-send dedup: check if already delivered for this alert+subscription
-                            if await _already_delivered(db, alert.id, subscription.id):
+                            if await _already_delivered(
+                                db,
+                                alert.id,
+                                subscription.id,
+                                cooldown_minutes=cooldown_minutes,
+                            ):
                                 logger.debug(
                                     f"Skipping alert {alert.id} for subscription {subscription.id}: already delivered"
                                 )
@@ -501,18 +527,28 @@ async def _process_pending_alerts():
 
 
 
-async def _already_delivered(db, alert_id: int, subscription_id: int) -> bool:
-    """Check if a successful delivery already exists for this alert+subscription"""
+async def _already_delivered(
+    db,
+    alert_id: int,
+    subscription_id: int,
+    cooldown_minutes: int = 0,
+) -> bool:
+    """Check if this alert+subscription was delivered within cooldown window."""
     from backend.models.alert_delivery_log import AlertDeliveryLog
     from sqlalchemy import select, and_
 
+    filters = [
+        AlertDeliveryLog.alert_id == alert_id,
+        AlertDeliveryLog.subscription_id == subscription_id,
+        AlertDeliveryLog.status == "sent",
+    ]
+    if cooldown_minutes > 0:
+        cutoff_time = now() - timedelta(minutes=cooldown_minutes)
+        filters.append(AlertDeliveryLog.sent_at >= cutoff_time)
+
     result = await db.execute(
         select(AlertDeliveryLog.id).where(
-            and_(
-                AlertDeliveryLog.alert_id == alert_id,
-                AlertDeliveryLog.subscription_id == subscription_id,
-                AlertDeliveryLog.status == "sent"
-            )
+            and_(*filters)
         ).limit(1)
     )
     return result.scalar_one_or_none() is not None
@@ -956,6 +992,38 @@ async def _is_datasource_silenced(db, datasource_id: int) -> bool:
     return False
 
 
+def _is_historical_alert(alert) -> bool:
+    created_at = getattr(alert, "created_at", None)
+    if not created_at:
+        return False
+    cutoff = now() - timedelta(days=MAX_ALERT_HISTORY_DAYS)
+    return created_at < cutoff
+
+
+def _is_network_probe_alert(alert) -> bool:
+    return getattr(alert, "metric_name", None) == NETWORK_PROBE_METRIC_NAME
+
+
+def _should_skip_for_probe_failure(alert, has_probe_failure: bool) -> bool:
+    return has_probe_failure and not _is_network_probe_alert(alert)
+
+
+async def _has_active_network_probe_failure(db) -> bool:
+    from backend.models.alert_message import AlertMessage
+    from sqlalchemy import and_
+
+    result = await db.execute(
+        select(AlertMessage.id).where(
+            and_(
+                AlertMessage.alert_type == "system_error",
+                AlertMessage.metric_name == NETWORK_PROBE_METRIC_NAME,
+                AlertMessage.status.in_(["active", "acknowledged"]),
+            )
+        ).limit(1)
+    )
+    return result.scalar_one_or_none() is not None
+
+
 async def _process_recovery_notifications(db):
     """Send notifications for recently resolved alerts"""
     resolved_alerts = await AlertService.get_pending_recovery_notifications(db, minutes=60)
@@ -969,7 +1037,25 @@ async def _process_recovery_notifications(db):
     if not subscriptions:
         return
 
+    has_probe_failure = await _has_active_network_probe_failure(db)
+
     for alert in resolved_alerts:
+        if _is_historical_alert(alert):
+            logger.info(
+                "Skipping recovery for alert %s: historical alert older than %s days",
+                alert.id,
+                MAX_ALERT_HISTORY_DAYS,
+            )
+            continue
+
+        if _should_skip_for_probe_failure(alert, has_probe_failure):
+            logger.info(
+                "Skipping recovery for alert %s: active network probe failure, only %s alert can be sent",
+                alert.id,
+                NETWORK_PROBE_METRIC_NAME,
+            )
+            continue
+
         # Check if datasource is in silence period
         if await _is_datasource_silenced(db, alert.datasource_id):
             logger.debug(f"Skipping recovery notification for alert {alert.id}: datasource {alert.datasource_id} is silenced")

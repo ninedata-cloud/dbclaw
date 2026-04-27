@@ -18,12 +18,20 @@ PRE_CREATE_MIGRATIONS: List[Callable[[], Awaitable[None]]] = [
 POST_CREATE_MIGRATIONS: List[Callable[[], Awaitable[None]]] = [
     # 添加 inspection_trigger.error_message 字段
     lambda: _run_add_inspection_trigger_error_message(),
+    # 添加 ai_model.reasoning_effort 字段
+    lambda: _run_add_ai_model_reasoning_effort(),
 ]
 
 
 async def _run_add_inspection_trigger_error_message():
     """添加 inspection_trigger.error_message 字段"""
     from backend.migrations.add_inspection_trigger_error_message import upgrade
+    await upgrade()
+
+
+async def _run_add_ai_model_reasoning_effort():
+    """添加 ai_model.reasoning_effort 字段"""
+    from backend.migrations.add_ai_model_reasoning_effort import upgrade
     await upgrade()
 
 

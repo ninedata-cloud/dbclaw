@@ -95,9 +95,9 @@ class AggregationEngine:
     ) -> bool:
         """
         Default aggregation rule:
-        - Respect the configured cooldown window for the same alert event.
-        - For non-event comparisons, deduplicate by datasource + alert_type + metric_name
-          within the same cooldown window, even if the previous alert recovered.
+        - Respect the configured cooldown window only for the same active alert event.
+        - If a previous event has already recovered and a new event is created, allow
+          notification immediately (do not suppress across events).
 
         Args:
             db: Database session
@@ -161,49 +161,7 @@ class AggregationEngine:
                     )
                     return True
 
-        # 如果没有事件ID，按告警身份在冷却窗口内去重
-        cutoff_time = current_time - timedelta(minutes=max(cooldown_minutes, 0))
-        similarity_filters = AggregationEngine._build_similarity_filters(alert)
-
-        # Check for recent deliveries with same datasource and alert_type
-        result = await db.execute(
-            select(AlertDeliveryLog, AlertMessage.severity).join(
-                AlertMessage, AlertDeliveryLog.alert_id == AlertMessage.id
-            ).where(
-                and_(
-                    AlertDeliveryLog.subscription_id == subscription.id,
-                    AlertDeliveryLog.sent_at >= cutoff_time,
-                    AlertDeliveryLog.status == "sent",
-                    AlertDeliveryLog.channel.not_like("%recovery%"),
-                    *similarity_filters,
-                )
-            )
-        )
-        recent_deliveries = result.all()
-
-        if recent_deliveries:
-            previous_severities = [row[1] for row in recent_deliveries]
-            if AggregationEngine._is_severity_escalated(alert.severity, previous_severities):
-                logger.info(
-                    "Allowing alert %s despite cooldown: severity escalated from %s to %s "
-                    "(datasource=%s, type=%s, metric=%s)",
-                    alert.id,
-                    max(previous_severities, key=AggregationEngine._severity_rank, default=None),
-                    alert.severity,
-                    alert.datasource_id,
-                    alert.alert_type,
-                    alert.metric_name or "-",
-                )
-                return True
-
-            logger.info(
-                f"Suppressing alert {alert.id} due to recent delivery "
-                f"(datasource={alert.datasource_id}, type={alert.alert_type}, "
-                f"metric={alert.metric_name or '-'}, found {len(recent_deliveries)} deliveries "
-                f"in last {cooldown_minutes} minutes)"
-            )
-            return False
-
+        # 没有关联 event_id 的告警不做跨事件冷却抑制，直接发送
         return True
 
     @staticmethod
