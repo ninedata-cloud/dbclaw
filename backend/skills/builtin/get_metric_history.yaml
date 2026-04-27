@@ -1,0 +1,39 @@
+id: get_metric_history
+name: Metric History
+version: 1.0.0
+author: DBClaw
+category: monitoring
+description: Get historical metric data for trend analysis
+tags: [monitoring, history, trends, metrics]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+  - name: metric_type
+    type: string
+    required: false
+    default: db_status
+    description: Type of metric (db_status, os_metrics)
+  - name: limit
+    type: integer
+    required: false
+    default: 20
+    description: Number of recent snapshots to retrieve
+
+permissions: []
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+      minutes = params.get('limit', 20) * 5  # Assume 5 min intervals
+
+      # Get historical metrics
+      metrics = await context.get_metrics(datasource_id, minutes)
+
+      return {
+          "success": True,
+          "metrics": metrics,
+          "count": len(metrics)
+      }

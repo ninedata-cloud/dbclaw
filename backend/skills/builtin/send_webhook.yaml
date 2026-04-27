@@ -1,0 +1,155 @@
+id: send_webhook
+name: Send Webhook Notification
+version: 1.0.0
+author: DBClaw
+category: notification
+description: Send a notification to a webhook URL. Supports generic webhooks, Feishu (Lark), and DingTalk bots with optional HMAC signing.
+tags: [webhook, notification, alert, feishu, dingtalk]
+
+parameters:
+  - name: url
+    type: string
+    required: true
+    description: Webhook URL (https://). Auto-detects Feishu and DingTalk URLs and sends structured card/markdown messages.
+  - name: title
+    type: string
+    required: true
+    description: Notification title
+  - name: content
+    type: string
+    required: true
+    description: Notification body / message content
+  - name: severity
+    type: string
+    required: false
+    default: info
+    description: Severity level, affects card color for Feishu
+    enum: [critical, high, medium, low, info]
+  - name: secret
+    type: string
+    required: false
+    description: DingTalk HMAC signing secret (only used for DingTalk webhooks)
+  - name: payload
+    type: object
+    required: false
+    description: Custom JSON payload to send (overrides auto-generated payload for generic webhooks)
+
+permissions: [access_external_api]
+
+timeout: 30
+
+code: |
+  async def execute(context, params):
+      import aiohttp
+      import json
+      import hmac
+      import hashlib
+      import base64
+      import time
+      import urllib.parse
+
+      url = params.get('url', '').strip()
+      title = params.get('title', '').strip()
+      content = params.get('content', '').strip()
+      severity = params.get('severity', 'info')
+      secret = params.get('secret', '').strip()
+      custom_payload = params.get('payload')
+
+      if not url or not url.startswith(('http://', 'https://')):
+          return {"success": False, "error": "Valid webhook URL (http/https) is required"}
+      if not title:
+          return {"success": False, "error": "title is required"}
+      if not content:
+          return {"success": False, "error": "content is required"}
+
+      def is_feishu(u):
+          return 'open.feishu.cn' in u or 'open.larksuite.com' in u
+
+      def is_dingtalk(u):
+          return 'oapi.dingtalk.com' in u
+
+      def build_dingtalk_url(webhook_url, signing_secret):
+          if not signing_secret:
+              return webhook_url
+          timestamp = str(round(time.time() * 1000))
+          string_to_sign = f'{timestamp}\n{signing_secret}'
+          hmac_code = hmac.new(
+              signing_secret.encode('utf-8'),
+              string_to_sign.encode('utf-8'),
+              digestmod=hashlib.sha256
+          ).digest()
+          sign = urllib.parse.quote_plus(base64.b64encode(hmac_code))
+          return f'{webhook_url}&timestamp={timestamp}&sign={sign}'
+
+      def build_feishu_payload():
+          color_map = {'critical': 'red', 'high': 'orange', 'medium': 'yellow', 'low': 'blue', 'info': 'blue'}
+          color = color_map.get(severity, 'blue')
+          return {
+              "msg_type": "interactive",
+              "card": {
+                  "config": {"wide_screen_mode": True},
+                  "header": {
+                      "title": {"tag": "plain_text", "content": title},
+                      "template": color
+                  },
+                  "elements": [{"tag": "div", "text": {"tag": "lark_md", "content": content}}]
+              }
+          }
+
+      def build_dingtalk_payload():
+          severity_labels = {'critical': '严重', 'high': '高', 'medium': '中', 'low': '低', 'info': '信息'}
+          label = severity_labels.get(severity, severity)
+          return {
+              'msgtype': 'markdown',
+              'markdown': {
+                  'title': title,
+                  'text': f'### [{label}] {title}\n\n{content}'
+              }
+          }
+
+      try:
+          async with aiohttp.ClientSession() as session:
+              timeout = aiohttp.ClientTimeout(total=20)
+
+              if is_feishu(url):
+                  payload = build_feishu_payload()
+                  async with session.post(url, json=payload, timeout=timeout) as response:
+                      resp_text = await response.text()
+                      if response.status not in [200, 201, 202]:
+                          return {"success": False, "error": f"Feishu returned HTTP {response.status}: {resp_text[:300]}"}
+                      resp_json = json.loads(resp_text)
+                      if resp_json.get('code', 0) != 0:
+                          return {"success": False, "error": f"Feishu error {resp_json.get('code')}: {resp_json.get('msg')}"}
+                  return {"success": True, "message": f"Feishu notification sent: {title}", "platform": "feishu"}
+
+              elif is_dingtalk(url):
+                  signed_url = build_dingtalk_url(url, secret or None)
+                  payload = build_dingtalk_payload()
+                  async with session.post(signed_url, json=payload, timeout=timeout) as response:
+                      resp_text = await response.text()
+                      if response.status not in [200, 201, 202]:
+                          return {"success": False, "error": f"DingTalk returned HTTP {response.status}: {resp_text[:300]}"}
+                      resp_json = json.loads(resp_text)
+                      if resp_json.get('errcode', 0) != 0:
+                          return {"success": False, "error": f"DingTalk error {resp_json.get('errcode')}: {resp_json.get('errmsg')}"}
+                  return {"success": True, "message": f"DingTalk notification sent: {title}", "platform": "dingtalk"}
+
+              else:
+                  # Generic webhook
+                  payload = custom_payload if custom_payload else {
+                      "title": title,
+                      "content": content,
+                      "severity": severity
+                  }
+                  async with session.post(url, json=payload, timeout=timeout) as response:
+                      resp_text = await response.text()
+                      if response.status not in [200, 201, 202]:
+                          return {"success": False, "error": f"Webhook returned HTTP {response.status}: {resp_text[:300]}"}
+                  return {"success": True, "message": f"Webhook notification sent: {title}", "platform": "generic", "status_code": response.status}
+
+      except aiohttp.ClientConnectorError as e:
+          return {"success": False, "error": f"Cannot connect to webhook URL: {str(e)}"}
+      except aiohttp.ClientTimeout:
+          return {"success": False, "error": "Webhook request timed out after 20 seconds"}
+      except Exception as e:
+          return {"success": False, "error": f"Unexpected error: {str(e)}"}

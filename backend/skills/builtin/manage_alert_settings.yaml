@@ -1,0 +1,115 @@
+id: manage_alert_settings
+name: Manage Alert Settings
+version: 1.0.0
+author: DBClaw
+category: system
+description: Manage alert subscriptions, alert templates, datasource alert config, and datasource silence settings
+tags: [alert, settings, subscription, template, silence, inspection]
+
+parameters:
+  - name: target
+    type: string
+    required: true
+    description: 目标类型
+    enum: [subscription, template, datasource_config, silence]
+  - name: action
+    type: string
+    required: true
+    description: 操作类型
+    enum: [list, get, create, update, delete, test, toggle, set_default, set, cancel]
+  - name: subscription_id
+    type: integer
+    required: false
+    description: 订阅 ID，subscription 的 get/update/delete/test 使用
+  - name: template_id
+    type: integer
+    required: false
+    description: 模板 ID，template 的 get/update/toggle/set_default 使用
+  - name: datasource_id
+    type: integer
+    required: false
+    description: 数据源 ID，datasource_config 与 silence 使用
+  - name: user_id
+    type: integer
+    required: false
+    description: 目标用户 ID；管理员可用于查询或创建其他用户订阅
+  - name: enabled
+    type: boolean
+    required: false
+    description: 启用状态；用于订阅、模板 toggle 与 datasource_config update
+  - name: name
+    type: string
+    required: false
+    description: 模板名称
+  - name: description
+    type: string
+    required: false
+    description: 模板描述
+  - name: is_default
+    type: boolean
+    required: false
+    description: 是否设为默认模板
+  - name: template_config
+    type: object
+    required: false
+    description: 告警模板配置对象，支持 threshold_rules、baseline_config、event_ai_config、ai_policy_text 等字段
+  - name: datasource_ids
+    type: array
+    required: false
+    description: 订阅绑定的数据源 ID 列表，留空表示全部
+    items:
+      type: integer
+  - name: severity_levels
+    type: array
+    required: false
+    description: 订阅严重级别列表，留空表示全部
+    items:
+      type: string
+  - name: integration_targets
+    type: array
+    required: false
+    description: 订阅通知目标列表
+    items:
+      type: object
+  - name: time_ranges
+    type: array
+    required: false
+    description: 订阅生效时间范围
+    items:
+      type: object
+  - name: aggregation_script
+    type: string
+    required: false
+    description: 订阅聚合脚本
+  - name: schedule_interval
+    type: integer
+    required: false
+    description: 巡检间隔秒数，仅 datasource_config update 使用
+  - name: use_ai_analysis
+    type: boolean
+    required: false
+    description: 是否启用 AI 分析，仅 datasource_config update 使用
+  - name: alert_template_id
+    type: integer
+    required: false
+    description: 绑定的告警模板 ID，仅 datasource_config update 使用
+  - name: hours
+    type: number
+    required: false
+    description: 静默时长（小时），支持 0.5 到 240
+  - name: reason
+    type: string
+    required: false
+    description: 静默原因
+
+permissions: []
+
+code: |
+  async def execute(context, params):
+      from backend.services.alert_skill_service import execute_manage_alert_settings
+
+      return await execute_manage_alert_settings(
+          context.db,
+          context.user_id,
+          params,
+      )

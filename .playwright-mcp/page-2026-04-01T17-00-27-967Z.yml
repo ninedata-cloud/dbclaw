@@ -1,0 +1,15 @@
+- main [ref=e3]:
+  - generic [ref=e32]:
+    - generic [ref=e33]:
+      - img "数据库智能卫士" [ref=e34]
+      - generic [ref=e35]: 数据库智能卫士
+    - generic [ref=e36]:
+      - generic [ref=e37]:
+        - generic [ref=e38]: 用户名
+        - textbox "用户名" [active] [ref=e39]:
+          - /placeholder: 请输入用户名
+      - generic [ref=e40]:
+        - generic [ref=e41]: 密码
+        - textbox "密码" [ref=e42]:
+          - /placeholder: 请输入密码
+      - button "登录" [ref=e43] [cursor=pointer]

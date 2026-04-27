@@ -1,0 +1,36 @@
+id: execute_any_sql
+name: Execute Any SQL Command
+version: 1.0.0
+author: DBClaw
+category: admin
+description: Execute ANY SQL command including DDL, DML, DCL operations. WARNING - This can modify database structure, data, and permissions. Use with extreme caution.
+tags: [sql, admin, ddl, dml, dcl, insert, update, delete, drop, create, alter, grant, dangerous]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The datasource ID
+  - name: sql
+    type: string
+    required: true
+    description: The SQL command to execute (any valid SQL statement)
+
+permissions:
+  - execute_any_sql
+  - admin
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+      sql = params['sql'].strip()
+
+      # Log the dangerous operation
+      import logging
+      logger = logging.getLogger(__name__)
+      logger.warning(f"DANGEROUS OPERATION: Executing unrestricted SQL on datasource {datasource_id}: {sql[:100]}")
+
+      # Execute without restrictions
+      result = await context.execute_query(sql, datasource_id, allow_write=True)
+
+      return result

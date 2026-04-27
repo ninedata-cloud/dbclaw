@@ -1,0 +1,75 @@
+id: pg_get_slow_queries
+name: PostgreSQL Slow Queries
+version: 1.0.0
+author: DBClaw
+category: postgresql
+description: Get slow running queries from pg_stat_statements extension
+tags: [postgresql, slow-queries, performance]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+  - name: limit
+    type: integer
+    required: false
+    description: Maximum number of queries to return
+    validation:
+      min: 1
+      max: 1000
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+      limit = params.get('limit', 20)
+
+      # Check if pg_stat_statements is available
+      check_query = """
+      SELECT EXISTS (
+          SELECT 1 FROM pg_extension WHERE extname = 'pg_stat_statements'
+      ) as extension_exists
+      """
+
+      result = await context.execute_query(check_query, datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": "Failed to check pg_stat_statements extension"}
+
+      if not result.get("data") or not result["data"][0][0]:
+          return {
+              "success": True,
+              "extension_enabled": False,
+              "message": "pg_stat_statements extension is not installed. Run: CREATE EXTENSION pg_stat_statements;"
+          }
+
+      # Get slow queries
+      query = f"""
+      SELECT
+          query,
+          calls,
+          total_exec_time / 1000 as total_time_seconds,
+          mean_exec_time / 1000 as mean_time_seconds,
+          max_exec_time / 1000 as max_time_seconds,
+          rows,
+          100.0 * shared_blks_hit / NULLIF(shared_blks_hit + shared_blks_read, 0) as cache_hit_ratio
+      FROM pg_stat_statements
+      WHERE query NOT LIKE '%pg_stat_statements%'
+      ORDER BY mean_exec_time DESC
+      LIMIT {limit}
+      """
+
+      result = await context.execute_query(query, datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get slow queries")}
+
+      return {
+          "success": True,
+          "extension_enabled": True,
+          "queries": result.get("data", []),
+          "columns": result.get("columns", [])
+      }

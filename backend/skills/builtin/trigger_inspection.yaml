@@ -1,0 +1,76 @@
+id: trigger_inspection
+name: Trigger Inspection
+version: 1.0.0
+author: DBClaw
+category: inspection
+description: Manually trigger database inspection for a datasource
+tags: [inspection, trigger, diagnosis, manual]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: Target datasource ID to inspect
+  - name: reason
+    type: string
+    required: false
+    description: Trigger reason description (default "Manual inspection via AI")
+
+permissions: []
+
+code: |
+  async def execute(context, params):
+      from backend.services import metric_collector
+      from backend.models.inspection_trigger import InspectionTrigger
+      from backend.models.datasource import Datasource
+      from backend.models.soft_delete import get_alive_by_id
+      from sqlalchemy import select
+      
+      datasource_id = params['datasource_id']
+      reason = params.get('reason', 'Manual inspection via AI')
+      
+      # Verify datasource exists
+      datasource = await get_alive_by_id(context.db, Datasource, datasource_id)
+      
+      if not datasource:
+          return {
+              "success": False,
+              "error": f"Datasource {datasource_id} not found"
+          }
+      
+      # Get inspection service instance
+      inspection_service = metric_collector._inspection_service if hasattr(metric_collector, '_inspection_service') else None
+      
+      if not inspection_service:
+          return {
+              "success": False,
+              "error": "Inspection service not available. Please ensure the service is running."
+          }
+      
+      try:
+          # Trigger inspection
+          trigger_id = await inspection_service.trigger_inspection(
+              context.db, datasource_id, "manual", reason
+          )
+          
+          # Get trigger details
+          trigger_result = await context.db.execute(
+              select(InspectionTrigger).where(InspectionTrigger.id == trigger_id)
+          )
+          trigger = trigger_result.scalar_one()
+          
+          return {
+              "success": True,
+              "trigger_id": trigger_id,
+              "report_id": trigger.report_id,
+              "datasource_id": datasource_id,
+              "datasource_name": datasource.name,
+              "reason": reason,
+              "message": f"Inspection triggered successfully for datasource '{datasource.name}'"
+          }
+      except Exception as e:
+          return {
+              "success": False,
+              "error": f"Failed to trigger inspection: {str(e)}",
+              "datasource_id": datasource_id
+          }

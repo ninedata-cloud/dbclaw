@@ -1,0 +1,131 @@
+id: diagnose_disk_io
+name: Diagnose Disk I/O Performance
+version: 1.0.0
+author: DBClaw
+category: diagnosis
+description: Diagnose disk I/O performance by checking iostat, I/O wait, per-device read/write rates, latency, queue depth, and top I/O consuming processes
+tags: [linux, disk, io, diagnosis, performance, system, iowait, iostat]
+timeout: 120
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: false
+    description: The database connection ID (must have host configured)
+  - name: host_id
+    type: integer
+    required: false
+    description: The SSH host ID to execute commands on (alternative to datasource_id)
+
+permissions:
+  - execute_command
+
+code: |
+  async def execute(context, params):
+      datasource_id = params.get('datasource_id')
+      host_id = params.get('host_id')
+
+      # Validate parameters
+      if not datasource_id and not host_id:
+          return {
+              "success": False,
+              "error": "missing_parameter",
+              "message": "必须提供 datasource_id 或 host_id 参数之一"
+          }
+
+      if datasource_id and host_id:
+          return {
+              "success": False,
+              "error": "conflicting_parameters",
+              "message": "不能同时提供 datasource_id 和 host_id 参数"
+          }
+
+      # Determine execution method
+      if datasource_id:
+          from backend.models.datasource import Datasource
+          from sqlalchemy import select
+
+          datasource = await context.get_connection(datasource_id)
+
+          if not datasource:
+              return {
+                  "success": False,
+                  "error": "datasource_not_found",
+                  "message": f"数据源 ID {datasource_id} 不存在"
+              }
+
+          if not datasource.host_id:
+              return {
+                  "success": False,
+                  "error": "no_host_configured",
+                  "message": f"数据源 {datasource.name} (ID: {datasource_id}) 未配置主机连接，无法进行磁盘 I/O 诊断。"
+              }
+
+          async def exec_cmd(cmd):
+              return await context.execute_command(cmd, datasource_id)
+      else:
+          async def exec_cmd(cmd):
+              return await context.execute_command_on_host(cmd, host_id)
+
+      results = {
+          "success": True,
+          "diagnosis": {}
+      }
+
+      # 1. CPU iowait percentage
+      iowait = await exec_cmd(
+          "top -bn1 | grep 'Cpu(s)'"
+      )
+      if iowait.get("success"):
+          results["diagnosis"]["cpu_iowait"] = iowait.get("output", "").strip()
+
+      # 2. iostat extended stats (per-device IOPS, throughput, latency, utilization)
+      iostat_ext = await exec_cmd(
+          "iostat -xm 1 2 2>/dev/null | tail -n +4"
+      )
+      if iostat_ext.get("success"):
+          results["diagnosis"]["iostat_extended"] = iostat_ext.get("output", "")
+      else:
+          # Fallback: read from /proc/diskstats
+          diskstats = await exec_cmd(
+              "cat /proc/diskstats"
+          )
+          if diskstats.get("success"):
+              results["diagnosis"]["diskstats"] = diskstats.get("output", "")
+
+      # 3. I/O scheduler for each block device
+      io_sched = await exec_cmd(
+          "for dev in $(lsblk -dn -o NAME 2>/dev/null); do echo \"$dev: $(cat /sys/block/$dev/queue/scheduler 2>/dev/null)\"; done"
+      )
+      if io_sched.get("success"):
+          results["diagnosis"]["io_scheduler"] = io_sched.get("output", "").strip()
+
+      # 4. Top I/O consuming processes (if iotop available, otherwise use /proc)
+      io_procs = await exec_cmd(
+          "iotop -b -n 1 -o 2>/dev/null | head -20 || (echo 'iotop not available, using /proc/diskstats'; for pid in $(ls /proc/ | grep -E '^[0-9]+$' | head -50); do io=$(cat /proc/$pid/io 2>/dev/null | grep -E 'read_bytes|write_bytes' | awk '{sum+=$2} END {print sum}'); cmd=$(cat /proc/$pid/cmdline 2>/dev/null | tr '\\0' ' ' | head -c 80); [ -n \"$io\" ] && [ \"$io\" -gt 0 ] 2>/dev/null && echo \"PID=$pid IO=$io CMD=$cmd\"; done | sort -t= -k3 -rn | head -15)"
+      )
+      if io_procs.get("success"):
+          results["diagnosis"]["top_io_processes"] = io_procs.get("output", "")
+
+      # 5. vmstat for I/O related metrics (bi/bo = blocks in/out)
+      vmstat_io = await exec_cmd(
+          "vmstat 1 3"
+      )
+      if vmstat_io.get("success"):
+          results["diagnosis"]["vmstat"] = vmstat_io.get("output", "")
+
+      # 6. Disk queue depth
+      queue_depth = await exec_cmd(
+          "for dev in $(lsblk -dn -o NAME 2>/dev/null); do echo \"$dev: nr_requests=$(cat /sys/block/$dev/queue/nr_requests 2>/dev/null)\"; done"
+      )
+      if queue_depth.get("success"):
+          results["diagnosis"]["queue_depth"] = queue_depth.get("output", "").strip()
+
+      # 7. Check if any filesystem is mounted with noatime/relatime
+      mount_opts = await exec_cmd(
+          "mount | grep -E '^/dev' | awk '{print $1, $3, $6}'"
+      )
+      if mount_opts.get("success"):
+          results["diagnosis"]["mount_options"] = mount_opts.get("output", "")
+
+      return results

@@ -1,0 +1,72 @@
+id: query_alert_statistics
+name: Query Alert Statistics
+version: 1.0.0
+author: DBClaw
+category: monitoring
+description: Query alert and alert event statistics with overview, trend, and top dimensions
+tags: [alert, statistics, trend, topn, analysis]
+
+parameters:
+  - name: scope
+    type: string
+    required: false
+    default: events
+    description: 统计范围，events 为告警事件，alerts 为原始告警
+    enum: [events, alerts]
+  - name: datasource_ids
+    type: array
+    required: false
+    description: 数据源 ID 列表，留空表示全部
+    items:
+      type: integer
+  - name: start_time
+    type: string
+    required: false
+    description: 开始时间，支持 ISO 8601 或 YYYY-MM-DD HH:MM[:SS]，默认最近 24 小时
+  - name: end_time
+    type: string
+    required: false
+    description: 结束时间，支持 ISO 8601 或 YYYY-MM-DD HH:MM[:SS]，默认当前时间
+  - name: status
+    type: string
+    required: false
+    default: all
+    description: 状态过滤
+    enum: [active, acknowledged, resolved, all]
+  - name: severity
+    type: string
+    required: false
+    description: 严重级别过滤
+    enum: [critical, high, medium, low]
+  - name: bucket
+    type: string
+    required: false
+    default: auto
+    description: 趋势聚合粒度
+    enum: [auto, 1h, 6h, 1d]
+  - name: top_n
+    type: integer
+    required: false
+    default: 5
+    description: Top 维度返回数量
+    min: 1
+    max: 20
+
+permissions:
+  - read_datasource
+
+code: |
+  async def execute(context, params):
+      from backend.services.alert_statistics_service import query_alert_statistics
+
+      return await query_alert_statistics(
+          context.db,
+          scope=params.get("scope", "events"),
+          datasource_ids=params.get("datasource_ids"),
+          start_time=params.get("start_time"),
+          end_time=params.get("end_time"),
+          status=params.get("status", "all"),
+          severity=params.get("severity"),
+          bucket=params.get("bucket", "auto"),
+          top_n=params.get("top_n", 5),
+      )

@@ -1,0 +1,295 @@
+/* System Configs page styles */
+.system-configs-page {
+    padding: 20px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.page-header-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.page-header-actions h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.configs-filters {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding: 16px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+}
+
+.configs-filters input[type="text"] {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.configs-filters select {
+    min-width: 150px;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.configs-table-container {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.configs-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.configs-table thead {
+    background: var(--bg-tertiary);
+}
+
+.configs-table th {
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+}
+
+.configs-table tbody tr {
+    border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.15s;
+}
+
+.configs-table tbody tr:hover {
+    background: var(--bg-tertiary);
+}
+
+.configs-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.configs-table td {
+    padding: 12px 16px;
+    font-size: 14px;
+    vertical-align: middle;
+}
+
+.configs-table td code {
+    background: var(--bg-tertiary);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--primary-color);
+}
+
+.configs-table td.config-value {
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+}
+
+.configs-table td.actions {
+    white-space: nowrap;
+}
+
+.configs-table td.actions .btn {
+    padding: 6px 10px;
+    margin-right: 6px;
+}
+
+.configs-table td.actions .btn:last-child {
+    margin-right: 0;
+}
+
+.configs-table td.empty-state {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-secondary);
+}
+
+.badge-type {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+
+/* Config form modal styles */
+.config-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.config-form .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.config-form label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.config-form input[type="text"],
+.config-form input[type="number"],
+.config-form select,
+.config-form textarea {
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: inherit;
+}
+
+.config-form textarea {
+    font-family: 'JetBrains Mono', monospace;
+    resize: vertical;
+}
+
+.config-form input[readonly] {
+    background: var(--bg-tertiary);
+    cursor: not-allowed;
+}
+
+.config-form .form-hint {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+.config-form input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.config-form .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-primary);
+    user-select: none;
+}
+
+.config-form .checkbox-label input[type="checkbox"] {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+}
+
+.encrypted-value {
+    color: var(--text-secondary);
+    font-style: italic;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.encrypted-value-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    position: relative;
+}
+
+.encrypted-mask {
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.btn-copy-secret {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.btn-copy-secret:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.btn-copy-secret svg {
+    width: 13px;
+    height: 13px;
+}
+
+.encrypted-value-cell:hover .btn-copy-secret {
+    display: inline-flex;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+    .configs-table td.config-value {
+        max-width: 200px;
+    }
+}
+
+@media (max-width: 768px) {
+    .system-configs-page {
+        padding: 12px;
+    }
+
+    .page-header-actions {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .configs-filters {
+        flex-direction: column;
+    }
+
+    .configs-table-container {
+        overflow-x: auto;
+    }
+
+    .configs-table {
+        min-width: 800px;
+    }
+}

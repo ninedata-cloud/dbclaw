@@ -1,0 +1,139 @@
+id: get_os_metrics
+name: OS Metrics
+version: 1.1.0
+author: DBClaw
+category: system
+description: Get comprehensive OS-level metrics (CPU, memory, disk, network, I/O, load) from the host server via host connection
+tags: [linux, system, monitoring, ssh, cpu, memory, disk, network, io]
+timeout: 120
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: false
+    description: The database connection ID (must have host configured)
+  - name: host_id
+    type: integer
+    required: false
+    description: The SSH host ID to execute commands on (alternative to datasource_id)
+
+permissions:
+  - execute_command
+
+code: |
+  async def execute(context, params):
+      datasource_id = params.get('datasource_id')
+      host_id = params.get('host_id')
+
+      # Validate parameters: must provide either datasource_id or host_id
+      if not datasource_id and not host_id:
+          return {
+              "success": False,
+              "error": "missing_parameter",
+              "message": "必须提供 datasource_id 或 host_id 参数之一"
+          }
+
+      if datasource_id and host_id:
+          return {
+              "success": False,
+              "error": "conflicting_parameters",
+              "message": "不能同时提供 datasource_id 和 host_id 参数"
+          }
+
+      # Determine execution method
+      if datasource_id:
+          # Check if datasource has host configured
+          from backend.models.datasource import Datasource
+          from sqlalchemy import select
+
+          datasource = await context.get_connection(datasource_id)
+
+          if not datasource:
+              return {
+                  "success": False,
+                  "error": "datasource_not_found",
+                  "message": f"数据源 ID {datasource_id} 不存在"
+              }
+
+          if not datasource.host_id:
+              return {
+                  "success": False,
+                  "error": "no_host_configured",
+                  "message": f"数据源 {datasource.name} (ID: {datasource_id}) 未配置主机连接，无法收集操作系统指标。如需收集OS指标，请在数据源配置中关联主机。"
+              }
+
+          # Use datasource-based execution
+          async def exec_cmd(cmd):
+              return await context.execute_command(cmd, datasource_id)
+      else:
+          # Use host-based execution
+          async def exec_cmd(cmd):
+              return await context.execute_command_on_host(cmd, host_id)
+
+      # Get various OS metrics
+      metrics = {}
+
+      # CPU usage
+      cpu_result = await exec_cmd(
+          "top -bn1 | grep 'Cpu(s)' | awk '{print $2}' | cut -d'%' -f1"
+      )
+      if cpu_result.get("success"):
+          metrics["cpu_usage"] = cpu_result.get("output", "").strip()
+
+      # CPU breakdown (user/system/iowait/idle)
+      cpu_detail = await exec_cmd(
+          "top -bn1 | grep 'Cpu(s)'"
+      )
+      if cpu_detail.get("success"):
+          metrics["cpu_breakdown"] = cpu_detail.get("output", "").strip()
+
+      # Memory usage
+      mem_result = await exec_cmd("free -m")
+      if mem_result.get("success"):
+          metrics["memory"] = mem_result.get("output", "")
+
+      # Swap usage
+      swap_result = await exec_cmd("swapon --show --bytes 2>/dev/null || cat /proc/swaps")
+      if swap_result.get("success"):
+          metrics["swap"] = swap_result.get("output", "").strip()
+
+      # Disk usage
+      disk_result = await exec_cmd("df -h")
+      if disk_result.get("success"):
+          metrics["disk"] = disk_result.get("output", "")
+
+      # Load average
+      load_result = await exec_cmd("uptime")
+      if load_result.get("success"):
+          metrics["load_average"] = load_result.get("output", "")
+
+      # CPU core count
+      cores_result = await exec_cmd("nproc")
+      if cores_result.get("success"):
+          metrics["cpu_cores"] = cores_result.get("output", "").strip()
+
+      # Disk I/O stats
+      io_result = await exec_cmd(
+          "iostat -x 1 2 2>/dev/null | tail -n +4 || cat /proc/diskstats | head -20"
+      )
+      if io_result.get("success"):
+          metrics["disk_io"] = io_result.get("output", "").strip()
+
+      # Network interface stats
+      net_result = await exec_cmd(
+          "cat /proc/net/dev | grep -v 'lo:' | tail -n +3"
+      )
+      if net_result.get("success"):
+          metrics["network"] = net_result.get("output", "").strip()
+
+      # TCP connection states
+      tcp_result = await exec_cmd(
+          "ss -s 2>/dev/null || netstat -s 2>/dev/null | head -20"
+      )
+      if tcp_result.get("success"):
+          metrics["tcp_stats"] = tcp_result.get("output", "").strip()
+
+      return {
+          "success": True,
+          "metrics": metrics
+      }

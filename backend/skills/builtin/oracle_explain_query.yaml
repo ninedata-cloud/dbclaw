@@ -1,0 +1,68 @@
+id: oracle_explain_query
+name: Oracle Explain Query
+version: 1.0.0
+author: DBClaw
+category: oracle
+description: Get Oracle execution plan for a SQL query
+tags: [oracle, explain, execution-plan, performance]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+  - name: sql
+    type: string
+    required: true
+    description: The SQL query to explain
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+      sql = params['sql'].strip()
+
+      # 使用 oracle_service 的 explain_sql 方法，它已经处理了绑定变量
+      from backend.database import get_db
+      from backend.models import Datasource
+      from backend.services.oracle_service import OracleConnector
+      from backend.utils.encryption import decrypt_value
+      from sqlalchemy import select
+
+      async for db in get_db():
+          stmt = select(Datasource).where(Datasource.id == datasource_id, Datasource.deleted_at.is_(None))
+          result = await db.execute(stmt)
+          datasource = result.scalar_one_or_none()
+
+          if not datasource:
+              return {"success": False, "error": f"Datasource {datasource_id} not found"}
+
+          if datasource.db_type != "oracle":
+              return {"success": False, "error": f"This skill only supports Oracle databases, got {datasource.db_type}"}
+
+          password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
+
+          connector = OracleConnector(
+              host=datasource.host,
+              port=datasource.port,
+              username=datasource.username,
+              password=password,
+              database=datasource.database,
+              **(datasource.extra_params or {}),
+          )
+
+          try:
+              result = await connector.explain_sql(sql)
+              return {
+                  "success": True,
+                  "format": result.get("format", "table"),
+                  "plan": result.get("plan", [])
+              }
+          except Exception as e:
+              return {"success": False, "error": str(e)}
+          finally:
+              await connector.close()
+
+          break

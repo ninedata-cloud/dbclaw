@@ -1,0 +1,228 @@
+id: query_system_metadata
+name: Query System Metadata
+version: 1.0.0
+author: DBClaw
+category: system
+description: Query system metadata with 5 modes - sql (safe SELECT queries), config (system configuration), statistics (counts), user (user list), health (service status)
+tags: [metadata, query, sql, statistics, system]
+
+parameters:
+  - name: query_type
+    type: string
+    required: true
+    description: Query type - sql, config, statistics, user, health
+    enum: [sql, config, statistics, user, health]
+  - name: sql
+    type: string
+    required: false
+    description: SQL query (required when query_type=sql, SELECT only)
+  - name: table
+    type: string
+    required: false
+    description: Optional table name for validation (used with sql mode)
+
+permissions: []
+
+code: |
+  async def execute(context, params):
+      from sqlalchemy import select, func, text
+      
+      query_type = params['query_type']
+      
+      # SQL mode with security
+      if query_type == 'sql':
+          sql_query = params.get('sql')
+          if not sql_query:
+              return {"success": False, "error": "sql parameter is required for sql query type"}
+          
+          sql_upper = sql_query.strip().upper()
+          
+          # Reject non-SELECT
+          if not sql_upper.startswith('SELECT'):
+              return {"success": False, "error": "Only SELECT queries are allowed"}
+          
+          # Table whitelist
+          allowed_tables = [
+              'datasource', 'host', 'skills', 'datasource_metric',
+              'diagnostic_session', 'report', 'user', 'doc_category', 'doc_document',
+              'skill_executions', 'inspection_config', 'inspection_trigger',
+              'ai_model', 'host_metric', 'login_log'
+          ]
+          
+          # Check if query references allowed tables
+          sql_lower = sql_query.lower()
+          has_allowed_table = any(table in sql_lower for table in allowed_tables)
+          if not has_allowed_table:
+              return {
+                  "success": False,
+                  "error": f"Query must reference allowed tables. Allowed: {', '.join(allowed_tables)}"
+              }
+          
+          # Check for forbidden keywords
+          forbidden_keywords = ['drop', 'delete', 'update', 'insert', 'alter', 'create', 'truncate', 'grant', 'revoke']
+          for keyword in forbidden_keywords:
+              if keyword in sql_lower:
+                  return {"success": False, "error": f"Forbidden keyword '{keyword}' detected"}
+          
+          try:
+              # Execute with row limit
+              query = text(sql_query)
+              result = await context.db.execute(query)
+              rows = result.fetchmany(1000)  # Max 1000 rows
+              
+              # Convert to dict list
+              results = [dict(row._mapping) for row in rows]
+              
+              return {
+                  "success": True,
+                  "query_type": "sql",
+                  "results": results,
+                  "count": len(results),
+                  "limited": len(results) == 1000
+              }
+          except Exception as e:
+              return {
+                  "success": False,
+                  "query_type": "sql",
+                  "error": f"Query execution failed: {str(e)}"
+              }
+      
+      # Config mode
+      if query_type == 'config':
+          from backend.models.ai_model import AIModel
+          from backend.models.document import DocCategory, DocDocument
+          from backend.models.inspection_config import InspectionConfig
+
+          # Get AI models
+          ai_model_result = await context.db.execute(select(AIModel))
+          ai_model = ai_model_result.scalars().all()
+
+          # Get document metadata
+          docs_count = await context.db.scalar(select(func.count()).select_from(DocDocument))
+          categories_count = await context.db.scalar(select(func.count()).select_from(DocCategory))
+
+          # Get inspection configs
+          configs_result = await context.db.execute(select(InspectionConfig))
+          configs = configs_result.scalars().all()
+
+          return {
+              "success": True,
+              "query_type": "config",
+              "config": {
+                  "ai_model": [
+                      {
+                          "id": m.id,
+                          "name": m.name,
+                          "provider": m.provider,
+                          "model_name": m.model_name,
+                          "is_default": m.is_default,
+                          "is_active": m.is_active
+                      }
+                      for m in ai_model
+                  ],
+                  "documents": {
+                      "document_count": docs_count or 0,
+                      "category_count": categories_count or 0
+                  },
+                  "inspection_config": [
+                      {
+                          "id": c.id,
+                          "datasource_id": c.datasource_id,
+                          "enabled": c.enabled,
+                          "schedule_interval": c.schedule_interval,
+                          "use_ai_analysis": c.use_ai_analysis,
+                          "ai_model_id": c.ai_model_id,
+                          "kb_ids": c.kb_ids or []
+                      }
+                      for c in configs
+                  ]
+              }
+          }
+      
+      # Statistics mode
+      if query_type == 'statistics':
+          from backend.models.datasource import Datasource
+          from backend.models.host import Host
+          from backend.models.diagnostic_session import DiagnosticSession
+          from backend.models.report import Report
+          from backend.skills.models import Skill, SkillExecution
+          from backend.models.document import DocCategory, DocDocument
+
+          stats = {}
+          stats['datasource'] = await context.db.scalar(select(func.count()).select_from(Datasource))
+          stats['host'] = await context.db.scalar(select(func.count()).select_from(Host))
+          stats['skills'] = await context.db.scalar(select(func.count()).select_from(Skill))
+          stats['sessions'] = await context.db.scalar(select(func.count()).select_from(DiagnosticSession))
+          stats['report'] = await context.db.scalar(select(func.count()).select_from(Report))
+          stats['executions'] = await context.db.scalar(select(func.count()).select_from(SkillExecution))
+          stats['documents'] = await context.db.scalar(select(func.count()).select_from(DocDocument))
+          stats['document_categories'] = await context.db.scalar(select(func.count()).select_from(DocCategory))
+
+          # Datasource breakdown by type
+          ds_result = await context.db.execute(
+              select(Datasource.db_type, func.count().label('count'))
+              .group_by(Datasource.db_type)
+          )
+          stats['datasource_by_type'] = {row.db_type: row.count for row in ds_result}
+
+          # Report breakdown by status
+          report_result = await context.db.execute(
+              select(Report.status, func.count().label('count'))
+              .group_by(Report.status)
+          )
+          stats['report_by_status'] = {row.status: row.count for row in report_result}
+
+          return {
+              "success": True,
+              "query_type": "statistics",
+              "statistics": stats
+          }
+      
+      # Users mode
+      if query_type == 'user':
+          from backend.models.user import User
+          from backend.models.soft_delete import alive_select
+
+          result = await context.db.execute(alive_select(User))
+          user = result.scalars().all()
+          
+          return {
+              "success": True,
+              "query_type": "user",
+              "results": [
+                  {
+                      "id": u.id,
+                      "username": u.username,
+                      "email": u.email,
+                      "is_active": u.is_active,
+                      "created_at": u.created_at.isoformat() if u.created_at else None
+                  }
+                  for u in user
+              ],
+              "count": len(user)
+          }
+      
+      # Health mode
+      if query_type == 'health':
+          from backend.services import metric_collector
+          
+          health = {
+              "metric_collector_running": getattr(metric_collector, '_running', False),
+              "inspection_service_available": hasattr(metric_collector, '_inspection_service') and metric_collector._inspection_service is not None,
+          }
+          
+          # Check database connection
+          try:
+              await context.db.execute(text("SELECT 1"))
+              health["database_connected"] = True
+          except Exception as e:
+              health["database_connected"] = False
+              health["database_error"] = str(e)
+          
+          return {
+              "success": True,
+              "query_type": "health",
+              "health": health
+          }
+      
+      return {"success": False, "error": f"Unknown query_type: {query_type}"}

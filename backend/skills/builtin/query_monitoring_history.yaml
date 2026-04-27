@@ -1,0 +1,77 @@
+id: query_monitoring_history
+name: Query Monitoring History
+version: 1.0.0
+author: DBClaw
+category: monitoring
+description: Query aggregated datasource and host monitoring history by datasource and time range
+tags: [monitoring, history, trends, aggregation, datasource, host]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: 数据源 ID，主机历史会自动通过该数据源关联的 host_id 查询
+  - name: start_time
+    type: string
+    required: false
+    description: 开始时间，支持 ISO 8601 或 YYYY-MM-DD HH:MM[:SS]，默认最近 24 小时
+  - name: end_time
+    type: string
+    required: false
+    description: 结束时间，支持 ISO 8601 或 YYYY-MM-DD HH:MM[:SS]，默认当前时间
+  - name: scope
+    type: string
+    required: false
+    default: both
+    description: 查询范围：仅数据源、仅主机或同时查询
+    enum: [datasource, host, both]
+  - name: metric_type
+    type: string
+    required: false
+    default: db_status
+    description: 数据源监控类型，默认 db_status
+  - name: metric_names
+    type: array
+    required: false
+    description: 指定要返回的指标名列表；为空时自动选择常用指标并聚合
+    items:
+      type: string
+  - name: aggregate
+    type: string
+    required: false
+    default: auto
+    description: 聚合粒度；auto 会根据时间范围自动降采样
+    enum: [auto, 1m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 12h, 1d]
+  - name: max_points
+    type: integer
+    required: false
+    default: 96
+    description: 每条指标时间序列最多返回的聚合点数量上限
+    min: 10
+    max: 240
+  - name: max_metrics
+    type: integer
+    required: false
+    default: 12
+    description: 自动选择指标时最多返回多少个指标
+    min: 1
+    max: 20
+
+permissions: [read_datasource]
+
+code: |
+  async def execute(context, params):
+      from backend.services.monitoring_history_service import query_monitoring_history
+
+      return await query_monitoring_history(
+          context.db,
+          datasource_id=params["datasource_id"],
+          start_time=params.get("start_time"),
+          end_time=params.get("end_time"),
+          scope=params.get("scope", "both"),
+          metric_type=params.get("metric_type", "db_status"),
+          metric_names=params.get("metric_names"),
+          aggregate=params.get("aggregate", "auto"),
+          max_points=params.get("max_points", 96),
+          max_metrics=params.get("max_metrics", 12),
+      )

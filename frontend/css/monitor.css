@@ -1,0 +1,160 @@
+
+/* Time range controls */
+#time-range-select {
+    background-color: #1c2333;
+    border: 1px solid #2a3140;
+    color: #e6edf3;
+}
+
+#realtime-toggle {
+    white-space: nowrap;
+}
+
+#refresh-btn {
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+#refresh-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+#refresh-btn i {
+    width: 16px;
+    height: 16px;
+}
+
+/* Custom time dialog */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal {
+    background: #0d1117;
+    border: 1px solid #2a3140;
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    max-width: 600px;
+    width: 90%;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid #2a3140;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    color: #e6edf3;
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 16px 20px;
+    border-top: 1px solid #2a3140;
+}
+
+.form-input[type="datetime-local"] {
+    background-color: #1c2333;
+    border: 1px solid #2a3140;
+    color: #e6edf3;
+    padding: 8px 12px;
+    border-radius: 6px;
+    width: 100%;
+    color-scheme: dark;
+}
+
+.form-input[type="datetime-local"]:focus {
+    outline: none;
+    border-color: #2f81f7;
+}
+
+.form-input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    filter: invert(1) brightness(1.5);
+    cursor: pointer;
+    opacity: 1;
+}
+
+.form-input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
+    filter: invert(1) brightness(1.8);
+}
+
+/* === Health Status Banner === */
+.health-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+}
+
+.health-banner-icon {
+    font-size: 20px;
+    line-height: 1;
+}
+
+.health-banner-status {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.health-banner-details {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+}
+
+/* Health violations list */
+.health-violations {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.health-violation-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(248, 81, 73, 0.1);
+    border: 1px solid rgba(248, 81, 73, 0.3);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.health-violation-item span:first-child {
+    font-size: 14px;
+    line-height: 1;
+}
+
+.health-violation-item span:last-child {
+    color: var(--text-primary);
+}

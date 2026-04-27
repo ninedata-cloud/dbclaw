@@ -1,0 +1,44 @@
+id: diagnose_datasource_connection
+name: Diagnose Datasource Connection
+version: 1.0.0
+author: DBClaw
+category: system
+description: Test and diagnose datasource connection failures with layered network, host, protocol, and authentication analysis
+tags: [datasource, connection, diagnostic, network, authentication, protocol]
+timeout: 30
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The datasource ID to diagnose
+  - name: include_host_checks
+    type: boolean
+    required: false
+    default: true
+    description: Whether to run optional host/SSH checks when host_id is configured
+  - name: include_tcp_checks
+    type: boolean
+    required: false
+    default: true
+    description: Whether to run TCP reachability checks before connector handshake
+
+permissions:
+  - execute_command
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+      include_host_checks = params.get('include_host_checks', True)
+      include_tcp_checks = params.get('include_tcp_checks', True)
+
+      from backend.services.connection_diagnostic_service import ConnectionDiagnosticService
+
+      diagnostic_service = ConnectionDiagnosticService(context.db)
+      result = await diagnostic_service.diagnose_datasource(
+          datasource_id,
+          include_host_checks=include_host_checks,
+          include_tcp_checks=include_tcp_checks,
+      )
+      result['datasource_id'] = datasource_id
+      return result

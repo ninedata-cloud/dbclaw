@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Database Diagnostic Report</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 40px; background: #161b22; color: #e6edf3; line-height: 1.6; }
+        h1 { color: #e6edf3; border-bottom: 3px solid #2f81f7; padding-bottom: 10px; }
+        h2 { color: #e6edf3; border-bottom: 1px solid #2a3140; padding-bottom: 5px; margin-top: 30px; }
+        h3 { color: #e6edf3; }
+        table { border-collapse: collapse; width: 100%; margin: 15px 0; background: #1c2333; }
+        th, td { border: 1px solid #2a3140; padding: 8px 12px; text-align: left; }
+        th { background-color: #2f81f7; color: white; }
+        tr:nth-child(even) { background-color: #1c2333; }
+        .finding { border-left: 4px solid #2a3140; padding: 12px 16px; margin: 12px 0; background: #1c2333; border-radius: 4px; }
+        .finding.critical { border-left-color: #f85149; background: rgba(248, 81, 73, 0.1); }
+        .finding.warning { border-left-color: #d29922; background: rgba(210, 153, 34, 0.1); }
+        .finding.info { border-left-color: #2f81f7; background: rgba(47, 129, 247, 0.1); }
+        .severity { font-weight: bold; padding: 2px 8px; border-radius: 3px; font-size: 0.85em; }
+        .severity.critical { background: #f85149; color: white; }
+        .severity.warning { background: #d29922; color: white; }
+        .severity.info { background: #2f81f7; color: white; }
+        .recommendation { background: rgba(63, 185, 80, 0.1); padding: 8px 12px; border-radius: 4px; margin-top: 8px; border-left: 3px solid #3fb950; }
+        .meta { color: #8b949e; font-size: 0.9em; }
+        .header-info { display: flex; justify-content: space-between; flex-wrap: wrap; background: #1c2333; padding: 16px; border-radius: 8px; margin: 16px 0; border: 1px solid #2a3140; }
+        .header-info div { margin: 4px 0; }
+        .footer { text-align: center; margin-top: 40px; color: #6e7681; font-size: 0.85em; border-top: 1px solid #2a3140; padding-top: 16px; }
+    </style>
+</head>
+<body>
+    <h1>Database Diagnostic Report</h1>
+
+    <div class="header-info">
+        <div><strong>Connection:</strong> {{ conn.name }} ({{ conn.db_type }})</div>
+        <div><strong>Host:</strong> {{ conn.host }}:{{ conn.port }}</div>
+        <div><strong>Database:</strong> {{ conn.database or 'N/A' }}</div>
+        <div><strong>Generated:</strong> {{ generated_at }}</div>
+    </div>
+
+    <h2>Executive Summary</h2>
+    {% set critical_findings = findings | selectattr('severity', 'equalto', 'CRITICAL') | list %}
+    {% set warning_findings = findings | selectattr('severity', 'equalto', 'WARNING') | list %}
+    {% set info_findings = findings | selectattr('severity', 'equalto', 'INFO') | list %}
+    <p>
+        Total findings: <strong>{{ findings | length }}</strong> &mdash;
+        <span class="severity critical">{{ critical_findings | length }} Critical</span>
+        <span class="severity warning">{{ warning_findings | length }} Warning</span>
+        <span class="severity info">{{ info_findings | length }} Info</span>
+    </p>
+
+    <h2>Database Status</h2>
+    {% if data.status %}
+    <table>
+        <tr><th>Metric</th><th>Value</th></tr>
+        {% for key, value in data.status.items() %}
+        {% if key != 'error' %}
+        <tr><td>{{ key.replace('_', ' ').title() }}</td><td>{{ value }}</td></tr>
+        {% endif %}
+        {% endfor %}
+    </table>
+    {% endif %}
+
+    {% if data.db_size %}
+    <h3>Database Size</h3>
+    <table>
+        <tr><th>Metric</th><th>Value</th></tr>
+        {% for key, value in data.db_size.items() %}
+        <tr><td>{{ key.replace('_', ' ').title() }}</td><td>{% if 'bytes' in key %}{{ format_bytes(value) }}{% else %}{{ value }}{% endif %}</td></tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+
+    {% if data.os_metrics %}
+    <h2>OS Resource Usage</h2>
+    <table>
+        <tr><th>Metric</th><th>Value</th></tr>
+        <tr><td>CPU Usage</td><td>{{ data.os_metrics.cpu_usage_percent }}%</td></tr>
+        <tr><td>Memory Usage</td><td>{{ data.os_metrics.memory_usage_percent }}%</td></tr>
+        <tr><td>Disk Usage</td><td>{{ data.os_metrics.disk_usage_percent }}%</td></tr>
+        <tr><td>Load Average (1/5/15m)</td><td>{{ data.os_metrics.load_1m }} / {{ data.os_metrics.load_5m }} / {{ data.os_metrics.load_15m }}</td></tr>
+    </table>
+    {% endif %}
+
+    <h2>Findings &amp; Recommendations</h2>
+    {% for finding in findings %}
+    <div class="finding {{ finding.severity | lower }}">
+        <h3>
+            <span class="severity {{ finding.severity | lower }}">{{ finding.severity }}</span>
+            {{ finding.title }}
+        </h3>
+        <p class="meta">Category: {{ finding.category }}</p>
+        <p>{{ finding.detail }}</p>
+        <div class="recommendation"><strong>Recommendation:</strong> {{ finding.recommendation }}</div>
+    </div>
+    {% endfor %}
+
+    {% if not findings %}
+    <p>No significant issues found. The database appears to be healthy.</p>
+    {% endif %}
+
+    <div class="footer">
+        <p>Generated by DBClaw &mdash; {{ generated_at }}</p>
+    </div>
+</body>
+</html>

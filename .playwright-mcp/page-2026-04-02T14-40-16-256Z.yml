@@ -1,0 +1,191 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - generic [ref=e4]:
+      - img "数据库智能卫士" [ref=e5]
+      - generic [ref=e6]:
+        - generic [ref=e7]: NineData
+        - generic [ref=e8]: 数据库智能卫士
+    - navigation [ref=e9]:
+      - generic [ref=e10] [cursor=pointer]:
+        - img [ref=e268]
+        - generic [ref=e16]: 资源大盘
+      - generic [ref=e17] [cursor=pointer]:
+        - img [ref=e273]
+        - generic [ref=e22]: 智能巡检
+      - generic [ref=e23] [cursor=pointer]:
+        - img [ref=e277]
+        - generic [ref=e27]: AI 诊断
+      - generic [ref=e28] [cursor=pointer]:
+        - img [ref=e280]
+        - generic [ref=e31]: 新AI对话诊断
+      - generic [ref=e32] [cursor=pointer]:
+        - img [ref=e282]
+        - generic [ref=e35]: 性能监控
+      - generic [ref=e36] [cursor=pointer]:
+        - img [ref=e284]
+        - generic [ref=e40]: 告警管理
+      - generic [ref=e41] [cursor=pointer]:
+        - img [ref=e287]
+        - generic [ref=e45]: SQL 查询
+      - generic [ref=e46]:
+        - generic [ref=e47]: AI 智能体配置
+        - generic [ref=e48] [cursor=pointer]:
+          - img [ref=e290]
+          - generic [ref=e52]: AI 大模型管理
+        - generic [ref=e53] [cursor=pointer]:
+          - img [ref=e293]
+          - generic [ref=e56]: 技能管理
+        - generic [ref=e57] [cursor=pointer]:
+          - img [ref=e295]
+          - generic [ref=e61]: 知识库
+      - generic [ref=e62]:
+        - generic [ref=e63]: 系统配置
+        - generic [ref=e64] [cursor=pointer]:
+          - img [ref=e298]
+          - generic [ref=e69]: 数据源管理
+        - generic [ref=e70] [cursor=pointer]:
+          - img [ref=e302]
+          - generic [ref=e73]: 主机管理
+        - generic [ref=e74] [cursor=pointer]:
+          - img [ref=e304]
+          - generic [ref=e79]: 外部集成管理
+        - generic [ref=e80] [cursor=pointer]:
+          - img [ref=e308]
+          - generic [ref=e84]: 系统参数配置
+        - generic [ref=e85] [cursor=pointer]:
+          - img [ref=e311]
+          - generic [ref=e91]: 用户管理
+    - generic [ref=e92]:
+      - generic [ref=e93]: A
+      - button "Administrator 管理员" [ref=e94] [cursor=pointer]:
+        - generic [ref=e95]: Administrator
+        - generic [ref=e96]: 管理员
+    - generic [ref=e97]:
+      - generic [ref=e98]: v1.0.0
+      - button "收起侧边栏" [ref=e99] [cursor=pointer]:
+        - img [ref=e316]
+  - main [ref=e103]:
+    - generic [ref=e104]:
+      - heading "新AI对话诊断" [level=1] [ref=e105]
+      - generic [ref=e107]:
+        - generic [ref=e108]:
+          - button "选择数据源..." [ref=e109] [cursor=pointer]:
+            - generic [ref=e111]: 选择数据源...
+            - img [ref=e319]
+          - text: 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址
+        - combobox [ref=e114] [cursor=pointer]:
+          - option "默认模型"
+          - option "qwen3.5-plus"
+          - option "kimi2.5"
+          - option "MiniMax-M2.5"
+          - option "MiniMax-M2.7"
+          - option "gpt-5.4"
+          - option "opus4.6-1" [selected]
+          - option "claude-opus-4-6-2"
+        - button "选择 0项" [ref=e116] [cursor=pointer]:
+          - generic [ref=e117]: 选择 0项
+          - img [ref=e321]
+        - button "新建会话" [ref=e120] [cursor=pointer]:
+          - img [ref=e323]
+          - text: 新建会话
+    - generic [ref=e123]:
+      - generic [ref=e124]:
+        - generic [ref=e125]: 会话列表
+        - generic [ref=e126]:
+          - generic [ref=e324] [cursor=pointer]: "[新AI对话诊断] 新建会话"
+          - generic [ref=e325] [cursor=pointer]: "[新AI对话诊断] 新建会话"
+      - generic [ref=e129]:
+        - generic [ref=e130]:
+          - generic [ref=e131]: 面向透明诊断流程的新模块
+          - generic [ref=e132]: 保留原 AI 诊断模块不变。这个新模块会逐步展示知识库阅读、诊断计划、Skill 调用过程和最终结论。
+        - generic [ref=e133]:
+          - generic [ref=e134]:
+            - generic [ref=e135]:
+              - generic [ref=e136]: 诊断过程
+              - generic [ref=e137]:
+                - generic [ref=e235]:
+                  - generic [ref=e236]: 问题
+                  - generic [ref=e237]: test message from console
+                - generic [ref=e238]:
+                  - generic [ref=e239]: 状态
+                  - generic [ref=e240]: 正在阅读问题并制定诊断计划...
+                - generic [ref=e241]:
+                  - generic [ref=e242]: 计划
+                  - generic [ref=e243]: 已创建初步诊断计划：先阅读知识库，再调用诊断技能逐步收集证据，最后输出结论。
+                - generic [ref=e326]:
+                  - generic [ref=e327]: 结论
+                  - generic [ref=e328]: 您好！测试消息已收到。👋 系统运行正常，随时为您提供数据库诊断服务。如果您有任何数据库性能、连接、资源使用等方面的问题，请随时告诉我，我会按照标准诊断流程为您分析。 可支持的数据库类型： - MySQL / TiDB / OceanBase - PostgreSQL / openGauss - Oracle / DM (达梦) - SQL Server 常见诊断场景： - 慢查询分析 - 高 CPU/内存/磁盘使用率 - 连接数异常 -
+                - generic [ref=e329]:
+                  - generic [ref=e330]: 结论
+                  - generic [ref=e331]: 本轮诊断已完成，请查看聊天结论与技能执行记录。
+            - generic [ref=e139]:
+              - generic [ref=e140]: 诊断结论
+              - generic [ref=e141]:
+                - generic [ref=e332]: 本轮诊断已完成，请查看聊天结论与技能执行记录。
+                - generic [ref=e333]: 置信度：未评估
+                - generic [ref=e334]:
+                  - generic [ref=e335]: 问题判断
+                  - generic [ref=e336]: 暂无
+                - generic [ref=e337]:
+                  - generic [ref=e338]: 建议动作
+                  - generic [ref=e339]: 暂无
+                - generic [ref=e340]:
+                  - generic [ref=e341]: 关键证据
+                  - generic [ref=e342]: 暂无
+                - generic [ref=e343]:
+                  - generic [ref=e344]: 知识库依据
+                  - generic [ref=e345]: 暂无
+            - generic [ref=e143]:
+              - generic [ref=e347]:
+                - generic [ref=e348]:
+                  - strong [ref=e349]: 本次会话已用
+                  - text: 18,807 tokens
+                - generic [ref=e350]: 输入 18,615
+                - generic [ref=e351]: 输出 192
+                - generic [ref=e352]: 上限 1,000,000
+                - generic [ref=e353]: 使用率 1.9%
+              - generic [ref=e153]:
+                - generic [ref=e154]:
+                  - img [ref=e354]
+                  - heading "新AI对话诊断" [level=3] [ref=e157]
+                  - paragraph [ref=e158]: 我会先阅读相关知识库，制定诊断计划，再逐步调用技能收集信息，并向你展示完整过程。
+                - generic [ref=e246]:
+                  - generic [ref=e247]: U
+                  - generic [ref=e248]: test message from console
+                  - button "复制内容" [ref=e249] [cursor=pointer]:
+                    - img [ref=e356]
+                - generic [ref=e253]:
+                  - generic [ref=e254]: AI
+                  - generic [ref=e255]:
+                    - paragraph [ref=e359]: 您好！测试消息已收到。👋
+                    - paragraph [ref=e360]: 系统运行正常，随时为您提供数据库诊断服务。如果您有任何数据库性能、连接、资源使用等方面的问题，请随时告诉我，我会按照标准诊断流程为您分析。
+                    - paragraph [ref=e361]:
+                      - strong [ref=e362]: 可支持的数据库类型：
+                    - list [ref=e363]:
+                      - listitem [ref=e364]: MySQL / TiDB / OceanBase
+                      - listitem [ref=e365]: PostgreSQL / openGauss
+                      - listitem [ref=e366]: Oracle / DM (达梦)
+                      - listitem [ref=e367]: SQL Server
+                    - paragraph [ref=e368]:
+                      - strong [ref=e369]: 常见诊断场景：
+                    - list [ref=e370]:
+                      - listitem [ref=e371]: 慢查询分析
+                      - listitem [ref=e372]: 高 CPU/内存/磁盘使用率
+                      - listitem [ref=e373]: 连接数异常
+                      - listitem [ref=e374]: 锁等待与阻塞
+                      - listitem [ref=e375]: 索引优化建议
+                      - listitem [ref=e376]: 复制/集群状态检查
+                    - paragraph [ref=e377]: 请问有什么可以帮您？
+                  - button "复制" [ref=e378] [cursor=pointer]:
+                    - img [ref=e379]
+              - generic [ref=e159]:
+                - textbox "询问数据库相关问题，按 Ctrl/Command+Enter 发送..." [ref=e160]: hi
+                - button "附加文件" [ref=e161] [cursor=pointer]:
+                  - img [ref=e382]
+                - button [ref=e164] [cursor=pointer]:
+                  - img [ref=e384]
+                - button "Clear session" [ref=e168] [cursor=pointer]:
+                  - img [ref=e387]
+              - generic [ref=e172]: 内容由AI生成，仅供参考
+          - button "显示 skill 调用记录" [ref=e175] [cursor=pointer]:
+            - img [ref=e390]

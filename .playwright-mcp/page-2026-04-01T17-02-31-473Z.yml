@@ -1,0 +1,368 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e18]:
+      - generic [ref=e19]:
+        - img "数据库智能卫士" [ref=e20]
+        - generic [ref=e21]:
+          - generic [ref=e22]: NineData
+          - generic [ref=e23]: 数据库智能卫士
+      - navigation [ref=e24]:
+        - generic [ref=e25] [cursor=pointer]:
+          - img [ref=e1160]
+          - generic [ref=e31]: 资源大盘
+        - generic [ref=e32] [cursor=pointer]:
+          - img [ref=e1165]
+          - generic [ref=e37]: 智能巡检
+        - generic [ref=e38] [cursor=pointer]:
+          - img [ref=e1169]
+          - generic [ref=e42]: AI 诊断
+        - generic [ref=e43] [cursor=pointer]:
+          - img [ref=e1172]
+          - generic [ref=e46]: 性能监控
+        - generic [ref=e47] [cursor=pointer]:
+          - img [ref=e1174]
+          - generic [ref=e51]: 告警管理
+        - generic [ref=e52] [cursor=pointer]:
+          - img [ref=e1177]
+          - generic [ref=e56]: SQL 查询
+        - generic [ref=e57]:
+          - generic [ref=e58]: AI 智能体配置
+          - generic [ref=e59] [cursor=pointer]:
+            - img [ref=e1180]
+            - generic [ref=e63]: AI 大模型管理
+          - generic [ref=e64] [cursor=pointer]:
+            - img [ref=e1183]
+            - generic [ref=e67]: 技能管理
+          - generic [ref=e68] [cursor=pointer]:
+            - img [ref=e1185]
+            - generic [ref=e72]: 知识库
+        - generic [ref=e73]:
+          - generic [ref=e74]: 系统配置
+          - generic [ref=e75] [cursor=pointer]:
+            - img [ref=e1188]
+            - generic [ref=e80]: 数据源管理
+          - generic [ref=e81] [cursor=pointer]:
+            - img [ref=e1192]
+            - generic [ref=e84]: 主机管理
+          - generic [ref=e85] [cursor=pointer]:
+            - img [ref=e1194]
+            - generic [ref=e90]: 外部集成管理
+          - generic [ref=e91] [cursor=pointer]:
+            - img [ref=e1198]
+            - generic [ref=e95]: 系统参数配置
+          - generic [ref=e96] [cursor=pointer]:
+            - img [ref=e1201]
+            - generic [ref=e102]: 用户管理
+      - generic [ref=e103]:
+        - generic [ref=e104]: A
+        - button "Administrator 管理员" [ref=e105] [cursor=pointer]:
+          - generic [ref=e106]: Administrator
+          - generic [ref=e107]: 管理员
+      - generic [ref=e108]:
+        - generic [ref=e109]: v1.0.0
+        - button "收起侧边栏" [ref=e110] [cursor=pointer]:
+          - img [ref=e1206]
+    - main [ref=e3]:
+      - generic [ref=e114]:
+        - heading "SQL 查询" [level=1] [ref=e1119]
+        - generic [ref=e1122]:
+          - button "vastbase(132)" [expanded] [ref=e1209] [cursor=pointer]:
+            - generic [ref=e1211]: vastbase(132)
+            - img [ref=e1212]
+          - generic [ref=e1249]:
+            - textbox "搜索数据源" [active] [ref=e1251]:
+              - /placeholder: 搜索数据源...
+            - listbox [ref=e1252]:
+              - generic [ref=e1253]:
+                - generic [ref=e1254]: MYSQL
+                - generic [ref=e1255]: "14"
+              - option "mysql_5.6(polardb-x)(66:8527) 地址 192.168.2.66:8527 MYSQL 连接正常" [ref=e1256] [cursor=pointer]:
+                - generic [ref=e1257]:
+                  - generic "mysql_5.6(polardb-x)(66:8527)" [ref=e1258]
+                  - generic "192.168.2.66:8527" [ref=e1260]: 地址 192.168.2.66:8527
+                - generic [ref=e1261]: MYSQL
+                - generic "连接正常" [ref=e1262]
+              - option "mysql_unknown(24:10082) 地址 192.168.2.24:10082 MYSQL 连接异常" [ref=e1263] [cursor=pointer]:
+                - generic [ref=e1264]:
+                  - generic "mysql_unknown(24:10082)" [ref=e1265]
+                  - generic "192.168.2.24:10082" [ref=e1267]: 地址 192.168.2.24:10082
+                - generic [ref=e1268]: MYSQL
+                - generic "连接异常" [ref=e1269]
+              - option "mysql_5.7(percona)(88:3308) 地址 192.168.2.88:3308 MYSQL 连接正常" [ref=e1270] [cursor=pointer]:
+                - generic [ref=e1271]:
+                  - generic "mysql_5.7(percona)(88:3308)" [ref=e1272]
+                  - generic "192.168.2.88:3308" [ref=e1274]: 地址 192.168.2.88:3308
+                - generic [ref=e1275]: MYSQL
+                - generic "连接正常" [ref=e1276]
+              - option "mysql_5.6(77:3306) 地址 192.168.2.77:3306 MYSQL 连接正常" [ref=e1277] [cursor=pointer]:
+                - generic [ref=e1278]:
+                  - generic "mysql_5.6(77:3306)" [ref=e1279]
+                  - generic "192.168.2.77:3306" [ref=e1281]: 地址 192.168.2.77:3306
+                - generic [ref=e1282]: MYSQL
+                - generic "连接正常" [ref=e1283]
+              - option "mysql_5.6(72:3306) 地址 192.168.2.72:3306 MYSQL 连接正常" [ref=e1284] [cursor=pointer]:
+                - generic [ref=e1285]:
+                  - generic "mysql_5.6(72:3306)" [ref=e1286]
+                  - generic "192.168.2.72:3306" [ref=e1288]: 地址 192.168.2.72:3306
+                - generic [ref=e1289]: MYSQL
+                - generic "连接正常" [ref=e1290]
+              - option "mysql_5.5(71:3306) 地址 192.168.2.71:3306 MYSQL 连接正常" [ref=e1291] [cursor=pointer]:
+                - generic [ref=e1292]:
+                  - generic "mysql_5.5(71:3306)" [ref=e1293]
+                  - generic "192.168.2.71:3306" [ref=e1295]: 地址 192.168.2.71:3306
+                - generic [ref=e1296]: MYSQL
+                - generic "连接正常" [ref=e1297]
+              - option "mysql_8.0(40:3306) 地址 192.168.2.40:3306 MYSQL 连接正常" [ref=e1298] [cursor=pointer]:
+                - generic [ref=e1299]:
+                  - generic "mysql_8.0(40:3306)" [ref=e1300]
+                  - generic "192.168.2.40:3306" [ref=e1302]: 地址 192.168.2.40:3306
+                - generic [ref=e1303]: MYSQL
+                - generic "连接正常" [ref=e1304]
+              - option "mysql_10.11(mariadb)(88:3307) 地址 192.168.2.88:3307 MYSQL 连接正常" [ref=e1305] [cursor=pointer]:
+                - generic [ref=e1306]:
+                  - generic "mysql_10.11(mariadb)(88:3307)" [ref=e1307]
+                  - generic "192.168.2.88:3307" [ref=e1309]: 地址 192.168.2.88:3307
+                - generic [ref=e1310]: MYSQL
+                - generic "连接正常" [ref=e1311]
+              - option "mysql_5.7(88:3306) 地址 192.168.2.88:3306 MYSQL 连接正常" [ref=e1312] [cursor=pointer]:
+                - generic [ref=e1313]:
+                  - generic "mysql_5.7(88:3306)" [ref=e1314]
+                  - generic "192.168.2.88:3306" [ref=e1316]: 地址 192.168.2.88:3306
+                - generic [ref=e1317]: MYSQL
+                - generic "连接正常" [ref=e1318]
+              - option "mysql_8.0(74:3306) 地址 192.168.2.74:3306 MYSQL 连接正常" [ref=e1319] [cursor=pointer]:
+                - generic [ref=e1320]:
+                  - generic "mysql_8.0(74:3306)" [ref=e1321]
+                  - generic "192.168.2.74:3306" [ref=e1323]: 地址 192.168.2.74:3306
+                - generic [ref=e1324]: MYSQL
+                - generic "连接正常" [ref=e1325]
+              - option "mysql_5.7(77:3307) 地址 192.168.2.77:3307 MYSQL 连接正常" [ref=e1326] [cursor=pointer]:
+                - generic [ref=e1327]:
+                  - generic "mysql_5.7(77:3307)" [ref=e1328]
+                  - generic "192.168.2.77:3307" [ref=e1330]: 地址 192.168.2.77:3307
+                - generic [ref=e1331]: MYSQL
+                - generic "连接正常" [ref=e1332]
+              - option "mysql_5.7(73:3306) 地址 192.168.2.73:3306 MYSQL 连接正常" [ref=e1333] [cursor=pointer]:
+                - generic [ref=e1334]:
+                  - generic "mysql_5.7(73:3306)" [ref=e1335]
+                  - generic "192.168.2.73:3306" [ref=e1337]: 地址 192.168.2.73:3306
+                - generic [ref=e1338]: MYSQL
+                - generic "连接正常" [ref=e1339]
+              - option "mysql_8.0(yzs-rds:3306) 地址 rm-bp16knn4mo4fvh99ieo.mysql.rds.aliyuncs.com:3306 MYSQL 连接正常" [ref=e1340] [cursor=pointer]:
+                - generic [ref=e1341]:
+                  - generic "mysql_8.0(yzs-rds:3306)" [ref=e1342]
+                  - generic "rm-bp16knn4mo4fvh99ieo.mysql.rds.aliyuncs.com:3306" [ref=e1344]: 地址 rm-bp16knn4mo4fvh99ieo.mysql.rds.aliyuncs.com:3306
+                - generic [ref=e1345]: MYSQL
+                - generic "连接正常" [ref=e1346]
+              - option "mysql_8.3(29:3306) 地址 192.168.2.29:3306 MYSQL 连接正常" [ref=e1347] [cursor=pointer]:
+                - generic [ref=e1348]:
+                  - generic "mysql_8.3(29:3306)" [ref=e1349]
+                  - generic "192.168.2.29:3306" [ref=e1351]: 地址 192.168.2.29:3306
+                - generic [ref=e1352]: MYSQL
+                - generic "连接正常" [ref=e1353]
+              - generic [ref=e1354]:
+                - generic [ref=e1355]: OCEANBASE_MYSQL
+                - generic [ref=e1356]: "1"
+              - option "oceanbase_4.2(14:2881) 地址 192.168.2.14:2881 OCEANBASE_MYSQL 连接正常" [ref=e1357] [cursor=pointer]:
+                - generic [ref=e1358]:
+                  - generic "oceanbase_4.2(14:2881)" [ref=e1359]
+                  - generic "192.168.2.14:2881" [ref=e1361]: 地址 192.168.2.14:2881
+                - generic [ref=e1362]: OCEANBASE_MYSQL
+                - generic "连接正常" [ref=e1363]
+              - generic [ref=e1364]:
+                - generic [ref=e1365]: OPENGAUSS
+                - generic [ref=e1366]: "2"
+              - option "vastbase(132) 地址 192.168.2.132:5432 OPENGAUSS 连接正常 已选" [selected] [ref=e1367] [cursor=pointer]:
+                - generic [ref=e1368]:
+                  - generic "vastbase(132)" [ref=e1369]
+                  - generic "192.168.2.132:5432" [ref=e1371]: 地址 192.168.2.132:5432
+                - generic [ref=e1372]: OPENGAUSS
+                - generic "连接正常" [ref=e1373]
+                - generic [ref=e1374]: 已选
+              - option "postgresql_9.4(greenplum)(93:5432) 地址 192.168.2.93:5432 OPENGAUSS 连接正常" [ref=e1375] [cursor=pointer]:
+                - generic [ref=e1376]:
+                  - generic "postgresql_9.4(greenplum)(93:5432)" [ref=e1377]
+                  - generic "192.168.2.93:5432" [ref=e1379]: 地址 192.168.2.93:5432
+                - generic [ref=e1380]: OPENGAUSS
+                - generic "连接正常" [ref=e1381]
+              - generic [ref=e1382]:
+                - generic [ref=e1383]: ORACLE
+                - generic [ref=e1384]: "2"
+              - option "oracle_18c(85:1518) 地址 192.168.2.85:1518 ORACLE 连接正常" [ref=e1385] [cursor=pointer]:
+                - generic [ref=e1386]:
+                  - generic "oracle_18c(85:1518)" [ref=e1387]
+                  - generic "192.168.2.85:1518" [ref=e1389]: 地址 192.168.2.85:1518
+                - generic [ref=e1390]: ORACLE
+                - generic "连接正常" [ref=e1391]
+              - option "oracle_19c(86:1519) 地址 192.168.2.86:1519 ORACLE 连接正常" [ref=e1392] [cursor=pointer]:
+                - generic [ref=e1393]:
+                  - generic "oracle_19c(86:1519)" [ref=e1394]
+                  - generic "192.168.2.86:1519" [ref=e1396]: 地址 192.168.2.86:1519
+                - generic [ref=e1397]: ORACLE
+                - generic "连接正常" [ref=e1398]
+              - generic [ref=e1399]:
+                - generic [ref=e1400]: POSTGRESQL
+                - generic [ref=e1401]: "16"
+              - option "postgresql_14(hashdata)(95:5432) 地址 192.168.2.95:5432 POSTGRESQL 连接异常" [ref=e1402] [cursor=pointer]:
+                - generic [ref=e1403]:
+                  - generic "postgresql_14(hashdata)(95:5432)" [ref=e1404]
+                  - generic "192.168.2.95:5432" [ref=e1406]: 地址 192.168.2.95:5432
+                - generic [ref=e1407]: POSTGRESQL
+                - generic "连接异常" [ref=e1408]
+              - option "postgresql_12(40:5432) 地址 192.168.2.40:5432 POSTGRESQL 连接正常" [ref=e1409] [cursor=pointer]:
+                - generic [ref=e1410]:
+                  - generic "postgresql_12(40:5432)" [ref=e1411]
+                  - generic "192.168.2.40:5432" [ref=e1413]: 地址 192.168.2.40:5432
+                - generic [ref=e1414]: POSTGRESQL
+                - generic "连接正常" [ref=e1415]
+              - option "postgresql_10(91:5410) 地址 192.168.2.91:5410 POSTGRESQL 连接正常" [ref=e1416] [cursor=pointer]:
+                - generic [ref=e1417]:
+                  - generic "postgresql_10(91:5410)" [ref=e1418]
+                  - generic "192.168.2.91:5410" [ref=e1420]: 地址 192.168.2.91:5410
+                - generic [ref=e1421]: POSTGRESQL
+                - generic "连接正常" [ref=e1422]
+              - option "polardb-oracle_14(132:1523) 地址 192.168.2.132:1523 POSTGRESQL 连接正常" [ref=e1423] [cursor=pointer]:
+                - generic [ref=e1424]:
+                  - generic "polardb-oracle_14(132:1523)" [ref=e1425]
+                  - generic "192.168.2.132:1523" [ref=e1427]: 地址 192.168.2.132:1523
+                - generic [ref=e1428]: POSTGRESQL
+                - generic "连接正常" [ref=e1429]
+              - option "postgresql_16(91:5416) 地址 192.168.2.91:5416 POSTGRESQL 连接正常" [ref=e1430] [cursor=pointer]:
+                - generic [ref=e1431]:
+                  - generic "postgresql_16(91:5416)" [ref=e1432]
+                  - generic "192.168.2.91:5416" [ref=e1434]: 地址 192.168.2.91:5416
+                - generic [ref=e1435]: POSTGRESQL
+                - generic "连接正常" [ref=e1436]
+              - option "postgresql_12(91:5412) 地址 192.168.2.91:5412 POSTGRESQL 连接正常" [ref=e1437] [cursor=pointer]:
+                - generic [ref=e1438]:
+                  - generic "postgresql_12(91:5412)" [ref=e1439]
+                  - generic "192.168.2.91:5412" [ref=e1441]: 地址 192.168.2.91:5412
+                - generic [ref=e1442]: POSTGRESQL
+                - generic "连接正常" [ref=e1443]
+              - option "postgresql_15(90:5432) 地址 192.168.2.90:5432 POSTGRESQL 连接正常" [ref=e1444] [cursor=pointer]:
+                - generic [ref=e1445]:
+                  - generic "postgresql_15(90:5432)" [ref=e1446]
+                  - generic "192.168.2.90:5432" [ref=e1448]: 地址 192.168.2.90:5432
+                - generic [ref=e1449]: POSTGRESQL
+                - generic "连接正常" [ref=e1450]
+              - option "postgresql_14(91:5414) 地址 192.168.2.91:5414 POSTGRESQL 连接正常" [ref=e1451] [cursor=pointer]:
+                - generic [ref=e1452]:
+                  - generic "postgresql_14(91:5414)" [ref=e1453]
+                  - generic "192.168.2.91:5414" [ref=e1455]: 地址 192.168.2.91:5414
+                - generic [ref=e1456]: POSTGRESQL
+                - generic "连接正常" [ref=e1457]
+              - option "postgresql_11(90:5411) 地址 192.168.2.90:5411 POSTGRESQL 连接正常" [ref=e1458] [cursor=pointer]:
+                - generic [ref=e1459]:
+                  - generic "postgresql_11(90:5411)" [ref=e1460]
+                  - generic "192.168.2.90:5411" [ref=e1462]: 地址 192.168.2.90:5411
+                - generic [ref=e1463]: POSTGRESQL
+                - generic "连接正常" [ref=e1464]
+              - option "postgresql_10(90:5410) 地址 192.168.2.90:5410 POSTGRESQL 连接正常" [ref=e1465] [cursor=pointer]:
+                - generic [ref=e1466]:
+                  - generic "postgresql_10(90:5410)" [ref=e1467]
+                  - generic "192.168.2.90:5410" [ref=e1469]: 地址 192.168.2.90:5410
+                - generic [ref=e1470]: POSTGRESQL
+                - generic "连接正常" [ref=e1471]
+              - option "postgresql_8(kingbase)(75:54321) 地址 192.168.2.75:54321 POSTGRESQL 连接正常" [ref=e1472] [cursor=pointer]:
+                - generic [ref=e1473]:
+                  - generic "postgresql_8(kingbase)(75:54321)" [ref=e1474]
+                  - generic "192.168.2.75:54321" [ref=e1476]: 地址 192.168.2.75:54321
+                - generic [ref=e1477]: POSTGRESQL
+                - generic "连接正常" [ref=e1478]
+              - option "postgresql_15(91:5432) 地址 192.168.2.91:5432 POSTGRESQL 连接正常" [ref=e1479] [cursor=pointer]:
+                - generic [ref=e1480]:
+                  - generic "postgresql_15(91:5432)" [ref=e1481]
+                  - generic "192.168.2.91:5432" [ref=e1483]: 地址 192.168.2.91:5432
+                - generic [ref=e1484]: POSTGRESQL
+                - generic "连接正常" [ref=e1485]
+              - option "postgresql_15(polardb)(91:5415) 地址 192.168.2.91:5415 POSTGRESQL 连接正常" [ref=e1486] [cursor=pointer]:
+                - generic [ref=e1487]:
+                  - generic "postgresql_15(polardb)(91:5415)" [ref=e1488]
+                  - generic "192.168.2.91:5415" [ref=e1490]: 地址 192.168.2.91:5415
+                - generic [ref=e1491]: POSTGRESQL
+                - generic "连接正常" [ref=e1492]
+              - option "postgresql_14(90:5414) 地址 192.168.2.90:5414 POSTGRESQL 连接正常" [ref=e1493] [cursor=pointer]:
+                - generic [ref=e1494]:
+                  - generic "postgresql_14(90:5414)" [ref=e1495]
+                  - generic "192.168.2.90:5414" [ref=e1497]: 地址 192.168.2.90:5414
+                - generic [ref=e1498]: POSTGRESQL
+                - generic "连接正常" [ref=e1499]
+              - option "postgresql_18(208:15432) 地址 118.178.108.208:15432 POSTGRESQL 连接正常" [ref=e1500] [cursor=pointer]:
+                - generic [ref=e1501]:
+                  - generic "postgresql_18(208:15432)" [ref=e1502]
+                  - generic "118.178.108.208:15432" [ref=e1504]: 地址 118.178.108.208:15432
+                - generic [ref=e1505]: POSTGRESQL
+                - generic "连接正常" [ref=e1506]
+              - option "postgresql_14(polardb)(179:1523) 地址 192.168.2.179:1523 POSTGRESQL 连接正常" [ref=e1507] [cursor=pointer]:
+                - generic [ref=e1508]:
+                  - generic "postgresql_14(polardb)(179:1523)" [ref=e1509]
+                  - generic "192.168.2.179:1523" [ref=e1511]: 地址 192.168.2.179:1523
+                - generic [ref=e1512]: POSTGRESQL
+                - generic "连接正常" [ref=e1513]
+              - generic [ref=e1514]:
+                - generic [ref=e1515]: SQLSERVER
+                - generic [ref=e1516]: "6"
+              - option "sqlserver_2019(62:1419) 地址 192.168.2.62:1419 SQLSERVER 连接正常" [ref=e1517] [cursor=pointer]:
+                - generic [ref=e1518]:
+                  - generic "sqlserver_2019(62:1419)" [ref=e1519]
+                  - generic "192.168.2.62:1419" [ref=e1521]: 地址 192.168.2.62:1419
+                - generic [ref=e1522]: SQLSERVER
+                - generic "连接正常" [ref=e1523]
+              - option "sqlserver_2019(61:1433) 地址 192.168.2.61:1433 SQLSERVER 连接正常" [ref=e1524] [cursor=pointer]:
+                - generic [ref=e1525]:
+                  - generic "sqlserver_2019(61:1433)" [ref=e1526]
+                  - generic "192.168.2.61:1433" [ref=e1528]: 地址 192.168.2.61:1433
+                - generic [ref=e1529]: SQLSERVER
+                - generic "连接正常" [ref=e1530]
+              - option "sqlserver_2017(62:1417) 地址 192.168.2.62:1417 SQLSERVER 连接正常" [ref=e1531] [cursor=pointer]:
+                - generic [ref=e1532]:
+                  - generic "sqlserver_2017(62:1417)" [ref=e1533]
+                  - generic "192.168.2.62:1417" [ref=e1535]: 地址 192.168.2.62:1417
+                - generic [ref=e1536]: SQLSERVER
+                - generic "连接正常" [ref=e1537]
+              - option "sqlserver_2019(244:1433) 地址 192.168.2.244:1433 SQLSERVER 连接正常" [ref=e1538] [cursor=pointer]:
+                - generic [ref=e1539]:
+                  - generic "sqlserver_2019(244:1433)" [ref=e1540]
+                  - generic "192.168.2.244:1433" [ref=e1542]: 地址 192.168.2.244:1433
+                - generic [ref=e1543]: SQLSERVER
+                - generic "连接正常" [ref=e1544]
+              - option "sqlserver_2022(62:1422) 地址 192.168.2.62:1422 SQLSERVER 连接正常" [ref=e1545] [cursor=pointer]:
+                - generic [ref=e1546]:
+                  - generic "sqlserver_2022(62:1422)" [ref=e1547]
+                  - generic "192.168.2.62:1422" [ref=e1549]: 地址 192.168.2.62:1422
+                - generic [ref=e1550]: SQLSERVER
+                - generic "连接正常" [ref=e1551]
+              - option "sqlserver_2017(61:1417) 地址 192.168.2.61:1417 SQLSERVER 连接正常" [ref=e1552] [cursor=pointer]:
+                - generic [ref=e1553]:
+                  - generic "sqlserver_2017(61:1417)" [ref=e1554]
+                  - generic "192.168.2.61:1417" [ref=e1556]: 地址 192.168.2.61:1417
+                - generic [ref=e1557]: SQLSERVER
+                - generic "连接正常" [ref=e1558]
+      - generic [ref=e1128]:
+        - generic [ref=e1129]:
+          - button "执行 (Ctrl+Enter)" [ref=e1130] [cursor=pointer]:
+            - img [ref=e1214]
+            - text: 执行 (Ctrl+Enter)
+          - button "执行计划" [ref=e1133] [cursor=pointer]:
+            - img [ref=e1216]
+            - text: 执行计划
+          - button "历史记录" [ref=e1137] [cursor=pointer]:
+            - img [ref=e1219]
+            - text: 历史记录
+          - button "刷新结构" [ref=e1142] [cursor=pointer]:
+            - img [ref=e1223]
+            - text: 刷新结构
+          - generic [ref=e1148]: "提示: 选中SQL后执行将只执行选中部分 | 最多返回10000行"
+        - code [ref=e1228]:
+          - generic [ref=e1229]:
+            - generic [ref=e1234]: "1"
+            - generic [ref=e1240]: SELECT 1;
+            - textbox "Editor content;Press Alt+F1 for Accessibility Options." [ref=e1242]
+        - generic [ref=e1153]: 就绪
+        - generic [ref=e1155]:
+          - img [ref=e1246]
+          - heading "暂无结果" [level=3] [ref=e1158]
+          - paragraph [ref=e1159]: 执行查询后结果将显示在这里
+  - generic [ref=e1248]:
+    - alert
+    - alert

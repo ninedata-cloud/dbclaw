@@ -1,0 +1,50 @@
+id: list_datasource
+name: List Datasources
+version: 1.0.0
+author: DBClaw
+category: query
+description: List all configured database datasource
+tags: [datasource, configuration]
+
+permissions: []
+
+code: |
+  async def execute(context, params):
+      from backend.models.datasource import Datasource
+      from backend.models.soft_delete import alive_select
+
+      # Get all datasource
+      result = await context.db.execute(alive_select(Datasource))
+      datasource = result.scalars().all()
+
+      # Format datasource info
+      datasource_list = []
+      for datasource in datasource:
+          datasource_list.append({
+              "id": datasource.id,
+              "name": datasource.name,
+              "db_type": datasource.db_type,
+              "host": datasource.host,
+              "port": datasource.port,
+              "database": datasource.database,
+              "username": datasource.username,
+              "host_id": datasource.host_id,
+              "has_ssh": datasource.host_id is not None,
+              "tags": datasource.tags,
+              "is_active": datasource.is_active,
+              "importance_level": datasource.importance_level,
+              "remark": datasource.remark,
+              "metric_source": datasource.metric_source,
+              "external_instance_id": datasource.external_instance_id,
+              "silence_until": datasource.silence_until.isoformat() if datasource.silence_until else None,
+              "silence_reason": datasource.silence_reason,
+              "db_version": datasource.db_version,
+              "connection_status": datasource.connection_status,
+              "connection_error": datasource.connection_error,
+              "connection_checked_at": datasource.connection_checked_at.isoformat() if datasource.connection_checked_at else None
+          })
+
+      return {
+          "success": True,
+          "datasource": datasource_list
+      }

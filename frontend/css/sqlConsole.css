@@ -1,0 +1,370 @@
+/* === Query Editor === */
+.sql-console-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.sql-console-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    flex-wrap: wrap;
+    width: 100%;
+    min-width: 0;
+    flex-shrink: 0;
+}
+
+.sql-console-toolbar-main-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.sql-console-toolbar-context {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-left: auto;
+    min-width: 0;
+    justify-content: flex-end;
+}
+
+.sql-console-context-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.sql-console-context-group label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.sql-console-context-group .form-select {
+    min-width: 0;
+    width: 240px;
+    max-width: 100%;
+}
+
+.sql-console-toolbar select {
+    padding: 5px 10px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 12px;
+    min-height: 30px;
+    min-width: 0;
+}
+
+.sql-console-toolbar .btn {
+    min-height: 30px;
+    padding: 4px 10px;
+    font-size: 12px;
+    gap: 6px;
+}
+
+.sql-console-toolbar .btn svg,
+.sql-console-toolbar .btn i {
+    width: 14px;
+    height: 14px;
+}
+
+.sql-console-editor-wrapper {
+    flex: 0 0 auto;
+    height: clamp(180px, 34vh, 320px);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    margin: 8px 0 0 0;
+    min-width: 0;
+    order: 1;
+}
+
+.sql-console-editor-wrapper .CodeMirror {
+    height: 100%;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    background: var(--bg-input);
+}
+
+.sql-console-editor-wrapper .CodeMirror-gutters {
+    background: var(--bg-tertiary);
+    border-right: 1px solid var(--border-color);
+}
+
+/* === AG Grid Theme Overrides === */
+.data-table-wrapper {
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    /* Force all AG Grid CSS variables to use our theme */
+    --ag-background-color: var(--bg-secondary) !important;
+    --ag-header-background-color: var(--bg-tertiary) !important;
+    --ag-foreground-color: var(--text-primary) !important;
+    --ag-header-foreground-color: var(--text-secondary) !important;
+    --ag-secondary-foreground-color: var(--text-secondary) !important;
+    --ag-disabled-foreground-color: var(--text-muted) !important;
+    --ag-border-color: var(--border-color) !important;
+    --ag-row-border-color: var(--border-color) !important;
+    --ag-row-hover-color: var(--bg-hover) !important;
+    --ag-odd-row-background-color: var(--bg-secondary) !important;
+    --ag-selected-row-background-color: rgba(47, 129, 247, 0.15) !important;
+    --ag-cell-horizontal-border: solid var(--border-color) !important;
+    --ag-header-column-separator-color: var(--border-color) !important;
+    --ag-input-focus-border-color: var(--accent-blue) !important;
+    --ag-input-border-color: var(--border-color) !important;
+    --ag-input-background-color: var(--bg-input) !important;
+    --ag-chip-background-color: var(--bg-tertiary) !important;
+    --ag-column-hover-color: rgba(47, 129, 247, 0.08) !important;
+    --ag-font-size: 13px !important;
+    --ag-font-family: var(--font-sans) !important;
+}
+
+/* AG Grid root wrapper */
+.data-table-wrapper .ag-root-wrapper {
+    border: none !important;
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary) !important;
+}
+
+.data-table-wrapper .ag-root-wrapper-body {
+    background: var(--bg-secondary) !important;
+}
+
+/* Rows — force dark background */
+.data-table-wrapper .ag-row {
+    background: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+    border-bottom: 1px solid var(--border-color) !important;
+}
+
+.data-table-wrapper .ag-row:nth-child(even) {
+    background: var(--bg-secondary) !important;
+}
+
+.data-table-wrapper .ag-row:hover {
+    background: var(--bg-hover) !important;
+}
+
+/* Cells — force light text on dark background */
+.data-table-wrapper .ag-cell {
+    background: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+    border-right: 1px solid var(--border-color) !important;
+    line-height: 36px;
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+}
+
+.data-table-wrapper .ag-cell:last-child {
+    border-right: none !important;
+}
+
+/* Header styling */
+.data-table-wrapper .ag-header {
+    background: var(--bg-tertiary) !important;
+    border-bottom: 1px solid var(--border-color) !important;
+}
+
+.data-table-wrapper .ag-header-cell {
+    background: var(--bg-tertiary) !important;
+    color: var(--text-secondary) !important;
+    border-right: 1px solid var(--border-color) !important;
+}
+
+.data-table-wrapper .ag-header-cell:last-child {
+    border-right: none !important;
+}
+
+.data-table-wrapper .ag-header-cell-label {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0.2px;
+    color: var(--text-secondary) !important;
+    gap: 8px;
+    justify-content: flex-start;
+    width: 100%;
+    min-width: 0;
+}
+
+.data-table-wrapper .ag-header-cell-comp-wrapper {
+    width: 100%;
+    min-width: 0;
+    padding: 0 16px 0 14px;
+    box-sizing: border-box;
+}
+
+.data-table-wrapper .ag-header-cell-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-left: 2px;
+}
+
+.data-table-wrapper .ag-header-icon {
+    color: var(--text-muted) !important;
+}
+
+.data-table-wrapper .ag-sort-indicator-container {
+    margin-left: auto;
+    flex: 0 0 auto;
+}
+
+.data-table-wrapper .ag-sort-indicator-icon {
+    color: var(--text-muted) !important;
+    padding-left: 0 !important;
+}
+
+.data-table-wrapper .ag-header-cell-menu-button,
+.data-table-wrapper .ag-header-cell-filter-button,
+.data-table-wrapper .ag-floating-filter-button {
+    display: none !important;
+}
+
+.data-table-wrapper .ag-header-cell:hover {
+    background: var(--bg-hover) !important;
+}
+
+/* NULL value styling */
+.data-table-wrapper .ag-cell.null-value {
+    color: var(--text-muted) !important;
+    font-style: italic;
+}
+
+/* Scrollbars */
+.data-table-wrapper .ag-body-horizontal-scroll-viewport::-webkit-scrollbar,
+.data-table-wrapper .ag-body-vertical-scroll-viewport::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+}
+
+.data-table-wrapper .ag-body-horizontal-scroll-viewport::-webkit-scrollbar-thumb,
+.data-table-wrapper .ag-body-vertical-scroll-viewport::-webkit-scrollbar-thumb {
+    background: var(--border-light);
+    border-radius: 4px;
+}
+
+/* Pagination */
+.data-table-wrapper .ag-paging-panel {
+    background: var(--bg-tertiary) !important;
+    border-top: 1px solid var(--border-color) !important;
+    color: var(--text-secondary) !important;
+    font-size: 12px;
+    height: 40px;
+}
+
+.data-table-wrapper .ag-paging-button {
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.data-table-wrapper .ag-paging-button:hover {
+    background: var(--bg-hover) !important;
+    color: var(--text-primary) !important;
+}
+
+/* Scrollbar inside grid */
+.data-table-wrapper .ag-body-horizontal-scroll-viewport::-webkit-scrollbar,
+.data-table-wrapper .ag-body-vertical-scroll-viewport::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+}
+
+.data-table-wrapper .ag-body-horizontal-scroll-viewport::-webkit-scrollbar-thumb,
+.data-table-wrapper .ag-body-vertical-scroll-viewport::-webkit-scrollbar-thumb {
+    background: var(--border-light);
+    border-radius: 4px;
+}
+
+.data-table-wrapper .ag-body-horizontal-scroll-viewport::-webkit-scrollbar-thumb:hover,
+.data-table-wrapper .ag-body-vertical-scroll-viewport::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
+
+/* Sort icon */
+.data-table-wrapper .ag-sort-indicator-icon {
+    color: var(--accent-blue);
+}
+
+/* Row number column */
+.data-table-wrapper .ag-row.row-numbers .ag-cell {
+    color: var(--text-muted);
+    font-size: 11px;
+    justify-content: center;
+    min-width: 50px;
+}
+
+/* === Explain Plan === */
+.sql-console-status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 0 4px;
+    font-size: 11px;
+    min-height: 24px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    order: 5;
+}
+
+.sql-console-resizer {
+    height: 8px;
+    background: transparent;
+    cursor: row-resize;
+    flex-shrink: 0;
+    user-select: none;
+    order: 3;
+}
+
+.sql-console-results {
+    flex: 1;
+    overflow: auto;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    min-height: 0;
+    min-width: 0;
+    order: 4;
+}
+
+.sql-console-status-bar .status-info {
+    display: flex;
+    gap: 16px;
+}
+
+/* === Explain Plan === */
+.explain-panel {
+    padding: 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    color: var(--text-primary);
+}
+
+@media (max-width: 1440px) {
+    .sql-console-toolbar {
+        align-items: flex-start;
+    }
+
+    .sql-console-toolbar-context {
+        margin-left: 0;
+        width: 100%;
+        justify-content: flex-start;
+    }
+}

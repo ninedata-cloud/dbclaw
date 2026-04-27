@@ -1,0 +1,40 @@
+id: execute_diagnostic_query
+name: Execute Diagnostic Query
+version: 1.0.0
+author: DBClaw
+category: general
+description: Execute a read-only SQL query for diagnostic purposes. Supports SELECT, SHOW, EXPLAIN, EXEC/EXECUTE (SQL Server), and DESCRIBE statements across all database types
+tags: [query, diagnostic, select, show, explain, exec, describe, general]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The datasource ID
+  - name: sql
+    type: string
+    required: true
+    description: The SQL query to execute (SELECT, SHOW, EXPLAIN, EXEC/EXECUTE, or DESCRIBE)
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+      sql = params['sql'].strip()
+
+      # Basic validation - allow SELECT, SHOW, EXPLAIN, and EXEC (for SQL Server stored procedures)
+      sql_upper = sql.upper()
+      allowed_keywords = ['SELECT', 'SHOW', 'EXPLAIN', 'EXEC', 'EXECUTE', 'DESCRIBE', 'DESC']
+
+      if not any(sql_upper.startswith(keyword) for keyword in allowed_keywords):
+          return {
+              "success": False,
+              "error": "Only SELECT, SHOW, EXPLAIN, EXEC/EXECUTE, and DESCRIBE queries are allowed for diagnostic purposes"
+          }
+
+      # Execute the query
+      result = await context.execute_query(sql, datasource_id)
+
+      return result

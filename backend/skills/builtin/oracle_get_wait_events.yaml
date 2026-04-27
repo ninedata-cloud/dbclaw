@@ -1,0 +1,57 @@
+id: oracle_get_wait_events
+name: Oracle Wait Events
+version: 1.0.0
+author: DBClaw
+category: oracle
+description: Get Oracle database wait events and statistics
+tags: [oracle, wait-events, performance, monitoring]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+  - name: limit
+    type: integer
+    required: false
+    description: Maximum number of wait events to return (default 20)
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+      try:
+          limit = int(params.get('limit', 20))
+      except (TypeError, ValueError):
+          limit = 20
+      limit = max(1, min(limit, 200))
+
+      query = f"""
+      SELECT * FROM (
+          SELECT
+              event,
+              wait_class,
+              total_waits,
+              total_timeouts,
+              ROUND(time_waited / 100, 2) as time_waited_seconds,
+              ROUND(average_wait / 100, 4) as avg_wait_seconds,
+              ROUND(time_waited_micro / 1000000, 2) as time_waited_micro_seconds
+          FROM v$system_event
+          WHERE wait_class != 'Idle'
+          ORDER BY time_waited DESC
+      )
+      WHERE ROWNUM <= {limit}
+      """
+
+      result = await context.execute_query(query, datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get wait events")}
+
+      return {
+          "success": True,
+          "wait_events": result.get("data", []),
+          "columns": result.get("columns", [])
+      }

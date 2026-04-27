@@ -1,0 +1,132 @@
+id: diagnose_high_memory
+name: Diagnose High Memory Usage
+version: 1.0.0
+author: DBClaw
+category: diagnosis
+description: Diagnose high memory usage by checking OS-level memory distribution, swap usage, top memory consumers, OOM killer logs, and database process memory
+tags: [linux, memory, diagnosis, performance, system, swap, oom]
+timeout: 120
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: false
+    description: The database connection ID (must have host configured)
+  - name: host_id
+    type: integer
+    required: false
+    description: The SSH host ID to execute commands on (alternative to datasource_id)
+
+permissions:
+  - execute_command
+
+code: |
+  async def execute(context, params):
+      datasource_id = params.get('datasource_id')
+      host_id = params.get('host_id')
+
+      # Validate parameters
+      if not datasource_id and not host_id:
+          return {
+              "success": False,
+              "error": "missing_parameter",
+              "message": "必须提供 datasource_id 或 host_id 参数之一"
+          }
+
+      if datasource_id and host_id:
+          return {
+              "success": False,
+              "error": "conflicting_parameters",
+              "message": "不能同时提供 datasource_id 和 host_id 参数"
+          }
+
+      # Determine execution method
+      if datasource_id:
+          from backend.models.datasource import Datasource
+          from sqlalchemy import select
+
+          datasource = await context.get_connection(datasource_id)
+
+          if not datasource:
+              return {
+                  "success": False,
+                  "error": "datasource_not_found",
+                  "message": f"数据源 ID {datasource_id} 不存在"
+              }
+
+          if not datasource.host_id:
+              return {
+                  "success": False,
+                  "error": "no_host_configured",
+                  "message": f"数据源 {datasource.name} (ID: {datasource_id}) 未配置主机连接，无法进行操作系统级别的内存诊断。"
+              }
+
+          async def exec_cmd(cmd):
+              return await context.execute_command(cmd, datasource_id)
+      else:
+          async def exec_cmd(cmd):
+              return await context.execute_command_on_host(cmd, host_id)
+
+      results = {
+          "success": True,
+          "diagnosis": {}
+      }
+
+      # 1. Detailed memory info (total, used, free, buffers, cached)
+      mem_detail = await exec_cmd(
+          "free -m"
+      )
+      if mem_detail.get("success"):
+          results["diagnosis"]["memory_detail"] = mem_detail.get("output", "")
+
+      # 2. /proc/meminfo for detailed breakdown
+      meminfo = await exec_cmd(
+          "cat /proc/meminfo | head -30"
+      )
+      if meminfo.get("success"):
+          results["diagnosis"]["meminfo"] = meminfo.get("output", "")
+
+      # 3. Swap usage details
+      swap_info = await exec_cmd(
+          "swapon --show 2>/dev/null; echo '---'; free -m | grep Swap"
+      )
+      if swap_info.get("success"):
+          results["diagnosis"]["swap_usage"] = swap_info.get("output", "")
+
+      # 4. Top memory consuming processes
+      top_mem = await exec_cmd(
+          "ps aux --sort=-%mem | head -16"
+      )
+      if top_mem.get("success"):
+          results["diagnosis"]["top_memory_processes"] = top_mem.get("output", "")
+
+      # 5. Database process memory usage
+      db_mem = await exec_cmd(
+          "ps aux | grep -E '(postgres|mysql|oracle|sqlserver|gaussdb)' | grep -v grep | awk '{printf \"%-10s %-8s %-8s %-8s %s\\n\", $1, $2, $4, $6, $11}'"
+      )
+      if db_mem.get("success"):
+          results["diagnosis"]["database_memory"] = db_mem.get("output", "")
+
+      # 6. Check OOM killer logs (recent)
+      oom_logs = await exec_cmd(
+          "dmesg -T 2>/dev/null | grep -i 'oom\\|out of memory\\|killed process' | tail -10 || journalctl -k --no-pager 2>/dev/null | grep -i 'oom\\|out of memory\\|killed process' | tail -10"
+      )
+      if oom_logs.get("success"):
+          oom_output = oom_logs.get("output", "").strip()
+          results["diagnosis"]["oom_killer_logs"] = oom_output if oom_output else "No OOM killer events found"
+
+      # 7. Shared memory segments (database shared buffers)
+      shm_info = await exec_cmd(
+          "ipcs -m 2>/dev/null | head -20"
+      )
+      if shm_info.get("success"):
+          results["diagnosis"]["shared_memory"] = shm_info.get("output", "")
+
+      # 8. Memory page stats (page faults, swap in/out)
+      vmstat_info = await exec_cmd(
+          "vmstat 1 3 | tail -2"
+      )
+      if vmstat_info.get("success"):
+          results["diagnosis"]["vmstat"] = vmstat_info.get("output", "")
+
+      return results

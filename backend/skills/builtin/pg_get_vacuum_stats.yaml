@@ -1,0 +1,60 @@
+id: pg_get_vacuum_stats
+name: PostgreSQL Vacuum Statistics
+version: 1.0.0
+author: DBClaw
+category: postgresql
+description: Get vacuum and analyze statistics to identify tables needing maintenance
+tags: [postgresql, vacuum, maintenance, bloat]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      query = """
+      SELECT
+          schemaname,
+          relname as tablename,
+          n_live_tup as live_tuples,
+          n_dead_tup as dead_tuples,
+          CASE
+              WHEN n_live_tup > 0 THEN ROUND((n_dead_tup::numeric / n_live_tup::numeric) * 100, 2)
+              ELSE 0
+          END as dead_tuple_percent,
+          last_vacuum,
+          last_autovacuum,
+          last_analyze,
+          last_autoanalyze,
+          vacuum_count,
+          autovacuum_count,
+          analyze_count,
+          autoanalyze_count,
+          CASE
+              WHEN n_dead_tup > 10000 AND (n_dead_tup::numeric / NULLIF(n_live_tup, 0)::numeric) > 0.2 THEN 'URGENT'
+              WHEN n_dead_tup > 5000 AND (n_dead_tup::numeric / NULLIF(n_live_tup, 0)::numeric) > 0.1 THEN 'HIGH'
+              WHEN n_dead_tup > 1000 THEN 'MEDIUM'
+              ELSE 'LOW'
+          END as maintenance_priority
+      FROM pg_stat_user_tables
+      ORDER BY n_dead_tup DESC
+      LIMIT 100
+      """
+
+      result = await context.execute_query(query, datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get vacuum stats")}
+
+      return {
+          "success": True,
+          "tables": result.get("data", []),
+          "columns": result.get("columns", [])
+      }

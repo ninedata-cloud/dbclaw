@@ -1,0 +1,87 @@
+id: oracle_get_db_status
+name: Oracle Database Status
+version: 1.0.0
+author: DBClaw
+category: oracle
+description: Get current Oracle database status metrics including sessions, SGA usage, and key performance indicators
+tags: [oracle, status, performance, monitoring]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      # Get session count
+      session_query = """
+      SELECT
+          COUNT(*) as total_sessions,
+          SUM(CASE WHEN status = 'ACTIVE' THEN 1 ELSE 0 END) as active_sessions,
+          SUM(CASE WHEN status = 'INACTIVE' THEN 1 ELSE 0 END) as inactive_sessions
+      FROM v$session
+      WHERE type = 'USER'
+      """
+
+      session_result = await context.execute_query(session_query, datasource_id)
+
+      if not session_result.get("success"):
+          return {"success": False, "error": session_result.get("error", "Failed to get session info")}
+
+      # Get SGA info
+      sga_query = """
+      SELECT
+          name,
+          ROUND(value / 1024 / 1024, 2) as size_mb
+      FROM v$sga
+      """
+
+      sga_result = await context.execute_query(sga_query, datasource_id)
+
+      # Get database info
+      db_query = """
+      SELECT
+          name as db_name,
+          open_mode,
+          log_mode,
+          database_role,
+          platform_name
+      FROM v$database
+      """
+
+      db_result = await context.execute_query(db_query, datasource_id)
+
+      # Get instance info
+      instance_query = """
+      SELECT
+          instance_name,
+          host_name,
+          version,
+          startup_time,
+          status,
+          ROUND((SYSDATE - startup_time) * 24, 2) as uptime_hours
+      FROM v$instance
+      """
+
+      instance_result = await context.execute_query(instance_query, datasource_id)
+
+      metrics = {}
+      if session_result.get("data"):
+          session_data = session_result["data"][0]
+          metrics["total_sessions"] = session_data[0]
+          metrics["active_sessions"] = session_data[1]
+          metrics["inactive_sessions"] = session_data[2]
+
+      return {
+          "success": True,
+          "metrics": metrics,
+          "sga_info": sga_result.get("data", []) if sga_result.get("success") else [],
+          "database_info": db_result.get("data", []) if db_result.get("success") else [],
+          "instance_info": instance_result.get("data", []) if instance_result.get("success") else []
+      }

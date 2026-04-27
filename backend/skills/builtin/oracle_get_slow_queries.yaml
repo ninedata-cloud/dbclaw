@@ -1,0 +1,61 @@
+id: oracle_get_slow_queries
+name: Oracle Slow Queries
+version: 1.0.0
+author: DBClaw
+category: oracle
+description: Get slow running SQL queries from Oracle AWR/ASH or v$sql views
+tags: [oracle, slow-queries, performance, sql]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+  - name: limit
+    type: integer
+    required: false
+    description: Maximum number of queries to return (default 20)
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+      try:
+          limit = int(params.get('limit', 20))
+      except (TypeError, ValueError):
+          limit = 20
+      limit = max(1, min(limit, 200))
+
+      query = f"""
+      SELECT * FROM (
+          SELECT
+              sql_id,
+              SUBSTR(sql_text, 1, 200) as sql_text,
+              executions,
+              ROUND(elapsed_time / 1000000, 2) as elapsed_seconds,
+              ROUND(cpu_time / 1000000, 2) as cpu_seconds,
+              ROUND(elapsed_time / executions / 1000000, 4) as avg_elapsed_seconds,
+              disk_reads,
+              buffer_gets,
+              rows_processed,
+              last_active_time,
+              parsing_schema_name
+          FROM v$sql
+          WHERE executions > 0
+          ORDER BY elapsed_time DESC
+      )
+      WHERE ROWNUM <= {limit}
+      """
+
+      result = await context.execute_query(query, datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get slow queries")}
+
+      return {
+          "success": True,
+          "queries": result.get("data", []),
+          "columns": result.get("columns", [])
+      }

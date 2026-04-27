@@ -1,0 +1,108 @@
+id: fetch_webpage
+name: Fetch Webpage Content
+version: 2.0.0
+author: DBClaw
+category: external_api
+description: Fetch and extract text content from a web page URL using a headless browser. Supports JavaScript-rendered pages (SPAs) like Feishu, Notion, etc. Useful for reading documentation, error messages, release notes, or any web-based reference material.
+tags: [web, fetch, webpage, external, content]
+
+parameters:
+  - name: url
+    type: string
+    required: true
+    description: The full URL of the web page to fetch (must start with http:// or https://)
+  - name: max_chars
+    type: integer
+    required: false
+    default: 1048576
+    description: Maximum number of characters to return from the page content
+    min: 100
+    max: 50000000
+  - name: wait_for
+    type: string
+    required: false
+    default: networkidle
+    description: Wait condition before extracting content (networkidle, domcontentloaded, load)
+    enum: [networkidle, domcontentloaded, load]
+
+permissions: [access_external_api]
+
+timeout: 60
+
+code: |
+  async def execute(context, params):
+      import re
+
+      url = params.get('url', '').strip()
+      max_chars = params.get('max_chars', 1048576)
+      wait_for = params.get('wait_for', 'networkidle')
+
+      if not url.startswith(('http://', 'https://')):
+          return {
+              "success": False,
+              "error": "Invalid URL: must start with http:// or https://"
+          }
+
+      def extract_text(html):
+          # Remove script, style, noscript blocks
+          html = re.sub(r'<(script|style|noscript)[^>]*>.*?</\1>', '', html, flags=re.IGNORECASE | re.DOTALL)
+          # Remove all remaining tags
+          text = re.sub(r'<[^>]+>', ' ', html)
+          # Decode common HTML entities
+          text = text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>') \
+                     .replace('&nbsp;', ' ').replace('&quot;', '"').replace('&#39;', "'")
+          # Collapse whitespace
+          text = re.sub(r'[ \t]+', ' ', text)
+          lines = [line.strip() for line in text.splitlines()]
+          lines = [l for l in lines if l]
+          return '\n'.join(lines)
+
+      try:
+          from playwright.async_api import async_playwright
+
+          async with async_playwright() as p:
+              browser = await p.chromium.launch(
+                  headless=True,
+                  args=['--no-sandbox', '--disable-dev-shm-usage']
+              )
+              context_pw = await browser.new_context(
+                  user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                  locale='zh-CN',
+                  ignore_https_errors=True
+              )
+              page = await context_pw.new_page()
+
+              try:
+                  await page.goto(url, wait_until=wait_for, timeout=50000)
+              except Exception:
+                  # Fallback: if networkidle times out, try load
+                  try:
+                      await page.goto(url, wait_until='load', timeout=30000)
+                  except Exception:
+                      pass
+
+              title = await page.title()
+              html = await page.content()
+              await browser.close()
+
+          text = extract_text(html)
+          text = re.sub(r'\n{3,}', '\n\n', text)
+          text = text.strip()
+
+          if len(text) > max_chars:
+              text = text[:max_chars] + f'\n\n... (truncated, showing {max_chars}/{len(text)} chars)'
+
+          return {
+              "success": True,
+              "url": url,
+              "title": title,
+              "content": text,
+              "content_length": len(text)
+          }
+
+      except Exception as e:
+          return {
+              "success": False,
+              "error": f"Unexpected error: {str(e)}",
+              "url": url
+          }

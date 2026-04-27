@@ -1,0 +1,75 @@
+id: mssql_get_wait_stats
+name: SQL Server Wait Statistics
+version: 1.0.0
+author: DBClaw
+category: sqlserver
+description: Analyze wait statistics to identify performance bottlenecks
+tags: [sqlserver, waits, performance, bottlenecks]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+  - name: limit
+    type: integer
+    required: false
+    description: Maximum number of wait types to return
+    validation:
+      min: 1
+      max: 100
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+      limit = params.get('limit', 20)
+
+      query = f"""
+      WITH Waits AS (
+          SELECT
+              wait_type,
+              wait_time_ms / 1000.0 AS wait_time_sec,
+              waiting_tasks_count,
+              100.0 * wait_time_ms / SUM(wait_time_ms) OVER() AS percentage,
+              ROW_NUMBER() OVER(ORDER BY wait_time_ms DESC) AS row_num
+          FROM sys.dm_os_wait_stats
+          WHERE wait_type NOT IN (
+              'CLR_SEMAPHORE', 'LAZYWRITER_SLEEP', 'RESOURCE_QUEUE', 'SLEEP_TASK',
+              'SLEEP_SYSTEMTASK', 'SQLTRACE_BUFFER_FLUSH', 'WAITFOR', 'LOGMGR_QUEUE',
+              'CHECKPOINT_QUEUE', 'REQUEST_FOR_DEADLOCK_SEARCH', 'XE_TIMER_EVENT',
+              'BROKER_TO_FLUSH', 'BROKER_TASK_STOP', 'CLR_MANUAL_EVENT',
+              'CLR_AUTO_EVENT', 'DISPATCHER_QUEUE_SEMAPHORE', 'FT_IFTS_SCHEDULER_IDLE_WAIT',
+              'XE_DISPATCHER_WAIT', 'XE_DISPATCHER_JOIN', 'SQLTRACE_INCREMENTAL_FLUSH_SLEEP'
+          )
+      )
+      SELECT TOP {limit}
+          wait_type,
+          wait_time_sec,
+          waiting_tasks_count,
+          CAST(percentage AS DECIMAL(5,2)) AS percentage,
+          CASE
+              WHEN wait_type LIKE 'LCK%' THEN 'Locking'
+              WHEN wait_type LIKE 'PAGEIOLATCH%' THEN 'I/O'
+              WHEN wait_type LIKE 'PAGELATCH%' THEN 'Memory/Contention'
+              WHEN wait_type LIKE 'CXPACKET%' THEN 'Parallelism'
+              WHEN wait_type LIKE 'SOS_SCHEDULER_YIELD%' THEN 'CPU'
+              ELSE 'Other'
+          END AS wait_category
+      FROM Waits
+      WHERE row_num <= {limit}
+      ORDER BY wait_time_sec DESC
+      """
+
+      result = await context.execute_query(query, datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get wait statistics")}
+
+      return {
+          "success": True,
+          "wait_stats": result.get("data", []),
+          "columns": result.get("columns", [])
+      }

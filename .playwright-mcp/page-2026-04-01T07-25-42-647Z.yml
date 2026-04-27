@@ -1,0 +1,46 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - img [ref=e5]
+    - img [ref=e10] [cursor=pointer]
+    - img [ref=e16] [cursor=pointer]
+    - img [ref=e20] [cursor=pointer]
+    - img [ref=e25] [cursor=pointer]
+    - img [ref=e29] [cursor=pointer]
+    - img [ref=e32] [cursor=pointer]
+    - img [ref=e38] [cursor=pointer]
+  - main [ref=e41]:
+    - generic [ref=e42]:
+      - generic [ref=e43]: 智能助手
+      - generic [ref=e44]:
+        - img
+        - textbox "搜索或提问...例如：MySQL 连接数异常" [ref=e45]
+      - generic [ref=e46]:
+        - button [ref=e47] [cursor=pointer]:
+          - img [ref=e48]
+        - generic [ref=e51] [cursor=pointer]: W
+    - generic [ref=e52]:
+      - generic [ref=e55]: 系统安静运行中
+      - generic [ref=e56]:
+        - generic [ref=e57]:
+          - generic [ref=e58]: 数据源
+          - generic [ref=e59]: "23"
+        - generic [ref=e60]:
+          - generic [ref=e61]: 健康
+          - generic [ref=e62]: "21"
+        - generic [ref=e63]:
+          - generic [ref=e64]: 活跃告警
+          - generic [ref=e65]: "2"
+    - generic [ref=e176]:
+      - generic [ref=e177]:
+        - generic [ref=e534]:
+          - generic [ref=e535]: W
+          - generic [ref=e536]: MySQL 连接数异常怎么办？
+        - generic [ref=e537]:
+          - generic [ref=e538]: AI
+          - generic [ref=e539]: 正在分析你的问题...
+      - generic [ref=e187]:
+        - textbox "描述你的问题或需求..." [ref=e189]
+        - button [ref=e190] [cursor=pointer]:
+          - img [ref=e191]
+        - button [active] [ref=e193] [cursor=pointer]:
+          - img [ref=e194]

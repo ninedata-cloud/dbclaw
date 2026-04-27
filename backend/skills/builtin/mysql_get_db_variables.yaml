@@ -1,0 +1,37 @@
+id: mysql_get_db_variables
+name: MySQL Database Variables
+version: 1.0.0
+author: DBClaw
+category: mysql
+description: Get MySQL database configuration variables/parameters
+tags: [mysql, configuration, variables]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      # Get variables
+      result = await context.execute_query("SHOW GLOBAL VARIABLES", datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get variables")}
+
+      # Parse variables into a dict
+      variables = {}
+      for row in result.get("data", []):
+          if len(row) >= 2:
+              variables[row[0]] = row[1]
+
+      return {
+          "success": True,
+          "variables": variables
+      }

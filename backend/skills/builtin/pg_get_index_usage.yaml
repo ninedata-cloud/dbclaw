@@ -1,0 +1,50 @@
+id: pg_get_index_usage
+name: PostgreSQL Index Usage
+version: 1.0.0
+author: DBClaw
+category: postgresql
+description: Analyze index usage patterns to identify unused or inefficient indexes
+tags: [postgresql, indexes, performance, optimization]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      query = """
+      SELECT
+          schemaname,
+          relname as tablename,
+          indexrelname as indexname,
+          idx_scan as index_scans,
+          idx_tup_read as tuples_read,
+          idx_tup_fetch as tuples_fetched,
+          pg_size_pretty(pg_relation_size(indexrelid)) as index_size,
+          CASE
+              WHEN idx_scan = 0 THEN 'UNUSED'
+              WHEN idx_scan < 100 THEN 'LOW USAGE'
+              ELSE 'ACTIVE'
+          END as usage_status
+      FROM pg_stat_user_indexes
+      ORDER BY idx_scan ASC, pg_relation_size(indexrelid) DESC
+      LIMIT 100
+      """
+
+      result = await context.execute_query(query, datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get index usage")}
+
+      return {
+          "success": True,
+          "indexes": result.get("data", []),
+          "columns": result.get("columns", [])
+      }

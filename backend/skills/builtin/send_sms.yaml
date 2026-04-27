@@ -1,0 +1,151 @@
+id: send_sms
+name: Send SMS
+version: 1.0.0
+author: DBClaw
+category: notification
+description: Send an SMS message to specified phone numbers via configured SMS provider (webhook or Aliyun)
+tags: [sms, notification, alert, phone]
+
+parameters:
+  - name: phone
+    type: string
+    required: true
+    description: Recipient phone number (E.164 format recommended, e.g. +8613800138000, or comma-separated for multiple)
+  - name: message
+    type: string
+    required: true
+    description: SMS message content (keep under 70 characters for a single SMS)
+  - name: provider
+    type: string
+    required: false
+    description: Override SMS provider (webhook or aliyun). Defaults to system-configured sms_provider.
+    enum: [webhook, aliyun]
+
+permissions: [access_external_api]
+
+timeout: 30
+
+code: |
+  async def execute(context, params):
+      import aiohttp
+      import json
+      from sqlalchemy import select
+      from backend.models.system_config import SystemConfig
+
+      phone = params.get('phone', '').strip()
+      message = params.get('message', '').strip()
+      provider_override = params.get('provider', '').strip()
+
+      if not phone:
+          return {"success": False, "error": "Phone number is required"}
+      if not message:
+          return {"success": False, "error": "Message content is required"}
+
+      # Get SMS configuration from system settings
+      config_result = await context.db.execute(
+          select(SystemConfig).where(SystemConfig.category == "notification")
+      )
+      configs = {c.key: c.value for c in config_result.scalars().all()}
+
+      provider = provider_override or configs.get("sms_provider", "webhook")
+
+      phone_numbers = [p.strip() for p in phone.split(',') if p.strip()]
+      results = []
+
+      if provider == "webhook":
+          webhook_url = configs.get("sms_webhook_url")
+          if not webhook_url:
+              return {
+                  "success": False,
+                  "error": "SMS webhook URL not configured. Please set sms_webhook_url in system notification settings."
+              }
+
+          async with aiohttp.ClientSession() as session:
+              for number in phone_numbers:
+                  try:
+                      payload = {"phone": number, "message": message}
+                      async with session.post(
+                          webhook_url,
+                          json=payload,
+                          timeout=aiohttp.ClientTimeout(total=15)
+                      ) as response:
+                          resp_text = await response.text()
+                          if response.status in [200, 201, 202]:
+                              results.append({"phone": number, "status": "sent"})
+                          else:
+                              results.append({"phone": number, "status": "failed", "error": f"HTTP {response.status}: {resp_text[:200]}"})
+                  except Exception as e:
+                      results.append({"phone": number, "status": "failed", "error": str(e)})
+
+      elif provider == "aliyun":
+          # Aliyun SMS via REST API
+          access_key_id = configs.get("aliyun_sms_access_key_id")
+          access_key_secret = configs.get("aliyun_sms_access_key_secret")
+          sign_name = configs.get("aliyun_sms_sign_name")
+          template_code = configs.get("aliyun_sms_template_code")
+
+          if not all([access_key_id, access_key_secret, sign_name, template_code]):
+              return {
+                  "success": False,
+                  "error": "Aliyun SMS configuration incomplete. Required: aliyun_sms_access_key_id, aliyun_sms_access_key_secret, aliyun_sms_sign_name, aliyun_sms_template_code"
+              }
+
+          import hmac
+          import hashlib
+          import base64
+          import urllib.parse
+          import time
+          import uuid
+
+          def aliyun_sign(params_dict, secret):
+              sorted_params = sorted(params_dict.items())
+              query_string = '&'.join([
+                  urllib.parse.quote(k, safe='') + '=' + urllib.parse.quote(v, safe='')
+                  for k, v in sorted_params
+              ])
+              string_to_sign = 'GET&' + urllib.parse.quote('/', safe='') + '&' + urllib.parse.quote(query_string, safe='')
+              h = hmac.new((secret + '&').encode('utf-8'), string_to_sign.encode('utf-8'), hashlib.sha1)
+              return base64.b64encode(h.digest()).decode('utf-8')
+
+          async with aiohttp.ClientSession() as session:
+              for number in phone_numbers:
+                  try:
+                      req_params = {
+                          'Action': 'SendSms',
+                          'Version': '2017-05-25',
+                          'RegionId': 'cn-hangzhou',
+                          'AccessKeyId': access_key_id,
+                          'SignatureMethod': 'HMAC-SHA1',
+                          'SignatureVersion': '1.0',
+                          'SignatureNonce': str(uuid.uuid4()),
+                          'Timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                          'Format': 'JSON',
+                          'PhoneNumbers': number,
+                          'SignName': sign_name,
+                          'TemplateCode': template_code,
+                          'TemplateParam': json.dumps({"message": message[:50]}),
+                      }
+                      req_params['Signature'] = aliyun_sign(req_params, access_key_secret)
+                      url = 'https://dysmsapi.aliyuncs.com/?' + urllib.parse.urlencode(req_params)
+                      async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as response:
+                          resp_json = await response.json()
+                          if resp_json.get('Code') == 'OK':
+                              results.append({"phone": number, "status": "sent", "request_id": resp_json.get('RequestId')})
+                          else:
+                              results.append({"phone": number, "status": "failed", "error": f"{resp_json.get('Code')}: {resp_json.get('Message')}"})
+                  except Exception as e:
+                      results.append({"phone": number, "status": "failed", "error": str(e)})
+      else:
+          return {"success": False, "error": f"Unsupported SMS provider: {provider}. Supported: webhook, aliyun"}
+
+      sent = [r for r in results if r['status'] == 'sent']
+      failed = [r for r in results if r['status'] == 'failed']
+
+      return {
+          "success": len(failed) == 0,
+          "message": f"Sent {len(sent)}/{len(results)} messages",
+          "provider": provider,
+          "results": results,
+          "sent_count": len(sent),
+          "failed_count": len(failed)
+      }

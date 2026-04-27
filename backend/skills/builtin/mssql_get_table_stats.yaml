@@ -1,0 +1,51 @@
+id: mssql_get_table_stats
+name: SQL Server Table Statistics
+version: 1.0.0
+author: DBClaw
+category: sqlserver
+description: Get table-level statistics including sizes, row counts, and index information
+tags: [sqlserver, tables, statistics, storage]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      query = """
+      SELECT
+          s.name AS schema_name,
+          t.name AS table_name,
+          p.rows AS row_count,
+          SUM(a.total_pages) * 8 / 1024 AS total_space_mb,
+          SUM(a.used_pages) * 8 / 1024 AS used_space_mb,
+          (SUM(a.total_pages) - SUM(a.used_pages)) * 8 / 1024 AS unused_space_mb,
+          SUM(CASE WHEN i.type_desc = 'CLUSTERED' THEN a.used_pages ELSE 0 END) * 8 / 1024 AS data_space_mb,
+          SUM(CASE WHEN i.type_desc IN ('NONCLUSTERED', 'CLUSTERED COLUMNSTORE') THEN a.used_pages ELSE 0 END) * 8 / 1024 AS index_space_mb
+      FROM sys.tables t
+      INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+      INNER JOIN sys.indexes i ON t.object_id = i.object_id
+      INNER JOIN sys.partitions p ON i.object_id = p.object_id AND i.index_id = p.index_id
+      INNER JOIN sys.allocation_units a ON p.partition_id = a.container_id
+      WHERE t.is_ms_shipped = 0
+      GROUP BY s.name, t.name, p.rows
+      ORDER BY SUM(a.total_pages) DESC
+      """
+
+      result = await context.execute_query(query, datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get table stats")}
+
+      return {
+          "success": True,
+          "tables": result.get("data", []),
+          "columns": result.get("columns", [])
+      }

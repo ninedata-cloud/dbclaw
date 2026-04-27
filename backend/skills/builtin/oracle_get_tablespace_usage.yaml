@@ -1,0 +1,59 @@
+id: oracle_get_tablespace_usage
+name: Oracle Tablespace Usage
+version: 1.0.0
+author: DBClaw
+category: oracle
+description: Get Oracle tablespace usage statistics including size, used space, and free space
+tags: [oracle, tablespace, storage, capacity]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      query = """
+      SELECT
+          df.tablespace_name,
+          ROUND(df.total_size_mb, 2) as total_mb,
+          ROUND(df.total_size_mb - NVL(fs.free_size_mb, 0), 2) as used_mb,
+          ROUND(NVL(fs.free_size_mb, 0), 2) as free_mb,
+          ROUND((df.total_size_mb - NVL(fs.free_size_mb, 0)) / df.total_size_mb * 100, 2) as used_percent,
+          df.datafile_count,
+          df.autoextensible
+      FROM (
+          SELECT
+              tablespace_name,
+              SUM(bytes) / 1024 / 1024 as total_size_mb,
+              COUNT(*) as datafile_count,
+              MAX(CASE WHEN autoextensible = 'YES' THEN 'YES' ELSE 'NO' END) as autoextensible
+          FROM dba_data_files
+          GROUP BY tablespace_name
+      ) df
+      LEFT JOIN (
+          SELECT
+              tablespace_name,
+              SUM(bytes) / 1024 / 1024 as free_size_mb
+          FROM dba_free_space
+          GROUP BY tablespace_name
+      ) fs ON df.tablespace_name = fs.tablespace_name
+      ORDER BY used_percent DESC
+      """
+
+      result = await context.execute_query(query, datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get tablespace usage")}
+
+      return {
+          "success": True,
+          "tablespaces": result.get("data", []),
+          "columns": result.get("columns", [])
+      }

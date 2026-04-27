@@ -1,0 +1,131 @@
+id: diagnose_disk_space
+name: Diagnose Disk Space Usage
+version: 1.0.0
+author: DBClaw
+category: diagnosis
+description: Diagnose disk space usage by checking partition usage, large files/directories, database data directory size, log files, and inode usage
+tags: [linux, disk, space, diagnosis, performance, system, storage]
+timeout: 120
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: false
+    description: The database connection ID (must have host configured)
+  - name: host_id
+    type: integer
+    required: false
+    description: The SSH host ID to execute commands on (alternative to datasource_id)
+
+permissions:
+  - execute_command
+
+code: |
+  async def execute(context, params):
+      datasource_id = params.get('datasource_id')
+      host_id = params.get('host_id')
+
+      # Validate parameters
+      if not datasource_id and not host_id:
+          return {
+              "success": False,
+              "error": "missing_parameter",
+              "message": "必须提供 datasource_id 或 host_id 参数之一"
+          }
+
+      if datasource_id and host_id:
+          return {
+              "success": False,
+              "error": "conflicting_parameters",
+              "message": "不能同时提供 datasource_id 和 host_id 参数"
+          }
+
+      # Determine execution method
+      if datasource_id:
+          from backend.models.datasource import Datasource
+          from sqlalchemy import select
+
+          datasource = await context.get_connection(datasource_id)
+
+          if not datasource:
+              return {
+                  "success": False,
+                  "error": "datasource_not_found",
+                  "message": f"数据源 ID {datasource_id} 不存在"
+              }
+
+          if not datasource.host_id:
+              return {
+                  "success": False,
+                  "error": "no_host_configured",
+                  "message": f"数据源 {datasource.name} (ID: {datasource_id}) 未配置主机连接，无法进行磁盘空间诊断。"
+              }
+
+          async def exec_cmd(cmd):
+              return await context.execute_command(cmd, datasource_id)
+      else:
+          async def exec_cmd(cmd):
+              return await context.execute_command_on_host(cmd, host_id)
+
+      results = {
+          "success": True,
+          "diagnosis": {}
+      }
+
+      # 1. All partition usage
+      disk_usage = await exec_cmd(
+          "df -h"
+      )
+      if disk_usage.get("success"):
+          results["diagnosis"]["partition_usage"] = disk_usage.get("output", "")
+
+      # 2. Disk usage in bytes for precise calculation
+      disk_bytes = await exec_cmd(
+          "df -B1"
+      )
+      if disk_bytes.get("success"):
+          results["diagnosis"]["partition_usage_bytes"] = disk_bytes.get("output", "")
+
+      # 3. Inode usage
+      inode_usage = await exec_cmd(
+          "df -i"
+      )
+      if inode_usage.get("success"):
+          results["diagnosis"]["inode_usage"] = inode_usage.get("output", "")
+
+      # 4. Top 15 largest directories under root
+      large_dirs = await exec_cmd(
+          "du -sh /* 2>/dev/null | sort -rh | head -15"
+      )
+      if large_dirs.get("success"):
+          results["diagnosis"]["largest_directories"] = large_dirs.get("output", "")
+
+      # 5. Find large files (>100MB)
+      large_files = await exec_cmd(
+          "find / -xdev -type f -size +100M -exec ls -lh {} \\; 2>/dev/null | sort -k5 -rh | head -20"
+      )
+      if large_files.get("success"):
+          results["diagnosis"]["large_files"] = large_files.get("output", "").strip() or "No files larger than 100MB found"
+
+      # 6. Database data directory size (common paths)
+      db_data_dirs = await exec_cmd(
+          "for d in /var/lib/mysql /var/lib/postgresql /var/lib/pgsql /opt/oracle /var/opt/mssql /var/lib/opengauss; do [ -d \"$d\" ] && du -sh \"$d\" 2>/dev/null; done"
+      )
+      if db_data_dirs.get("success"):
+          results["diagnosis"]["database_data_dirs"] = db_data_dirs.get("output", "").strip() or "No standard database directories found"
+
+      # 7. Log files size check
+      log_files = await exec_cmd(
+          "find /var/log -type f -name '*.log' -exec ls -lh {} \\; 2>/dev/null | sort -k5 -rh | head -15"
+      )
+      if log_files.get("success"):
+          results["diagnosis"]["log_files"] = log_files.get("output", "").strip() or "No log files found"
+
+      # 8. Temp files
+      tmp_usage = await exec_cmd(
+          "du -sh /tmp /var/tmp 2>/dev/null"
+      )
+      if tmp_usage.get("success"):
+          results["diagnosis"]["temp_usage"] = tmp_usage.get("output", "")
+
+      return results

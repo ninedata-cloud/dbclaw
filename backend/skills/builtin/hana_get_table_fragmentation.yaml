@@ -1,0 +1,56 @@
+id: hana_get_table_fragmentation
+name: HANA Table Fragmentation
+version: 1.0.0
+author: DBClaw
+category: hana
+description: Get SAP HANA table fragmentation information to identify tables that may benefit from reorganization
+tags: [hana, fragmentation, maintenance, optimization]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      query = """
+      SELECT
+          SCHEMA_NAME, TABLE_NAME,
+          RECORD_COUNT, MEMORY_SIZE_IN_TOTAL,
+          MEMORY_SIZE_IN_MAIN, MEMORY_SIZE_IN_DELTA,
+          (MEMORY_SIZE_IN_DELTA * 100.0 / NULLIF(MEMORY_SIZE_IN_TOTAL, 0)) as delta_pct
+      FROM SYS.M_CS_TABLES
+      WHERE SCHEMA_NAME NOT IN ('SYS', '_SYS_STATISTICS', '_SYS_REPO')
+        AND MEMORY_SIZE_IN_TOTAL > 0
+      ORDER BY delta_pct DESC
+      LIMIT 100
+      """
+
+      result = await context.execute_query(query, datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get table fragmentation")}
+
+      tables = []
+      for row in result.get("data", []):
+          tables.append({
+              "schema": row[0],
+              "table": row[1],
+              "rows": row[2],
+              "memory_size": row[3],
+              "main_size": row[4],
+              "delta_size": row[5],
+              "delta_pct": row[6],
+          })
+
+      return {
+          "success": True,
+          "tables": tables,
+          "count": len(tables)
+      }

@@ -1,0 +1,704 @@
+/* === Integrations === */
+.integrations-page {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding: 8px 4px 24px;
+}
+
+.integrations-section-card {
+    background:
+        radial-gradient(circle at top right, rgba(88, 166, 255, 0.08), transparent 34%),
+        linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: var(--shadow-md);
+}
+
+.integrations-section-heading,
+.integration-group-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.integrations-eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+.integrations-section-heading h2,
+.integration-group-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.integrations-section-heading p,
+.integration-group-header p {
+    margin: 6px 0 0;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+
+.integration-binding-grid,
+.integration-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+}
+
+.integration-binding-card,
+.integration-card {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+    background:
+        linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.025));
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    padding: 16px;
+    transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.integration-binding-card {
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+}
+
+.integration-binding-card:hover,
+.integration-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(88, 166, 255, 0.32);
+    box-shadow: 0 14px 30px rgba(0,0,0,0.24);
+}
+
+.integration-card.builtin {
+    box-shadow: inset 0 0 0 1px rgba(63,185,80,0.12);
+}
+
+.integration-card.custom {
+    box-shadow: inset 0 0 0 1px rgba(88,166,255,0.08);
+}
+
+.integration-binding-icon,
+.integration-card-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: rgba(88,166,255,0.12);
+    color: var(--accent-blue);
+    border: 1px solid rgba(88,166,255,0.15);
+}
+
+.integration-binding-icon svg,
+.integration-card-icon svg {
+    width: 20px;
+    height: 20px;
+}
+
+.integration-binding-body,
+.integration-card-main {
+    min-width: 0;
+    flex: 1;
+}
+
+.integration-binding-name,
+.integration-card-title-row h4 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.integration-card-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.integration-card-title-row .integration-card-icon {
+    width: 40px;
+    height: 40px;
+}
+
+.integration-card-title-row h4 {
+    flex: 0 1 auto;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.integration-card-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent-green);
+    background: rgba(63,185,80,0.12);
+    border: 1px solid rgba(63,185,80,0.2);
+    flex: 0 0 auto;
+}
+
+.integration-card-description {
+    margin: 10px 0 0;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    min-height: 42px;
+}
+
+.integration-binding-meta,
+.integration-card-meta,
+.integration-card-footer,
+.integration-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.integration-binding-error {
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
+}
+
+.integration-chip,
+.integration-count-pill,
+.integration-status-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 24px;
+    padding: 0 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.integration-chip,
+.integration-count-pill {
+    color: var(--text-secondary);
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+}
+
+.integration-count-pill {
+    min-width: 28px;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.integration-status-chip.success {
+    color: var(--accent-green);
+    background: rgba(63,185,80,0.12);
+    border: 1px solid rgba(63,185,80,0.2);
+}
+
+.integration-status-chip.warning {
+    color: var(--accent-yellow);
+    background: rgba(210,153,34,0.14);
+    border: 1px solid rgba(210,153,34,0.2);
+}
+
+.integration-status-chip.danger {
+    color: var(--accent-red);
+    background: rgba(248,81,73,0.12);
+    border: 1px solid rgba(248,81,73,0.2);
+}
+
+.integration-status-chip.muted,
+.integration-status-chip.idle {
+    color: var(--text-muted);
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+}
+
+.integration-card-footer {
+    justify-content: space-between;
+    padding-top: 4px;
+}
+
+.integration-card-actions {
+    justify-content: flex-end;
+}
+
+.integration-action-btn {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.04);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition);
+}
+
+.integration-action-btn:hover {
+    color: var(--text-primary);
+    border-color: rgba(88,166,255,0.28);
+    background: rgba(88,166,255,0.1);
+}
+
+.integration-action-btn.danger:hover {
+    color: var(--accent-red);
+    border-color: rgba(248,81,73,0.28);
+    background: rgba(248,81,73,0.1);
+}
+
+.integration-action-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.integrations-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 72px 20px;
+    border: 1px dashed rgba(255,255,255,0.12);
+    border-radius: 16px;
+    background: rgba(255,255,255,0.02);
+    text-align: center;
+}
+
+.integrations-empty-icon {
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 18px;
+    background: rgba(255,255,255,0.05);
+    color: var(--text-muted);
+}
+
+.integrations-empty-icon svg {
+    width: 28px;
+    height: 28px;
+}
+
+.integrations-empty-state h3 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.integrations-empty-state p {
+    max-width: 360px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+
+.integration-modal-form .form-group {
+    margin-bottom: 18px;
+}
+
+.integration-modal-form .form-textarea {
+    min-height: 110px;
+}
+
+.integration-editor-modal .modal-header {
+    padding-bottom: 18px;
+}
+
+.integration-editor-modal-body {
+    padding: 18px 20px 20px;
+}
+
+.integration-editor-form {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.integration-editor-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.integration-editor-meta .form-group {
+    margin-bottom: 0;
+}
+
+.integration-editor-meta-full {
+    grid-column: 1 / -1;
+}
+
+.integration-editor-description {
+    min-height: 96px !important;
+}
+
+.integration-editor-toggle {
+    display: flex;
+    align-items: end;
+    justify-content: flex-start;
+}
+
+.integration-editor-workspace {
+    display: grid;
+    grid-template-columns: minmax(300px, 0.9fr) minmax(520px, 1.45fr);
+    gap: 16px;
+    align-items: stretch;
+}
+
+.integration-editor-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+    padding: 16px;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+}
+
+.integration-editor-panel-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.integration-editor-panel-header label {
+    display: block;
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+}
+
+.integration-editor-panel-header p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
+.integration-schema-input {
+    min-height: 280px !important;
+    height: clamp(280px, 34vh, 380px);
+}
+
+.integration-code-input {
+    min-height: 520px;
+    height: clamp(520px, 58vh, 760px);
+}
+
+.integration-editor-note {
+    margin-bottom: 0;
+}
+
+.integration-checkbox-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.integration-modal-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.integration-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.integration-detail-item,
+.integration-detail-block {
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+}
+
+.integration-detail-label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+}
+
+.integration-detail-value {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-primary);
+}
+
+.integration-code-block {
+    margin: 0;
+    padding: 14px;
+    border-radius: 10px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    font-size: 12px;
+    line-height: 1.6;
+    overflow: auto;
+    max-height: 320px;
+}
+
+.integration-code-block code {
+    font-family: var(--font-mono);
+}
+
+.integration-code-block-lg {
+    max-height: 420px;
+}
+
+.integration-modal-note {
+    padding: 12px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    background: rgba(88,166,255,0.08);
+    border: 1px solid rgba(88,166,255,0.16);
+}
+
+.integration-modal-note.danger {
+    color: #ffb4ae;
+    background: rgba(248,81,73,0.12);
+    border-color: rgba(248,81,73,0.18);
+}
+
+.integration-test-result {
+    display: none;
+    margin-top: 20px;
+}
+
+.integration-test-result.show {
+    display: block;
+}
+
+@media (max-width: 1120px) {
+    .integration-editor-workspace {
+        grid-template-columns: 1fr;
+    }
+
+    .integration-code-input {
+        min-height: 420px;
+        height: clamp(420px, 50vh, 680px);
+    }
+}
+
+@media (max-width: 720px) {
+    .integration-editor-modal-body {
+        padding: 14px 12px 16px;
+    }
+
+    .integration-editor-meta {
+        grid-template-columns: 1fr;
+    }
+
+    .integration-editor-meta-full {
+        grid-column: auto;
+    }
+
+    .integration-editor-panel {
+        padding: 14px;
+    }
+
+    .integration-schema-input {
+        min-height: 220px !important;
+        height: 260px;
+    }
+
+    .integration-code-input {
+        min-height: 320px;
+        height: 360px;
+    }
+}
+
+.integration-test-result-title {
+    margin: 0 0 12px;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.integration-weixin-panel,
+.integration-weixin-ready {
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.03);
+}
+
+.integration-weixin-status-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.integration-weixin-inline-status {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.integration-weixin-error {
+    margin-top: 10px;
+    font-size: 12px;
+    color: #ffb4ae;
+}
+
+.integration-weixin-status-message {
+    margin-top: 14px;
+}
+
+.integration-qr-panel {
+    display: none;
+    margin-top: 18px;
+}
+
+.integration-qr-frame {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 18px;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+}
+
+.integration-qr-display img,
+.integration-qr-placeholder {
+    width: 200px;
+    height: 200px;
+    border-radius: 12px;
+}
+
+.integration-qr-display img {
+    display: block;
+    background: #fff;
+    object-fit: contain;
+    padding: 10px;
+}
+
+.integration-qr-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 14px;
+    background: #fff;
+    color: #111827;
+    font-size: 12px;
+    line-height: 1.5;
+    word-break: break-all;
+    text-align: center;
+}
+
+.integration-qr-hint {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.integration-qr-actions {
+    margin-top: 12px;
+}
+
+.integration-weixin-ready {
+    text-align: center;
+    background: rgba(63,185,80,0.08);
+    border-color: rgba(63,185,80,0.16);
+}
+
+.integration-weixin-ready-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    margin-bottom: 12px;
+    border-radius: 16px;
+    background: rgba(63,185,80,0.12);
+    color: var(--accent-green);
+}
+
+.integration-weixin-ready-icon svg {
+    width: 24px;
+    height: 24px;
+}
+
+.integration-weixin-ready-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.integration-weixin-ready-text {
+    margin-top: 6px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+
+@media (max-width: 768px) {
+    .integrations-page {
+        gap: 16px;
+    }
+
+    .integrations-section-card {
+        padding: 16px;
+    }
+
+    .integration-binding-grid,
+    .integration-grid,
+    .integration-detail-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .integration-card-footer,
+    .integration-binding-card,
+    .integration-group-header,
+    .integrations-section-heading {
+        align-items: stretch;
+    }
+
+    .integration-card-footer {
+        flex-direction: column;
+    }
+
+    .integration-card-actions {
+        justify-content: flex-start;
+    }
+}

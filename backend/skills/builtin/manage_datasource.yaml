@@ -1,0 +1,339 @@
+id: manage_datasource
+name: Manage Datasource
+version: 1.0.0
+author: DBClaw
+category: system
+description: Manage database datasource - create, update, delete, list, get details, and test connections
+tags: [datasource, management, crud, system]
+
+parameters:
+  - name: action
+    type: string
+    required: true
+    description: Operation type - list, get, create, update, delete, test
+    enum: [list, get, create, update, delete, test]
+  - name: datasource_id
+    type: integer
+    required: false
+    description: Datasource ID (required for get/update/delete/test actions)
+  - name: name
+    type: string
+    required: false
+    description: Datasource name (required for create)
+  - name: db_type
+    type: string
+    required: false
+    description: Database type (required for create)
+    enum: [mysql, postgresql, oracle, sqlserver, tdsql-c-mysql, opengauss]
+  - name: host
+    type: string
+    required: false
+    description: Database host address (required for create)
+  - name: port
+    type: integer
+    required: false
+    description: Database port (required for create)
+  - name: username
+    type: string
+    required: false
+    description: Database username (optional for create/update)
+  - name: password
+    type: string
+    required: false
+    description: Database password (optional for create/update)
+  - name: database
+    type: string
+    required: false
+    description: Database name (optional for create/update)
+  - name: host_id
+    type: integer
+    required: false
+    description: SSH host ID for tunneling (optional for create/update)
+  - name: importance_level
+    type: string
+    required: false
+    description: Importance level (optional for create/update)
+    enum: [core, production, development, temporary]
+  - name: extra_params
+    type: object
+    required: false
+    description: Extra connection parameters as JSON object (optional for create/update)
+  - name: tags
+    type: array
+    required: false
+    description: Tags for categorization (optional for create/update)
+  - name: remark
+    type: string
+    required: false
+    description: Remark to help AI understand datasource context (optional for create/update)
+  - name: metric_source
+    type: string
+    required: false
+    description: Metric source type (optional for create/update)
+    enum: [system, integration]
+  - name: external_instance_id
+    type: string
+    required: false
+    description: External system instance ID (optional for create/update)
+  - name: inbound_source
+    type: object
+    required: false
+    description: Integration binding and parameters (optional for create/update)
+  - name: silence_until
+    type: string
+    required: false
+    description: Silence until datetime in ISO format (optional for create/update)
+  - name: silence_reason
+    type: string
+    required: false
+    description: Reason for silencing (optional for create/update)
+  - name: is_active
+    type: boolean
+    required: false
+    description: Whether datasource is active (optional for create/update)
+
+permissions:
+  - execute_command
+
+code: |
+  async def execute(context, params):
+      from backend.models.datasource import Datasource
+      from backend.models.soft_delete import alive_select, get_alive_by_id
+      from backend.utils.encryption import encrypt_value, decrypt_value
+      from sqlalchemy import select
+      
+      action = params['action']
+      
+      # List action
+      if action == 'list':
+          result = await context.db.execute(
+              alive_select(Datasource).order_by(Datasource.id.desc())
+          )
+          datasource = result.scalars().all()
+          
+          return {
+              "success": True,
+              "action": "list",
+              "datasource": [
+                  {
+                      "id": ds.id,
+                      "name": ds.name,
+                      "db_type": ds.db_type,
+                      "host": ds.host,
+                      "port": ds.port,
+                      "username": ds.username,
+                      "database": ds.database,
+                      "host_id": ds.host_id,
+                      "tags": ds.tags,
+                      "is_active": ds.is_active,
+                      "importance_level": ds.importance_level,
+                      "remark": ds.remark,
+                      "metric_source": ds.metric_source,
+                      "external_instance_id": ds.external_instance_id,
+                      "silence_until": ds.silence_until.isoformat() if ds.silence_until else None,
+                      "silence_reason": ds.silence_reason,
+                      "db_version": ds.db_version,
+                      "connection_status": ds.connection_status,
+                      "connection_error": ds.connection_error,
+                      "connection_checked_at": ds.connection_checked_at.isoformat() if ds.connection_checked_at else None,
+                      "created_at": ds.created_at.isoformat() if ds.created_at else None,
+                      "updated_at": ds.updated_at.isoformat() if ds.updated_at else None
+                  }
+                  for ds in datasource
+              ],
+              "count": len(datasource)
+          }
+      
+      # Get action
+      if action == 'get':
+          datasource_id = params.get('datasource_id')
+          if not datasource_id:
+              return {"success": False, "error": "datasource_id is required for get action"}
+          
+          datasource = await get_alive_by_id(context.db, Datasource, datasource_id)
+          
+          if not datasource:
+              return {"success": False, "error": f"Datasource {datasource_id} not found"}
+          
+          return {
+              "success": True,
+              "action": "get",
+              "datasource": {
+                  "id": datasource.id,
+                  "name": datasource.name,
+                  "db_type": datasource.db_type,
+                  "host": datasource.host,
+                  "port": datasource.port,
+                  "username": datasource.username,
+                  "database": datasource.database,
+                  "host_id": datasource.host_id,
+                  "tags": datasource.tags,
+                  "is_active": datasource.is_active,
+                  "importance_level": datasource.importance_level,
+                  "remark": datasource.remark,
+                  "metric_source": datasource.metric_source,
+                  "external_instance_id": datasource.external_instance_id,
+                  "inbound_source": datasource.inbound_source,
+                  "silence_until": datasource.silence_until.isoformat() if datasource.silence_until else None,
+                  "silence_reason": datasource.silence_reason,
+                  "db_version": datasource.db_version,
+                  "connection_status": datasource.connection_status,
+                  "connection_error": datasource.connection_error,
+                  "connection_checked_at": datasource.connection_checked_at.isoformat() if datasource.connection_checked_at else None,
+                  "extra_params": datasource.extra_params,
+                  "created_at": datasource.created_at.isoformat() if datasource.created_at else None,
+                  "updated_at": datasource.updated_at.isoformat() if datasource.updated_at else None
+              }
+          }
+      
+      # Create action
+      if action == 'create':
+          required_fields = ['name', 'db_type', 'host', 'port']
+          missing = [f for f in required_fields if not params.get(f)]
+          if missing:
+              return {"success": False, "error": f"Missing required fields: {', '.join(missing)}"}
+          
+          datasource = Datasource(
+              name=params['name'],
+              db_type=params['db_type'],
+              host=params['host'],
+              port=params['port'],
+              username=params.get('username'),
+              password_encrypted=encrypt_value(params['password']) if params.get('password') else None,
+              database=params.get('database'),
+              host_id=params.get('host_id'),
+              tags=params.get('tags', []),
+              is_active=params.get('is_active', True),
+              importance_level=params.get('importance_level', 'production'),
+              remark=params.get('remark'),
+              metric_source=params.get('metric_source', 'system'),
+              external_instance_id=params.get('external_instance_id'),
+              inbound_source=params.get('inbound_source'),
+              silence_until=params.get('silence_until'),
+              silence_reason=params.get('silence_reason'),
+              extra_params=params.get('extra_params')
+          )
+          
+          context.db.add(datasource)
+          await context.db.commit()
+          await context.db.refresh(datasource)
+          
+          return {
+              "success": True,
+              "action": "create",
+              "datasource": {
+                  "id": datasource.id,
+                  "name": datasource.name,
+                  "db_type": datasource.db_type,
+                  "host": datasource.host,
+                  "port": datasource.port,
+                  "database": datasource.database
+              },
+              "message": f"Datasource '{datasource.name}' created successfully with ID {datasource.id}"
+          }
+      
+      # Update action
+      if action == 'update':
+          datasource_id = params.get('datasource_id')
+          if not datasource_id:
+              return {"success": False, "error": "datasource_id is required for update action"}
+          
+          datasource = await get_alive_by_id(context.db, Datasource, datasource_id)
+          
+          if not datasource:
+              return {"success": False, "error": f"Datasource {datasource_id} not found"}
+          
+          # Update fields
+          if 'name' in params:
+              datasource.name = params['name']
+          if 'db_type' in params:
+              datasource.db_type = params['db_type']
+          if 'host' in params:
+              datasource.host = params['host']
+          if 'port' in params:
+              datasource.port = params['port']
+          if 'username' in params:
+              datasource.username = params['username']
+          if 'password' in params:
+              datasource.password_encrypted = encrypt_value(params['password'])
+          if 'database' in params:
+              datasource.database = params['database']
+          if 'host_id' in params:
+              datasource.host_id = params['host_id']
+          if 'tags' in params:
+              datasource.tags = params['tags']
+          if 'is_active' in params:
+              datasource.is_active = params['is_active']
+          if 'importance_level' in params:
+              datasource.importance_level = params['importance_level']
+          if 'remark' in params:
+              datasource.remark = params['remark']
+          if 'metric_source' in params:
+              datasource.metric_source = params['metric_source']
+          if 'external_instance_id' in params:
+              datasource.external_instance_id = params['external_instance_id']
+          if 'inbound_source' in params:
+              datasource.inbound_source = params['inbound_source']
+          if 'silence_until' in params:
+              datasource.silence_until = params['silence_until']
+          if 'silence_reason' in params:
+              datasource.silence_reason = params['silence_reason']
+          if 'extra_params' in params:
+              datasource.extra_params = params['extra_params']
+          
+          await context.db.commit()
+          await context.db.refresh(datasource)
+          
+          return {
+              "success": True,
+              "action": "update",
+              "datasource": {
+                  "id": datasource.id,
+                  "name": datasource.name,
+                  "db_type": datasource.db_type,
+                  "host": datasource.host,
+                  "port": datasource.port
+              },
+              "message": f"Datasource {datasource_id} updated successfully"
+          }
+      
+      # Delete action
+      if action == 'delete':
+          datasource_id = params.get('datasource_id')
+          if not datasource_id:
+              return {"success": False, "error": "datasource_id is required for delete action"}
+          
+          datasource = await get_alive_by_id(context.db, Datasource, datasource_id)
+          
+          if not datasource:
+              return {"success": False, "error": f"Datasource {datasource_id} not found"}
+          
+          datasource_name = datasource.name
+          datasource.soft_delete(None)
+          await context.db.commit()
+          
+          return {
+              "success": True,
+              "action": "delete",
+              "message": f"Datasource '{datasource_name}' (ID {datasource_id}) deleted successfully"
+          }
+      
+      # Test action
+      if action == 'test':
+          datasource_id = params.get('datasource_id')
+          if not datasource_id:
+              return {"success": False, "error": "datasource_id is required for test action"}
+
+          from backend.services.connection_diagnostic_service import ConnectionDiagnosticService
+
+          diagnostic_service = ConnectionDiagnosticService(context.db)
+          diagnosis = await diagnostic_service.diagnose_datasource(
+              datasource_id,
+              include_host_checks=True,
+              include_tcp_checks=True,
+          )
+          diagnosis["action"] = "test"
+          diagnosis["datasource_id"] = datasource_id
+          return diagnosis
+      
+      return {"success": False, "error": f"Unknown action: {action}"}

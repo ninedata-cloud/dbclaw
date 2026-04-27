@@ -1,0 +1,325 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - generic [ref=e4]:
+      - img "数据库智能卫士" [ref=e5]
+      - generic [ref=e6]:
+        - generic [ref=e7]: NineData
+        - generic [ref=e8]: 数据库智能卫士
+    - navigation [ref=e9]:
+      - generic [ref=e10] [cursor=pointer]:
+        - img [ref=e745]
+        - generic [ref=e16]: 资源大盘
+      - generic [ref=e17] [cursor=pointer]:
+        - img [ref=e750]
+        - generic [ref=e22]: 智能巡检
+      - generic [ref=e23] [cursor=pointer]:
+        - img [ref=e754]
+        - generic [ref=e27]: AI 诊断
+      - generic [ref=e28] [cursor=pointer]:
+        - img [ref=e757]
+        - generic [ref=e31]: 新AI对话诊断
+      - generic [ref=e32] [cursor=pointer]:
+        - img [ref=e759]
+        - generic [ref=e35]: 性能监控
+      - generic [ref=e36] [cursor=pointer]:
+        - img [ref=e761]
+        - generic [ref=e40]: 告警管理
+      - generic [ref=e41] [cursor=pointer]:
+        - img [ref=e764]
+        - generic [ref=e45]: SQL 查询
+      - generic [ref=e46]:
+        - generic [ref=e47]: AI 智能体配置
+        - generic [ref=e48] [cursor=pointer]:
+          - img [ref=e767]
+          - generic [ref=e52]: AI 大模型管理
+        - generic [ref=e53] [cursor=pointer]:
+          - img [ref=e770]
+          - generic [ref=e56]: 技能管理
+        - generic [ref=e57] [cursor=pointer]:
+          - img [ref=e772]
+          - generic [ref=e61]: 知识库
+      - generic [ref=e62]:
+        - generic [ref=e63]: 系统配置
+        - generic [ref=e64] [cursor=pointer]:
+          - img [ref=e775]
+          - generic [ref=e69]: 数据源管理
+        - generic [ref=e70] [cursor=pointer]:
+          - img [ref=e779]
+          - generic [ref=e73]: 主机管理
+        - generic [ref=e74] [cursor=pointer]:
+          - img [ref=e781]
+          - generic [ref=e79]: 外部集成管理
+        - generic [ref=e80] [cursor=pointer]:
+          - img [ref=e785]
+          - generic [ref=e84]: 系统参数配置
+        - generic [ref=e85] [cursor=pointer]:
+          - img [ref=e788]
+          - generic [ref=e91]: 用户管理
+    - generic [ref=e92]:
+      - generic [ref=e93]: A
+      - button "Administrator 管理员" [ref=e94] [cursor=pointer]:
+        - generic [ref=e95]: Administrator
+        - generic [ref=e96]: 管理员
+    - generic [ref=e97]:
+      - generic [ref=e98]: v1.0.0
+      - button "收起侧边栏" [ref=e99] [cursor=pointer]:
+        - img [ref=e793]
+  - main [ref=e103]:
+    - generic [ref=e104]:
+      - heading "新AI对话诊断" [level=1] [ref=e105]
+      - generic [ref=e107]:
+        - generic [ref=e108]:
+          - button "选择数据源..." [ref=e109] [cursor=pointer]:
+            - generic [ref=e111]: 选择数据源...
+            - img [ref=e796]
+          - text: 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址 地址
+        - combobox [ref=e114] [cursor=pointer]:
+          - option "默认模型"
+          - option "qwen3.5-plus"
+          - option "kimi2.5"
+          - option "MiniMax-M2.5"
+          - option "MiniMax-M2.7"
+          - option "gpt-5.4"
+          - option "opus4.6-1" [selected]
+          - option "claude-opus-4-6-2"
+        - button "选择 0项" [ref=e116] [cursor=pointer]:
+          - generic [ref=e117]: 选择 0项
+          - img [ref=e798]
+        - button "新建会话" [ref=e120] [cursor=pointer]:
+          - img [ref=e800]
+          - text: 新建会话
+    - generic [ref=e123]:
+      - generic [ref=e124]:
+        - generic [ref=e125]: 会话列表
+        - generic [ref=e126]:
+          - generic [ref=e801] [cursor=pointer]: "[新AI对话诊断] 新建会话"
+          - generic [ref=e802] [cursor=pointer]: "[新AI对话诊断] 新建会话"
+      - generic [ref=e129]:
+        - generic [ref=e130]:
+          - generic [ref=e131]: 面向透明诊断流程的新模块
+          - generic [ref=e132]: 保留原 AI 诊断模块不变。这个新模块会逐步展示知识库阅读、诊断计划、Skill 调用过程和最终结论。
+        - generic [ref=e133]:
+          - generic [ref=e134]:
+            - generic [ref=e135]:
+              - generic [ref=e136]: 诊断过程
+              - generic [ref=e137]:
+                - generic [ref=e235]:
+                  - generic [ref=e236]: 问题
+                  - generic [ref=e237]: test message from console
+                - generic [ref=e238]:
+                  - generic [ref=e239]: 状态
+                  - generic [ref=e240]: 正在阅读问题并制定诊断计划...
+                - generic [ref=e241]:
+                  - generic [ref=e242]: 计划
+                  - generic [ref=e243]: 已创建初步诊断计划：先阅读知识库，再调用诊断技能逐步收集证据，最后输出结论。
+                - generic [ref=e326]:
+                  - generic [ref=e327]: 结论
+                  - generic [ref=e328]: 您好！测试消息已收到。👋 系统运行正常，随时为您提供数据库诊断服务。如果您有任何数据库性能、连接、资源使用等方面的问题，请随时告诉我，我会按照标准诊断流程为您分析。 可支持的数据库类型： - MySQL / TiDB / OceanBase - PostgreSQL / openGauss - Oracle / DM (达梦) - SQL Server 常见诊断场景： - 慢查询分析 - 高 CPU/内存/磁盘使用率 - 连接数异常 -
+                - generic [ref=e329]:
+                  - generic [ref=e330]: 结论
+                  - generic [ref=e331]: 本轮诊断已完成，请查看聊天结论与技能执行记录。
+                - generic [ref=e449]:
+                  - generic [ref=e450]: 问题
+                  - generic [ref=e451]: debug test
+                - generic [ref=e452]:
+                  - generic [ref=e453]: 状态
+                  - generic [ref=e454]: 正在阅读问题并制定诊断计划...
+                - generic [ref=e455]:
+                  - generic [ref=e456]: 计划
+                  - generic [ref=e457]: 已创建初步诊断计划：先阅读知识库，再调用诊断技能逐步收集证据，最后输出结论。
+                - generic [ref=e567]:
+                  - generic [ref=e568]: 结论
+                  - generic [ref=e569]: 调试测试成功！✅ 系统状态检查： - 控制台连接：正常 - 响应能力：正常 - 诊断服务：就绪 --- 准备就绪，等待您的诊断任务。 您可以提供： 1. 具体数据库问题（如"查询慢"、"CPU 高"、"连接数暴涨"） 2. 数据源 ID（如果需要针对特定数据库分析） 3. 错误信息/现象描述（越详细越好） 示例提问方式： - "数据源 1001 的慢查询帮我分析一下" - "MySQL 数据库 CPU 使用率 90% 以上，怎么回事？"
+                - generic [ref=e570]:
+                  - generic [ref=e571]: 结论
+                  - generic [ref=e572]: 本轮诊断已完成，请查看聊天结论与技能执行记录。
+                - generic [ref=e701]:
+                  - generic [ref=e702]: 问题
+                  - generic [ref=e703]: why no work
+                - generic [ref=e739]:
+                  - generic [ref=e740]: 状态
+                  - generic [ref=e741]: 正在阅读问题并制定诊断计划...
+                - generic [ref=e742]:
+                  - generic [ref=e743]: 计划
+                  - generic [ref=e744]: 已创建初步诊断计划：先阅读知识库，再调用诊断技能逐步收集证据，最后输出结论。
+                - generic [ref=e803]:
+                  - generic [ref=e804]: 结论
+                  - generic [ref=e805]: 您好！我需要更多信息来帮您诊断问题。❓ 请问具体是什么"不工作"？ 请告诉我： | 问题类型 | 示例描述 | |---------|---------| | 🔌 连接问题 | "无法连接到数据库"、"数据源连接失败" | | 🐌 性能问题 | "查询很慢"、"系统卡顿" | | 💾 资源问题 | "磁盘满了"、"内存不足"、"CPU 100%" | | 🔒 权限问题 | "访问被拒绝"、"没有权限执行" | | 📊 功能问题 | "某
+                - generic [ref=e806]:
+                  - generic [ref=e807]: 结论
+                  - generic [ref=e808]: 本轮诊断已完成，请查看聊天结论与技能执行记录。
+            - generic [ref=e139]:
+              - generic [ref=e140]: 诊断结论
+              - generic [ref=e141]:
+                - generic [ref=e809]: 本轮诊断已完成，请查看聊天结论与技能执行记录。
+                - generic [ref=e810]: 置信度：未评估
+                - generic [ref=e811]:
+                  - generic [ref=e812]: 问题判断
+                  - generic [ref=e813]: 暂无
+                - generic [ref=e814]:
+                  - generic [ref=e815]: 建议动作
+                  - generic [ref=e816]: 暂无
+                - generic [ref=e817]:
+                  - generic [ref=e818]: 关键证据
+                  - generic [ref=e819]: 暂无
+                - generic [ref=e820]:
+                  - generic [ref=e821]: 知识库依据
+                  - generic [ref=e822]: 暂无
+            - generic [ref=e143]:
+              - generic [ref=e824]:
+                - generic [ref=e825]:
+                  - strong [ref=e826]: 本次会话已用
+                  - text: 57,147 tokens
+                - generic [ref=e827]: 输入 56,325
+                - generic [ref=e828]: 输出 822
+                - generic [ref=e829]: 上限 1,000,000
+                - generic [ref=e830]: 使用率 5.7%
+              - generic [ref=e153]:
+                - generic [ref=e154]:
+                  - img [ref=e831]
+                  - heading "新AI对话诊断" [level=3] [ref=e157]
+                  - paragraph [ref=e158]: 我会先阅读相关知识库，制定诊断计划，再逐步调用技能收集信息，并向你展示完整过程。
+                - generic [ref=e246]:
+                  - generic [ref=e247]: U
+                  - generic [ref=e248]: test message from console
+                  - button "复制内容" [ref=e249] [cursor=pointer]:
+                    - img [ref=e833]
+                - generic [ref=e253]:
+                  - generic [ref=e254]: AI
+                  - generic [ref=e255]:
+                    - paragraph [ref=e359]: 您好！测试消息已收到。👋
+                    - paragraph [ref=e360]: 系统运行正常，随时为您提供数据库诊断服务。如果您有任何数据库性能、连接、资源使用等方面的问题，请随时告诉我，我会按照标准诊断流程为您分析。
+                    - paragraph [ref=e361]:
+                      - strong [ref=e362]: 可支持的数据库类型：
+                    - list [ref=e363]:
+                      - listitem [ref=e364]: MySQL / TiDB / OceanBase
+                      - listitem [ref=e365]: PostgreSQL / openGauss
+                      - listitem [ref=e366]: Oracle / DM (达梦)
+                      - listitem [ref=e367]: SQL Server
+                    - paragraph [ref=e368]:
+                      - strong [ref=e369]: 常见诊断场景：
+                    - list [ref=e370]:
+                      - listitem [ref=e371]: 慢查询分析
+                      - listitem [ref=e372]: 高 CPU/内存/磁盘使用率
+                      - listitem [ref=e373]: 连接数异常
+                      - listitem [ref=e374]: 锁等待与阻塞
+                      - listitem [ref=e375]: 索引优化建议
+                      - listitem [ref=e376]: 复制/集群状态检查
+                    - paragraph [ref=e377]: 请问有什么可以帮您？
+                  - button "复制" [ref=e378] [cursor=pointer]:
+                    - img [ref=e836]
+                - generic [ref=e466]:
+                  - generic [ref=e467]: U
+                  - generic [ref=e468]: debug test
+                  - button "复制内容" [ref=e469] [cursor=pointer]:
+                    - img [ref=e839]
+                - generic [ref=e473]:
+                  - generic [ref=e474]: AI
+                  - generic [ref=e475]:
+                    - paragraph [ref=e606]: 调试测试成功！✅
+                    - paragraph [ref=e607]:
+                      - strong [ref=e608]: 系统状态检查：
+                    - list [ref=e609]:
+                      - listitem [ref=e610]: 控制台连接：正常
+                      - listitem [ref=e611]: 响应能力：正常
+                      - listitem [ref=e612]: 诊断服务：就绪
+                    - separator [ref=e613]
+                    - paragraph [ref=e614]:
+                      - strong [ref=e615]: 准备就绪，等待您的诊断任务。
+                    - paragraph [ref=e616]: 您可以提供：
+                    - list [ref=e617]:
+                      - listitem [ref=e618]:
+                        - strong [ref=e619]: 具体数据库问题
+                        - text: （如"查询慢"、"CPU 高"、"连接数暴涨"）
+                      - listitem [ref=e620]:
+                        - strong [ref=e621]: 数据源 ID
+                        - text: （如果需要针对特定数据库分析）
+                      - listitem [ref=e622]:
+                        - strong [ref=e623]: 错误信息/现象描述
+                        - text: （越详细越好）
+                    - paragraph [ref=e624]: 示例提问方式：
+                    - list [ref=e625]:
+                      - listitem [ref=e626]: "\"数据源 1001 的慢查询帮我分析一下\""
+                      - listitem [ref=e627]: "\"MySQL 数据库 CPU 使用率 90% 以上，怎么回事？\""
+                      - listitem [ref=e628]: "\"检查 Oracle 实例的表空间使用情况\""
+                    - paragraph [ref=e629]: 请告诉我您需要诊断什么问题？🔍
+                  - button "复制" [ref=e630] [cursor=pointer]:
+                    - img [ref=e842]
+                - generic [ref=e718]:
+                  - generic [ref=e719]: U
+                  - generic [ref=e720]: why no work
+                  - button "复制内容" [ref=e721] [cursor=pointer]:
+                    - img [ref=e845]
+                - generic [ref=e725]:
+                  - generic [ref=e726]: AI
+                  - generic [ref=e727]:
+                    - paragraph [ref=e848]: 您好！我需要更多信息来帮您诊断问题。❓
+                    - paragraph [ref=e849]:
+                      - strong [ref=e850]: 请问具体是什么"不工作"？
+                    - paragraph [ref=e851]: 请告诉我：
+                    - table [ref=e852]:
+                      - rowgroup [ref=e853]:
+                        - row "问题类型 示例描述" [ref=e854]:
+                          - columnheader "问题类型" [ref=e855]
+                          - columnheader "示例描述" [ref=e856]
+                      - rowgroup [ref=e857]:
+                        - row "🔌 连接问题 \"无法连接到数据库\"、\"数据源连接失败\"" [ref=e858]:
+                          - cell "🔌 连接问题" [ref=e859]
+                          - cell "\"无法连接到数据库\"、\"数据源连接失败\"" [ref=e860]
+                        - row "🐌 性能问题 \"查询很慢\"、\"系统卡顿\"" [ref=e861]:
+                          - cell "🐌 性能问题" [ref=e862]
+                          - cell "\"查询很慢\"、\"系统卡顿\"" [ref=e863]
+                        - row "💾 资源问题 \"磁盘满了\"、\"内存不足\"、\"CPU 100%\"" [ref=e864]:
+                          - cell "💾 资源问题" [ref=e865]
+                          - cell "\"磁盘满了\"、\"内存不足\"、\"CPU 100%\"" [ref=e866]
+                        - row "🔒 权限问题 \"访问被拒绝\"、\"没有权限执行\"" [ref=e867]:
+                          - cell "🔒 权限问题" [ref=e868]
+                          - cell "\"访问被拒绝\"、\"没有权限执行\"" [ref=e869]
+                        - row "📊 功能问题 \"某个查询不返回结果\"、\"报表不显示\"" [ref=e870]:
+                          - cell "📊 功能问题" [ref=e871]
+                          - cell "\"某个查询不返回结果\"、\"报表不显示\"" [ref=e872]
+                        - row "🔄 复制/集群 \"主从不同步\"、\"集群节点异常\"" [ref=e873]:
+                          - cell "🔄 复制/集群" [ref=e874]
+                          - cell "\"主从不同步\"、\"集群节点异常\"" [ref=e875]
+                    - separator [ref=e876]
+                    - paragraph [ref=e877]:
+                      - strong [ref=e878]: 同时，请提供以下信息（如果方便）：
+                    - list [ref=e879]:
+                      - listitem [ref=e880]:
+                        - strong [ref=e881]: 数据源 ID
+                        - text: （如果有）
+                      - listitem [ref=e882]:
+                        - strong [ref=e883]: 数据库类型
+                        - text: （MySQL/Oracle/PostgreSQL等）
+                      - listitem [ref=e884]:
+                        - strong [ref=e885]: 错误信息
+                        - text: （完整的报错内容）
+                      - listitem [ref=e886]:
+                        - strong [ref=e887]: 发生时间
+                        - text: （什么时候开始出现的）
+                      - listitem [ref=e888]:
+                        - strong [ref=e889]: 影响范围
+                        - text: （单个查询/整个系统）
+                    - separator [ref=e890]
+                    - paragraph [ref=e891]:
+                      - strong [ref=e892]: 或者，我可以先帮您做一个快速系统检查：
+                    - paragraph [ref=e893]: 如果您告诉我数据源 ID，我可以立即检查：
+                    - list [ref=e894]:
+                      - listitem [ref=e895]: 数据库连接状态
+                      - listitem [ref=e896]: 当前会话/连接数
+                      - listitem [ref=e897]: 资源使用情况
+                      - listitem [ref=e898]: 慢查询/阻塞情况
+                    - paragraph [ref=e899]: 请补充更多信息，我会马上开始诊断！🔍
+                  - button "复制" [ref=e900] [cursor=pointer]:
+                    - img [ref=e901]
+              - generic [ref=e159]:
+                - textbox "询问数据库相关问题，按 Ctrl/Command+Enter 发送..." [ref=e160]: hi
+                - button "附加文件" [ref=e161] [cursor=pointer]:
+                  - img [ref=e904]
+                - button [ref=e164] [cursor=pointer]:
+                  - img [ref=e906]
+                - button "Clear session" [ref=e168] [cursor=pointer]:
+                  - img [ref=e909]
+              - generic [ref=e172]: 内容由AI生成，仅供参考
+          - button "显示 skill 调用记录" [ref=e175] [cursor=pointer]:
+            - img [ref=e912]

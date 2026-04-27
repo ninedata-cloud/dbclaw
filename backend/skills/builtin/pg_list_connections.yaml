@@ -1,0 +1,50 @@
+id: pg_list_connections
+name: PostgreSQL Active Connections
+version: 1.0.0
+author: DBClaw
+category: postgresql
+description: List all active database connections with their current state and queries
+tags: [postgresql, connections, monitoring]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      query = """
+      SELECT
+          pid,
+          usename as username,
+          application_name,
+          client_addr,
+          client_port,
+          backend_start,
+          state,
+          state_change,
+          wait_event_type,
+          wait_event,
+          query_start,
+          LEFT(query, 100) as query_preview
+      FROM pg_stat_activity
+      WHERE pid <> pg_backend_pid()
+      ORDER BY backend_start DESC
+      """
+
+      result = await context.execute_query(query, datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to list connections")}
+
+      return {
+          "success": True,
+          "connections": result.get("data", []),
+          "columns": result.get("columns", [])
+      }

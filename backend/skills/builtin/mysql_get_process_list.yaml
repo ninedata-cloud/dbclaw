@@ -1,0 +1,32 @@
+id: mysql_get_process_list
+name: MySQL Process List
+version: 1.0.0
+author: DBClaw
+category: mysql
+description: Get list of active MySQL database processes/sessions to identify blocking or long-running queries
+tags: [mysql, processes, sessions, blocking]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      # Get process list
+      result = await context.execute_query("SHOW FULL PROCESSLIST", datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get process list")}
+
+      return {
+          "success": True,
+          "processes": result.get("data", []),
+          "columns": result.get("columns", [])
+      }

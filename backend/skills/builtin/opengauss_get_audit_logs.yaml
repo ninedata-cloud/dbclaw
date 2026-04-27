@@ -1,0 +1,53 @@
+id: opengauss_get_audit_logs
+version: 1.0.0
+category: opengauss
+name: opengauss_get_audit_logs
+description: Get security audit logs from openGauss (if available)
+tags:
+  - opengauss
+  - security
+  - audit
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: ID of the openGauss datasource
+timeout: 30
+permissions:
+  - read_datasource
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      from backend.models.datasource import Datasource
+      from backend.services.opengauss_service import OpenGaussConnector
+      from backend.utils.encryption import decrypt_value
+
+      # Get datasource
+      datasource = await context.get_connection(datasource_id)
+      if not datasource:
+          return {"success": False, "error": "Datasource not found"}
+
+      if datasource.db_type != "opengauss":
+          return {"success": False, "error": "Not an openGauss datasource"}
+
+      # Decrypt password
+      password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
+
+      # Connect and get audit logs
+      connector = OpenGaussConnector(
+          host=datasource.host,
+          port=datasource.port,
+          username=datasource.username,
+          password=password,
+          database=datasource.database
+      )
+
+      try:
+          result = await connector.execute_query(
+              "SELECT time, type, result, userid, username, database, client_conninfo, object_name, command_text "
+              "FROM pg_query_audit('2024-01-01', '2099-12-31') LIMIT 100"
+          )
+          return {"success": True, "data": result}
+      except Exception as e:
+          return {"success": False, "error": f"Audit logs not available: {str(e)}"}

@@ -1,0 +1,138 @@
+id: diagnose_network
+name: Diagnose Network Status
+version: 1.0.0
+author: DBClaw
+category: diagnosis
+description: Diagnose network status by checking interface traffic, TCP connection states, network errors/drops, bandwidth usage, and top network connections
+tags: [linux, network, diagnosis, performance, system, tcp, bandwidth]
+timeout: 120
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: false
+    description: The database connection ID (must have host configured)
+  - name: host_id
+    type: integer
+    required: false
+    description: The SSH host ID to execute commands on (alternative to datasource_id)
+
+permissions:
+  - execute_command
+
+code: |
+  async def execute(context, params):
+      datasource_id = params.get('datasource_id')
+      host_id = params.get('host_id')
+
+      # Validate parameters
+      if not datasource_id and not host_id:
+          return {
+              "success": False,
+              "error": "missing_parameter",
+              "message": "必须提供 datasource_id 或 host_id 参数之一"
+          }
+
+      if datasource_id and host_id:
+          return {
+              "success": False,
+              "error": "conflicting_parameters",
+              "message": "不能同时提供 datasource_id 和 host_id 参数"
+          }
+
+      # Determine execution method
+      if datasource_id:
+          from backend.models.datasource import Datasource
+          from sqlalchemy import select
+
+          datasource = await context.get_connection(datasource_id)
+
+          if not datasource:
+              return {
+                  "success": False,
+                  "error": "datasource_not_found",
+                  "message": f"数据源 ID {datasource_id} 不存在"
+              }
+
+          if not datasource.host_id:
+              return {
+                  "success": False,
+                  "error": "no_host_configured",
+                  "message": f"数据源 {datasource.name} (ID: {datasource_id}) 未配置主机连接，无法进行网络诊断。"
+              }
+
+          async def exec_cmd(cmd):
+              return await context.execute_command(cmd, datasource_id)
+      else:
+          async def exec_cmd(cmd):
+              return await context.execute_command_on_host(cmd, host_id)
+
+      results = {
+          "success": True,
+          "diagnosis": {}
+      }
+
+      # 1. Network interface traffic stats
+      net_dev = await exec_cmd(
+          "cat /proc/net/dev"
+      )
+      if net_dev.get("success"):
+          results["diagnosis"]["interface_stats"] = net_dev.get("output", "")
+
+      # 2. Network interface info (IP, MTU, status)
+      ip_info = await exec_cmd(
+          "ip -s link show 2>/dev/null || ifconfig 2>/dev/null"
+      )
+      if ip_info.get("success"):
+          results["diagnosis"]["interface_info"] = ip_info.get("output", "")
+
+      # 3. TCP connection state distribution
+      tcp_states = await exec_cmd(
+          "ss -tan 2>/dev/null | awk 'NR>1 {print $1}' | sort | uniq -c | sort -rn || netstat -tan 2>/dev/null | awk 'NR>2 {print $6}' | sort | uniq -c | sort -rn"
+      )
+      if tcp_states.get("success"):
+          results["diagnosis"]["tcp_connection_states"] = tcp_states.get("output", "")
+
+      # 4. Total TCP connections count
+      tcp_count = await exec_cmd(
+          "ss -s 2>/dev/null || netstat -s 2>/dev/null | head -30"
+      )
+      if tcp_count.get("success"):
+          results["diagnosis"]["tcp_summary"] = tcp_count.get("output", "")
+
+      # 5. Top connections by remote IP (who is connecting most)
+      top_conns = await exec_cmd(
+          "ss -tn 2>/dev/null | awk 'NR>1 {split($5,a,\":\"); print a[1]}' | sort | uniq -c | sort -rn | head -15 || netstat -tn 2>/dev/null | awk 'NR>2 {split($5,a,\":\"); print a[1]}' | sort | uniq -c | sort -rn | head -15"
+      )
+      if top_conns.get("success"):
+          results["diagnosis"]["top_connections_by_ip"] = top_conns.get("output", "")
+
+      # 6. Connections to database ports
+      db_conns = await exec_cmd(
+          "ss -tn 2>/dev/null | grep -E ':(3306|5432|1521|1433|5236|27017|6379|4000|2881|5433) ' | wc -l || netstat -tn 2>/dev/null | grep -E ':(3306|5432|1521|1433|5236|27017|6379|4000|2881|5433) ' | wc -l"
+      )
+      if db_conns.get("success"):
+          results["diagnosis"]["database_connections"] = db_conns.get("output", "").strip()
+
+      # 7. Network errors and drops
+      net_errors = await exec_cmd(
+          "netstat -i 2>/dev/null || ip -s link show 2>/dev/null | grep -A2 'RX\\|TX'"
+      )
+      if net_errors.get("success"):
+          results["diagnosis"]["network_errors"] = net_errors.get("output", "")
+
+      # 8. Check for TIME_WAIT accumulation
+      time_wait = await exec_cmd(
+          "ss -tan state time-wait 2>/dev/null | wc -l || netstat -tan 2>/dev/null | grep TIME_WAIT | wc -l"
+      )
+      if time_wait.get("success"):
+          results["diagnosis"]["time_wait_count"] = time_wait.get("output", "").strip()
+
+      # 9. TCP kernel parameters (relevant tuning)
+      tcp_params = await exec_cmd(
+          "sysctl net.ipv4.tcp_max_syn_backlog net.core.somaxconn net.ipv4.tcp_tw_reuse net.ipv4.tcp_fin_timeout net.ipv4.ip_local_port_range 2>/dev/null"
+      )
+      if tcp_params.get("success"):
+          results["diagnosis"]["tcp_kernel_params"] = tcp_params.get("output", "")
+
+      return results

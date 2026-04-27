@@ -1,0 +1,112 @@
+id: query_monitoring_data
+name: Query Monitoring Data
+version: 1.0.0
+author: DBClaw
+category: monitoring
+description: Query historical monitoring metrics with statistics calculation (avg, min, max)
+tags: [monitoring, metrics, query, statistics]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: false
+    description: Filter by datasource ID (if omitted, return all datasource)
+  - name: metric_type
+    type: string
+    required: false
+    description: Filter by metric type (db_status, os_metrics, etc.)
+  - name: minutes
+    type: integer
+    required: false
+    default: 60
+    description: Time range in minutes (default 60)
+    min: 1
+    max: 10080
+  - name: limit
+    type: integer
+    required: false
+    default: 100
+    description: Max records to return (default 100, max 1000)
+    min: 1
+    max: 1000
+
+permissions: []
+
+code: |
+  async def execute(context, params):
+      from backend.models.datasource_metric import DatasourceMetric
+      from sqlalchemy import select, desc
+      from datetime import datetime, timedelta
+      
+      datasource_id = params.get('datasource_id')
+      metric_type = params.get('metric_type')
+      minutes = params.get('minutes', 60)
+      limit = params.get('limit', 100)
+      
+      # Build query with filters
+      query = select(DatasourceMetric)
+      
+      if datasource_id:
+          query = query.where(DatasourceMetric.datasource_id == datasource_id)
+      
+      if metric_type:
+          query = query.where(DatasourceMetric.metric_type == metric_type)
+      
+      # Time range filter
+      time_threshold = datetime.now() - timedelta(minutes=minutes)
+      query = query.where(DatasourceMetric.collected_at >= time_threshold)
+      
+      # Order and limit
+      query = query.order_by(desc(DatasourceMetric.collected_at)).limit(limit)
+      
+      # Execute query
+      result = await context.db.execute(query)
+      metrics = result.scalars().all()
+      
+      # Convert to dict list
+      metrics_list = []
+      for metric in metrics:
+          metrics_list.append({
+              "id": metric.id,
+              "datasource_id": metric.datasource_id,
+              "metric_type": metric.metric_type,
+              "metric_data": metric.data,
+              "collected_at": metric.collected_at.isoformat() if metric.collected_at else None
+          })
+
+      # Calculate statistics from data JSON field
+      statistics = {}
+      for metric in metrics:
+          if not metric.data:
+              continue
+
+          data = metric.data
+          for key, value in data.items():
+              if isinstance(value, (int, float)):
+                  if key not in statistics:
+                      statistics[key] = {"values": []}
+                  statistics[key]["values"].append(value)
+      
+      # Compute avg/min/max
+      for key, stat in statistics.items():
+          values = stat["values"]
+          if values:
+              stat["avg"] = round(sum(values) / len(values), 2)
+              stat["min"] = round(min(values), 2)
+              stat["max"] = round(max(values), 2)
+              stat["count"] = len(values)
+              del stat["values"]
+      
+      return {
+          "success": True,
+          "metrics": metrics_list,
+          "count": len(metrics_list),
+          "time_range": f"{minutes} minutes",
+          "statistics": statistics,
+          "filters": {
+              "datasource_id": datasource_id,
+              "metric_type": metric_type,
+              "minutes": minutes,
+              "limit": limit
+          }
+      }

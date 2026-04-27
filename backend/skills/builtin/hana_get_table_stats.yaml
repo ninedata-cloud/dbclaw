@@ -1,0 +1,49 @@
+id: hana_get_table_stats
+name: HANA Table Statistics
+version: 1.0.0
+author: DBClaw
+category: hana
+description: Get SAP HANA table statistics including row counts, disk size, and memory usage for capacity planning and optimization
+tags: [hana, tables, statistics, storage]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      query = """
+      SELECT
+          SCHEMA_NAME, TABLE_NAME, RECORD_COUNT, TABLE_SIZE
+      FROM SYS.M_TABLES
+      WHERE SCHEMA_NAME NOT IN ('SYS', '_SYS_STATISTICS', '_SYS_REPO')
+      ORDER BY TABLE_SIZE DESC
+      LIMIT 100
+      """
+
+      result = await context.execute_query(query, datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get table stats")}
+
+      tables = []
+      for row in result.get("data", []):
+          tables.append({
+              "schema": row[0],
+              "table": row[1],
+              "rows": row[2],
+              "size": row[3],
+          })
+
+      return {
+          "success": True,
+          "tables": tables,
+          "count": len(tables)
+      }

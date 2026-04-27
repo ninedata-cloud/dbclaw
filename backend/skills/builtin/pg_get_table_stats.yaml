@@ -1,0 +1,52 @@
+id: pg_get_table_stats
+name: PostgreSQL Table Statistics
+version: 1.0.0
+author: DBClaw
+category: postgresql
+description: Get table-level statistics including sizes, row counts, and I/O patterns
+tags: [postgresql, tables, statistics, storage]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      query = """
+      SELECT
+          schemaname,
+          relname as tablename,
+          pg_size_pretty(pg_total_relation_size(quote_ident(schemaname)||'.'||quote_ident(relname))) as total_size,
+          pg_size_pretty(pg_relation_size(quote_ident(schemaname)||'.'||quote_ident(relname))) as table_size,
+          pg_size_pretty(pg_indexes_size(quote_ident(schemaname)||'.'||quote_ident(relname))) as indexes_size,
+          n_tup_ins as inserts,
+          n_tup_upd as updates,
+          n_tup_del as deletes,
+          n_live_tup as live_tuples,
+          n_dead_tup as dead_tuples,
+          last_vacuum,
+          last_autovacuum,
+          last_analyze,
+          last_autoanalyze
+      FROM pg_stat_user_tables
+      ORDER BY pg_total_relation_size(quote_ident(schemaname)||'.'||quote_ident(relname)) DESC
+      LIMIT 100
+      """
+
+      result = await context.execute_query(query, datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get table stats")}
+
+      return {
+          "success": True,
+          "tables": result.get("data", []),
+          "columns": result.get("columns", [])
+      }

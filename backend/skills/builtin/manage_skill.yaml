@@ -1,0 +1,325 @@
+id: manage_skill
+name: Manage Skill
+version: 1.0.0
+author: DBClaw
+category: system
+description: Manage custom skills - list, get, create, update, enable, disable. Builtin skills cannot be modified.
+tags: [skill, management, registry, system]
+
+parameters:
+  - name: action
+    type: string
+    required: true
+    description: Operation type - list, get, create, update, enable, disable
+    enum: [list, get, create, update, enable, disable]
+  - name: skill_id
+    type: string
+    required: false
+    description: Skill ID (required for create/get/update/enable/disable actions)
+  - name: name
+    type: string
+    required: false
+    description: Skill name (required for create)
+  - name: version
+    type: string
+    required: false
+    description: Skill version (optional, default "1.0.0")
+  - name: category
+    type: string
+    required: false
+    description: Skill category (optional for create/update, used for filtering in list)
+  - name: description
+    type: string
+    required: false
+    description: Skill description (optional for create/update)
+  - name: tags
+    type: array
+    required: false
+    description: Skill tags (optional for create/update)
+    items:
+      type: string
+  - name: parameters
+    type: array
+    required: false
+    description: Skill parameters definition (optional for create/update)
+  - name: permissions
+    type: array
+    required: false
+    description: Required permissions (optional for create/update)
+    items:
+      type: string
+  - name: timeout
+    type: integer
+    required: false
+    description: Execution timeout in seconds (optional for create/update)
+  - name: code
+    type: string
+    required: false
+    description: Skill code (required for create)
+
+permissions: []
+
+code: |
+  async def execute(context, params):
+      from backend.skills.models import Skill
+      from backend.skills.validator import SkillValidator
+      from sqlalchemy import select
+      
+      action = params['action']
+      
+      # List action
+      if action == 'list':
+          query = select(Skill)
+          
+          # Filter by category
+          category = params.get('category')
+          if category:
+              query = query.where(Skill.category == category)
+          
+          # Filter by tags (SQLite JSON filtering)
+          tags = params.get('tags')
+          if tags:
+              for tag in tags:
+                  query = query.where(Skill.tags.like(f'%"{tag}"%'))
+          
+          query = query.order_by(Skill.created_at.desc())
+          
+          result = await context.db.execute(query)
+          skills = result.scalars().all()
+          
+          return {
+              "success": True,
+              "action": "list",
+              "skills": [
+                  {
+                      "id": s.id,
+                      "name": s.name,
+                      "version": s.version,
+                      "category": s.category,
+                      "description": s.description,
+                      "tags": s.tags,
+                      "is_builtin": s.is_builtin,
+                      "is_enabled": s.is_enabled,
+                      "created_at": s.created_at.isoformat() if s.created_at else None
+                  }
+                  for s in skills
+              ],
+              "count": len(skills)
+          }
+      
+      # Get action
+      if action == 'get':
+          skill_id = params.get('skill_id')
+          if not skill_id:
+              return {"success": False, "error": "skill_id is required for get action"}
+          
+          result = await context.db.execute(
+              select(Skill).where(Skill.id == skill_id)
+          )
+          skill = result.scalar_one_or_none()
+          
+          if not skill:
+              return {"success": False, "error": f"Skill '{skill_id}' not found"}
+          
+          return {
+              "success": True,
+              "action": "get",
+              "skill": {
+                  "id": skill.id,
+                  "name": skill.name,
+                  "version": skill.version,
+                  "category": skill.category,
+                  "description": skill.description,
+                  "tags": skill.tags,
+                  "parameters": skill.parameters,
+                  "permissions": skill.permissions,
+                  "timeout": skill.timeout,
+                  "code": skill.code,
+                  "is_builtin": skill.is_builtin,
+                  "is_enabled": skill.is_enabled,
+                  "created_at": skill.created_at.isoformat() if skill.created_at else None,
+                  "updated_at": skill.updated_at.isoformat() if skill.updated_at else None
+              }
+          }
+      
+      # Create action
+      if action == 'create':
+          required_fields = ['skill_id', 'name', 'code']
+          missing = [f for f in required_fields if not params.get(f)]
+          if missing:
+              return {"success": False, "error": f"Missing required fields: {', '.join(missing)}"}
+          
+          skill_id = params['skill_id']
+          
+          # Check if skill already exists
+          result = await context.db.execute(
+              select(Skill).where(Skill.id == skill_id)
+          )
+          existing = result.scalar_one_or_none()
+          if existing:
+              return {"success": False, "error": f"Skill '{skill_id}' already exists"}
+          
+          # Validate skill definition
+          from backend.skills.schema import SkillDefinition, SkillParameter
+          try:
+              skill_def = SkillDefinition(
+                  id=skill_id,
+                  name=params['name'],
+                  version=params.get('version', '1.0.0'),
+                  author='custom',
+                  category=params.get('category', 'custom'),
+                  description=params.get('description', ''),
+                  tags=params.get('tags', []),
+                  parameters=[SkillParameter(**p) for p in params.get('parameters', [])],
+                  dependencies=[],
+                  permissions=params.get('permissions', []),
+                  timeout=params.get('timeout'),
+                  code=params['code'],
+              )
+          except Exception as e:
+              return {
+                  "success": False,
+                  "error": f"Validation failed: {str(e)}"
+              }
+
+          is_valid, validation_errors = SkillValidator.validate_code(skill_def.code)
+          if not is_valid:
+              return {
+                  "success": False,
+                  "error": f"Validation failed: {', '.join(validation_errors)}"
+              }
+          
+          # Create skill (is_builtin=False for custom skills)
+          skill = Skill(
+              id=skill_id,
+              name=params['name'],
+              version=params.get('version', '1.0.0'),
+              category=params.get('category', 'custom'),
+              description=params.get('description'),
+              tags=params.get('tags'),
+              parameters=params.get('parameters'),
+              permissions=params.get('permissions'),
+              timeout=params.get('timeout'),
+              code=params['code'],
+              is_builtin=False,
+              is_enabled=True
+          )
+          
+          context.db.add(skill)
+          await context.db.commit()
+          await context.db.refresh(skill)
+          
+          return {
+              "success": True,
+              "action": "create",
+              "skill": {
+                  "id": skill.id,
+                  "name": skill.name,
+                  "version": skill.version,
+                  "category": skill.category
+              },
+              "message": f"Custom skill '{skill.name}' created successfully"
+          }
+      
+      # Update action
+      if action == 'update':
+          skill_id = params.get('skill_id')
+          if not skill_id:
+              return {"success": False, "error": "skill_id is required for update action"}
+          
+          result = await context.db.execute(
+              select(Skill).where(Skill.id == skill_id)
+          )
+          skill = result.scalar_one_or_none()
+          
+          if not skill:
+              return {"success": False, "error": f"Skill '{skill_id}' not found"}
+          
+          if skill.is_builtin:
+              return {"success": False, "error": "Cannot modify builtin skills"}
+          
+          # Update fields (excluding code for safety)
+          if 'name' in params:
+              skill.name = params['name']
+          if 'version' in params:
+              skill.version = params['version']
+          if 'category' in params:
+              skill.category = params['category']
+          if 'description' in params:
+              skill.description = params['description']
+          if 'tags' in params:
+              skill.tags = params['tags']
+          if 'parameters' in params:
+              skill.parameters = params['parameters']
+          if 'permissions' in params:
+              skill.permissions = params['permissions']
+          if 'timeout' in params:
+              skill.timeout = params['timeout']
+          
+          await context.db.commit()
+          await context.db.refresh(skill)
+          
+          return {
+              "success": True,
+              "action": "update",
+              "skill": {
+                  "id": skill.id,
+                  "name": skill.name,
+                  "version": skill.version
+              },
+              "message": f"Skill '{skill_id}' updated successfully"
+          }
+      
+      # Enable action
+      if action == 'enable':
+          skill_id = params.get('skill_id')
+          if not skill_id:
+              return {"success": False, "error": "skill_id is required for enable action"}
+          
+          result = await context.db.execute(
+              select(Skill).where(Skill.id == skill_id)
+          )
+          skill = result.scalar_one_or_none()
+          
+          if not skill:
+              return {"success": False, "error": f"Skill '{skill_id}' not found"}
+          
+          if skill.is_builtin:
+              return {"success": False, "error": "Cannot modify builtin skills"}
+          
+          skill.is_enabled = True
+          await context.db.commit()
+          
+          return {
+              "success": True,
+              "action": "enable",
+              "message": f"Skill '{skill_id}' enabled successfully"
+          }
+      
+      # Disable action
+      if action == 'disable':
+          skill_id = params.get('skill_id')
+          if not skill_id:
+              return {"success": False, "error": "skill_id is required for disable action"}
+          
+          result = await context.db.execute(
+              select(Skill).where(Skill.id == skill_id)
+          )
+          skill = result.scalar_one_or_none()
+          
+          if not skill:
+              return {"success": False, "error": f"Skill '{skill_id}' not found"}
+          
+          if skill.is_builtin:
+              return {"success": False, "error": "Cannot modify builtin skills"}
+          
+          skill.is_enabled = False
+          await context.db.commit()
+          
+          return {
+              "success": True,
+              "action": "disable",
+              "message": f"Skill '{skill_id}' disabled successfully"
+          }
+      
+      return {"success": False, "error": f"Unknown action: {action}"}

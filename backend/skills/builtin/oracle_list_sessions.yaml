@@ -1,0 +1,56 @@
+id: oracle_list_sessions
+name: Oracle Active Sessions
+version: 1.0.0
+author: DBClaw
+category: oracle
+description: List active Oracle database sessions with details
+tags: [oracle, sessions, connections, monitoring]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      query = """
+      SELECT
+          s.sid,
+          s.serial#,
+          s.username,
+          s.status,
+          s.osuser,
+          s.machine,
+          s.program,
+          s.module,
+          s.sql_id,
+          SUBSTR(sq.sql_text, 1, 100) as sql_text,
+          s.logon_time,
+          ROUND((SYSDATE - s.logon_time) * 24 * 60, 2) as session_duration_minutes,
+          s.blocking_session,
+          s.event,
+          s.wait_class,
+          ROUND(s.wait_time_micro / 1000000, 2) as wait_seconds
+      FROM v$session s
+      LEFT JOIN v$sql sq ON s.sql_id = sq.sql_id AND s.sql_child_number = sq.child_number
+      WHERE s.type = 'USER'
+        AND s.username IS NOT NULL
+      ORDER BY s.status DESC, s.logon_time DESC
+      """
+
+      result = await context.execute_query(query, datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get sessions")}
+
+      return {
+          "success": True,
+          "sessions": result.get("data", []),
+          "columns": result.get("columns", [])
+      }

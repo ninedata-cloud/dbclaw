@@ -1,0 +1,57 @@
+id: execute_os_command
+name: Execute OS Command
+version: 1.0.0
+author: DBClaw
+category: system
+description: |
+  Execute READ-ONLY diagnostic shell commands on a server via SSH host connection.
+
+  ALLOWED commands (read-only diagnostics):
+  - System info: uname, hostname, uptime, date, whoami, id
+  - Process monitoring: ps, top, htop, pgrep, pidof
+  - Resource usage: df, du, free, vmstat, iostat, mpstat, sar
+  - Network: netstat, ss, ip addr, ifconfig, ping, traceroute, nslookup, dig
+  - Logs: cat, tail, head, grep, less, more (for reading log files)
+  - File inspection: ls, find, stat, file, wc, md5sum
+  - Database processes: checking MySQL/PostgreSQL/Oracle/SQL Server/openGauss processes and connections
+  - Docker：ps,logs,stats,inspect,exec
+  - Performance: iotop, iftop, dstat, perf
+  - Output safe redirection: >, >>, | (pipe), tee
+
+  BLOCKED commands (will be rejected):
+  - File operations: rm, rmdir, mv, cp (with output redirection)
+  - Permissions: chmod, chown, chgrp
+  - Process control: kill, pkill, killall
+  - System control: shutdown, reboot, halt, systemctl stop/start/restart, service stop/start/restart
+  - Disk operations: mkfs, fdisk, parted, dd, format
+  - Network config: iptables, firewall-cmd
+  - User management: useradd, userdel, usermod, groupadd, groupdel
+  - Package management: apt install, yum install, dnf install
+  - Downloads: wget, curl -o/-O
+
+  For write operations or blocked commands, use 'execute_any_os_command' skill instead (requires admin permission).
+tags: [linux, ssh, command, system, diagnostic, readonly]
+timeout: 120
+
+parameters:
+  - name: host_id
+    type: integer
+    required: true
+    description: The SSH host ID to execute the command on
+  - name: command
+    type: string
+    required: true
+    description: The shell command to execute
+
+permissions:
+  - execute_command
+
+code: |
+  async def execute(context, params):
+      host_id = params['host_id']
+      command = params['command']
+
+      # Execute the command directly on the host
+      result = await context.execute_command_on_host(command, host_id)
+
+      return result

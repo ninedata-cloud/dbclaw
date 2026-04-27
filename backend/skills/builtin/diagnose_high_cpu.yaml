@@ -1,0 +1,142 @@
+id: diagnose_high_cpu
+name: Diagnose High CPU Usage
+version: 1.0.0
+author: DBClaw
+category: diagnosis
+description: Diagnose high CPU usage by checking OS-level processes, load average, I/O wait, and identifying top CPU consumers
+tags: [linux, cpu, diagnosis, performance, system]
+timeout: 120
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: false
+    description: The database connection ID (must have host configured)
+  - name: host_id
+    type: integer
+    required: false
+    description: The SSH host ID to execute commands on (alternative to datasource_id)
+
+permissions:
+  - execute_command
+
+code: |
+  async def execute(context, params):
+      datasource_id = params.get('datasource_id')
+      host_id = params.get('host_id')
+
+      # Validate parameters
+      if not datasource_id and not host_id:
+          return {
+              "success": False,
+              "error": "missing_parameter",
+              "message": "必须提供 datasource_id 或 host_id 参数之一"
+          }
+
+      if datasource_id and host_id:
+          return {
+              "success": False,
+              "error": "conflicting_parameters",
+              "message": "不能同时提供 datasource_id 和 host_id 参数"
+          }
+
+      # Determine execution method
+      if datasource_id:
+          from backend.models.datasource import Datasource
+          from sqlalchemy import select
+
+          datasource = await context.get_connection(datasource_id)
+
+          if not datasource:
+              return {
+                  "success": False,
+                  "error": "datasource_not_found",
+                  "message": f"数据源 ID {datasource_id} 不存在"
+              }
+
+          if not datasource.host_id:
+              return {
+                  "success": False,
+                  "error": "no_host_configured",
+                  "message": f"数据源 {datasource.name} (ID: {datasource_id}) 未配置主机连接，无法进行操作系统级别的CPU诊断。如需进行OS级别诊断，请在数据源配置中关联主机。"
+              }
+
+          async def exec_cmd(cmd):
+              return await context.execute_command(cmd, datasource_id)
+      else:
+          async def exec_cmd(cmd):
+              return await context.execute_command_on_host(cmd, host_id)
+
+      results = {
+          "success": True,
+          "diagnosis": {}
+      }
+
+      # 1. Get top CPU consuming processes
+      top_processes = await exec_cmd(
+          "ps aux --sort=-%cpu | head -11"
+      )
+      if top_processes.get("success"):
+          results["diagnosis"]["top_cpu_processes"] = top_processes.get("output", "")
+
+      # 2. Get load average and CPU info
+      load_avg = await exec_cmd(
+          "uptime"
+      )
+      if load_avg.get("success"):
+          results["diagnosis"]["load_average"] = load_avg.get("output", "")
+
+      # 3. Get CPU core count
+      cpu_cores = await exec_cmd(
+          "nproc"
+      )
+      if cpu_cores.get("success"):
+          results["diagnosis"]["cpu_cores"] = cpu_cores.get("output", "").strip()
+
+      # 4. Get detailed CPU usage breakdown (user, system, iowait, etc.)
+      cpu_breakdown = await exec_cmd(
+          "top -bn1 | grep 'Cpu(s)'"
+      )
+      if cpu_breakdown.get("success"):
+          results["diagnosis"]["cpu_breakdown"] = cpu_breakdown.get("output", "")
+
+      # 5. Check I/O wait (high iowait indicates disk bottleneck)
+      iostat = await exec_cmd(
+          "iostat -x 1 2 | tail -n +4"
+      )
+      if iostat.get("success"):
+          results["diagnosis"]["io_stats"] = iostat.get("output", "")
+
+      # 6. Check for zombie processes
+      zombies = await exec_cmd(
+          "ps aux | awk '{if ($8 ~ /Z/) print $0}'"
+      )
+      if zombies.get("success"):
+          zombie_output = zombies.get("output", "").strip()
+          if zombie_output:
+              results["diagnosis"]["zombie_processes"] = zombie_output
+          else:
+              results["diagnosis"]["zombie_processes"] = "No zombie processes found"
+
+      # 7. Get running process count
+      process_count = await exec_cmd(
+          "ps aux | wc -l"
+      )
+      if process_count.get("success"):
+          results["diagnosis"]["total_processes"] = process_count.get("output", "").strip()
+
+      # 8. Check context switches (high rate can indicate CPU contention)
+      context_switches = await exec_cmd(
+          "vmstat 1 2 | tail -1"
+      )
+      if context_switches.get("success"):
+          results["diagnosis"]["vmstat"] = context_switches.get("output", "")
+
+      # 9. Get database process CPU usage specifically
+      db_process_cpu = await exec_cmd(
+          "ps aux | grep -E '(postgres|mysql|oracle|sqlserver|gaussdb)' | grep -v grep"
+      )
+      if db_process_cpu.get("success"):
+          results["diagnosis"]["database_processes"] = db_process_cpu.get("output", "")
+
+      return results

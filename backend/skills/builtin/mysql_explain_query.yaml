@@ -1,0 +1,47 @@
+id: mysql_explain_query
+name: MySQL Explain Query
+version: 1.0.0
+author: DBClaw
+category: mysql
+description: Get the execution plan for a SQL query to analyze its performance
+tags: [mysql, explain, query-plan, optimization]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+  - name: sql
+    type: string
+    required: true
+    description: The SQL query to explain
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+      sql = params['sql'].strip()
+
+      # Execute EXPLAIN
+      explain_sql = f"EXPLAIN {sql}"
+      result = await context.execute_query(explain_sql, datasource_id)
+
+      if not result.get("success"):
+          return result
+
+      # Also try EXPLAIN FORMAT=JSON for more details
+      json_result = await context.execute_query(
+          f"EXPLAIN FORMAT=JSON {sql}",
+          datasource_id
+      )
+
+      return {
+          "success": True,
+          "explain": {
+              "data": result.get("data", []),
+              "columns": result.get("columns", [])
+          },
+          "explain_json": json_result.get("data", []) if json_result.get("success") else None
+      }

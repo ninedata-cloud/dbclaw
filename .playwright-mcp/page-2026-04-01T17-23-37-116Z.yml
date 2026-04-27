@@ -1,0 +1,1117 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - img "数据库智能卫士" [ref=e5]
+        - generic [ref=e6]:
+          - generic [ref=e7]: NineData
+          - generic [ref=e8]: 数据库智能卫士
+      - navigation [ref=e9]:
+        - generic [ref=e10] [cursor=pointer]:
+          - img [ref=e212]
+          - generic [ref=e16]: 资源大盘
+        - generic [ref=e17] [cursor=pointer]:
+          - img [ref=e217]
+          - generic [ref=e22]: 智能巡检
+        - generic [ref=e23] [cursor=pointer]:
+          - img [ref=e221]
+          - generic [ref=e27]: AI 诊断
+        - generic [ref=e28] [cursor=pointer]:
+          - img [ref=e224]
+          - generic [ref=e31]: 性能监控
+        - generic [ref=e32] [cursor=pointer]:
+          - img [ref=e226]
+          - generic [ref=e36]: 告警管理
+        - generic [ref=e37] [cursor=pointer]:
+          - img [ref=e229]
+          - generic [ref=e41]: SQL 查询
+        - generic [ref=e42]:
+          - generic [ref=e43]: AI 智能体配置
+          - generic [ref=e44] [cursor=pointer]:
+            - img [ref=e232]
+            - generic [ref=e48]: AI 大模型管理
+          - generic [ref=e49] [cursor=pointer]:
+            - img [ref=e235]
+            - generic [ref=e52]: 技能管理
+          - generic [ref=e53] [cursor=pointer]:
+            - img [ref=e237]
+            - generic [ref=e57]: 知识库
+        - generic [ref=e58]:
+          - generic [ref=e59]: 系统配置
+          - generic [ref=e60] [cursor=pointer]:
+            - img [ref=e240]
+            - generic [ref=e65]: 数据源管理
+          - generic [ref=e66] [cursor=pointer]:
+            - img [ref=e244]
+            - generic [ref=e69]: 主机管理
+          - generic [ref=e70] [cursor=pointer]:
+            - img [ref=e246]
+            - generic [ref=e75]: 外部集成管理
+          - generic [ref=e76] [cursor=pointer]:
+            - img [ref=e250]
+            - generic [ref=e80]: 系统参数配置
+          - generic [ref=e81] [cursor=pointer]:
+            - img [ref=e253]
+            - generic [ref=e87]: 用户管理
+      - generic [ref=e88]:
+        - generic [ref=e89]: A
+        - button "Administrator 管理员" [ref=e90] [cursor=pointer]:
+          - generic [ref=e91]: Administrator
+          - generic [ref=e92]: 管理员
+      - generic [ref=e93]:
+        - generic [ref=e94]: v1.0.0
+        - button "收起侧边栏" [ref=e95] [cursor=pointer]:
+          - img [ref=e258]
+    - main [ref=e99]:
+      - generic [ref=e100]:
+        - heading "主机管理" [level=1] [ref=e261]
+        - generic [ref=e262]:
+          - generic [ref=e263]:
+            - textbox "按名称或 IP 搜索..." [ref=e264]
+            - button "检索" [ref=e265] [cursor=pointer]:
+              - img [ref=e266]
+              - text: 检索
+          - button "New Host" [ref=e269] [cursor=pointer]:
+            - img [ref=e270]
+            - text: New Host
+      - table [ref=e272]:
+        - rowgroup [ref=e273]:
+          - row "名称 ▲ 主机 端口 状态 CPU 内存 磁盘 操作" [ref=e274]:
+            - columnheader "名称 ▲" [ref=e275] [cursor=pointer]
+            - columnheader "主机" [ref=e276] [cursor=pointer]: 主机
+            - columnheader "端口" [ref=e277] [cursor=pointer]: 端口
+            - columnheader "状态" [ref=e278] [cursor=pointer]: 状态
+            - columnheader "CPU" [ref=e279] [cursor=pointer]: CPU
+            - columnheader "内存" [ref=e280] [cursor=pointer]: 内存
+            - columnheader "磁盘" [ref=e281] [cursor=pointer]: 磁盘
+            - columnheader "操作" [ref=e282]
+        - rowgroup [ref=e283]:
+          - row "118.178.108.208(aliyun临时测试机) 118.178.108.208 22 ✓ 正常 6.1% 27.2% 13.0%" [ref=e284]:
+            - cell "118.178.108.208(aliyun临时测试机)" [ref=e285]:
+              - strong [ref=e286]: 118.178.108.208(aliyun临时测试机)
+            - cell "118.178.108.208" [ref=e287]
+            - cell "22" [ref=e288]
+            - cell "✓ 正常" [ref=e289]:
+              - generic "运行正常" [ref=e290]: ✓ 正常
+            - cell "6.1%" [ref=e291]
+            - cell "27.2%" [ref=e292]
+            - cell "13.0%" [ref=e293]
+            - cell [ref=e294]:
+              - generic [ref=e295]:
+                - button "Test" [ref=e296] [cursor=pointer]:
+                  - img [ref=e297]
+                - button "Edit" [ref=e299] [cursor=pointer]:
+                  - img [ref=e300]
+                - button "Delete" [ref=e303] [cursor=pointer]:
+                  - img [ref=e304]
+          - row "192.168.2.2(物理机) 192.168.2.2 22 ✗ 严重 10.7% 63.3% 98.0%" [ref=e307]:
+            - cell "192.168.2.2(物理机)" [ref=e308]:
+              - strong [ref=e309]: 192.168.2.2(物理机)
+            - cell "192.168.2.2" [ref=e310]
+            - cell "22" [ref=e311]
+            - cell "✗ 严重" [ref=e312]:
+              - generic "磁盘使用率过高 (98.0%)" [ref=e313]: ✗ 严重
+            - cell "10.7%" [ref=e314]
+            - cell "63.3%" [ref=e315]
+            - cell "98.0%" [ref=e316]
+            - cell [ref=e317]:
+              - generic [ref=e318]:
+                - button "Test" [ref=e319] [cursor=pointer]:
+                  - img [ref=e320]
+                - button "Edit" [ref=e322] [cursor=pointer]:
+                  - img [ref=e323]
+                - button "Delete" [ref=e326] [cursor=pointer]:
+                  - img [ref=e327]
+          - row "192.168.2.24 192.168.2.24 9022 ✓ 正常 14.0% 33.2% 66.0%" [ref=e330]:
+            - cell "192.168.2.24" [ref=e331]:
+              - strong [ref=e332]: 192.168.2.24
+            - cell "192.168.2.24" [ref=e333]
+            - cell "9022" [ref=e334]
+            - cell "✓ 正常" [ref=e335]:
+              - generic "运行正常" [ref=e336]: ✓ 正常
+            - cell "14.0%" [ref=e337]
+            - cell "33.2%" [ref=e338]
+            - cell "66.0%" [ref=e339]
+            - cell [ref=e340]:
+              - generic [ref=e341]:
+                - button "Test" [ref=e342] [cursor=pointer]:
+                  - img [ref=e343]
+                - button "Edit" [ref=e345] [cursor=pointer]:
+                  - img [ref=e346]
+                - button "Delete" [ref=e349] [cursor=pointer]:
+                  - img [ref=e350]
+          - row "192.168.2.244 192.168.2.244 9022 ○ 离线 - - -" [ref=e353]:
+            - cell "192.168.2.244" [ref=e354]:
+              - strong [ref=e355]: 192.168.2.244
+            - cell "192.168.2.244" [ref=e356]
+            - cell "9022" [ref=e357]
+            - cell "○ 离线" [ref=e358]:
+              - generic "暂无监控数据" [ref=e359]: ○ 离线
+            - cell "-" [ref=e360]
+            - cell "-" [ref=e361]
+            - cell "-" [ref=e362]
+            - cell [ref=e363]:
+              - generic [ref=e364]:
+                - button "Test" [ref=e365] [cursor=pointer]:
+                  - img [ref=e366]
+                - button "Edit" [ref=e368] [cursor=pointer]:
+                  - img [ref=e369]
+                - button "Delete" [ref=e372] [cursor=pointer]:
+                  - img [ref=e373]
+          - row "192.168.2.29(yzs测试机) 192.168.2.29 9022 ✓ 正常 1.6% 15.8% 71.0%" [ref=e376]:
+            - cell "192.168.2.29(yzs测试机)" [ref=e377]:
+              - strong [ref=e378]: 192.168.2.29(yzs测试机)
+            - cell "192.168.2.29" [ref=e379]
+            - cell "9022" [ref=e380]
+            - cell "✓ 正常" [ref=e381]:
+              - generic "运行正常" [ref=e382]: ✓ 正常
+            - cell "1.6%" [ref=e383]
+            - cell "15.8%" [ref=e384]
+            - cell "71.0%" [ref=e385]
+            - cell [ref=e386]:
+              - generic [ref=e387]:
+                - button "Test" [ref=e388] [cursor=pointer]:
+                  - img [ref=e389]
+                - button "Edit" [ref=e391] [cursor=pointer]:
+                  - img [ref=e392]
+                - button "Delete" [ref=e395] [cursor=pointer]:
+                  - img [ref=e396]
+          - row "192.168.2.3(物理机) 192.168.2.3 9022 ✓ 正常 48.5% - 73.0%" [ref=e399]:
+            - cell "192.168.2.3(物理机)" [ref=e400]:
+              - strong [ref=e401]: 192.168.2.3(物理机)
+            - cell "192.168.2.3" [ref=e402]
+            - cell "9022" [ref=e403]
+            - cell "✓ 正常" [ref=e404]:
+              - generic "运行正常" [ref=e405]: ✓ 正常
+            - cell "48.5%" [ref=e406]
+            - cell "-" [ref=e407]
+            - cell "73.0%" [ref=e408]
+            - cell [ref=e409]:
+              - generic [ref=e410]:
+                - button "Test" [ref=e411] [cursor=pointer]:
+                  - img [ref=e412]
+                - button "Edit" [ref=e414] [cursor=pointer]:
+                  - img [ref=e415]
+                - button "Delete" [ref=e418] [cursor=pointer]:
+                  - img [ref=e419]
+          - row "192.168.2.4(物理机) 192.168.2.4 9022 ✓ 正常 49.0% 10.7% 70.0%" [ref=e422]:
+            - cell "192.168.2.4(物理机)" [ref=e423]:
+              - strong [ref=e424]: 192.168.2.4(物理机)
+            - cell "192.168.2.4" [ref=e425]
+            - cell "9022" [ref=e426]
+            - cell "✓ 正常" [ref=e427]:
+              - generic "运行正常" [ref=e428]: ✓ 正常
+            - cell "49.0%" [ref=e429]
+            - cell "10.7%" [ref=e430]
+            - cell "70.0%" [ref=e431]
+            - cell [ref=e432]:
+              - generic [ref=e433]:
+                - button "Test" [ref=e434] [cursor=pointer]:
+                  - img [ref=e435]
+                - button "Edit" [ref=e437] [cursor=pointer]:
+                  - img [ref=e438]
+                - button "Delete" [ref=e441] [cursor=pointer]:
+                  - img [ref=e442]
+          - row "192.168.2.5(物理机) 192.168.2.5 9022 ⚠ 异常 41.4% - 84.0%" [ref=e445]:
+            - cell "192.168.2.5(物理机)" [ref=e446]:
+              - strong [ref=e447]: 192.168.2.5(物理机)
+            - cell "192.168.2.5" [ref=e448]
+            - cell "9022" [ref=e449]
+            - cell "⚠ 异常" [ref=e450]:
+              - generic "磁盘使用率较高 (84.0%)" [ref=e451]: ⚠ 异常
+            - cell "41.4%" [ref=e452]
+            - cell "-" [ref=e453]
+            - cell "84.0%" [ref=e454]
+            - cell [ref=e455]:
+              - generic [ref=e456]:
+                - button "Test" [ref=e457] [cursor=pointer]:
+                  - img [ref=e458]
+                - button "Edit" [ref=e460] [cursor=pointer]:
+                  - img [ref=e461]
+                - button "Delete" [ref=e464] [cursor=pointer]:
+                  - img [ref=e465]
+          - row "192.168.2.6(物理机) 192.168.2.6 9022 ✓ 正常 6.3% 44.7% 1.0%" [ref=e468]:
+            - cell "192.168.2.6(物理机)" [ref=e469]:
+              - strong [ref=e470]: 192.168.2.6(物理机)
+            - cell "192.168.2.6" [ref=e471]
+            - cell "9022" [ref=e472]
+            - cell "✓ 正常" [ref=e473]:
+              - generic "运行正常" [ref=e474]: ✓ 正常
+            - cell "6.3%" [ref=e475]
+            - cell "44.7%" [ref=e476]
+            - cell "1.0%" [ref=e477]
+            - cell [ref=e478]:
+              - generic [ref=e479]:
+                - button "Test" [ref=e480] [cursor=pointer]:
+                  - img [ref=e481]
+                - button "Edit" [ref=e483] [cursor=pointer]:
+                  - img [ref=e484]
+                - button "Delete" [ref=e487] [cursor=pointer]:
+                  - img [ref=e488]
+          - row "192.168.2.61 192.168.2.61 9022 ○ 离线 - - -" [ref=e491]:
+            - cell "192.168.2.61" [ref=e492]:
+              - strong [ref=e493]: 192.168.2.61
+            - cell "192.168.2.61" [ref=e494]
+            - cell "9022" [ref=e495]
+            - cell "○ 离线" [ref=e496]:
+              - generic "暂无监控数据" [ref=e497]: ○ 离线
+            - cell "-" [ref=e498]
+            - cell "-" [ref=e499]
+            - cell "-" [ref=e500]
+            - cell [ref=e501]:
+              - generic [ref=e502]:
+                - button "Test" [ref=e503] [cursor=pointer]:
+                  - img [ref=e504]
+                - button "Edit" [ref=e506] [cursor=pointer]:
+                  - img [ref=e507]
+                - button "Delete" [ref=e510] [cursor=pointer]:
+                  - img [ref=e511]
+          - row "192.168.2.62 192.168.2.62 22 ○ 离线 - - -" [ref=e514]:
+            - cell "192.168.2.62" [ref=e515]:
+              - strong [ref=e516]: 192.168.2.62
+            - cell "192.168.2.62" [ref=e517]
+            - cell "22" [ref=e518]
+            - cell "○ 离线" [ref=e519]:
+              - generic "暂无监控数据" [ref=e520]: ○ 离线
+            - cell "-" [ref=e521]
+            - cell "-" [ref=e522]
+            - cell "-" [ref=e523]
+            - cell [ref=e524]:
+              - generic [ref=e525]:
+                - button "Test" [ref=e526] [cursor=pointer]:
+                  - img [ref=e527]
+                - button "Edit" [ref=e529] [cursor=pointer]:
+                  - img [ref=e530]
+                - button "Delete" [ref=e533] [cursor=pointer]:
+                  - img [ref=e534]
+          - row "192.168.2.66 192.168.2.66 9022 ✓ 正常 2.3% 50.6% 24.0%" [ref=e537]:
+            - cell "192.168.2.66" [ref=e538]:
+              - strong [ref=e539]: 192.168.2.66
+            - cell "192.168.2.66" [ref=e540]
+            - cell "9022" [ref=e541]
+            - cell "✓ 正常" [ref=e542]:
+              - generic "运行正常" [ref=e543]: ✓ 正常
+            - cell "2.3%" [ref=e544]
+            - cell "50.6%" [ref=e545]
+            - cell "24.0%" [ref=e546]
+            - cell [ref=e547]:
+              - generic [ref=e548]:
+                - button "Test" [ref=e549] [cursor=pointer]:
+                  - img [ref=e550]
+                - button "Edit" [ref=e552] [cursor=pointer]:
+                  - img [ref=e553]
+                - button "Delete" [ref=e556] [cursor=pointer]:
+                  - img [ref=e557]
+          - row "192.168.2.71 192.168.2.71 9022 ✓ 正常 2.8% 60.7% 70.0%" [ref=e560]:
+            - cell "192.168.2.71" [ref=e561]:
+              - strong [ref=e562]: 192.168.2.71
+            - cell "192.168.2.71" [ref=e563]
+            - cell "9022" [ref=e564]
+            - cell "✓ 正常" [ref=e565]:
+              - generic "运行正常" [ref=e566]: ✓ 正常
+            - cell "2.8%" [ref=e567]
+            - cell "60.7%" [ref=e568]
+            - cell "70.0%" [ref=e569]
+            - cell [ref=e570]:
+              - generic [ref=e571]:
+                - button "Test" [ref=e572] [cursor=pointer]:
+                  - img [ref=e573]
+                - button "Edit" [ref=e575] [cursor=pointer]:
+                  - img [ref=e576]
+                - button "Delete" [ref=e579] [cursor=pointer]:
+                  - img [ref=e580]
+          - row "192.168.2.72 192.168.2.72 9022 ✓ 正常 0.0% 31.5% 23.0%" [ref=e583]:
+            - cell "192.168.2.72" [ref=e584]:
+              - strong [ref=e585]: 192.168.2.72
+            - cell "192.168.2.72" [ref=e586]
+            - cell "9022" [ref=e587]
+            - cell "✓ 正常" [ref=e588]:
+              - generic "运行正常" [ref=e589]: ✓ 正常
+            - cell "0.0%" [ref=e590]
+            - cell "31.5%" [ref=e591]
+            - cell "23.0%" [ref=e592]
+            - cell [ref=e593]:
+              - generic [ref=e594]:
+                - button "Test" [ref=e595] [cursor=pointer]:
+                  - img [ref=e596]
+                - button "Edit" [ref=e598] [cursor=pointer]:
+                  - img [ref=e599]
+                - button "Delete" [ref=e602] [cursor=pointer]:
+                  - img [ref=e603]
+          - row "192.168.2.73 192.168.2.73 9022 ✓ 正常 15.1% 79.0% 73.0%" [ref=e606]:
+            - cell "192.168.2.73" [ref=e607]:
+              - strong [ref=e608]: 192.168.2.73
+            - cell "192.168.2.73" [ref=e609]
+            - cell "9022" [ref=e610]
+            - cell "✓ 正常" [ref=e611]:
+              - generic "运行正常" [ref=e612]: ✓ 正常
+            - cell "15.1%" [ref=e613]
+            - cell "79.0%" [ref=e614]
+            - cell "73.0%" [ref=e615]
+            - cell [ref=e616]:
+              - generic [ref=e617]:
+                - button "Test" [ref=e618] [cursor=pointer]:
+                  - img [ref=e619]
+                - button "Edit" [ref=e621] [cursor=pointer]:
+                  - img [ref=e622]
+                - button "Delete" [ref=e625] [cursor=pointer]:
+                  - img [ref=e626]
+          - row "192.168.2.74 192.168.2.74 9022 ✓ 正常 1.8% 2.0% 23.0%" [ref=e629]:
+            - cell "192.168.2.74" [ref=e630]:
+              - strong [ref=e631]: 192.168.2.74
+            - cell "192.168.2.74" [ref=e632]
+            - cell "9022" [ref=e633]
+            - cell "✓ 正常" [ref=e634]:
+              - generic "运行正常" [ref=e635]: ✓ 正常
+            - cell "1.8%" [ref=e636]
+            - cell "2.0%" [ref=e637]
+            - cell "23.0%" [ref=e638]
+            - cell [ref=e639]:
+              - generic [ref=e640]:
+                - button "Test" [ref=e641] [cursor=pointer]:
+                  - img [ref=e642]
+                - button "Edit" [ref=e644] [cursor=pointer]:
+                  - img [ref=e645]
+                - button "Delete" [ref=e648] [cursor=pointer]:
+                  - img [ref=e649]
+          - row "192.168.2.77 192.168.2.77 9022 ✗ 严重 0.0% 94.4% 70.0%" [ref=e652]:
+            - cell "192.168.2.77" [ref=e653]:
+              - strong [ref=e654]: 192.168.2.77
+            - cell "192.168.2.77" [ref=e655]
+            - cell "9022" [ref=e656]
+            - cell "✗ 严重" [ref=e657]:
+              - generic "内存使用率过高 (94.4%)" [ref=e658]: ✗ 严重
+            - cell "0.0%" [ref=e659]
+            - cell "94.4%" [ref=e660]
+            - cell "70.0%" [ref=e661]
+            - cell [ref=e662]:
+              - generic [ref=e663]:
+                - button "Test" [ref=e664] [cursor=pointer]:
+                  - img [ref=e665]
+                - button "Edit" [ref=e667] [cursor=pointer]:
+                  - img [ref=e668]
+                - button "Delete" [ref=e671] [cursor=pointer]:
+                  - img [ref=e672]
+          - row "192.168.2.95 192.168.2.95 9022 ✓ 正常 1.6% 11.2% 17.0%" [ref=e675]:
+            - cell "192.168.2.95" [ref=e676]:
+              - strong [ref=e677]: 192.168.2.95
+            - cell "192.168.2.95" [ref=e678]
+            - cell "9022" [ref=e679]
+            - cell "✓ 正常" [ref=e680]:
+              - generic "运行正常" [ref=e681]: ✓ 正常
+            - cell "1.6%" [ref=e682]
+            - cell "11.2%" [ref=e683]
+            - cell "17.0%" [ref=e684]
+            - cell [ref=e685]:
+              - generic [ref=e686]:
+                - button "Test" [ref=e687] [cursor=pointer]:
+                  - img [ref=e688]
+                - button "Edit" [ref=e690] [cursor=pointer]:
+                  - img [ref=e691]
+                - button "Delete" [ref=e694] [cursor=pointer]:
+                  - img [ref=e695]
+          - row "192.168.2.95 192.168.2.95 22 ✓ 正常 0.0% 11.2% 17.0%" [ref=e698]:
+            - cell "192.168.2.95" [ref=e699]:
+              - strong [ref=e700]: 192.168.2.95
+            - cell "192.168.2.95" [ref=e701]
+            - cell "22" [ref=e702]
+            - cell "✓ 正常" [ref=e703]:
+              - generic "运行正常" [ref=e704]: ✓ 正常
+            - cell "0.0%" [ref=e705]
+            - cell "11.2%" [ref=e706]
+            - cell "17.0%" [ref=e707]
+            - cell [ref=e708]:
+              - generic [ref=e709]:
+                - button "Test" [ref=e710] [cursor=pointer]:
+                  - img [ref=e711]
+                - button "Edit" [ref=e713] [cursor=pointer]:
+                  - img [ref=e714]
+                - button "Delete" [ref=e717] [cursor=pointer]:
+                  - img [ref=e718]
+          - row "db2-test02 192.168.2.48 9022 ✓ 正常 20.7% 24.4% 35.0%" [ref=e721]:
+            - cell "db2-test02" [ref=e722]:
+              - strong [ref=e723]: db2-test02
+            - cell "192.168.2.48" [ref=e724]
+            - cell "9022" [ref=e725]
+            - cell "✓ 正常" [ref=e726]:
+              - generic "运行正常" [ref=e727]: ✓ 正常
+            - cell "20.7%" [ref=e728]
+            - cell "24.4%" [ref=e729]
+            - cell "35.0%" [ref=e730]
+            - cell [ref=e731]:
+              - generic [ref=e732]:
+                - button "Test" [ref=e733] [cursor=pointer]:
+                  - img [ref=e734]
+                - button "Edit" [ref=e736] [cursor=pointer]:
+                  - img [ref=e737]
+                - button "Delete" [ref=e740] [cursor=pointer]:
+                  - img [ref=e741]
+          - row "dm-test01 192.168.2.78 9022 ✓ 正常 36.0% 77.6% 35.0%" [ref=e744]:
+            - cell "dm-test01" [ref=e745]:
+              - strong [ref=e746]: dm-test01
+            - cell "192.168.2.78" [ref=e747]
+            - cell "9022" [ref=e748]
+            - cell "✓ 正常" [ref=e749]:
+              - generic "运行正常" [ref=e750]: ✓ 正常
+            - cell "36.0%" [ref=e751]
+            - cell "77.6%" [ref=e752]
+            - cell "35.0%" [ref=e753]
+            - cell [ref=e754]:
+              - generic [ref=e755]:
+                - button "Test" [ref=e756] [cursor=pointer]:
+                  - img [ref=e757]
+                - button "Edit" [ref=e759] [cursor=pointer]:
+                  - img [ref=e760]
+                - button "Delete" [ref=e763] [cursor=pointer]:
+                  - img [ref=e764]
+          - row "doris-test01 192.168.2.34 9022 ✓ 正常 11.9% 54.7% 43.0%" [ref=e767]:
+            - cell "doris-test01" [ref=e768]:
+              - strong [ref=e769]: doris-test01
+            - cell "192.168.2.34" [ref=e770]
+            - cell "9022" [ref=e771]
+            - cell "✓ 正常" [ref=e772]:
+              - generic "运行正常" [ref=e773]: ✓ 正常
+            - cell "11.9%" [ref=e774]
+            - cell "54.7%" [ref=e775]
+            - cell "43.0%" [ref=e776]
+            - cell [ref=e777]:
+              - generic [ref=e778]:
+                - button "Test" [ref=e779] [cursor=pointer]:
+                  - img [ref=e780]
+                - button "Edit" [ref=e782] [cursor=pointer]:
+                  - img [ref=e783]
+                - button "Delete" [ref=e786] [cursor=pointer]:
+                  - img [ref=e787]
+          - row "doris-test03 192.168.2.33 9022 ✓ 正常 3.2% 45.6% 17.0%" [ref=e790]:
+            - cell "doris-test03" [ref=e791]:
+              - strong [ref=e792]: doris-test03
+            - cell "192.168.2.33" [ref=e793]
+            - cell "9022" [ref=e794]
+            - cell "✓ 正常" [ref=e795]:
+              - generic "运行正常" [ref=e796]: ✓ 正常
+            - cell "3.2%" [ref=e797]
+            - cell "45.6%" [ref=e798]
+            - cell "17.0%" [ref=e799]
+            - cell [ref=e800]:
+              - generic [ref=e801]:
+                - button "Test" [ref=e802] [cursor=pointer]:
+                  - img [ref=e803]
+                - button "Edit" [ref=e805] [cursor=pointer]:
+                  - img [ref=e806]
+                - button "Delete" [ref=e809] [cursor=pointer]:
+                  - img [ref=e810]
+          - row "gjy-cs2 192.168.2.165 9022 ✓ 正常 1.5% 4.0% 25.0%" [ref=e813]:
+            - cell "gjy-cs2" [ref=e814]:
+              - strong [ref=e815]: gjy-cs2
+            - cell "192.168.2.165" [ref=e816]
+            - cell "9022" [ref=e817]
+            - cell "✓ 正常" [ref=e818]:
+              - generic "运行正常" [ref=e819]: ✓ 正常
+            - cell "1.5%" [ref=e820]
+            - cell "4.0%" [ref=e821]
+            - cell "25.0%" [ref=e822]
+            - cell [ref=e823]:
+              - generic [ref=e824]:
+                - button "Test" [ref=e825] [cursor=pointer]:
+                  - img [ref=e826]
+                - button "Edit" [ref=e828] [cursor=pointer]:
+                  - img [ref=e829]
+                - button "Delete" [ref=e832] [cursor=pointer]:
+                  - img [ref=e833]
+          - row "greenplum-test01 192.168.2.93 9022 ✓ 正常 0.0% 2.2% 14.0%" [ref=e836]:
+            - cell "greenplum-test01" [ref=e837]:
+              - strong [ref=e838]: greenplum-test01
+            - cell "192.168.2.93" [ref=e839]
+            - cell "9022" [ref=e840]
+            - cell "✓ 正常" [ref=e841]:
+              - generic "运行正常" [ref=e842]: ✓ 正常
+            - cell "0.0%" [ref=e843]
+            - cell "2.2%" [ref=e844]
+            - cell "14.0%" [ref=e845]
+            - cell [ref=e846]:
+              - generic [ref=e847]:
+                - button "Test" [ref=e848] [cursor=pointer]:
+                  - img [ref=e849]
+                - button "Edit" [ref=e851] [cursor=pointer]:
+                  - img [ref=e852]
+                - button "Delete" [ref=e855] [cursor=pointer]:
+                  - img [ref=e856]
+          - row "hive-test01 192.168.2.63 9022 ✓ 正常 1.6% 36.0% 5.0%" [ref=e859]:
+            - cell "hive-test01" [ref=e860]:
+              - strong [ref=e861]: hive-test01
+            - cell "192.168.2.63" [ref=e862]
+            - cell "9022" [ref=e863]
+            - cell "✓ 正常" [ref=e864]:
+              - generic "运行正常" [ref=e865]: ✓ 正常
+            - cell "1.6%" [ref=e866]
+            - cell "36.0%" [ref=e867]
+            - cell "5.0%" [ref=e868]
+            - cell [ref=e869]:
+              - generic [ref=e870]:
+                - button "Test" [ref=e871] [cursor=pointer]:
+                  - img [ref=e872]
+                - button "Edit" [ref=e874] [cursor=pointer]:
+                  - img [ref=e875]
+                - button "Delete" [ref=e878] [cursor=pointer]:
+                  - img [ref=e879]
+          - row "kafka-cluster 192.168.2.59 9022 ✓ 正常 1.6% 50.0% 5.0%" [ref=e882]:
+            - cell "kafka-cluster" [ref=e883]:
+              - strong [ref=e884]: kafka-cluster
+            - cell "192.168.2.59" [ref=e885]
+            - cell "9022" [ref=e886]
+            - cell "✓ 正常" [ref=e887]:
+              - generic "运行正常" [ref=e888]: ✓ 正常
+            - cell "1.6%" [ref=e889]
+            - cell "50.0%" [ref=e890]
+            - cell "5.0%" [ref=e891]
+            - cell [ref=e892]:
+              - generic [ref=e893]:
+                - button "Test" [ref=e894] [cursor=pointer]:
+                  - img [ref=e895]
+                - button "Edit" [ref=e897] [cursor=pointer]:
+                  - img [ref=e898]
+                - button "Delete" [ref=e901] [cursor=pointer]:
+                  - img [ref=e902]
+          - row "kingbaseEs-oracle 192.168.2.75 9022 ✓ 正常 1.6% 2.5% 13.0%" [ref=e905]:
+            - cell "kingbaseEs-oracle" [ref=e906]:
+              - strong [ref=e907]: kingbaseEs-oracle
+            - cell "192.168.2.75" [ref=e908]
+            - cell "9022" [ref=e909]
+            - cell "✓ 正常" [ref=e910]:
+              - generic "运行正常" [ref=e911]: ✓ 正常
+            - cell "1.6%" [ref=e912]
+            - cell "2.5%" [ref=e913]
+            - cell "13.0%" [ref=e914]
+            - cell [ref=e915]:
+              - generic [ref=e916]:
+                - button "Test" [ref=e917] [cursor=pointer]:
+                  - img [ref=e918]
+                - button "Edit" [ref=e920] [cursor=pointer]:
+                  - img [ref=e921]
+                - button "Delete" [ref=e924] [cursor=pointer]:
+                  - img [ref=e925]
+          - row "kingbaseEs-test01 192.168.2.68 9022 ✓ 正常 3.4% 3.6% 17.0%" [ref=e928]:
+            - cell "kingbaseEs-test01" [ref=e929]:
+              - strong [ref=e930]: kingbaseEs-test01
+            - cell "192.168.2.68" [ref=e931]
+            - cell "9022" [ref=e932]
+            - cell "✓ 正常" [ref=e933]:
+              - generic "运行正常" [ref=e934]: ✓ 正常
+            - cell "3.4%" [ref=e935]
+            - cell "3.6%" [ref=e936]
+            - cell "17.0%" [ref=e937]
+            - cell [ref=e938]:
+              - generic [ref=e939]:
+                - button "Test" [ref=e940] [cursor=pointer]:
+                  - img [ref=e941]
+                - button "Edit" [ref=e943] [cursor=pointer]:
+                  - img [ref=e944]
+                - button "Delete" [ref=e947] [cursor=pointer]:
+                  - img [ref=e948]
+          - row "KingbaseES-V8 192.168.2.243 9022 ✓ 正常 0.0% 2.2% 10.0%" [ref=e951]:
+            - cell "KingbaseES-V8" [ref=e952]:
+              - strong [ref=e953]: KingbaseES-V8
+            - cell "192.168.2.243" [ref=e954]
+            - cell "9022" [ref=e955]
+            - cell "✓ 正常" [ref=e956]:
+              - generic "运行正常" [ref=e957]: ✓ 正常
+            - cell "0.0%" [ref=e958]
+            - cell "2.2%" [ref=e959]
+            - cell "10.0%" [ref=e960]
+            - cell [ref=e961]:
+              - generic [ref=e962]:
+                - button "Test" [ref=e963] [cursor=pointer]:
+                  - img [ref=e964]
+                - button "Edit" [ref=e966] [cursor=pointer]:
+                  - img [ref=e967]
+                - button "Delete" [ref=e970] [cursor=pointer]:
+                  - img [ref=e971]
+          - row "mongodb-test01 192.168.2.80 9022 ✓ 正常 0.8% 24.5% 56.0%" [ref=e974]:
+            - cell "mongodb-test01" [ref=e975]:
+              - strong [ref=e976]: mongodb-test01
+            - cell "192.168.2.80" [ref=e977]
+            - cell "9022" [ref=e978]
+            - cell "✓ 正常" [ref=e979]:
+              - generic "运行正常" [ref=e980]: ✓ 正常
+            - cell "0.8%" [ref=e981]
+            - cell "24.5%" [ref=e982]
+            - cell "56.0%" [ref=e983]
+            - cell [ref=e984]:
+              - generic [ref=e985]:
+                - button "Test" [ref=e986] [cursor=pointer]:
+                  - img [ref=e987]
+                - button "Edit" [ref=e989] [cursor=pointer]:
+                  - img [ref=e990]
+                - button "Delete" [ref=e993] [cursor=pointer]:
+                  - img [ref=e994]
+          - row "mongodb-test02 192.168.2.81 9022 ✓ 正常 1.6% 10.3% 36.0%" [ref=e997]:
+            - cell "mongodb-test02" [ref=e998]:
+              - strong [ref=e999]: mongodb-test02
+            - cell "192.168.2.81" [ref=e1000]
+            - cell "9022" [ref=e1001]
+            - cell "✓ 正常" [ref=e1002]:
+              - generic "运行正常" [ref=e1003]: ✓ 正常
+            - cell "1.6%" [ref=e1004]
+            - cell "10.3%" [ref=e1005]
+            - cell "36.0%" [ref=e1006]
+            - cell [ref=e1007]:
+              - generic [ref=e1008]:
+                - button "Test" [ref=e1009] [cursor=pointer]:
+                  - img [ref=e1010]
+                - button "Edit" [ref=e1012] [cursor=pointer]:
+                  - img [ref=e1013]
+                - button "Delete" [ref=e1016] [cursor=pointer]:
+                  - img [ref=e1017]
+          - row "mongodb-test03 192.168.2.82 9022 ✓ 正常 10.1% 11.3% 63.0%" [ref=e1020]:
+            - cell "mongodb-test03" [ref=e1021]:
+              - strong [ref=e1022]: mongodb-test03
+            - cell "192.168.2.82" [ref=e1023]
+            - cell "9022" [ref=e1024]
+            - cell "✓ 正常" [ref=e1025]:
+              - generic "运行正常" [ref=e1026]: ✓ 正常
+            - cell "10.1%" [ref=e1027]
+            - cell "11.3%" [ref=e1028]
+            - cell "63.0%" [ref=e1029]
+            - cell [ref=e1030]:
+              - generic [ref=e1031]:
+                - button "Test" [ref=e1032] [cursor=pointer]:
+                  - img [ref=e1033]
+                - button "Edit" [ref=e1035] [cursor=pointer]:
+                  - img [ref=e1036]
+                - button "Delete" [ref=e1039] [cursor=pointer]:
+                  - img [ref=e1040]
+          - row "mysql-demo 192.168.2.40 9022 ✓ 正常 0.0% 35.0% 37.0%" [ref=e1043]:
+            - cell "mysql-demo" [ref=e1044]:
+              - strong [ref=e1045]: mysql-demo
+            - cell "192.168.2.40" [ref=e1046]
+            - cell "9022" [ref=e1047]
+            - cell "✓ 正常" [ref=e1048]:
+              - generic "运行正常" [ref=e1049]: ✓ 正常
+            - cell "0.0%" [ref=e1050]
+            - cell "35.0%" [ref=e1051]
+            - cell "37.0%" [ref=e1052]
+            - cell [ref=e1053]:
+              - generic [ref=e1054]:
+                - button "Test" [ref=e1055] [cursor=pointer]:
+                  - img [ref=e1056]
+                - button "Edit" [ref=e1058] [cursor=pointer]:
+                  - img [ref=e1059]
+                - button "Delete" [ref=e1062] [cursor=pointer]:
+                  - img [ref=e1063]
+          - row "mysql-meta 192.168.2.123 9022 ✓ 正常 3.2% 2.0% 36.0%" [ref=e1066]:
+            - cell "mysql-meta" [ref=e1067]:
+              - strong [ref=e1068]: mysql-meta
+            - cell "192.168.2.123" [ref=e1069]
+            - cell "9022" [ref=e1070]
+            - cell "✓ 正常" [ref=e1071]:
+              - generic "运行正常" [ref=e1072]: ✓ 正常
+            - cell "3.2%" [ref=e1073]
+            - cell "2.0%" [ref=e1074]
+            - cell "36.0%" [ref=e1075]
+            - cell [ref=e1076]:
+              - generic [ref=e1077]:
+                - button "Test" [ref=e1078] [cursor=pointer]:
+                  - img [ref=e1079]
+                - button "Edit" [ref=e1081] [cursor=pointer]:
+                  - img [ref=e1082]
+                - button "Delete" [ref=e1085] [cursor=pointer]:
+                  - img [ref=e1086]
+          - row "mysql57-test 192.168.2.88 9022 ✓ 正常 0.0% 20.3% 17.0%" [ref=e1089]:
+            - cell "mysql57-test" [ref=e1090]:
+              - strong [ref=e1091]: mysql57-test
+            - cell "192.168.2.88" [ref=e1092]
+            - cell "9022" [ref=e1093]
+            - cell "✓ 正常" [ref=e1094]:
+              - generic "运行正常" [ref=e1095]: ✓ 正常
+            - cell "0.0%" [ref=e1096]
+            - cell "20.3%" [ref=e1097]
+            - cell "17.0%" [ref=e1098]
+            - cell [ref=e1099]:
+              - generic [ref=e1100]:
+                - button "Test" [ref=e1101] [cursor=pointer]:
+                  - img [ref=e1102]
+                - button "Edit" [ref=e1104] [cursor=pointer]:
+                  - img [ref=e1105]
+                - button "Delete" [ref=e1108] [cursor=pointer]:
+                  - img [ref=e1109]
+          - row "nd-test 192.168.2.29 9022 ✓ 正常 1.5% 15.8% 71.0%" [ref=e1112]:
+            - cell "nd-test" [ref=e1113]:
+              - strong [ref=e1114]: nd-test
+            - cell "192.168.2.29" [ref=e1115]
+            - cell "9022" [ref=e1116]
+            - cell "✓ 正常" [ref=e1117]:
+              - generic "运行正常" [ref=e1118]: ✓ 正常
+            - cell "1.5%" [ref=e1119]
+            - cell "15.8%" [ref=e1120]
+            - cell "71.0%" [ref=e1121]
+            - cell [ref=e1122]:
+              - generic [ref=e1123]:
+                - button "Test" [ref=e1124] [cursor=pointer]:
+                  - img [ref=e1125]
+                - button "Edit" [ref=e1127] [cursor=pointer]:
+                  - img [ref=e1128]
+                - button "Delete" [ref=e1131] [cursor=pointer]:
+                  - img [ref=e1132]
+          - row "ob-mysql 192.168.2.14 9022 ✓ 正常 34.7% 32.4% 51.0%" [ref=e1135]:
+            - cell "ob-mysql" [ref=e1136]:
+              - strong [ref=e1137]: ob-mysql
+            - cell "192.168.2.14" [ref=e1138]
+            - cell "9022" [ref=e1139]
+            - cell "✓ 正常" [ref=e1140]:
+              - generic "运行正常" [ref=e1141]: ✓ 正常
+            - cell "34.7%" [ref=e1142]
+            - cell "32.4%" [ref=e1143]
+            - cell "51.0%" [ref=e1144]
+            - cell [ref=e1145]:
+              - generic [ref=e1146]:
+                - button "Test" [ref=e1147] [cursor=pointer]:
+                  - img [ref=e1148]
+                - button "Edit" [ref=e1150] [cursor=pointer]:
+                  - img [ref=e1151]
+                - button "Delete" [ref=e1154] [cursor=pointer]:
+                  - img [ref=e1155]
+          - row "ob-testing 192.168.2.45 9022 ✓ 正常 1.6% 2.1% 5.0%" [ref=e1158]:
+            - cell "ob-testing" [ref=e1159]:
+              - strong [ref=e1160]: ob-testing
+            - cell "192.168.2.45" [ref=e1161]
+            - cell "9022" [ref=e1162]
+            - cell "✓ 正常" [ref=e1163]:
+              - generic "运行正常" [ref=e1164]: ✓ 正常
+            - cell "1.6%" [ref=e1165]
+            - cell "2.1%" [ref=e1166]
+            - cell "5.0%" [ref=e1167]
+            - cell [ref=e1168]:
+              - generic [ref=e1169]:
+                - button "Test" [ref=e1170] [cursor=pointer]:
+                  - img [ref=e1171]
+                - button "Edit" [ref=e1173] [cursor=pointer]:
+                  - img [ref=e1174]
+                - button "Delete" [ref=e1177] [cursor=pointer]:
+                  - img [ref=e1178]
+          - row "opengauss-test01 192.168.2.58 9022 ✓ 正常 47.4% 32.8% 45.0%" [ref=e1181]:
+            - cell "opengauss-test01" [ref=e1182]:
+              - strong [ref=e1183]: opengauss-test01
+            - cell "192.168.2.58" [ref=e1184]
+            - cell "9022" [ref=e1185]
+            - cell "✓ 正常" [ref=e1186]:
+              - generic "运行正常" [ref=e1187]: ✓ 正常
+            - cell "47.4%" [ref=e1188]
+            - cell "32.8%" [ref=e1189]
+            - cell "45.0%" [ref=e1190]
+            - cell [ref=e1191]:
+              - generic [ref=e1192]:
+                - button "Test" [ref=e1193] [cursor=pointer]:
+                  - img [ref=e1194]
+                - button "Edit" [ref=e1196] [cursor=pointer]:
+                  - img [ref=e1197]
+                - button "Delete" [ref=e1200] [cursor=pointer]:
+                  - img [ref=e1201]
+          - row "opengauss3 192.168.2.120 9022 ✓ 正常 3.4% 22.6% 7.0%" [ref=e1204]:
+            - cell "opengauss3" [ref=e1205]:
+              - strong [ref=e1206]: opengauss3
+            - cell "192.168.2.120" [ref=e1207]
+            - cell "9022" [ref=e1208]
+            - cell "✓ 正常" [ref=e1209]:
+              - generic "运行正常" [ref=e1210]: ✓ 正常
+            - cell "3.4%" [ref=e1211]
+            - cell "22.6%" [ref=e1212]
+            - cell "7.0%" [ref=e1213]
+            - cell [ref=e1214]:
+              - generic [ref=e1215]:
+                - button "Test" [ref=e1216] [cursor=pointer]:
+                  - img [ref=e1217]
+                - button "Edit" [ref=e1219] [cursor=pointer]:
+                  - img [ref=e1220]
+                - button "Delete" [ref=e1223] [cursor=pointer]:
+                  - img [ref=e1224]
+          - row "oracle-test01 192.168.2.84 9022 ✓ 正常 0.8% 2.9% 38.0%" [ref=e1227]:
+            - cell "oracle-test01" [ref=e1228]:
+              - strong [ref=e1229]: oracle-test01
+            - cell "192.168.2.84" [ref=e1230]
+            - cell "9022" [ref=e1231]
+            - cell "✓ 正常" [ref=e1232]:
+              - generic "运行正常" [ref=e1233]: ✓ 正常
+            - cell "0.8%" [ref=e1234]
+            - cell "2.9%" [ref=e1235]
+            - cell "38.0%" [ref=e1236]
+            - cell [ref=e1237]:
+              - generic [ref=e1238]:
+                - button "Test" [ref=e1239] [cursor=pointer]:
+                  - img [ref=e1240]
+                - button "Edit" [ref=e1242] [cursor=pointer]:
+                  - img [ref=e1243]
+                - button "Delete" [ref=e1246] [cursor=pointer]:
+                  - img [ref=e1247]
+          - row "oracle-test02 192.168.2.83 9022 ✓ 正常 1.6% 8.9% 3.0%" [ref=e1250]:
+            - cell "oracle-test02" [ref=e1251]:
+              - strong [ref=e1252]: oracle-test02
+            - cell "192.168.2.83" [ref=e1253]
+            - cell "9022" [ref=e1254]
+            - cell "✓ 正常" [ref=e1255]:
+              - generic "运行正常" [ref=e1256]: ✓ 正常
+            - cell "1.6%" [ref=e1257]
+            - cell "8.9%" [ref=e1258]
+            - cell "3.0%" [ref=e1259]
+            - cell [ref=e1260]:
+              - generic [ref=e1261]:
+                - button "Test" [ref=e1262] [cursor=pointer]:
+                  - img [ref=e1263]
+                - button "Edit" [ref=e1265] [cursor=pointer]:
+                  - img [ref=e1266]
+                - button "Delete" [ref=e1269] [cursor=pointer]:
+                  - img [ref=e1270]
+          - row "oracle-test03 192.168.2.85 9022 ✓ 正常 3.1% 24.8% 29.0%" [ref=e1273]:
+            - cell "oracle-test03" [ref=e1274]:
+              - strong [ref=e1275]: oracle-test03
+            - cell "192.168.2.85" [ref=e1276]
+            - cell "9022" [ref=e1277]
+            - cell "✓ 正常" [ref=e1278]:
+              - generic "运行正常" [ref=e1279]: ✓ 正常
+            - cell "3.1%" [ref=e1280]
+            - cell "24.8%" [ref=e1281]
+            - cell "29.0%" [ref=e1282]
+            - cell [ref=e1283]:
+              - generic [ref=e1284]:
+                - button "Test" [ref=e1285] [cursor=pointer]:
+                  - img [ref=e1286]
+                - button "Edit" [ref=e1288] [cursor=pointer]:
+                  - img [ref=e1289]
+                - button "Delete" [ref=e1292] [cursor=pointer]:
+                  - img [ref=e1293]
+          - row "oracle-test04 192.168.2.86 9022 ✓ 正常 1.1% 11.4% 23.0%" [ref=e1296]:
+            - cell "oracle-test04" [ref=e1297]:
+              - strong [ref=e1298]: oracle-test04
+            - cell "192.168.2.86" [ref=e1299]
+            - cell "9022" [ref=e1300]
+            - cell "✓ 正常" [ref=e1301]:
+              - generic "运行正常" [ref=e1302]: ✓ 正常
+            - cell "1.1%" [ref=e1303]
+            - cell "11.4%" [ref=e1304]
+            - cell "23.0%" [ref=e1305]
+            - cell [ref=e1306]:
+              - generic [ref=e1307]:
+                - button "Test" [ref=e1308] [cursor=pointer]:
+                  - img [ref=e1309]
+                - button "Edit" [ref=e1311] [cursor=pointer]:
+                  - img [ref=e1312]
+                - button "Delete" [ref=e1315] [cursor=pointer]:
+                  - img [ref=e1316]
+          - row "patroni-test01 192.168.2.220 9022 ✓ 正常 6.2% 10.4% 7.0%" [ref=e1319]:
+            - cell "patroni-test01" [ref=e1320]:
+              - strong [ref=e1321]: patroni-test01
+            - cell "192.168.2.220" [ref=e1322]
+            - cell "9022" [ref=e1323]
+            - cell "✓ 正常" [ref=e1324]:
+              - generic "运行正常" [ref=e1325]: ✓ 正常
+            - cell "6.2%" [ref=e1326]
+            - cell "10.4%" [ref=e1327]
+            - cell "7.0%" [ref=e1328]
+            - cell [ref=e1329]:
+              - generic [ref=e1330]:
+                - button "Test" [ref=e1331] [cursor=pointer]:
+                  - img [ref=e1332]
+                - button "Edit" [ref=e1334] [cursor=pointer]:
+                  - img [ref=e1335]
+                - button "Delete" [ref=e1338] [cursor=pointer]:
+                  - img [ref=e1339]
+          - row "PolarDB-ora 192.168.2.132 9022 ✓ 正常 30.0% 17.8% 42.0%" [ref=e1342]:
+            - cell "PolarDB-ora" [ref=e1343]:
+              - strong [ref=e1344]: PolarDB-ora
+            - cell "192.168.2.132" [ref=e1345]
+            - cell "9022" [ref=e1346]
+            - cell "✓ 正常" [ref=e1347]:
+              - generic "运行正常" [ref=e1348]: ✓ 正常
+            - cell "30.0%" [ref=e1349]
+            - cell "17.8%" [ref=e1350]
+            - cell "42.0%" [ref=e1351]
+            - cell [ref=e1352]:
+              - generic [ref=e1353]:
+                - button "Test" [ref=e1354] [cursor=pointer]:
+                  - img [ref=e1355]
+                - button "Edit" [ref=e1357] [cursor=pointer]:
+                  - img [ref=e1358]
+                - button "Delete" [ref=e1361] [cursor=pointer]:
+                  - img [ref=e1362]
+          - row "PolarDB-pg 192.168.2.179 9022 ✓ 正常 0.0% 8.0% 31.0%" [ref=e1365]:
+            - cell "PolarDB-pg" [ref=e1366]:
+              - strong [ref=e1367]: PolarDB-pg
+            - cell "192.168.2.179" [ref=e1368]
+            - cell "9022" [ref=e1369]
+            - cell "✓ 正常" [ref=e1370]:
+              - generic "运行正常" [ref=e1371]: ✓ 正常
+            - cell "0.0%" [ref=e1372]
+            - cell "8.0%" [ref=e1373]
+            - cell "31.0%" [ref=e1374]
+            - cell [ref=e1375]:
+              - generic [ref=e1376]:
+                - button "Test" [ref=e1377] [cursor=pointer]:
+                  - img [ref=e1378]
+                - button "Edit" [ref=e1380] [cursor=pointer]:
+                  - img [ref=e1381]
+                - button "Delete" [ref=e1384] [cursor=pointer]:
+                  - img [ref=e1385]
+          - row "postgresql-test03 192.168.2.90 9022 ✓ 正常 13.3% 3.4% 79.0%" [ref=e1388]:
+            - cell "postgresql-test03" [ref=e1389]:
+              - strong [ref=e1390]: postgresql-test03
+            - cell "192.168.2.90" [ref=e1391]
+            - cell "9022" [ref=e1392]
+            - cell "✓ 正常" [ref=e1393]:
+              - generic "运行正常" [ref=e1394]: ✓ 正常
+            - cell "13.3%" [ref=e1395]
+            - cell "3.4%" [ref=e1396]
+            - cell "79.0%" [ref=e1397]
+            - cell [ref=e1398]:
+              - generic [ref=e1399]:
+                - button "Test" [ref=e1400] [cursor=pointer]:
+                  - img [ref=e1401]
+                - button "Edit" [ref=e1403] [cursor=pointer]:
+                  - img [ref=e1404]
+                - button "Delete" [ref=e1407] [cursor=pointer]:
+                  - img [ref=e1408]
+          - row "postgresql-test04 192.168.2.91 9022 ✓ 正常 5.2% 3.7% 67.0%" [ref=e1411]:
+            - cell "postgresql-test04" [ref=e1412]:
+              - strong [ref=e1413]: postgresql-test04
+            - cell "192.168.2.91" [ref=e1414]
+            - cell "9022" [ref=e1415]
+            - cell "✓ 正常" [ref=e1416]:
+              - generic "运行正常" [ref=e1417]: ✓ 正常
+            - cell "5.2%" [ref=e1418]
+            - cell "3.7%" [ref=e1419]
+            - cell "67.0%" [ref=e1420]
+            - cell [ref=e1421]:
+              - generic [ref=e1422]:
+                - button "Test" [ref=e1423] [cursor=pointer]:
+                  - img [ref=e1424]
+                - button "Edit" [ref=e1426] [cursor=pointer]:
+                  - img [ref=e1427]
+                - button "Delete" [ref=e1430] [cursor=pointer]:
+                  - img [ref=e1431]
+          - row "redis-cluster 192.168.2.46 9022 ✓ 正常 1.7% 5.2% 2.0%" [ref=e1434]:
+            - cell "redis-cluster" [ref=e1435]:
+              - strong [ref=e1436]: redis-cluster
+            - cell "192.168.2.46" [ref=e1437]
+            - cell "9022" [ref=e1438]
+            - cell "✓ 正常" [ref=e1439]:
+              - generic "运行正常" [ref=e1440]: ✓ 正常
+            - cell "1.7%" [ref=e1441]
+            - cell "5.2%" [ref=e1442]
+            - cell "2.0%" [ref=e1443]
+            - cell [ref=e1444]:
+              - generic [ref=e1445]:
+                - button "Test" [ref=e1446] [cursor=pointer]:
+                  - img [ref=e1447]
+                - button "Edit" [ref=e1449] [cursor=pointer]:
+                  - img [ref=e1450]
+                - button "Delete" [ref=e1453] [cursor=pointer]:
+                  - img [ref=e1454]
+          - row "redis-sentinel 192.168.2.36 9022 ✓ 正常 1.6% 3.2% 4.0%" [ref=e1457]:
+            - cell "redis-sentinel" [ref=e1458]:
+              - strong [ref=e1459]: redis-sentinel
+            - cell "192.168.2.36" [ref=e1460]
+            - cell "9022" [ref=e1461]
+            - cell "✓ 正常" [ref=e1462]:
+              - generic "运行正常" [ref=e1463]: ✓ 正常
+            - cell "1.6%" [ref=e1464]
+            - cell "3.2%" [ref=e1465]
+            - cell "4.0%" [ref=e1466]
+            - cell [ref=e1467]:
+              - generic [ref=e1468]:
+                - button "Test" [ref=e1469] [cursor=pointer]:
+                  - img [ref=e1470]
+                - button "Edit" [ref=e1472] [cursor=pointer]:
+                  - img [ref=e1473]
+                - button "Delete" [ref=e1476] [cursor=pointer]:
+                  - img [ref=e1477]
+          - row "redis-test01 192.168.2.31 9022 ✓ 正常 1.6% 76.5% 11.0%" [ref=e1480]:
+            - cell "redis-test01" [ref=e1481]:
+              - strong [ref=e1482]: redis-test01
+            - cell "192.168.2.31" [ref=e1483]
+            - cell "9022" [ref=e1484]
+            - cell "✓ 正常" [ref=e1485]:
+              - generic "运行正常" [ref=e1486]: ✓ 正常
+            - cell "1.6%" [ref=e1487]
+            - cell "76.5%" [ref=e1488]
+            - cell "11.0%" [ref=e1489]
+            - cell [ref=e1490]:
+              - generic [ref=e1491]:
+                - button "Test" [ref=e1492] [cursor=pointer]:
+                  - img [ref=e1493]
+                - button "Edit" [ref=e1495] [cursor=pointer]:
+                  - img [ref=e1496]
+                - button "Delete" [ref=e1499] [cursor=pointer]:
+                  - img [ref=e1500]
+          - row "redis-test02 192.168.2.32 9022 ✓ 正常 6.2% 29.2% 15.0%" [ref=e1503]:
+            - cell "redis-test02" [ref=e1504]:
+              - strong [ref=e1505]: redis-test02
+            - cell "192.168.2.32" [ref=e1506]
+            - cell "9022" [ref=e1507]
+            - cell "✓ 正常" [ref=e1508]:
+              - generic "运行正常" [ref=e1509]: ✓ 正常
+            - cell "6.2%" [ref=e1510]
+            - cell "29.2%" [ref=e1511]
+            - cell "15.0%" [ref=e1512]
+            - cell [ref=e1513]:
+              - generic [ref=e1514]:
+                - button "Test" [ref=e1515] [cursor=pointer]:
+                  - img [ref=e1516]
+                - button "Edit" [ref=e1518] [cursor=pointer]:
+                  - img [ref=e1519]
+                - button "Delete" [ref=e1522] [cursor=pointer]:
+                  - img [ref=e1523]
+          - row "starrocks-test01 192.168.2.41 9022 ⚠ 异常 33.9% 81.0% 16.0%" [ref=e1526]:
+            - cell "starrocks-test01" [ref=e1527]:
+              - strong [ref=e1528]: starrocks-test01
+            - cell "192.168.2.41" [ref=e1529]
+            - cell "9022" [ref=e1530]
+            - cell "⚠ 异常" [ref=e1531]:
+              - generic "内存使用率较高 (81.0%)" [ref=e1532]: ⚠ 异常
+            - cell "33.9%" [ref=e1533]
+            - cell "81.0%" [ref=e1534]
+            - cell "16.0%" [ref=e1535]
+            - cell [ref=e1536]:
+              - generic [ref=e1537]:
+                - button "Test" [ref=e1538] [cursor=pointer]:
+                  - img [ref=e1539]
+                - button "Edit" [ref=e1541] [cursor=pointer]:
+                  - img [ref=e1542]
+                - button "Delete" [ref=e1545] [cursor=pointer]:
+                  - img [ref=e1546]
+          - row "sybase-test 192.168.2.19 9022 ✓ 正常 0.0% 2.1% 27.0%" [ref=e1549]:
+            - cell "sybase-test" [ref=e1550]:
+              - strong [ref=e1551]: sybase-test
+            - cell "192.168.2.19" [ref=e1552]
+            - cell "9022" [ref=e1553]
+            - cell "✓ 正常" [ref=e1554]:
+              - generic "运行正常" [ref=e1555]: ✓ 正常
+            - cell "0.0%" [ref=e1556]
+            - cell "2.1%" [ref=e1557]
+            - cell "27.0%" [ref=e1558]
+            - cell [ref=e1559]:
+              - generic [ref=e1560]:
+                - button "Test" [ref=e1561] [cursor=pointer]:
+                  - img [ref=e1562]
+                - button "Edit" [ref=e1564] [cursor=pointer]:
+                  - img [ref=e1565]
+                - button "Delete" [ref=e1568] [cursor=pointer]:
+                  - img [ref=e1569]
+          - row "sybase-test01 192.168.2.43 9022 ✓ 正常 0.0% 35.4% 25.0%" [ref=e1572]:
+            - cell "sybase-test01" [ref=e1573]:
+              - strong [ref=e1574]: sybase-test01
+            - cell "192.168.2.43" [ref=e1575]
+            - cell "9022" [ref=e1576]
+            - cell "✓ 正常" [ref=e1577]:
+              - generic "运行正常" [ref=e1578]: ✓ 正常
+            - cell "0.0%" [ref=e1579]
+            - cell "35.4%" [ref=e1580]
+            - cell "25.0%" [ref=e1581]
+            - cell [ref=e1582]:
+              - generic [ref=e1583]:
+                - button "Test" [ref=e1584] [cursor=pointer]:
+                  - img [ref=e1585]
+                - button "Edit" [ref=e1587] [cursor=pointer]:
+                  - img [ref=e1588]
+                - button "Delete" [ref=e1591] [cursor=pointer]:
+                  - img [ref=e1592]
+  - generic [ref=e211]:
+    - alert
+    - alert

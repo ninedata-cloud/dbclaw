@@ -1,0 +1,292 @@
+/* Datasource Selector Component Styles */
+
+.datasource-selector {
+    position: relative;
+    display: inline-block;
+}
+
+/* 选择器按钮 */
+.datasource-selector-button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.datasource-selector-button:hover {
+    border-color: var(--primary-color);
+    background: var(--bg-hover);
+}
+
+.datasource-selector-button.open {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.datasource-selector-button-content {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+}
+
+.datasource-selector-text {
+    width: 100%;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 下拉面板 */
+.datasource-selector-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    max-height: 400px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 数据源列表容器 */
+.datasource-selector-items {
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+}
+
+/* 搜索框 */
+.datasource-selector-search {
+    padding: 8px;
+    border-bottom: 1px solid var(--border-color);
+    position: sticky;
+    top: 0;
+    background: var(--bg-secondary);
+    z-index: 1;
+}
+
+.datasource-selector-search-input {
+    width: 100%;
+    padding: 6px 10px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 13px;
+    outline: none;
+}
+
+.datasource-selector-search-input:focus {
+    border-color: var(--primary-color);
+}
+
+/* 分组标题 */
+.datasource-selector-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.datasource-selector-group-count {
+    font-size: 11px;
+    color: var(--text-secondary);
+    background: rgba(148, 163, 184, 0.12);
+    border-radius: 999px;
+    padding: 2px 8px;
+}
+
+/* 数据源项 */
+.datasource-selector-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    border-bottom: 1px solid var(--border-color);
+    border-left: 3px solid transparent;
+}
+
+.datasource-selector-item:last-child {
+    border-bottom: none;
+}
+
+.datasource-selector-item:hover {
+    background: var(--bg-hover);
+}
+
+.datasource-selector-item.selected {
+    background: rgba(59, 130, 246, 0.12);
+    border-left-color: var(--primary-color);
+}
+
+.datasource-selector-item.selected .datasource-selector-item-name {
+    font-weight: 600;
+}
+
+.datasource-selector-item-empty {
+    background: rgba(59, 130, 246, 0.04);
+}
+
+.datasource-selector-item-empty.selected {
+    background: rgba(59, 130, 246, 0.12);
+}
+
+.datasource-selector-item-checkbox {
+    margin: 0;
+    pointer-events: none;
+}
+
+.datasource-selector-item-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.datasource-selector-item-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.datasource-selector-item-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.datasource-selector-item-empty-hint {
+    color: var(--text-secondary);
+}
+
+.datasource-selector-item-host,
+.datasource-selector-item-desc {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.datasource-selector-item-host {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-secondary);
+}
+
+.datasource-selector-item-host::before {
+    content: '地址';
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.datasource-selector-item-type {
+    padding: 2px 8px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+.datasource-selector-item-status {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.datasource-selector-item-status.status-success {
+    background: #10b981;
+}
+
+.datasource-selector-item-status.status-error {
+    background: #ef4444;
+}
+
+.datasource-selector-item-status.status-warning {
+    background: #f59e0b;
+}
+
+.datasource-selector-item-status.status-unknown {
+    background: #6b7280;
+}
+
+.datasource-selector-item-check {
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+/* 空状态 */
+.datasource-selector-empty {
+    padding: 20px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+/* 滚动条样式 */
+.datasource-selector-items::-webkit-scrollbar {
+    width: 6px;
+}
+
+.datasource-selector-items::-webkit-scrollbar-track {
+    background: var(--bg-primary);
+}
+
+.datasource-selector-items::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+.datasource-selector-items::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+    .datasource-selector-dropdown {
+        max-height: 300px;
+    }
+
+    .datasource-selector-item {
+        padding: 12px;
+    }
+
+    .datasource-selector-item-details {
+        flex-direction: column;
+        gap: 4px;
+    }
+}

@@ -1,0 +1,64 @@
+id: mssql_list_connections
+name: SQL Server Active Connections
+version: 1.0.0
+author: DBClaw
+category: sqlserver
+description: List all active database connections with their current state and queries
+tags: [sqlserver, connections, monitoring]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      query = """
+      SELECT
+          s.session_id,
+          s.login_name,
+          s.host_name,
+          s.program_name,
+          s.status,
+          s.cpu_time,
+          s.memory_usage,
+          s.total_scheduled_time,
+          s.total_elapsed_time,
+          s.last_request_start_time,
+          s.last_request_end_time,
+          c.connect_time,
+          c.net_transport,
+          c.client_net_address,
+          r.blocking_session_id,
+          r.wait_type,
+          r.wait_time,
+          r.wait_resource,
+          SUBSTRING(st.text, (r.statement_start_offset/2)+1,
+              ((CASE r.statement_end_offset
+                  WHEN -1 THEN DATALENGTH(st.text)
+                  ELSE r.statement_end_offset
+              END - r.statement_start_offset)/2) + 1) AS current_query
+      FROM sys.dm_exec_sessions s
+      LEFT JOIN sys.dm_exec_connections c ON s.session_id = c.session_id
+      LEFT JOIN sys.dm_exec_requests r ON s.session_id = r.session_id
+      OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) st
+      WHERE s.is_user_process = 1
+      ORDER BY s.last_request_start_time DESC
+      """
+
+      result = await context.execute_query(query, datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to list connections")}
+
+      return {
+          "success": True,
+          "connections": result.get("data", []),
+          "columns": result.get("columns", [])
+      }

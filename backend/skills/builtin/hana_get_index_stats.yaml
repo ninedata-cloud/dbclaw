@@ -1,0 +1,51 @@
+id: hana_get_index_stats
+name: HANA Index Statistics
+version: 1.0.0
+author: DBClaw
+category: hana
+description: Get SAP HANA index statistics including size and type for index optimization and analysis
+tags: [hana, indexes, statistics, optimization]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      query = """
+      SELECT
+          SCHEMA_NAME, TABLE_NAME, INDEX_NAME,
+          INDEX_TYPE, CONSTRAINT
+      FROM SYS.INDEXES
+      WHERE SCHEMA_NAME NOT IN ('SYS', '_SYS_STATISTICS', '_SYS_REPO')
+      ORDER BY SCHEMA_NAME, TABLE_NAME
+      LIMIT 100
+      """
+
+      result = await context.execute_query(query, datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get index stats")}
+
+      indexes = []
+      for row in result.get("data", []):
+          indexes.append({
+              "schema": row[0],
+              "table": row[1],
+              "index": row[2],
+              "type": row[3],
+              "constraint": row[4],
+          })
+
+      return {
+          "success": True,
+          "indexes": indexes,
+          "count": len(indexes)
+      }

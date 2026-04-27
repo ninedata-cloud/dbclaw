@@ -1,0 +1,64 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - generic [ref=e4]:
+      - img "数据库智能卫士" [ref=e5]
+      - generic [ref=e6]:
+        - generic [ref=e7]: NineData
+        - generic [ref=e8]: 数据库智能卫士
+    - navigation [ref=e9]:
+      - generic [ref=e10] [cursor=pointer]:
+        - img [ref=e11]
+        - generic [ref=e16]: 资源大盘
+      - generic [ref=e17] [cursor=pointer]:
+        - img [ref=e18]
+        - generic [ref=e22]: 智能巡检
+      - generic [ref=e23] [cursor=pointer]:
+        - img [ref=e24]
+        - generic [ref=e27]: AI 诊断
+      - generic [ref=e28] [cursor=pointer]:
+        - img [ref=e29]
+        - generic [ref=e31]: 性能监控
+      - generic [ref=e32] [cursor=pointer]:
+        - img [ref=e33]
+        - generic [ref=e36]: 告警管理
+      - generic [ref=e37] [cursor=pointer]:
+        - img [ref=e38]
+        - generic [ref=e41]: SQL 查询
+      - generic [ref=e42]:
+        - generic [ref=e43]: AI 智能体配置
+        - generic [ref=e44] [cursor=pointer]:
+          - img [ref=e45]
+          - generic [ref=e48]: AI 大模型管理
+        - generic [ref=e49] [cursor=pointer]:
+          - img [ref=e50]
+          - generic [ref=e52]: 技能管理
+        - generic [ref=e53] [cursor=pointer]:
+          - img [ref=e54]
+          - generic [ref=e57]: 知识库
+      - generic [ref=e58]:
+        - generic [ref=e59]: 系统配置
+        - generic [ref=e60] [cursor=pointer]:
+          - img [ref=e61]
+          - generic [ref=e65]: 数据源管理
+        - generic [ref=e66] [cursor=pointer]:
+          - img [ref=e67]
+          - generic [ref=e69]: 主机管理
+        - generic [ref=e70] [cursor=pointer]:
+          - img [ref=e71]
+          - generic [ref=e75]: 外部集成管理
+        - generic [ref=e76] [cursor=pointer]:
+          - img [ref=e77]
+          - generic [ref=e80]: 系统参数配置
+        - generic [ref=e81] [cursor=pointer]:
+          - img [ref=e82]
+          - generic [ref=e87]: 用户管理
+    - generic [ref=e88]:
+      - generic [ref=e89]: A
+      - button "Administrator 管理员" [ref=e90] [cursor=pointer]:
+        - generic [ref=e91]: Administrator
+        - generic [ref=e92]: 管理员
+    - generic [ref=e93]:
+      - generic [ref=e94]: v1.0.0
+      - button "收起侧边栏" [ref=e95] [cursor=pointer]:
+        - img [ref=e96]
+  - main [ref=e99]

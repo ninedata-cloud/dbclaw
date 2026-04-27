@@ -1,0 +1,85 @@
+id: hana_get_db_status
+name: HANA Database Status
+version: 1.0.0
+author: DBClaw
+category: hana
+description: Get current SAP HANA database status metrics including connections, transactions, memory usage, and key performance indicators
+tags: [hana, status, performance, monitoring]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      # Get connection statistics
+      conn_query = """
+      SELECT
+          COUNT(*) as total,
+          SUM(CASE WHEN CONNECTION_STATUS = 'RUNNING' THEN 1 ELSE 0 END) as active,
+          SUM(CASE WHEN CONNECTION_STATUS = 'IDLE' THEN 1 ELSE 0 END) as idle
+      FROM SYS.M_CONNECTIONS
+      WHERE CONNECTION_TYPE NOT LIKE 'History%'
+      """
+      conn_result = await context.execute_query(conn_query, datasource_id)
+
+      # Get transaction count
+      tx_query = "SELECT COUNT(*) as tx_count FROM SYS.M_TRANSACTIONS"
+      tx_result = await context.execute_query(tx_query, datasource_id)
+
+      # Get memory usage
+      mem_query = """
+      SELECT
+          SUM(TOTAL_MEMORY_USED_SIZE) as used_memory,
+          SUM(PHYSICAL_MEMORY_SIZE) as total_memory
+      FROM SYS.M_SERVICE_MEMORY
+      """
+      mem_result = await context.execute_query(mem_query, datasource_id)
+
+      # Get database size
+      size_query = "SELECT SUM(DISK_SIZE) as db_size FROM SYS.M_TABLE_PERSISTENCE_STATISTICS"
+      size_result = await context.execute_query(size_query, datasource_id)
+
+      # Get uptime
+      uptime_query = "SELECT SECONDS_BETWEEN(START_TIME, CURRENT_TIMESTAMP) as uptime FROM SYS.M_DATABASE"
+      uptime_result = await context.execute_query(uptime_query, datasource_id)
+
+      # Get lock waits
+      lock_query = "SELECT COUNT(*) as cnt FROM SYS.M_BLOCKED_TRANSACTIONS"
+      lock_result = await context.execute_query(lock_query, datasource_id)
+
+      metrics = {}
+      if conn_result.get("success") and conn_result.get("data"):
+          conn_data = conn_result["data"][0]
+          metrics["connections_total"] = conn_data[0] or 0
+          metrics["connections_active"] = conn_data[1] or 0
+          metrics["connections_idle"] = conn_data[2] or 0
+
+      if tx_result.get("success") and tx_result.get("data"):
+          metrics["transactions_active"] = tx_result["data"][0][0] or 0
+
+      if mem_result.get("success") and mem_result.get("data"):
+          mem_data = mem_result["data"][0]
+          metrics["used_memory_bytes"] = mem_data[0] or 0
+          metrics["total_memory_bytes"] = mem_data[1] or 0
+
+      if size_result.get("success") and size_result.get("data"):
+          metrics["db_size_bytes"] = size_result["data"][0][0] or 0
+
+      if uptime_result.get("success") and uptime_result.get("data"):
+          metrics["uptime"] = uptime_result["data"][0][0] or 0
+
+      if lock_result.get("success") and lock_result.get("data"):
+          metrics["lock_waiting"] = lock_result["data"][0][0] or 0
+
+      return {
+          "success": True,
+          "metrics": metrics
+      }

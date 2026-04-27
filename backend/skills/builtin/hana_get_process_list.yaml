@@ -1,0 +1,55 @@
+id: hana_get_process_list
+name: HANA Process List
+version: 1.0.0
+author: DBClaw
+category: hana
+description: Get list of active SAP HANA database connections/sessions to identify blocking or long-running queries
+tags: [hana, processes, sessions, connections]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      query = """
+      SELECT
+          CONNECTION_ID, USER_NAME, CLIENT_IP,
+          CONNECTION_STATUS, CURRENT_STATEMENT_ID,
+          LAST_ACTION, CURRENT_SCHEMA_NAME,
+          IDLE_TIME
+      FROM SYS.M_CONNECTIONS
+      WHERE CONNECTION_TYPE NOT LIKE 'History%'
+      ORDER BY LAST_ACTION DESC
+      """
+
+      result = await context.execute_query(query, datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get process list")}
+
+      processes = []
+      for row in result.get("data", []):
+          processes.append({
+              "id": row[0],
+              "user": row[1],
+              "host": row[2],
+              "db": row[6],
+              "command": row[3],
+              "time": row[7] // 1000 if row[7] else 0,
+              "state": row[5],
+              "info": None,
+          })
+
+      return {
+          "success": True,
+          "processes": processes,
+          "count": len(processes)
+      }

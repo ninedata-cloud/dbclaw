@@ -1,0 +1,40 @@
+id: list_host
+name: List Hosts
+version: 1.0.0
+author: DBClaw
+category: query
+description: List all configured SSH host
+tags: [host, configuration, ssh]
+
+permissions: []
+
+code: |
+  async def execute(context, params):
+      from backend.models.host import Host
+      from backend.models.soft_delete import alive_select
+
+      # Get all host
+      result = await context.db.execute(alive_select(Host))
+      host = result.scalars().all()
+
+      # Format host info
+      host_list = []
+      for host in host:
+          host_list.append({
+              "id": host.id,
+              "name": host.name,
+              "host": host.host,
+              "port": host.port,
+              "username": host.username,
+              "auth_type": host.auth_type,
+              "os_version": host.os_version,
+              "config_collected_at": host.config_collected_at.isoformat() if host.config_collected_at else None,
+              "created_at": host.created_at.isoformat() if host.created_at else None,
+              "updated_at": host.updated_at.isoformat() if host.updated_at else None
+          })
+
+      return {
+          "success": True,
+          "host": host_list,
+          "total": len(host_list)
+      }

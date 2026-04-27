@@ -1,0 +1,51 @@
+id: opengauss_get_vacuum_stats
+version: 1.0.0
+category: opengauss
+name: opengauss_get_vacuum_stats
+description: Get vacuum and autovacuum statistics for openGauss
+tags:
+  - opengauss
+  - maintenance
+  - vacuum
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: ID of the openGauss datasource
+timeout: 30
+permissions:
+  - read_datasource
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      from backend.models.datasource import Datasource
+      from backend.services.opengauss_service import OpenGaussConnector
+      from backend.utils.encryption import decrypt_value
+
+      # Get datasource
+      datasource = await context.get_connection(datasource_id)
+      if not datasource:
+          return {"success": False, "error": "Datasource not found"}
+
+      if datasource.db_type != "opengauss":
+          return {"success": False, "error": "Not an openGauss datasource"}
+
+      # Decrypt password
+      password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
+
+      # Connect and get vacuum stats
+      connector = OpenGaussConnector(
+          host=datasource.host,
+          port=datasource.port,
+          username=datasource.username,
+          password=password,
+          database=datasource.database
+      )
+
+      result = await connector.execute_query(
+          "SELECT schemaname, relname, last_vacuum, last_autovacuum, "
+          "vacuum_count, autovacuum_count, n_dead_tup "
+          "FROM pg_stat_user_tables ORDER BY n_dead_tup DESC LIMIT 50"
+      )
+      return {"success": True, "data": result}

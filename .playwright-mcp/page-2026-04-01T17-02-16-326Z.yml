@@ -1,0 +1,917 @@
+- generic [ref=e2]:
+  - complementary [ref=e18]:
+    - generic [ref=e19]:
+      - img "数据库智能卫士" [ref=e20]
+      - generic [ref=e21]:
+        - generic [ref=e22]: NineData
+        - generic [ref=e23]: 数据库智能卫士
+    - navigation [ref=e24]:
+      - generic [ref=e25] [cursor=pointer]:
+        - img [ref=e26]
+        - generic [ref=e31]: 资源大盘
+      - generic [ref=e32] [cursor=pointer]:
+        - img [ref=e33]
+        - generic [ref=e37]: 智能巡检
+      - generic [ref=e38] [cursor=pointer]:
+        - img [ref=e39]
+        - generic [ref=e42]: AI 诊断
+      - generic [ref=e43] [cursor=pointer]:
+        - img [ref=e44]
+        - generic [ref=e46]: 性能监控
+      - generic [ref=e47] [cursor=pointer]:
+        - img [ref=e48]
+        - generic [ref=e51]: 告警管理
+      - generic [ref=e52] [cursor=pointer]:
+        - img [ref=e53]
+        - generic [ref=e56]: SQL 查询
+      - generic [ref=e57]:
+        - generic [ref=e58]: AI 智能体配置
+        - generic [ref=e59] [cursor=pointer]:
+          - img [ref=e60]
+          - generic [ref=e63]: AI 大模型管理
+        - generic [ref=e64] [cursor=pointer]:
+          - img [ref=e65]
+          - generic [ref=e67]: 技能管理
+        - generic [ref=e68] [cursor=pointer]:
+          - img [ref=e69]
+          - generic [ref=e72]: 知识库
+      - generic [ref=e73]:
+        - generic [ref=e74]: 系统配置
+        - generic [ref=e75] [cursor=pointer]:
+          - img [ref=e76]
+          - generic [ref=e80]: 数据源管理
+        - generic [ref=e81] [cursor=pointer]:
+          - img [ref=e82]
+          - generic [ref=e84]: 主机管理
+        - generic [ref=e85] [cursor=pointer]:
+          - img [ref=e86]
+          - generic [ref=e90]: 外部集成管理
+        - generic [ref=e91] [cursor=pointer]:
+          - img [ref=e92]
+          - generic [ref=e95]: 系统参数配置
+        - generic [ref=e96] [cursor=pointer]:
+          - img [ref=e97]
+          - generic [ref=e102]: 用户管理
+    - generic [ref=e103]:
+      - generic [ref=e104]: A
+      - button "Administrator 管理员" [ref=e105] [cursor=pointer]:
+        - generic [ref=e106]: Administrator
+        - generic [ref=e107]: 管理员
+    - generic [ref=e108]:
+      - generic [ref=e109]: v1.0.0
+      - button "收起侧边栏" [ref=e110] [cursor=pointer]:
+        - img [ref=e111]
+  - main [ref=e3]:
+    - generic [ref=e114]:
+      - heading "资源大盘" [level=1] [ref=e115]
+      - generic [ref=e117]:
+        - combobox [ref=e118] [cursor=pointer]:
+          - option "全部状态" [selected]
+          - option "健康"
+          - option "警告"
+          - option "异常"
+          - option "未知"
+        - combobox [ref=e119] [cursor=pointer]:
+          - option "全部类型" [selected]
+          - option "opengauss"
+          - option "postgresql"
+          - option "mysql"
+          - option "oceanbase_mysql"
+          - option "oracle"
+          - option "sqlserver"
+        - combobox [ref=e120] [cursor=pointer]:
+          - option "全部主机" [selected]
+          - option "192.168.2.66"
+          - option "192.168.2.24"
+          - option "192.168.2.244"
+          - option "192.168.2.95"
+          - option "192.168.2.61"
+          - option "192.168.2.74"
+          - option "192.168.2.73"
+          - option "192.168.2.95"
+          - option "192.168.2.62"
+          - option "192.168.2.72"
+          - option "192.168.2.77"
+          - option "192.168.2.71"
+          - option "starrocks-test01"
+          - option "postgresql-test04"
+          - option "oracle-test02"
+          - option "dm-test01"
+          - option "postgresql-test03"
+          - option "oracle-test04"
+          - option "oracle-test03"
+          - option "opengauss-test01"
+          - option "nd-test"
+          - option "mysql-demo"
+          - option "hive-test01"
+          - option "greenplum-test01"
+          - option "db2-test02"
+          - option "patroni-test01"
+          - option "ob-mysql"
+          - option "mysql-meta"
+          - option "192.168.2.2(物理机)"
+          - option "192.168.2.6(物理机)"
+          - option "192.168.2.4(物理机)"
+          - option "192.168.2.3(物理机)"
+          - option "gjy-cs2"
+          - option "kafka-cluster"
+          - option "sybase-test01"
+          - option "sybase-test"
+          - option "redis-test02"
+          - option "redis-test01"
+          - option "redis-sentinel"
+          - option "redis-cluster"
+          - option "ob-testing"
+          - option "opengauss3"
+          - option "oracle-test01"
+          - option "mysql57-test"
+          - option "mongodb-test03"
+          - option "mongodb-test02"
+          - option "mongodb-test01"
+          - option "kingbaseEs-oracle"
+          - option "kingbaseEs-test01"
+          - option "doris-test03"
+          - option "doris-test01"
+          - option "PolarDB-pg"
+          - option "PolarDB-ora"
+          - option "KingbaseES-V8"
+          - option "118.178.108.208(aliyun临时测试机)"
+          - option "192.168.2.5(物理机)"
+          - option "192.168.2.29(yzs测试机)"
+        - textbox "搜索名称/地址..." [ref=e121]
+    - generic [ref=e4]:
+      - generic [ref=e122]:
+        - generic [ref=e123]:
+          - generic [ref=e124]: 主机健康
+          - generic [ref=e125]:
+            - img [ref=e126]:
+              - generic [ref=e129]: 91%
+            - generic [ref=e130]:
+              - generic [ref=e131]: 在线 52
+              - generic [ref=e133]: 异常 5
+          - generic [ref=e135]:
+            - generic [ref=e136]: 192.168.2.244
+            - generic [ref=e138]: 192.168.2.61
+            - generic [ref=e140]: 192.168.2.62
+            - generic [ref=e142]: +2 台异常
+        - generic [ref=e143]:
+          - generic [ref=e144]: 数据库健康
+          - generic [ref=e145]:
+            - img [ref=e146]:
+              - generic [ref=e149]: 100%
+            - generic [ref=e150]:
+              - generic [ref=e151]: 健康 41
+              - generic [ref=e153]: 异常 0
+          - generic [ref=e155]:
+            - generic [ref=e156]:
+              - text: opengauss
+              - strong [ref=e158]: "2"
+            - generic [ref=e159]:
+              - text: postgresql
+              - strong [ref=e161]: "16"
+            - generic [ref=e162]:
+              - text: mysql
+              - strong [ref=e164]: "14"
+            - generic [ref=e165]:
+              - text: oceanbase_mysql
+              - strong [ref=e167]: "1"
+            - generic [ref=e168]:
+              - text: oracle
+              - strong [ref=e170]: "2"
+            - generic [ref=e171]:
+              - text: sqlserver
+              - strong [ref=e173]: "6"
+        - generic [ref=e174]:
+          - generic [ref=e175]:
+            - text: ⚡ 活跃告警
+            - generic [ref=e176]: "95"
+          - generic [ref=e177]:
+            - generic [ref=e180] [cursor=pointer]:
+              - generic [ref=e181]: System Error
+              - generic [ref=e182]:
+                - generic [ref=e183]: polardb-oracle_14(132:1523)
+                - generic [ref=e184]: 11s前
+            - generic [ref=e187] [cursor=pointer]:
+              - generic [ref=e188]: System Error
+              - generic [ref=e189]:
+                - generic [ref=e190]: postgresql_14(hashdata)(95:5432)
+                - generic [ref=e191]: 12h前
+            - generic [ref=e194] [cursor=pointer]:
+              - generic [ref=e195]: System Error
+              - generic [ref=e196]:
+                - generic [ref=e197]: vastbase(132)
+                - generic [ref=e198]: 34h前
+            - generic [ref=e201] [cursor=pointer]:
+              - generic [ref=e202]: System Error
+              - generic [ref=e203]:
+                - generic [ref=e204]: vastbase(132)
+                - generic [ref=e205]: 34h前
+            - generic [ref=e208] [cursor=pointer]:
+              - generic [ref=e209]: connections threshold violation
+              - generic [ref=e210]:
+                - generic [ref=e211]: oracle_19c(86:1519)
+                - generic [ref=e212]: 50h前
+          - generic [ref=e213]: 查看全部 95 条 →
+      - generic [ref=e217]: 最后更新 01:02:14
+      - generic [ref=e218]:
+        - generic [ref=e219]:
+          - generic [ref=e220]: 其余资源
+          - generic [ref=e221]: "41"
+        - generic [ref=e222]:
+          - generic [ref=e223] [cursor=pointer]:
+            - generic [ref=e224]:
+              - generic [ref=e225]: vastbase(132)
+              - generic [ref=e227]:
+                - generic [ref=e228]: 健康
+                - generic [ref=e229]: opengauss
+            - generic [ref=e230]: 192.168.2.132:5432
+            - generic [ref=e232]:
+              - generic [ref=e233]:
+                - generic [ref=e234]: 活跃连接
+                - generic [ref=e235]: "2"
+              - generic [ref=e236]:
+                - generic [ref=e237]: CPU
+                - generic [ref=e238]: 34.0%
+              - generic [ref=e241]:
+                - generic [ref=e242]: QPS
+                - generic [ref=e243]: "--"
+          - generic [ref=e244] [cursor=pointer]:
+            - generic [ref=e245]:
+              - generic [ref=e246]: postgresql_14(hashdata)(95:5432)
+              - generic [ref=e248]:
+                - generic [ref=e249]: 健康
+                - generic [ref=e250]: postgresql
+            - generic [ref=e251]: 192.168.2.95:5432
+            - generic [ref=e253]:
+              - generic [ref=e254]:
+                - generic [ref=e255]: 活跃连接
+                - generic [ref=e256]: "0"
+              - generic [ref=e257]:
+                - generic [ref=e258]: CPU
+                - generic [ref=e259]: 1.6%
+              - generic [ref=e262]:
+                - generic [ref=e263]: QPS
+                - generic [ref=e264]: "--"
+          - generic [ref=e265] [cursor=pointer]:
+            - generic [ref=e266]:
+              - generic [ref=e267]: mysql_5.6(polardb-x)(66:8527)
+              - generic [ref=e269]:
+                - generic [ref=e270]: 健康
+                - generic [ref=e271]: mysql
+            - generic [ref=e272]: 192.168.2.66:8527
+            - generic [ref=e274]:
+              - generic [ref=e275]:
+                - generic [ref=e276]: 活跃连接
+                - generic [ref=e277]: "0"
+              - generic [ref=e278]:
+                - generic [ref=e279]: CPU
+                - generic [ref=e280]: 2.3%
+              - generic [ref=e283]:
+                - generic [ref=e284]: QPS
+                - generic [ref=e285]: "36.2"
+          - generic [ref=e286] [cursor=pointer]:
+            - generic [ref=e287]:
+              - generic [ref=e288]: oceanbase_4.2(14:2881)
+              - generic [ref=e290]:
+                - generic [ref=e291]: 健康
+                - generic [ref=e292]: oceanbase_mysql
+            - generic [ref=e293]: 192.168.2.14:2881
+            - generic [ref=e295]:
+              - generic [ref=e296]:
+                - generic [ref=e297]: 活跃连接
+                - generic [ref=e298]: "0"
+              - generic [ref=e299]:
+                - generic [ref=e300]: CPU
+                - generic [ref=e301]: 36.1%
+              - generic [ref=e304]:
+                - generic [ref=e305]: QPS
+                - generic [ref=e306]: "0.0"
+          - generic [ref=e307] [cursor=pointer]:
+            - generic [ref=e308]:
+              - generic [ref=e309]: mysql_unknown(24:10082)
+              - generic [ref=e311]:
+                - generic [ref=e312]: 健康
+                - generic [ref=e313]: mysql
+            - generic [ref=e314]: 192.168.2.24:10082
+            - generic [ref=e316]:
+              - generic [ref=e317]:
+                - generic [ref=e318]: 活跃连接
+                - generic [ref=e319]: "0"
+              - generic [ref=e320]:
+                - generic [ref=e321]: CPU
+                - generic [ref=e322]: 5.2%
+              - generic [ref=e325]:
+                - generic [ref=e326]: QPS
+                - generic [ref=e327]: "--"
+          - generic [ref=e328] [cursor=pointer]:
+            - generic [ref=e329]:
+              - generic [ref=e330]: postgresql_12(40:5432)
+              - generic [ref=e332]:
+                - generic [ref=e333]: 健康
+                - generic [ref=e334]: postgresql
+            - generic [ref=e335]: 192.168.2.40:5432
+            - generic [ref=e337]:
+              - generic [ref=e338]:
+                - generic [ref=e339]: 活跃连接
+                - generic [ref=e340]: "1"
+              - generic [ref=e341]:
+                - generic [ref=e342]: CPU
+                - generic [ref=e343]: 3.2%
+              - generic [ref=e346]:
+                - generic [ref=e347]: QPS
+                - generic [ref=e348]: "6.8"
+          - generic [ref=e349] [cursor=pointer]:
+            - generic [ref=e350]:
+              - generic [ref=e351]: mysql_5.7(percona)(88:3308)
+              - generic [ref=e353]:
+                - generic [ref=e354]: 健康
+                - generic [ref=e355]: mysql
+            - generic [ref=e356]: 192.168.2.88:3308
+            - generic [ref=e358]:
+              - generic [ref=e359]:
+                - generic [ref=e360]: 活跃连接
+                - generic [ref=e361]: "1"
+              - generic [ref=e362]:
+                - generic [ref=e363]: CPU
+                - generic [ref=e364]: 0.8%
+              - generic [ref=e367]:
+                - generic [ref=e368]: QPS
+                - generic [ref=e369]: "0.1"
+          - generic [ref=e370] [cursor=pointer]:
+            - generic [ref=e371]:
+              - generic [ref=e372]: postgresql_10(91:5410)
+              - generic [ref=e374]:
+                - generic [ref=e375]: 健康
+                - generic [ref=e376]: postgresql
+            - generic [ref=e377]: 192.168.2.91:5410
+            - generic [ref=e379]:
+              - generic [ref=e380]:
+                - generic [ref=e381]: 活跃连接
+                - generic [ref=e382]: "1"
+              - generic [ref=e383]:
+                - generic [ref=e384]: CPU
+                - generic [ref=e385]: 46.2%
+              - generic [ref=e388]:
+                - generic [ref=e389]: QPS
+                - generic [ref=e390]: "5.8"
+          - generic [ref=e391] [cursor=pointer]:
+            - generic [ref=e392]:
+              - generic [ref=e393]: postgresql_9.4(greenplum)(93:5432)
+              - generic [ref=e395]:
+                - generic [ref=e396]: 健康
+                - generic [ref=e397]: opengauss
+            - generic [ref=e398]: 192.168.2.93:5432
+            - generic [ref=e400]:
+              - generic [ref=e401]:
+                - generic [ref=e402]: 活跃连接
+                - generic [ref=e403]: "1"
+              - generic [ref=e404]:
+                - generic [ref=e405]: CPU
+                - generic [ref=e406]: 0.0%
+              - generic [ref=e408]:
+                - generic [ref=e409]: QPS
+                - generic [ref=e410]: "--"
+          - generic [ref=e411] [cursor=pointer]:
+            - generic [ref=e412]:
+              - generic [ref=e413]: polardb-oracle_14(132:1523)
+              - generic [ref=e415]:
+                - generic [ref=e416]: 健康
+                - generic [ref=e417]: postgresql
+            - generic [ref=e418]: 192.168.2.132:1523
+            - generic [ref=e420]:
+              - generic [ref=e421]:
+                - generic [ref=e422]: 活跃连接
+                - generic [ref=e423]: "0"
+              - generic [ref=e424]:
+                - generic [ref=e425]: CPU
+                - generic [ref=e426]: 32.7%
+              - generic [ref=e429]:
+                - generic [ref=e430]: QPS
+                - generic [ref=e431]: "--"
+          - generic [ref=e432] [cursor=pointer]:
+            - generic [ref=e433]:
+              - generic [ref=e434]: postgresql_16(91:5416)
+              - generic [ref=e436]:
+                - generic [ref=e437]: 健康
+                - generic [ref=e438]: postgresql
+            - generic [ref=e439]: 192.168.2.91:5416
+            - generic [ref=e441]:
+              - generic [ref=e442]:
+                - generic [ref=e443]: 活跃连接
+                - generic [ref=e444]: "2"
+              - generic [ref=e445]:
+                - generic [ref=e446]: CPU
+                - generic [ref=e447]: 25.5%
+              - generic [ref=e450]:
+                - generic [ref=e451]: QPS
+                - generic [ref=e452]: "61.3"
+          - generic [ref=e453] [cursor=pointer]:
+            - generic [ref=e454]:
+              - generic [ref=e455]: oracle_18c(85:1518)
+              - generic [ref=e457]:
+                - generic [ref=e458]: 健康
+                - generic [ref=e459]: oracle
+            - generic [ref=e460]: 192.168.2.85:1518
+            - generic [ref=e462]:
+              - generic [ref=e463]:
+                - generic [ref=e464]: 活跃连接
+                - generic [ref=e465]: "2"
+              - generic [ref=e466]:
+                - generic [ref=e467]: CPU
+                - generic [ref=e468]: 1.6%
+              - generic [ref=e471]:
+                - generic [ref=e472]: QPS
+                - generic [ref=e473]: "16.6"
+          - generic [ref=e474] [cursor=pointer]:
+            - generic [ref=e475]:
+              - generic [ref=e476]: sqlserver_2019(62:1419)
+              - generic [ref=e478]:
+                - generic [ref=e479]: 健康
+                - generic [ref=e480]: sqlserver
+            - generic [ref=e481]: 192.168.2.62:1419
+            - generic [ref=e483]:
+              - generic [ref=e484]:
+                - generic [ref=e485]: 活跃连接
+                - generic [ref=e486]: "1"
+              - generic [ref=e487]:
+                - generic [ref=e488]: CPU
+                - generic [ref=e489]: "--"
+              - generic [ref=e491]:
+                - generic [ref=e492]: QPS
+                - generic [ref=e493]: "2.3"
+          - generic [ref=e494] [cursor=pointer]:
+            - generic [ref=e495]:
+              - generic [ref=e496]: postgresql_12(91:5412)
+              - generic [ref=e498]:
+                - generic [ref=e499]: 健康
+                - generic [ref=e500]: postgresql
+            - generic [ref=e501]: 192.168.2.91:5412
+            - generic [ref=e503]:
+              - generic [ref=e504]:
+                - generic [ref=e505]: 活跃连接
+                - generic [ref=e506]: "1"
+              - generic [ref=e507]:
+                - generic [ref=e508]: CPU
+                - generic [ref=e509]: 36.0%
+              - generic [ref=e512]:
+                - generic [ref=e513]: QPS
+                - generic [ref=e514]: "10.6"
+          - generic [ref=e515] [cursor=pointer]:
+            - generic [ref=e516]:
+              - generic [ref=e517]: postgresql_15(90:5432)
+              - generic [ref=e519]:
+                - generic [ref=e520]: 健康
+                - generic [ref=e521]: postgresql
+            - generic [ref=e522]: 192.168.2.90:5432
+            - generic [ref=e524]:
+              - generic [ref=e525]:
+                - generic [ref=e526]: 活跃连接
+                - generic [ref=e527]: "1"
+              - generic [ref=e528]:
+                - generic [ref=e529]: CPU
+                - generic [ref=e530]: 22.1%
+              - generic [ref=e533]:
+                - generic [ref=e534]: QPS
+                - generic [ref=e535]: "56.3"
+          - generic [ref=e536] [cursor=pointer]:
+            - generic [ref=e537]:
+              - generic [ref=e538]: mysql_5.6(77:3306)
+              - generic [ref=e540]:
+                - generic [ref=e541]: 健康
+                - generic [ref=e542]: mysql
+            - generic [ref=e543]: 192.168.2.77:3306
+            - generic [ref=e545]:
+              - generic [ref=e546]:
+                - generic [ref=e547]: 活跃连接
+                - generic [ref=e548]: "1"
+              - generic [ref=e549]:
+                - generic [ref=e550]: CPU
+                - generic [ref=e551]: 4.0%
+              - generic [ref=e554]:
+                - generic [ref=e555]: QPS
+                - generic [ref=e556]: "0.1"
+          - generic [ref=e557] [cursor=pointer]:
+            - generic [ref=e558]:
+              - generic [ref=e559]: postgresql_14(91:5414)
+              - generic [ref=e561]:
+                - generic [ref=e562]: 健康
+                - generic [ref=e563]: postgresql
+            - generic [ref=e564]: 192.168.2.91:5414
+            - generic [ref=e566]:
+              - generic [ref=e567]:
+                - generic [ref=e568]: 活跃连接
+                - generic [ref=e569]: "1"
+              - generic [ref=e570]:
+                - generic [ref=e571]: CPU
+                - generic [ref=e572]: 10.6%
+              - generic [ref=e575]:
+                - generic [ref=e576]: QPS
+                - generic [ref=e577]: "19.2"
+          - generic [ref=e578] [cursor=pointer]:
+            - generic [ref=e579]:
+              - generic [ref=e580]: postgresql_11(90:5411)
+              - generic [ref=e582]:
+                - generic [ref=e583]: 健康
+                - generic [ref=e584]: postgresql
+            - generic [ref=e585]: 192.168.2.90:5411
+            - generic [ref=e587]:
+              - generic [ref=e588]:
+                - generic [ref=e589]: 活跃连接
+                - generic [ref=e590]: "1"
+              - generic [ref=e591]:
+                - generic [ref=e592]: CPU
+                - generic [ref=e593]: 20.7%
+              - generic [ref=e596]:
+                - generic [ref=e597]: QPS
+                - generic [ref=e598]: "6.0"
+          - generic [ref=e599] [cursor=pointer]:
+            - generic [ref=e600]:
+              - generic [ref=e601]: postgresql_10(90:5410)
+              - generic [ref=e603]:
+                - generic [ref=e604]: 健康
+                - generic [ref=e605]: postgresql
+            - generic [ref=e606]: 192.168.2.90:5410
+            - generic [ref=e608]:
+              - generic [ref=e609]:
+                - generic [ref=e610]: 活跃连接
+                - generic [ref=e611]: "1"
+              - generic [ref=e612]:
+                - generic [ref=e613]: CPU
+                - generic [ref=e614]: 24.5%
+              - generic [ref=e617]:
+                - generic [ref=e618]: QPS
+                - generic [ref=e619]: "10.6"
+          - generic [ref=e620] [cursor=pointer]:
+            - generic [ref=e621]:
+              - generic [ref=e622]: mysql_5.6(72:3306)
+              - generic [ref=e624]:
+                - generic [ref=e625]: 健康
+                - generic [ref=e626]: mysql
+            - generic [ref=e627]: 192.168.2.72:3306
+            - generic [ref=e629]:
+              - generic [ref=e630]:
+                - generic [ref=e631]: 活跃连接
+                - generic [ref=e632]: "1"
+              - generic [ref=e633]:
+                - generic [ref=e634]: CPU
+                - generic [ref=e635]: 2.7%
+              - generic [ref=e638]:
+                - generic [ref=e639]: QPS
+                - generic [ref=e640]: "13.1"
+          - generic [ref=e641] [cursor=pointer]:
+            - generic [ref=e642]:
+              - generic [ref=e643]: mysql_5.5(71:3306)
+              - generic [ref=e645]:
+                - generic [ref=e646]: 健康
+                - generic [ref=e647]: mysql
+            - generic [ref=e648]: 192.168.2.71:3306
+            - generic [ref=e650]:
+              - generic [ref=e651]:
+                - generic [ref=e652]: 活跃连接
+                - generic [ref=e653]: "1"
+              - generic [ref=e654]:
+                - generic [ref=e655]: CPU
+                - generic [ref=e656]: 2.6%
+              - generic [ref=e659]:
+                - generic [ref=e660]: QPS
+                - generic [ref=e661]: "13.1"
+          - generic [ref=e662] [cursor=pointer]:
+            - generic [ref=e663]:
+              - generic [ref=e664]: mysql_8.0(40:3306)
+              - generic [ref=e666]:
+                - generic [ref=e667]: 健康
+                - generic [ref=e668]: mysql
+            - generic [ref=e669]: 192.168.2.40:3306
+            - generic [ref=e671]:
+              - generic [ref=e672]:
+                - generic [ref=e673]: 活跃连接
+                - generic [ref=e674]: "1"
+              - generic [ref=e675]:
+                - generic [ref=e676]: CPU
+                - generic [ref=e677]: 0.0%
+              - generic [ref=e679]:
+                - generic [ref=e680]: QPS
+                - generic [ref=e681]: "0.1"
+          - generic [ref=e682] [cursor=pointer]:
+            - generic [ref=e683]:
+              - generic [ref=e684]: postgresql_8(kingbase)(75:54321)
+              - generic [ref=e686]:
+                - generic [ref=e687]: 健康
+                - generic [ref=e688]: postgresql
+            - generic [ref=e689]: 192.168.2.75:54321
+            - generic [ref=e691]:
+              - generic [ref=e692]:
+                - generic [ref=e693]: 活跃连接
+                - generic [ref=e694]: "1"
+              - generic [ref=e695]:
+                - generic [ref=e696]: CPU
+                - generic [ref=e697]: 1.6%
+              - generic [ref=e700]:
+                - generic [ref=e701]: QPS
+                - generic [ref=e702]: "57.9"
+          - generic [ref=e703] [cursor=pointer]:
+            - generic [ref=e704]:
+              - generic [ref=e705]: sqlserver_2019(61:1433)
+              - generic [ref=e707]:
+                - generic [ref=e708]: 健康
+                - generic [ref=e709]: sqlserver
+            - generic [ref=e710]: 192.168.2.61:1433
+            - generic [ref=e712]:
+              - generic [ref=e713]:
+                - generic [ref=e714]: 活跃连接
+                - generic [ref=e715]: "1"
+              - generic [ref=e716]:
+                - generic [ref=e717]: CPU
+                - generic [ref=e718]: "--"
+              - generic [ref=e720]:
+                - generic [ref=e721]: QPS
+                - generic [ref=e722]: "0.1"
+          - generic [ref=e723] [cursor=pointer]:
+            - generic [ref=e724]:
+              - generic [ref=e725]: sqlserver_2017(62:1417)
+              - generic [ref=e727]:
+                - generic [ref=e728]: 健康
+                - generic [ref=e729]: sqlserver
+            - generic [ref=e730]: 192.168.2.62:1417
+            - generic [ref=e732]:
+              - generic [ref=e733]:
+                - generic [ref=e734]: 活跃连接
+                - generic [ref=e735]: "1"
+              - generic [ref=e736]:
+                - generic [ref=e737]: CPU
+                - generic [ref=e738]: "--"
+              - generic [ref=e740]:
+                - generic [ref=e741]: QPS
+                - generic [ref=e742]: "0.6"
+          - generic [ref=e743] [cursor=pointer]:
+            - generic [ref=e744]:
+              - generic [ref=e745]: oracle_19c(86:1519)
+              - generic [ref=e747]:
+                - generic [ref=e748]: 健康
+                - generic [ref=e749]: oracle
+            - generic [ref=e750]: 192.168.2.86:1519 / orcl
+            - generic [ref=e752]:
+              - generic [ref=e753]:
+                - generic [ref=e754]: 活跃连接
+                - generic [ref=e755]: "0"
+              - generic [ref=e756]:
+                - generic [ref=e757]: CPU
+                - generic [ref=e758]: 1.0%
+              - generic [ref=e761]:
+                - generic [ref=e762]: QPS
+                - generic [ref=e763]: "8.2"
+          - generic [ref=e764] [cursor=pointer]:
+            - generic [ref=e765]:
+              - generic [ref=e766]: sqlserver_2019(244:1433)
+              - generic [ref=e768]:
+                - generic [ref=e769]: 健康
+                - generic [ref=e770]: sqlserver
+            - generic [ref=e771]: 192.168.2.244:1433
+            - generic [ref=e773]:
+              - generic [ref=e774]:
+                - generic [ref=e775]: 活跃连接
+                - generic [ref=e776]: "1"
+              - generic [ref=e777]:
+                - generic [ref=e778]: CPU
+                - generic [ref=e779]: "--"
+              - generic [ref=e781]:
+                - generic [ref=e782]: QPS
+                - generic [ref=e783]: "0.1"
+          - generic [ref=e784] [cursor=pointer]:
+            - generic [ref=e785]:
+              - generic [ref=e786]: mysql_10.11(mariadb)(88:3307)
+              - generic [ref=e788]:
+                - generic [ref=e789]: 健康
+                - generic [ref=e790]: mysql
+            - generic [ref=e791]: 192.168.2.88:3307
+            - generic [ref=e793]:
+              - generic [ref=e794]:
+                - generic [ref=e795]: 活跃连接
+                - generic [ref=e796]: "0"
+              - generic [ref=e797]:
+                - generic [ref=e798]: CPU
+                - generic [ref=e799]: 0.0%
+              - generic [ref=e801]:
+                - generic [ref=e802]: QPS
+                - generic [ref=e803]: "0.1"
+          - generic [ref=e804] [cursor=pointer]:
+            - generic [ref=e805]:
+              - generic [ref=e806]: sqlserver_2022(62:1422)
+              - generic [ref=e808]:
+                - generic [ref=e809]: 健康
+                - generic [ref=e810]: sqlserver
+            - generic [ref=e811]: 192.168.2.62:1422
+            - generic [ref=e813]:
+              - generic [ref=e814]:
+                - generic [ref=e815]: 活跃连接
+                - generic [ref=e816]: "1"
+              - generic [ref=e817]:
+                - generic [ref=e818]: CPU
+                - generic [ref=e819]: "--"
+              - generic [ref=e821]:
+                - generic [ref=e822]: QPS
+                - generic [ref=e823]: "0.1"
+          - generic [ref=e824] [cursor=pointer]:
+            - generic [ref=e825]:
+              - generic [ref=e826]: mysql_5.7(88:3306)
+              - generic [ref=e828]:
+                - generic [ref=e829]: 健康
+                - generic [ref=e830]: mysql
+            - generic [ref=e831]: 192.168.2.88:3306
+            - generic [ref=e833]:
+              - generic [ref=e834]:
+                - generic [ref=e835]: 活跃连接
+                - generic [ref=e836]: "1"
+              - generic [ref=e837]:
+                - generic [ref=e838]: CPU
+                - generic [ref=e839]: 2.4%
+              - generic [ref=e842]:
+                - generic [ref=e843]: QPS
+                - generic [ref=e844]: "0.1"
+          - generic [ref=e845] [cursor=pointer]:
+            - generic [ref=e846]:
+              - generic [ref=e847]: postgresql_15(91:5432)
+              - generic [ref=e849]:
+                - generic [ref=e850]: 健康
+                - generic [ref=e851]: postgresql
+            - generic [ref=e852]: 192.168.2.91:5432
+            - generic [ref=e854]:
+              - generic [ref=e855]:
+                - generic [ref=e856]: 活跃连接
+                - generic [ref=e857]: "1"
+              - generic [ref=e858]:
+                - generic [ref=e859]: CPU
+                - generic [ref=e860]: 20.2%
+              - generic [ref=e863]:
+                - generic [ref=e864]: QPS
+                - generic [ref=e865]: "296.7"
+          - generic [ref=e866] [cursor=pointer]:
+            - generic [ref=e867]:
+              - generic [ref=e868]: postgresql_15(polardb)(91:5415)
+              - generic [ref=e870]:
+                - generic [ref=e871]: 健康
+                - generic [ref=e872]: postgresql
+            - generic [ref=e873]: 192.168.2.91:5415
+            - generic [ref=e875]:
+              - generic [ref=e876]:
+                - generic [ref=e877]: 活跃连接
+                - generic [ref=e878]: "2"
+              - generic [ref=e879]:
+                - generic [ref=e880]: CPU
+                - generic [ref=e881]: 16.2%
+              - generic [ref=e884]:
+                - generic [ref=e885]: QPS
+                - generic [ref=e886]: "243.3"
+          - generic [ref=e887] [cursor=pointer]:
+            - generic [ref=e888]:
+              - generic [ref=e889]: sqlserver_2017(61:1417)
+              - generic [ref=e891]:
+                - generic [ref=e892]: 健康
+                - generic [ref=e893]: sqlserver
+            - generic [ref=e894]: 192.168.2.61:1417
+            - generic [ref=e896]:
+              - generic [ref=e897]:
+                - generic [ref=e898]: 活跃连接
+                - generic [ref=e899]: "1"
+              - generic [ref=e900]:
+                - generic [ref=e901]: CPU
+                - generic [ref=e902]: "--"
+              - generic [ref=e904]:
+                - generic [ref=e905]: QPS
+                - generic [ref=e906]: "0.1"
+          - generic [ref=e907] [cursor=pointer]:
+            - generic [ref=e908]:
+              - generic [ref=e909]: postgresql_14(90:5414)
+              - generic [ref=e911]:
+                - generic [ref=e912]: 健康
+                - generic [ref=e913]: postgresql
+            - generic [ref=e914]: 192.168.2.90:5414
+            - generic [ref=e916]:
+              - generic [ref=e917]:
+                - generic [ref=e918]: 活跃连接
+                - generic [ref=e919]: "1"
+              - generic [ref=e920]:
+                - generic [ref=e921]: CPU
+                - generic [ref=e922]: 13.5%
+              - generic [ref=e925]:
+                - generic [ref=e926]: QPS
+                - generic [ref=e927]: "19.1"
+          - generic [ref=e928] [cursor=pointer]:
+            - generic [ref=e929]:
+              - generic [ref=e930]: mysql_8.0(74:3306)
+              - generic [ref=e932]:
+                - generic [ref=e933]: 健康
+                - generic [ref=e934]: mysql
+            - generic [ref=e935]: 192.168.2.74:3306
+            - generic [ref=e937]:
+              - generic [ref=e938]:
+                - generic [ref=e939]: 活跃连接
+                - generic [ref=e940]: "2"
+              - generic [ref=e941]:
+                - generic [ref=e942]: CPU
+                - generic [ref=e943]: 0.0%
+              - generic [ref=e945]:
+                - generic [ref=e946]: QPS
+                - generic [ref=e947]: "13.1"
+          - generic [ref=e948] [cursor=pointer]:
+            - generic [ref=e949]:
+              - generic [ref=e950]: mysql_5.7(77:3307)
+              - generic [ref=e952]:
+                - generic [ref=e953]: 健康
+                - generic [ref=e954]: mysql
+            - generic [ref=e955]: 192.168.2.77:3307
+            - generic [ref=e957]:
+              - generic [ref=e958]:
+                - generic [ref=e959]: 活跃连接
+                - generic [ref=e960]: "1"
+              - generic [ref=e961]:
+                - generic [ref=e962]: CPU
+                - generic [ref=e963]: 0.0%
+              - generic [ref=e965]:
+                - generic [ref=e966]: QPS
+                - generic [ref=e967]: "0.1"
+          - generic [ref=e968] [cursor=pointer]:
+            - generic [ref=e969]:
+              - generic [ref=e970]: mysql_5.7(73:3306)
+              - generic [ref=e972]:
+                - generic [ref=e973]: 健康
+                - generic [ref=e974]: mysql
+            - generic [ref=e975]: 192.168.2.73:3306
+            - generic [ref=e977]:
+              - generic [ref=e978]:
+                - generic [ref=e979]: 活跃连接
+                - generic [ref=e980]: "3"
+              - generic [ref=e981]:
+                - generic [ref=e982]: CPU
+                - generic [ref=e983]: 2.5%
+              - generic [ref=e986]:
+                - generic [ref=e987]: QPS
+                - generic [ref=e988]: "13.1"
+          - generic [ref=e989] [cursor=pointer]:
+            - generic [ref=e990]:
+              - generic [ref=e991]: postgresql_18(208:15432)
+              - generic [ref=e993]:
+                - generic [ref=e994]: 健康
+                - generic [ref=e995]: postgresql
+            - generic [ref=e996]: 118.178.108.208:15432 / tpcc
+            - generic [ref=e998]:
+              - generic [ref=e999]:
+                - generic [ref=e1000]: 活跃连接
+                - generic [ref=e1001]: "1"
+              - generic [ref=e1002]:
+                - generic [ref=e1003]: CPU
+                - generic [ref=e1004]: 0.0%
+              - generic [ref=e1006]:
+                - generic [ref=e1007]: QPS
+                - generic [ref=e1008]: "9.1"
+          - generic [ref=e1009] [cursor=pointer]:
+            - generic [ref=e1010]:
+              - generic [ref=e1011]: mysql_8.0(yzs-rds:3306)
+              - generic [ref=e1013]:
+                - generic [ref=e1014]: 健康
+                - generic [ref=e1015]: mysql
+            - generic [ref=e1016]: rm-bp16knn4mo4fvh99ieo.mysql.rds.aliyuncs.com:3306 / yzs
+            - generic [ref=e1018]:
+              - generic [ref=e1019]:
+                - generic [ref=e1020]: 活跃连接
+                - generic [ref=e1021]: "0"
+              - generic [ref=e1022]:
+                - generic [ref=e1023]: CPU
+                - generic [ref=e1024]: "--"
+              - generic [ref=e1026]:
+                - generic [ref=e1027]: QPS
+                - generic [ref=e1028]: "5.2"
+          - generic [ref=e1029] [cursor=pointer]:
+            - generic [ref=e1030]:
+              - generic [ref=e1031]: postgresql_14(polardb)(179:1523)
+              - generic [ref=e1033]:
+                - generic [ref=e1034]: 健康
+                - generic [ref=e1035]: postgresql
+            - generic [ref=e1036]: 192.168.2.179:1523 / admin_db
+            - generic [ref=e1038]:
+              - generic [ref=e1039]:
+                - generic [ref=e1040]: 活跃连接
+                - generic [ref=e1041]: "1"
+              - generic [ref=e1042]:
+                - generic [ref=e1043]: CPU
+                - generic [ref=e1044]: 0.0%
+              - generic [ref=e1046]:
+                - generic [ref=e1047]: QPS
+                - generic [ref=e1048]: "74.0"
+          - generic [ref=e1049] [cursor=pointer]:
+            - generic [ref=e1050]:
+              - generic [ref=e1051]: mysql_8.3(29:3306)
+              - generic [ref=e1053]:
+                - generic [ref=e1054]: 健康
+                - generic [ref=e1055]: mysql
+            - generic [ref=e1056]: 192.168.2.29:3306
+            - generic [ref=e1058]:
+              - generic [ref=e1059]:
+                - generic [ref=e1060]: 活跃连接
+                - generic [ref=e1061]: "1"
+              - generic [ref=e1062]:
+                - generic [ref=e1063]: CPU
+                - generic [ref=e1064]: 3.1%
+              - generic [ref=e1067]:
+                - generic [ref=e1068]: QPS
+                - generic [ref=e1069]: "0.1"

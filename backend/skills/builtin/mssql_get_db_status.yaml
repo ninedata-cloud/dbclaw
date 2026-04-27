@@ -1,0 +1,58 @@
+id: mssql_get_db_status
+name: SQL Server Database Status
+version: 1.0.0
+author: DBClaw
+category: sqlserver
+description: Get current SQL Server database status including performance metrics and resource usage
+tags: [sqlserver, status, performance, monitoring]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      query = """
+      SELECT
+          DB_NAME() AS database_name,
+          (SELECT COUNT(*) FROM sys.dm_exec_sessions WHERE is_user_process = 1) AS active_connections,
+          (SELECT COUNT(*) FROM sys.dm_exec_requests) AS active_requests,
+          (SELECT SUM(user_seeks + user_scans + user_lookups) FROM sys.dm_db_index_usage_stats WHERE database_id = DB_ID()) AS total_index_operations,
+          (SELECT SUM(user_updates) FROM sys.dm_db_index_usage_stats WHERE database_id = DB_ID()) AS total_index_updates,
+          (SELECT COUNT(*) FROM sys.dm_exec_requests WHERE blocking_session_id <> 0) AS blocked_sessions,
+          (SELECT SUM(size) * 8 / 1024 FROM sys.master_files WHERE database_id = DB_ID() AND type = 0) AS data_size_mb,
+          (SELECT SUM(size) * 8 / 1024 FROM sys.master_files WHERE database_id = DB_ID() AND type = 1) AS log_size_mb,
+          (SELECT cntr_value FROM sys.dm_os_performance_counters WHERE counter_name = 'Page life expectancy' AND object_name LIKE '%Buffer Manager%') AS page_life_expectancy,
+          (SELECT cntr_value FROM sys.dm_os_performance_counters WHERE counter_name = 'Buffer cache hit ratio' AND object_name LIKE '%Buffer Manager%') AS buffer_cache_hit_ratio_base,
+          (SELECT cntr_value FROM sys.dm_os_performance_counters WHERE counter_name = 'Transactions/sec' AND instance_name = '_Total') AS transactions_per_sec
+      """
+
+      result = await context.execute_query(query, datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get database status")}
+
+      metrics = {}
+      if result.get("data") and len(result["data"]) > 0:
+          data = result["data"][0]
+          metrics["database_name"] = data[0]
+          metrics["active_connections"] = data[1]
+          metrics["active_requests"] = data[2]
+          metrics["blocked_sessions"] = data[5]
+          metrics["data_size_mb"] = data[6]
+          metrics["log_size_mb"] = data[7]
+          metrics["page_life_expectancy"] = data[8]
+
+      return {
+          "success": True,
+          "metrics": metrics,
+          "data": result.get("data", []),
+          "columns": result.get("columns", [])
+      }

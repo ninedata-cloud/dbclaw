@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Markdown Empty String Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.1/dist/markdown-it.min.js"></script>
+</head>
+<body>
+    <h1>Markdown-it 空字符串渲染测试</h1>
+
+    <h2>测试 1: 空字符串</h2>
+    <div id="test1" style="border: 1px solid red; min-height: 20px;"></div>
+
+    <h2>测试 2: 只有空格</h2>
+    <div id="test2" style="border: 1px solid blue; min-height: 20px;"></div>
+
+    <h2>测试 3: 只有换行</h2>
+    <div id="test3" style="border: 1px solid green; min-height: 20px;"></div>
+
+    <h2>测试 4: null</h2>
+    <div id="test4" style="border: 1px solid orange; min-height: 20px;"></div>
+
+    <h2>测试 5: undefined</h2>
+    <div id="test5" style="border: 1px solid purple; min-height: 20px;"></div>
+
+    <script>
+        const md = window.markdownit();
+
+        // 测试 1: 空字符串
+        const result1 = md.render('');
+        document.getElementById('test1').innerHTML = result1;
+        console.log('空字符串渲染结果:', JSON.stringify(result1));
+
+        // 测试 2: 只有空格
+        const result2 = md.render('   ');
+        document.getElementById('test2').innerHTML = result2;
+        console.log('空格渲染结果:', JSON.stringify(result2));
+
+        // 测试 3: 只有换行
+        const result3 = md.render('\n\n');
+        document.getElementById('test3').innerHTML = result3;
+        console.log('换行渲染结果:', JSON.stringify(result3));
+
+        // 测试 4: null
+        const result4 = md.render(null);
+        document.getElementById('test4').innerHTML = result4;
+        console.log('null 渲染结果:', JSON.stringify(result4));
+
+        // 测试 5: undefined
+        const result5 = md.render(undefined);
+        document.getElementById('test5').innerHTML = result5;
+        console.log('undefined 渲染结果:', JSON.stringify(result5));
+    </script>
+</body>
+</html>

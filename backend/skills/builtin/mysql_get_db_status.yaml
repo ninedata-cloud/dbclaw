@@ -1,0 +1,60 @@
+id: mysql_get_db_status
+name: MySQL Database Status
+version: 1.0.0
+author: DBClaw
+category: mysql
+description: Get current MySQL database status metrics including connections, throughput, cache hit rates, and key performance indicators
+tags: [mysql, status, performance, monitoring]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+      conn = await context.get_connection(datasource_id)
+
+      # Get status variables
+      result = await context.execute_query("SHOW GLOBAL STATUS", datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get status")}
+
+      # Parse status into a dict
+      status_dict = {}
+      for row in result.get("data", []):
+          if len(row) >= 2:
+              status_dict[row[0]] = row[1]
+
+      # Extract key metrics
+      metrics = {
+          "connections": status_dict.get("Threads_connected", "0"),
+          "max_connections": status_dict.get("Max_used_connections", "0"),
+          "queries": status_dict.get("Queries", "0"),
+          "slow_queries": status_dict.get("Slow_queries", "0"),
+          "uptime": status_dict.get("Uptime", "0"),
+          "threads_running": status_dict.get("Threads_running", "0"),
+          "innodb_buffer_pool_hit_rate": "0",
+      }
+
+      # Calculate InnoDB buffer pool hit rate
+      try:
+          reads = int(status_dict.get("Innodb_buffer_pool_reads", 0))
+          read_requests = int(status_dict.get("Innodb_buffer_pool_read_requests", 0))
+          if read_requests > 0:
+              hit_rate = ((read_requests - reads) / read_requests) * 100
+              metrics["innodb_buffer_pool_hit_rate"] = f"{hit_rate:.2f}"
+      except:
+          pass
+
+      return {
+          "success": True,
+          "metrics": metrics,
+          "raw_status": status_dict
+      }

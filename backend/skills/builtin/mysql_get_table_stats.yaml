@@ -1,0 +1,50 @@
+id: mysql_get_table_stats
+name: MySQL Table Statistics
+version: 1.0.0
+author: DBClaw
+category: mysql
+description: Get MySQL table-level statistics including row counts, sizes, and scan patterns
+tags: [mysql, tables, statistics, storage]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      # Get table statistics from information_schema
+      query = """
+      SELECT
+          table_schema,
+          table_name,
+          engine,
+          table_rows,
+          data_length,
+          index_length,
+          data_free,
+          auto_increment,
+          create_time,
+          update_time
+      FROM information_schema.tables
+      WHERE table_schema NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')
+      ORDER BY data_length DESC
+      LIMIT 100
+      """
+
+      result = await context.execute_query(query, datasource_id)
+
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get table stats")}
+
+      return {
+          "success": True,
+          "tables": result.get("data", []),
+          "columns": result.get("columns", [])
+      }

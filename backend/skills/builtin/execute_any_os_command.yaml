@@ -1,0 +1,64 @@
+id: execute_any_os_command
+name: Execute Any OS Command
+version: 1.0.0
+author: DBClaw
+category: admin
+description: |
+  Execute ANY shell command on a server via SSH host connection, including write operations and system modifications.
+
+  ⚠️ DANGER: This skill has NO restrictions and can execute destructive operations:
+  - Delete files and directories (rm, rmdir)
+  - Modify file permissions (chmod, chown)
+  - Kill processes (kill, pkill, killall)
+  - Restart services (systemctl restart, service restart)
+  - Modify system configuration
+  - Install/remove packages
+  - Shutdown/reboot system
+  - Modify network settings
+  - Create/delete user
+
+  USE CASES:
+  - Database maintenance: restart database services, clear logs, backup operations
+  - System administration: install monitoring tools, configure services
+  - Emergency operations: kill runaway processes, free up disk space
+  - Configuration changes: modify database config files, update system settings
+
+  SAFETY GUIDELINES:
+  - Always verify the command before execution
+  - Prefer 'execute_os_command' for read-only diagnostics
+  - Use this skill only when write operations are explicitly required
+  - Be cautious with destructive operations (rm, kill, shutdown)
+  - Consider the impact on production systems
+
+  Requires 'execute_any_os_command' or 'admin' permission.
+tags: [os, admin, shell, ssh, system, dangerous, write]
+timeout: 120
+
+parameters:
+  - name: host_id
+    type: integer
+    required: true
+    description: The SSH host ID to execute the command on
+  - name: command
+    type: string
+    required: true
+    description: The shell command to execute (any valid shell command)
+
+permissions:
+  - execute_any_os_command
+  - admin
+
+code: |
+  async def execute(context, params):
+      host_id = params['host_id']
+      command = params['command'].strip()
+
+      # Log the dangerous operation
+      import logging
+      logger = logging.getLogger(__name__)
+      logger.warning(f"DANGEROUS OPERATION: Executing unrestricted OS command on host {host_id}: {command[:100]}")
+
+      # Execute without restrictions directly on the host
+      result = await context.execute_command_on_host(command, host_id, allow_write=True)
+
+      return result

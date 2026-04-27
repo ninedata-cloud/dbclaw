@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DBClaw 数据库智能卫士</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/assets/logo-1.svg">
+    <link rel="alternate icon" href="/assets/logo-1.svg">
+
+    <!-- Fonts -->
+    <link rel="stylesheet" href="/lib/fonts/inter/300.css">
+    <link rel="stylesheet" href="/lib/fonts/inter/400.css">
+    <link rel="stylesheet" href="/lib/fonts/inter/500.css">
+    <link rel="stylesheet" href="/lib/fonts/inter/600.css">
+    <link rel="stylesheet" href="/lib/fonts/inter/700.css">
+    <link rel="stylesheet" href="/lib/fonts/jetbrains-mono/400.css">
+    <link rel="stylesheet" href="/lib/fonts/jetbrains-mono/500.css">
+
+    <!-- Chart.js -->
+    <script src="/lib/chart.js/dist/chart.umd.js"></script>
+
+    <!-- Markdown-it + Highlight.js (load BEFORE Monaco to ensure global registration) -->
+    <script src="/lib/markdown-it/markdown-it.min.js"></script>
+    <script src="/lib/highlight.js/highlight.min.js"></script>
+    <script src="/lib/highlight.js/languages/sql.min.js"></script>
+    <script src="/lib/highlight.js/languages/json.min.js"></script>
+    <script src="/lib/highlight.js/languages/bash.min.js"></script>
+    <script src="/lib/highlight.js/languages/python.min.js"></script>
+    <script src="/lib/highlight.js/languages/javascript.min.js"></script>
+    <script src="/lib/highlight.js/languages/plaintext.min.js"></script>
+    <link rel="stylesheet" href="/lib/highlight.js/styles/atom-one-dark.min.css">
+
+    <!-- Lucide Icons -->
+    <script src="/lib/lucide/dist/umd/lucide.js"></script>
+
+    <!-- AG Grid Community Edition -->
+    <link rel="stylesheet" href="/lib/ag-grid-community/styles/ag-grid.css"/>
+    <link rel="stylesheet" href="/lib/ag-grid-community/styles/ag-theme-alpine.css"/>
+
+    <!-- AG Grid JS (load before Monaco AMD loader, disable AMD to force window.agGrid) -->
+    <script>
+        if (typeof define === 'function' && define.amd) {
+            window._agDefine_backup = define;
+            define = undefined;
+        }
+    </script>
+    <script src="/lib/ag-grid-community/dist/ag-grid-community.min.js"></script>
+    <script>
+        if (typeof window._agDefine_backup !== 'undefined') {
+            define = window._agDefine_backup;
+            window._agDefine_backup = undefined;
+        }
+    </script>
+
+    <!-- Monaco Editor -->
+    <script src="/lib/monaco-editor/min/vs/loader.js"></script>
+
+    <!-- CodeMirror (load after Monaco to avoid AMD conflicts) -->
+    <script>
+        // Temporarily disable AMD for CodeMirror
+        if (typeof define === 'function' && define.amd) {
+            var _define = define;
+            define = undefined;
+        }
+    </script>
+    <link rel="stylesheet" href="/lib/codemirror/lib/codemirror.css">
+    <link rel="stylesheet" href="/lib/codemirror/theme/material-darker.css">
+    <script src="/lib/codemirror/lib/codemirror.js"></script>
+    <script src="/lib/codemirror/mode/sql/sql.js"></script>
+    <script>
+        // Restore AMD define
+        if (typeof _define !== 'undefined') {
+            define = _define;
+        }
+    </script>
+
+    <!-- App CSS -->
+    <link rel="stylesheet" href="/css/main.css">
+    <link rel="stylesheet" href="/css/sidebar.css">
+    <link rel="stylesheet" href="/css/components.css">
+    <link rel="stylesheet" href="/css/charts.css">
+    <link rel="stylesheet" href="/css/chat.css">
+    <link rel="stylesheet" href="/css/chat-attachments.css">
+    <link rel="stylesheet" href="/css/diagnosis.css">
+    <link rel="stylesheet" href="/css/diagnosis-v2.css">
+    <link rel="stylesheet" href="/css/dashboard.css">
+    <link rel="stylesheet" href="/css/sqlConsole.css?v=2">
+    <link rel="stylesheet" href="/css/skills.css">
+    <link rel="stylesheet" href="/css/inspection.css?v=7">
+    <link rel="stylesheet" href="/css/system-configs.css">
+    <link rel="stylesheet" href="/css/alerts.css">
+    <link rel="stylesheet" href="/css/instance-detail.css?v=2">
+    <link rel="stylesheet" href="/css/instance-traffic.css?v=1">
+    <link rel="stylesheet" href="/css/integrations.css?v=3">
+    <link rel="stylesheet" href="/css/datasource-selector.css">
+    <link rel="stylesheet" href="/css/auth.css">
+    <link rel="stylesheet" href="/css/documents.css">
+    <link rel="stylesheet" href="/css/host-detail.css">
+    <link rel="stylesheet" href="/css/host-network.css">
+
+    <!-- Xterm.js for Terminal -->
+    <link rel="stylesheet" href="/lib/xterm/css/xterm.css">
+</head>
+<body>
+    <div id="app">
+        <aside id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <img src="/assets/logo-1.svg" alt="DBClaw" class="sidebar-logo">
+                <div class="sidebar-title">
+                    <span class="sidebar-title-en">DBClaw</span>
+                    <span class="sidebar-title-cn">数据库智能卫士</span>
+                </div>
+            </div>
+            <nav id="sidebar-nav" class="sidebar-nav"></nav>
+            <div class="sidebar-footer">
+                <div id="sidebar-version" class="sidebar-version">v--</div>
+            </div>
+        </aside>
+        <main id="main-content" class="main-content">
+            <header id="page-header" class="page-header"></header>
+            <div id="page-content" class="page-content"></div>
+        </main>
+    </div>
+
+    <!-- Toast container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Modal container -->
+    <div id="modal-overlay" class="modal-overlay hidden">
+        <div id="modal-container" class="modal-container"></div>
+    </div>
+
+    <!-- App JS -->
+    <script src="/js/markdown-renderer.js"></script>
+    <script src="/js/utils/dom.js"></script>
+    <script src="/js/utils/format.js"></script>
+    <script src="/js/utils/websocket.js"></script>
+    <script src="/js/utils/schema-cache.js"></script>
+    <script src="/js/utils/sql-completion-provider.js"></script>
+    <script src="/js/state.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/router.js"></script>
+    <script src="/js/components/toast.js"></script>
+    <script src="/js/utils/version-checker.js"></script>
+    <script src="/js/components/modal.js"></script>
+    <script src="/js/components/sidebar.js"></script>
+    <script src="/js/components/header.js"></script>
+    <script src="/js/components/metric-card.js"></script>
+    <script src="/js/components/chart-panel.js"></script>
+    <script src="/js/components/table.js?v=3"></script>
+    <script src="/js/components/datasource-form.js"></script>
+    <script src="/js/components/datasource-selector.js"></script>
+    <script src="/js/components/chat-widget.js"></script>
+    <script src="/js/components/query-editor.js"></script>
+    <script src="/js/pages/dashboard.js"></script>
+    <script src="/js/pages/datasources.js"></script>
+    <script src="/js/pages/hosts.js"></script>
+    <script src="/js/pages/monitor.js"></script>
+    <script src="/js/pages/diagnosis.js"></script>
+    <script src="/js/pages/sqlConsole.js"></script>
+    <script src="/js/pages/ai-models.js"></script>
+    <script src="/js/pages/documents.js"></script>
+    <script src="/js/pages/skills.js"></script>
+    <script src="/js/pages/system-configs.js"></script>
+    <script src="/js/pages/login.js"></script>
+    <script src="/js/pages/users.js"></script>
+    <script src="/js/pages/inspection.js?v=4"></script>
+    <script src="/js/pages/alerts.js"></script>
+    <script src="/js/pages/alert-templates.js"></script>
+    <script src="/js/pages/instance-traffic.js?v=1"></script>
+    <script src="/js/pages/instance-detail.js?v=2"></script>
+    <script src="/js/pages/integrations.js?v=3"></script>
+
+    <!-- Xterm.js (disable AMD to avoid Monaco conflict) -->
+    <script>
+        // Temporarily disable AMD for xterm.js
+        if (typeof define === 'function' && define.amd) {
+            window._xtermDefineBackup = define;
+            define = undefined;
+        }
+    </script>
+    <script src="/lib/xterm/lib/xterm.js"></script>
+    <script src="/lib/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+    <script>
+        // Restore AMD
+        if (typeof window._xtermDefineBackup !== 'undefined') {
+            define = window._xtermDefineBackup;
+            window._xtermDefineBackup = undefined;
+        }
+    </script>
+
+    <!-- Host Detail Components and Pages -->
+    <script src="/js/components/host-terminal.js"></script>
+    <script src="/js/pages/host-network.js"></script>
+    <script src="/js/pages/host-detail.js?v=2"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>

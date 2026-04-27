@@ -1,0 +1,224 @@
+/* === Sidebar === */
+.sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: var(--sidebar-width);
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    z-index: 100;
+}
+
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(57, 210, 192, 0.14);
+    background:
+        linear-gradient(180deg, rgba(57, 210, 192, 0.05) 0%, rgba(22, 27, 34, 0) 100%),
+        var(--bg-secondary);
+}
+
+.sidebar-logo {
+    width: 48px;
+    height: 48px;
+    flex-shrink: 0;
+}
+
+.sidebar-title {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.sidebar-title-en {
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: 0.02em;
+    background: linear-gradient(90deg, #12d7ff 0%, #18d3f4 38%, #3ee7d5 72%, #bdf8ee 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 0 18px rgba(24, 211, 244, 0.18);
+}
+
+.sidebar-title-cn {
+    margin-top: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: 0.18em;
+    color: rgba(166, 225, 255, 0.9);
+    text-shadow: 0 0 10px rgba(18, 215, 255, 0.12);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sidebar-nav {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 8px;
+}
+
+.nav-section {
+    margin-bottom: 8px;
+}
+
+.nav-section-title {
+    padding: 8px 12px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: var(--radius-sm);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition);
+    user-select: none;
+}
+
+.nav-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.nav-item.active {
+    background: rgba(47, 129, 247, 0.12);
+    color: var(--accent-blue);
+}
+
+.nav-item svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+.sidebar-footer {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.sidebar-version {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.sidebar-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all var(--transition);
+}
+
+.sidebar-toggle:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.sidebar-toggle svg {
+    width: 18px;
+    height: 18px;
+    transition: transform 0.3s ease;
+}
+
+/* Collapsed sidebar */
+.sidebar.collapsed {
+    width: var(--sidebar-collapsed-width);
+}
+
+.sidebar.collapsed .sidebar-header {
+    padding: 16px 8px;
+    justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-logo {
+    width: 32px;
+    height: 32px;
+}
+
+.sidebar.collapsed .sidebar-title {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-nav {
+    padding: 8px 4px;
+}
+
+.sidebar.collapsed .nav-section-title {
+    display: none;
+}
+
+.sidebar.collapsed .nav-item {
+    justify-content: center;
+    padding: 10px 8px;
+}
+
+.sidebar.collapsed .nav-item svg {
+    margin: 0;
+}
+
+.sidebar.collapsed .nav-item span {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-footer {
+    padding: 12px 8px;
+    justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-version {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-toggle svg {
+    transform: rotate(180deg);
+}
+
+/* User section in collapsed mode */
+.sidebar.collapsed .sidebar-user {
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 8px;
+}
+
+.sidebar.collapsed .sidebar-user-avatar {
+    margin: 0;
+}
+
+.sidebar.collapsed .sidebar-user-info {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-user-menu {
+    display: none !important;
+}
+
+/* Main content adjustment when sidebar collapsed */
+.sidebar.collapsed ~ .main-content {
+    margin-left: var(--sidebar-collapsed-width);
+}

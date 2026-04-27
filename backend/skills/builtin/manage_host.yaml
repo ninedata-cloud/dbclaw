@@ -1,0 +1,291 @@
+id: manage_host
+name: Manage SSH Host
+version: 1.0.0
+author: DBClaw
+category: system
+description: Manage SSH host for database tunneling - create, update, delete, list, get details, and test connections
+tags: [host, ssh, management, crud, system]
+
+parameters:
+  - name: action
+    type: string
+    required: true
+    description: Operation type - list, get, create, update, delete, test
+    enum: [list, get, create, update, delete, test]
+  - name: host_id
+    type: integer
+    required: false
+    description: Host ID (required for get/update/delete/test actions)
+  - name: name
+    type: string
+    required: false
+    description: Host name (required for create)
+  - name: host
+    type: string
+    required: false
+    description: Host address (required for create)
+  - name: port
+    type: integer
+    required: false
+    description: SSH port (optional, default 22)
+  - name: username
+    type: string
+    required: false
+    description: SSH username (required for create)
+  - name: auth_type
+    type: string
+    required: false
+    description: Authentication type (optional, default password)
+    enum: [password, key]
+  - name: password
+    type: string
+    required: false
+    description: SSH password (required if auth_type=password)
+  - name: private_key
+    type: string
+    required: false
+    description: SSH private key (required if auth_type=key)
+  - name: os_version
+    type: string
+    required: false
+    description: Operating system version (optional for create/update)
+  - name: config_data
+    type: object
+    required: false
+    description: Host configuration data cache (optional for create/update)
+
+permissions: []
+
+code: |
+  async def execute(context, params):
+      from backend.models.host import Host
+      from backend.utils.encryption import encrypt_value, decrypt_value
+      from sqlalchemy import select
+      
+      action = params['action']
+      
+      # List action
+      if action == 'list':
+          result = await context.db.execute(
+              select(Host).order_by(Host.id.desc())
+          )
+          host = result.scalars().all()
+          
+          return {
+              "success": True,
+              "action": "list",
+              "host": [
+                  {
+                      "id": h.id,
+                      "name": h.name,
+                      "host": h.host,
+                      "port": h.port,
+                      "username": h.username,
+                      "auth_type": h.auth_type,
+                      "os_version": h.os_version,
+                      "config_collected_at": h.config_collected_at.isoformat() if h.config_collected_at else None,
+                      "created_at": h.created_at.isoformat() if h.created_at else None,
+                      "updated_at": h.updated_at.isoformat() if h.updated_at else None
+                  }
+                  for h in host
+              ],
+              "count": len(host)
+          }
+      
+      # Get action
+      if action == 'get':
+          host_id = params.get('host_id')
+          if not host_id:
+              return {"success": False, "error": "host_id is required for get action"}
+          
+          result = await context.db.execute(
+              select(Host).where(Host.id == host_id)
+          )
+          host = result.scalar_one_or_none()
+          
+          if not host:
+              return {"success": False, "error": f"Host {host_id} not found"}
+          
+          return {
+              "success": True,
+              "action": "get",
+              "host": {
+                  "id": host.id,
+                  "name": host.name,
+                  "host": host.host,
+                  "port": host.port,
+                  "username": host.username,
+                  "auth_type": host.auth_type,
+                  "os_version": host.os_version,
+                  "config_data": host.config_data,
+                  "config_collected_at": host.config_collected_at.isoformat() if host.config_collected_at else None,
+                  "created_at": host.created_at.isoformat() if host.created_at else None,
+                  "updated_at": host.updated_at.isoformat() if host.updated_at else None
+              }
+          }
+      
+      # Create action
+      if action == 'create':
+          required_fields = ['name', 'host', 'username']
+          missing = [f for f in required_fields if not params.get(f)]
+          if missing:
+              return {"success": False, "error": f"Missing required fields: {', '.join(missing)}"}
+          
+          auth_type = params.get('auth_type', 'password')
+          
+          # Validate auth credentials
+          if auth_type == 'password' and not params.get('password'):
+              return {"success": False, "error": "password is required when auth_type=password"}
+          if auth_type == 'key' and not params.get('private_key'):
+              return {"success": False, "error": "private_key is required when auth_type=key"}
+          
+          host = Host(
+              name=params['name'],
+              host=params['host'],
+              port=params.get('port', 22),
+              username=params['username'],
+              auth_type=auth_type,
+              password_encrypted=encrypt_value(params['password']) if params.get('password') else None,
+              private_key_encrypted=encrypt_value(params['private_key']) if params.get('private_key') else None,
+              os_version=params.get('os_version'),
+              config_data=params.get('config_data')
+          )
+          
+          context.db.add(host)
+          await context.db.commit()
+          await context.db.refresh(host)
+          
+          return {
+              "success": True,
+              "action": "create",
+              "host": {
+                  "id": host.id,
+                  "name": host.name,
+                  "host": host.host,
+                  "port": host.port,
+                  "username": host.username,
+                  "auth_type": host.auth_type
+              },
+              "message": f"SSH host '{host.name}' created successfully with ID {host.id}"
+          }
+      
+      # Update action
+      if action == 'update':
+          host_id = params.get('host_id')
+          if not host_id:
+              return {"success": False, "error": "host_id is required for update action"}
+          
+          result = await context.db.execute(
+              select(Host).where(Host.id == host_id)
+          )
+          host = result.scalar_one_or_none()
+          
+          if not host:
+              return {"success": False, "error": f"Host {host_id} not found"}
+          
+          # Update fields
+          if 'name' in params:
+              host.name = params['name']
+          if 'host' in params:
+              host.host = params['host']
+          if 'port' in params:
+              host.port = params['port']
+          if 'username' in params:
+              host.username = params['username']
+          if 'auth_type' in params:
+              host.auth_type = params['auth_type']
+          if 'password' in params:
+              host.password_encrypted = encrypt_value(params['password'])
+          if 'private_key' in params:
+              host.private_key_encrypted = encrypt_value(params['private_key'])
+          if 'os_version' in params:
+              host.os_version = params['os_version']
+          if 'config_data' in params:
+              host.config_data = params['config_data']
+          
+          await context.db.commit()
+          await context.db.refresh(host)
+          
+          return {
+              "success": True,
+              "action": "update",
+              "host": {
+                  "id": host.id,
+                  "name": host.name,
+                  "host": host.host,
+                  "port": host.port,
+                  "auth_type": host.auth_type
+              },
+              "message": f"Host {host_id} updated successfully"
+          }
+      
+      # Delete action
+      if action == 'delete':
+          host_id = params.get('host_id')
+          if not host_id:
+              return {"success": False, "error": "host_id is required for delete action"}
+          
+          result = await context.db.execute(
+              select(Host).where(Host.id == host_id)
+          )
+          host = result.scalar_one_or_none()
+          
+          if not host:
+              return {"success": False, "error": f"Host {host_id} not found"}
+          
+          host_name = host.name
+          await context.db.delete(host)
+          await context.db.commit()
+          
+          return {
+              "success": True,
+              "action": "delete",
+              "message": f"SSH host '{host_name}' (ID {host_id}) deleted successfully"
+          }
+      
+      # Test action
+      if action == 'test':
+          host_id = params.get('host_id')
+          if not host_id:
+              return {"success": False, "error": "host_id is required for test action"}
+          
+          result = await context.db.execute(
+              select(Host).where(Host.id == host_id)
+          )
+          host = result.scalar_one_or_none()
+          
+          if not host:
+              return {"success": False, "error": f"Host {host_id} not found"}
+          
+          try:
+              from backend.services.ssh_service import SSHService
+              
+              password = decrypt_value(host.password_encrypted) if host.password_encrypted else None
+              private_key = decrypt_value(host.private_key_encrypted) if host.private_key_encrypted else None
+              
+              ssh = SSHService(
+                  host=host.host,
+                  port=host.port,
+                  username=host.username,
+                  password=password,
+                  private_key=private_key
+              )
+              
+              output = ssh.execute("echo 'SSH connection successful'")
+              
+              return {
+                  "success": True,
+                  "action": "test",
+                  "message": f"SSH connection to '{host.name}' successful",
+                  "output": output.strip(),
+                  "host_id": host_id
+              }
+          except Exception as e:
+              return {
+                  "success": False,
+                  "action": "test",
+                  "error": f"SSH connection test failed: {str(e)}",
+                  "host_id": host_id
+              }
+      
+      return {"success": False, "error": f"Unknown action: {action}"}

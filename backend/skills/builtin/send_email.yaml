@@ -1,0 +1,115 @@
+id: send_email
+name: Send Email
+version: 1.0.0
+author: DBClaw
+category: notification
+description: Send an email to specified recipients using the configured SMTP server
+tags: [email, notification, alert, smtp]
+
+parameters:
+  - name: to
+    type: string
+    required: true
+    description: Recipient email address (single address or comma-separated list)
+  - name: subject
+    type: string
+    required: true
+    description: Email subject line
+  - name: body
+    type: string
+    required: true
+    description: Email body content (plain text)
+  - name: cc
+    type: string
+    required: false
+    description: CC email addresses (comma-separated)
+  - name: html
+    type: boolean
+    required: false
+    default: false
+    description: Whether the body is HTML content (default false, plain text)
+
+permissions: [access_external_api]
+
+timeout: 30
+
+code: |
+  async def execute(context, params):
+      import smtplib
+      from email.mime.text import MIMEText
+      from email.mime.multipart import MIMEMultipart
+      from sqlalchemy import select
+      from backend.models.system_config import SystemConfig
+
+      to = params.get('to', '').strip()
+      subject = params.get('subject', '').strip()
+      body = params.get('body', '').strip()
+      cc = params.get('cc', '').strip()
+      is_html = params.get('html', False)
+
+      if not to:
+          return {"success": False, "error": "Recipient email address is required"}
+      if not subject:
+          return {"success": False, "error": "Email subject is required"}
+      if not body:
+          return {"success": False, "error": "Email body is required"}
+
+      # Get SMTP configuration from system settings
+      config_result = await context.db.execute(
+          select(SystemConfig).where(SystemConfig.category == "notification")
+      )
+      configs = {c.key: c.value for c in config_result.scalars().all()}
+
+      smtp_host = configs.get("smtp_host")
+      smtp_port = int(configs.get("smtp_port", 587))
+      smtp_username = configs.get("smtp_username")
+      smtp_password = configs.get("smtp_password")
+      smtp_from = configs.get("smtp_from_email")
+      smtp_use_tls = configs.get("smtp_use_tls", "true").lower() == "true"
+
+      if not all([smtp_host, smtp_username, smtp_password, smtp_from]):
+          return {
+              "success": False,
+              "error": "SMTP configuration incomplete. Please configure smtp_host, smtp_username, smtp_password, smtp_from_email in system notification settings."
+          }
+
+      # Build message
+      msg = MIMEMultipart()
+      msg['From'] = smtp_from
+      msg['To'] = to
+      msg['Subject'] = subject
+      if cc:
+          msg['Cc'] = cc
+
+      content_type = 'html' if is_html else 'plain'
+      msg.attach(MIMEText(body, content_type, 'utf-8'))
+
+      # Collect all recipients
+      recipients = [addr.strip() for addr in to.split(',') if addr.strip()]
+      if cc:
+          recipients += [addr.strip() for addr in cc.split(',') if addr.strip()]
+
+      try:
+        if smtp_use_tls:
+            server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=20)
+        else:
+            server = smtplib.SMTP(smtp_host, smtp_port, timeout=20)
+        server.login(smtp_username, smtp_password)
+        server.sendmail(smtp_from, recipients, msg.as_string())
+        server.quit()
+        return {
+            "success": True,
+            "message": f"Email sent successfully to {to}",
+            "to": to,
+            "subject": subject,
+            "recipients_count": len(recipients)
+        }
+
+      except smtplib.SMTPAuthenticationError as e:
+          return {"success": False, "error": f"SMTP authentication failed: {str(e)}"}
+      except smtplib.SMTPConnectError as e:
+          return {"success": False, "error": f"Cannot connect to SMTP server {smtp_host}:{smtp_port}: {str(e)}"}
+      except smtplib.SMTPRecipientsRefused as e:
+          return {"success": False, "error": f"Recipient refused: {str(e)}"}
+      except Exception as e:
+          return {"success": False, "error": f"Failed to send email: {str(e)}"}

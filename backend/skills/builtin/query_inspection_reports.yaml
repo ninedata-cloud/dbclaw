@@ -1,0 +1,130 @@
+id: query_inspection_report
+name: Query Inspection Reports
+version: 1.0.0
+author: DBClaw
+category: inspection
+description: Query AI inspection report - list with filters or get detailed report content
+tags: [inspection, report, query, diagnosis]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: false
+    description: Filter by datasource ID
+  - name: report_id
+    type: integer
+    required: false
+    description: Get specific report detail (if provided, returns full content)
+  - name: trigger_type
+    type: string
+    required: false
+    description: Filter by trigger type
+    enum: [manual, scheduled, threshold, anomaly]
+  - name: status
+    type: string
+    required: false
+    description: Filter by status
+    enum: [generating, completed, partial, timed_out, awaiting_confirm, failed]
+  - name: limit
+    type: integer
+    required: false
+    default: 20
+    description: Max records to return (default 20)
+    min: 1
+    max: 100
+
+permissions: []
+
+code: |
+  async def execute(context, params):
+      from backend.models.report import Report
+      from backend.models.datasource import Datasource
+      from backend.models.soft_delete import alive_filter, get_alive_by_id
+      from sqlalchemy import select, desc
+      
+      report_id = params.get('report_id')
+      
+      # Detail mode (when report_id provided)
+      if report_id:
+          report = await get_alive_by_id(context.db, Report, report_id)
+          
+          if not report:
+              return {"success": False, "error": f"Report {report_id} not found"}
+          
+          # Get datasource name
+          datasource_name = None
+          if report.datasource_id:
+              datasource = await get_alive_by_id(context.db, Datasource, report.datasource_id)
+              if datasource:
+                  datasource_name = datasource.name
+          
+          return {
+              "success": True,
+              "mode": "detail",
+              "report": {
+                  "id": report.id,
+                  "datasource_id": report.datasource_id,
+                  "datasource_name": datasource_name,
+                  "title": report.title,
+                  "trigger_type": report.trigger_type,
+                  "trigger_reason": report.trigger_reason,
+                  "content_md": report.content_md,
+                  "status": report.status,
+                  "error_message": report.error_message,
+                  "created_at": report.created_at.isoformat() if report.created_at else None,
+                  "completed_at": report.completed_at.isoformat() if report.completed_at else None
+              }
+          }
+      
+      # List mode with filters
+      datasource_id = params.get('datasource_id')
+      trigger_type = params.get('trigger_type')
+      status = params.get('status')
+      limit = params.get('limit', 20)
+      
+      # Build query with join
+      query = select(Report, Datasource.name.label('datasource_name')).join(
+          Datasource, (Report.datasource_id == Datasource.id) & alive_filter(Datasource), isouter=True
+      ).where(alive_filter(Report))
+      
+      if datasource_id:
+          query = query.where(Report.datasource_id == datasource_id)
+      if trigger_type:
+          query = query.where(Report.trigger_type == trigger_type)
+      if status:
+          query = query.where(Report.status == status)
+      
+      query = query.order_by(desc(Report.created_at)).limit(limit)
+      
+      # Execute query
+      result = await context.db.execute(query)
+      rows = result.all()
+      
+      # Format results
+      report = []
+      for row in rows:
+          report.append({
+              "id": row.Report.id,
+              "datasource_id": row.Report.datasource_id,
+              "datasource_name": row.datasource_name,
+              "title": row.Report.title,
+              "trigger_type": row.Report.trigger_type,
+              "trigger_reason": row.Report.trigger_reason,
+              "status": row.Report.status,
+              "error_message": row.Report.error_message,
+              "created_at": row.Report.created_at.isoformat() if row.Report.created_at else None,
+              "completed_at": row.Report.completed_at.isoformat() if row.Report.completed_at else None
+          })
+      
+      return {
+          "success": True,
+          "mode": "list",
+          "report": report,
+          "count": len(report),
+          "filters": {
+              "datasource_id": datasource_id,
+              "trigger_type": trigger_type,
+              "status": status,
+              "limit": limit
+          }
+      }

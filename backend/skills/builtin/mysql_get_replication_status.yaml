@@ -1,0 +1,40 @@
+id: mysql_get_replication_status
+name: MySQL Replication Status
+version: 1.0.0
+author: DBClaw
+category: mysql
+description: Get MySQL database replication/cluster status
+tags: [mysql, replication, cluster, high-availability]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The database connection ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+
+      # Try to get slave status
+      slave_result = await context.execute_query("SHOW SLAVE STATUS", datasource_id)
+
+      # Try to get master status
+      master_result = await context.execute_query("SHOW MASTER STATUS", datasource_id)
+
+      return {
+          "success": True,
+          "slave_status": {
+              "success": slave_result.get("success", False),
+              "data": slave_result.get("data", []),
+              "columns": slave_result.get("columns", [])
+          },
+          "master_status": {
+              "success": master_result.get("success", False),
+              "data": master_result.get("data", []),
+              "columns": master_result.get("columns", [])
+          }
+      }

@@ -1,0 +1,52 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Environment files (never bake secrets into image)
+.env
+.env.*
+!.env.example
+
+# Data (use volumes instead)
+data/
+uploads/
+
+# Dev/test files
+test_*.py
+*_test.py
+*.test.js
+tests/
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# IDE
+.vscode/
+.idea/
+.VSCodeCounter/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Misc
+*.bak
+*.tmp
