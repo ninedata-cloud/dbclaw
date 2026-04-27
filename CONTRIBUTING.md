@@ -59,7 +59,7 @@ cd dbclaw
 
 3. 添加上游仓库
 ```bash
-git remote add upstream https://github.com/ninedata/dbclaw.git
+git remote add upstream https://github.com/ninedata-community/dbclaw.git
 ```
 
 4. 创建 Python 虚拟环境
@@ -243,7 +243,7 @@ python -m pytest -m api
 
 - 查看现有的 Issues 和 Discussions
 - 在 GitHub Discussions 中提问
-- 发送邮件至：dev@ninedata.com
+- 发送邮件至：support@ninedata.com
 
 ## 许可证
 
@@ -251,7 +251,7 @@ python -m pytest -m api
 
 ## 致谢
 
-感谢所有为 DBClaw 做出贡献的开发者！
+感谢所有为 NineData DBClaw 做出贡献的开发者！
 
 您的贡献将被记录在：
 - Git 提交历史

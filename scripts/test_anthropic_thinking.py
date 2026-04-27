@@ -12,7 +12,7 @@
     --model claude-opus-4-6 \
     --mode adaptive \
     --effort high \
-    --max-tokens 2048
+    --max-tokens 32000
 """
 
 import argparse
@@ -57,9 +57,9 @@ async def run_test(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Anthropic thinking minimal test")
     parser.add_argument("--api-key", default=os.getenv("ANTHROPIC_API_KEY", ""), help="Anthropic API key")
-    parser.add_argument("--base-url", default="http://154.92.5.72:8080", help="Anthropic base URL")
-    parser.add_argument("--model", default="claude-opus-4-6", help="Model name")
-    parser.add_argument("--max-tokens", type=int, default=2048, help="Max output tokens")
+    parser.add_argument("--base-url", default=os.getenv("ANTHROPIC_BASE_URL", ""), help="Anthropic base URL")
+    parser.add_argument("--model", default=os.getenv("ANTHROPIC_MODEL", "claude-opus-4-6"), help="Model name")
+    parser.add_argument("--max-tokens", type=int, default=os.getenv("ANTHROPIC_MAX_TOKENS", 32000), help="Max output tokens")
     parser.add_argument(
         "--mode",
         choices=["adaptive", "enabled"],

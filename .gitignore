@@ -48,6 +48,8 @@ node_modules/
 .claude/
 .playwright-mcp
 .superpowers/
+AGENTS.md
+CLAUDE.md
 
 .VSCodeCounter/
 
