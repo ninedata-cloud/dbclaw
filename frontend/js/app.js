@@ -11,6 +11,7 @@
     Router.register('documents', () => DocumentsPage.render());
     Router.register('skills', () => SkillsPage.render());
     Router.register('system-configs', () => SystemConfigsPage.render());
+    Router.register('scheduled-tasks', () => ScheduledTasksPage.render());
     Router.register('users', () => UsersPage.render());
     Router.register('inspection', (routeParam) => InspectionPage.renderFromRoute(routeParam));
     Router.register('alerts', (routeParam) => AlertsPage.init({ routeParam }));

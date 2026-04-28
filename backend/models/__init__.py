@@ -31,6 +31,7 @@ from backend.models.login_log import LoginLog
 from backend.models.inspection_config import InspectionConfig
 from backend.models.inspection_trigger import InspectionTrigger
 from backend.models.skill import Skill, SkillExecution, SkillRating
+from backend.models.scheduled_task import ScheduledTask, ScheduledTaskRun
 
 __all__ = [
     "User",
@@ -68,4 +69,6 @@ __all__ = [
     "Skill",
     "SkillExecution",
     "SkillRating",
+    "ScheduledTask",
+    "ScheduledTaskRun",
 ]

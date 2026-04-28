@@ -20,6 +20,10 @@ POST_CREATE_MIGRATIONS: List[Callable[[], Awaitable[None]]] = [
     lambda: _run_add_inspection_trigger_error_message(),
     # 添加 ai_model.reasoning_effort 字段
     lambda: _run_add_ai_model_reasoning_effort(),
+    # 添加 scheduled_task 运行结果通知字段
+    lambda: _run_add_scheduled_task_notifications(),
+    # 移除 scheduled_task 任务级参数配置字段
+    lambda: _run_remove_scheduled_task_params(),
 ]
 
 
@@ -32,6 +36,18 @@ async def _run_add_inspection_trigger_error_message():
 async def _run_add_ai_model_reasoning_effort():
     """添加 ai_model.reasoning_effort 字段"""
     from backend.migrations.add_ai_model_reasoning_effort import upgrade
+    await upgrade()
+
+
+async def _run_add_scheduled_task_notifications():
+    """添加 scheduled_task 运行结果通知字段"""
+    from backend.migrations.add_scheduled_task_notifications import upgrade
+    await upgrade()
+
+
+async def _run_remove_scheduled_task_params():
+    """移除 scheduled_task 任务级参数配置字段"""
+    from backend.migrations.remove_scheduled_task_params import upgrade
     await upgrade()
 
 

@@ -308,6 +308,27 @@ async def _auto_resolve_recovered_alerts(
             return None
         return min(level_thresholds)
 
+    def _to_float_or_none(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _resolve_effective_recovery_threshold(alert: AlertMessage, rule: Dict[str, Any]) -> Optional[float]:
+        configured_threshold = _resolve_recovery_threshold(rule)
+        original_threshold = _to_float_or_none(alert.threshold_value)
+
+        if configured_threshold is None:
+            return original_threshold
+        if original_threshold is None:
+            return configured_threshold
+
+        # Do not let a raised rule threshold resolve alerts that are still above
+        # the threshold value captured when the alert was created.
+        return min(configured_threshold, original_threshold)
+
     try:
         normalized_threshold_rules: Dict[str, Any] = {}
         if isinstance(threshold_rules, dict):
@@ -360,8 +381,8 @@ async def _auto_resolve_recovered_alerts(
                 continue
 
             # Check if metric has recovered (is now below threshold).
-            # For multi-level threshold rules, use the lowest level threshold.
-            threshold = _resolve_recovery_threshold(threshold_rule)
+            # For multi-level threshold rules, keep using the lowest level threshold.
+            threshold = _resolve_effective_recovery_threshold(alert, threshold_rule)
             if threshold is None:
                 continue
 

@@ -298,6 +298,11 @@ async def lifespan(app: FastAPI):
     await task_manager.register_task("integration_scheduler", start_integration_scheduler())
     logger.info("Integration scheduler started")
 
+    # Start user-managed scheduled task scheduler
+    from backend.services.scheduled_task_scheduler import start_scheduled_task_scheduler
+    await start_scheduled_task_scheduler()
+    logger.info("Scheduled task scheduler started")
+
     # Start Feishu bot long connection client
     from backend.services.feishu_longconn_service import start_feishu_longconn_client
     await start_feishu_longconn_client()
@@ -322,12 +327,14 @@ async def lifespan(app: FastAPI):
     from backend.services.metric_collector import stop_scheduler
     from backend.services.ssh_connection_pool import stop_ssh_pool
     from backend.services.integration_scheduler import stop_integration_scheduler
+    from backend.services.scheduled_task_scheduler import stop_scheduled_task_scheduler
     from backend.services.dingtalk_stream_service import stop_dingtalk_stream_client
     from backend.services.feishu_longconn_service import stop_feishu_longconn_client
     from backend.services.weixin_bot_service import stop_weixin_bot_poller
 
     stop_scheduler()
     stop_integration_scheduler()
+    stop_scheduled_task_scheduler()
     await stop_dingtalk_stream_client()
     await stop_feishu_longconn_client()
     await stop_weixin_bot_poller()
@@ -415,6 +422,7 @@ def create_app() -> FastAPI:
         metrics,
         monitor_ws,
         query,
+        scheduled_tasks,
         system_configs as system_config,
         terminal_ws,
         users as user,
@@ -431,6 +439,7 @@ def create_app() -> FastAPI:
     app.include_router(monitor_ws.router)
     app.include_router(chat.router)
     app.include_router(query.router)
+    app.include_router(scheduled_tasks.router)
     app.include_router(instances.router)
     app.include_router(ai_model.router)
     app.include_router(documents.router)

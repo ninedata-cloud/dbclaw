@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-APP_VERSION = "0.10.0"
+APP_VERSION = "1.0.0"
 BUILD_INFO_PATH = Path(__file__).resolve().parents[1] / ".build-info"
 
 

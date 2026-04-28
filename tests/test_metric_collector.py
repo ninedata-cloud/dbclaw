@@ -18,6 +18,17 @@ class _AsyncSessionContext:
         return False
 
 
+class _ScalarsAllResult:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def scalars(self):
+        return self
+
+    def all(self):
+        return self._rows
+
+
 @pytest.mark.unit
 def test_subscribe_and_unsubscribe_updates_registry():
     metric_collector._metric_subscribers.clear()
@@ -202,3 +213,55 @@ async def test_collect_metrics_for_connection_skips_integration_metric_source(mo
     await metric_collector.collect_metrics_for_connection(7)
 
     get_connector.assert_not_called()
+
+
+@pytest.mark.service
+@pytest.mark.asyncio
+async def test_auto_resolve_recovered_alerts_uses_original_threshold_when_rule_is_raised(mocker):
+    db = AsyncMock()
+    alert = SimpleNamespace(
+        id=1,
+        metric_name="cpu_usage",
+        threshold_value=75,
+    )
+    db.execute = AsyncMock(return_value=_ScalarsAllResult([alert]))
+    resolve_alert = mocker.patch(
+        "backend.services.alert_service.AlertService.resolve_alert",
+        AsyncMock(),
+    )
+
+    await metric_collector._auto_resolve_recovered_alerts(
+        db=db,
+        datasource_id=10,
+        metrics={"cpu_usage": 76.6},
+        threshold_rules={"cpu_usage": {"threshold": 80, "duration": 60}},
+        current_violations=[],
+    )
+
+    resolve_alert.assert_not_awaited()
+
+
+@pytest.mark.service
+@pytest.mark.asyncio
+async def test_auto_resolve_recovered_alerts_resolves_below_original_threshold(mocker):
+    db = AsyncMock()
+    alert = SimpleNamespace(
+        id=1,
+        metric_name="cpu_usage",
+        threshold_value=75,
+    )
+    db.execute = AsyncMock(return_value=_ScalarsAllResult([alert]))
+    resolve_alert = mocker.patch(
+        "backend.services.alert_service.AlertService.resolve_alert",
+        AsyncMock(),
+    )
+
+    await metric_collector._auto_resolve_recovered_alerts(
+        db=db,
+        datasource_id=10,
+        metrics={"cpu_usage": 74.9},
+        threshold_rules={"cpu_usage": {"threshold": 80, "duration": 60}},
+        current_violations=[],
+    )
+
+    resolve_alert.assert_awaited_once_with(db, 1, resolved_value=74.9)

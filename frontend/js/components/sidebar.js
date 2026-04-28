@@ -25,6 +25,7 @@ const Sidebar = {
             { id: 'datasources', icon: 'database', label: '数据源管理' },
             { id: 'hosts', icon: 'terminal', label: '主机管理' },
             { id: 'integrations', icon: 'package', label: '外部集成管理' },
+            { id: 'scheduled-tasks', icon: 'calendar-clock', label: '任务调度管理' },
             { id: 'system-configs', icon: 'settings', label: '系统参数配置' },
         ]},
     ],

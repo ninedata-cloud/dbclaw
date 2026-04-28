@@ -296,6 +296,21 @@ const API = {
     setDefaultAIModel(id) { return this.post(`/api/ai-models/${id}/set-default`); },
     testAIModelChat(id, data) { return this.post(`/api/ai-models/${id}/test-chat`, data); },
 
+    // Scheduled task endpoints
+    getScheduledTasks(params = null) {
+        const queryString = params ? `?${new URLSearchParams(params).toString()}` : '';
+        return this.get(`/api/scheduled-tasks${queryString}`);
+    },
+    createScheduledTask(data) { return this.post('/api/scheduled-tasks', data); },
+    updateScheduledTask(id, data) { return this.put(`/api/scheduled-tasks/${id}`, data); },
+    deleteScheduledTask(id) { return this.delete(`/api/scheduled-tasks/${id}`); },
+    runScheduledTask(id) { return this.post(`/api/scheduled-tasks/${id}/run`, {}); },
+    getScheduledTaskRuns(id, params = null) {
+        const queryString = params ? `?${new URLSearchParams(params).toString()}` : '';
+        return this.get(`/api/scheduled-tasks/${id}/runs${queryString}`);
+    },
+    getScheduledTaskRun(runId) { return this.get(`/api/scheduled-task-runs/${runId}`); },
+
     getAlertTemplates() { return this.get('/api/inspections/templates'); },
     createAlertTemplate(data) { return this.post('/api/inspections/templates', data); },
     updateAlertTemplate(id, data) { return this.put(`/api/inspections/templates/${id}`, data); },
