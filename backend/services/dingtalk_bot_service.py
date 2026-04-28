@@ -13,6 +13,7 @@ from backend.models.diagnostic_session import DiagnosticSession
 from backend.models.integration import Integration
 from backend.models.integration_bot_binding import IntegrationBotBinding
 from backend.models.soft_delete import alive_filter
+from backend.services import config_service
 from backend.services.chat_orchestration_service import prepare_user_turn, process_stream_events, resolve_pending_approval
 from backend.services.feishu_service import format_reply_text
 from backend.utils.datetime_helper import now
@@ -22,6 +23,8 @@ logger = logging.getLogger(__name__)
 PENDING_APPROVALS: dict[int, dict[str, dict[str, Any]]] = {}
 BOT_HISTORY_WINDOW_HOURS = 24
 _MESSAGE_LOCKS: dict[str, asyncio.Lock] = {}
+DINGTALK_CLIENT_ID_KEY = "dingtalk_client_id"
+DINGTALK_CLIENT_SECRET_KEY = "dingtalk_client_secret"
 
 _CONFIG_VAR_PATTERNS = {
     "client_id": [
@@ -62,6 +65,21 @@ def _extract_dingtalk_bot_config(integration: Integration | None) -> dict[str, s
                 config[key] = match.group(2)
                 break
     return config
+
+
+async def get_dingtalk_bot_credentials(db: AsyncSession, integration: Integration | None = None) -> dict[str, str]:
+    """优先从系统参数读取，兼容旧版 Integration 代码内配置。"""
+    client_id = str(await config_service.get_config(db, DINGTALK_CLIENT_ID_KEY, "") or "").strip()
+    client_secret = str(await config_service.get_config(db, DINGTALK_CLIENT_SECRET_KEY, "") or "").strip()
+    if client_id and client_secret:
+        return {"client_id": client_id, "client_secret": client_secret}
+
+    # 向后兼容：旧版本仍可能把凭据写在 Integration 代码顶部
+    legacy_config = _extract_dingtalk_bot_config(integration)
+    return {
+        "client_id": str(legacy_config.get("client_id") or "").strip(),
+        "client_secret": str(legacy_config.get("client_secret") or "").strip(),
+    }
 
 
 def _extract_text_from_message(message: dict[str, Any]) -> str:

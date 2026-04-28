@@ -7,7 +7,7 @@ import urllib.parse
 from typing import Any
 
 from backend.database import async_session
-from backend.services.dingtalk_bot_service import DingTalkBotService, _extract_dingtalk_bot_config
+from backend.services.dingtalk_bot_service import DingTalkBotService, get_dingtalk_bot_credentials
 
 logger = logging.getLogger(__name__)
 
@@ -164,12 +164,13 @@ async def start_dingtalk_stream_client() -> None:
         )
         return
 
-    config = _extract_dingtalk_bot_config(integration)
+    async with async_session() as db:
+        config = await get_dingtalk_bot_credentials(db, integration=integration)
     client_id = (config.get("client_id") or "").strip()
     client_secret = (config.get("client_secret") or "").strip()
 
     if not client_id or not client_secret:
-        logger.info("钉钉机器人未配置 CLIENT_ID/CLIENT_SECRET，跳过长连接启动")
+        logger.info("钉钉机器人未在系统参数中配置 dingtalk_client_id/dingtalk_client_secret，跳过长连接启动")
         await _update_binding_status(login_status="not_ready", last_error="")
         return
 

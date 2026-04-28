@@ -66,8 +66,8 @@ code: |
               cache_hit_ratio = (blocks_hit / total_blocks) * 100
               metrics["cache_hit_ratio"] = f"{cache_hit_ratio:.2f}%"
 
-          metrics["active_connections"] = data[0]
-          metrics["total_connections"] = max_connections
+          metrics["connections_active"] = data[0]
+          metrics["connections_total"] = max_connections
           metrics["transactions_committed"] = data[1]
           metrics["transactions_rolled_back"] = data[2]
           metrics["deadlocks"] = data[13]

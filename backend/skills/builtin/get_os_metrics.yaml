@@ -33,13 +33,6 @@ code: |
               "message": "必须提供 datasource_id 或 host_id 参数之一"
           }
 
-      if datasource_id and host_id:
-          return {
-              "success": False,
-              "error": "conflicting_parameters",
-              "message": "不能同时提供 datasource_id 和 host_id 参数"
-          }
-
       # Determine execution method
       if datasource_id:
           # Check if datasource has host configured
@@ -60,6 +53,14 @@ code: |
                   "success": False,
                   "error": "no_host_configured",
                   "message": f"数据源 {datasource.name} (ID: {datasource_id}) 未配置主机连接，无法收集操作系统指标。如需收集OS指标，请在数据源配置中关联主机。"
+              }
+
+          # If both provided, ensure they refer to the same host
+          if host_id and datasource.host_id != host_id:
+              return {
+                  "success": False,
+                  "error": "mismatched_parameters",
+                  "message": "datasource_id 和 host_id不匹配"
               }
 
           # Use datasource-based execution

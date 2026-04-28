@@ -60,7 +60,7 @@ class ThresholdChecker:
                 }
                 Example (custom expression): {
                     "custom_expression": {
-                        "expression": "cpu_usage > 50 and connections > 20",
+                    "expression": "cpu_usage > 50 and connections_active > 20",
                         "duration": 60
                     }
                 }
@@ -345,7 +345,7 @@ class ThresholdChecker:
         context = {}
 
         # Extract common metrics
-        metric_names = ["cpu_usage", "memory_usage", "disk_usage", "connections", "qps", "tps"]
+        metric_names = ["cpu_usage", "memory_usage", "disk_usage", "connections_active", "qps", "tps"]
 
         for metric_name in metric_names:
             value = self._extract_metric_value(metrics, metric_name)
@@ -359,7 +359,7 @@ class ThresholdChecker:
         Evaluate custom expression using Python's eval().
 
         Args:
-            expression: Python expression string (e.g., "cpu_usage > 50 and connections > 20")
+            expression: Python expression string (e.g., "cpu_usage > 50 and connections_active > 20")
             metrics: Dictionary with metric names as keys and float values
 
         Returns:
@@ -401,7 +401,7 @@ class ThresholdChecker:
             "cpu_usage": ["cpu_usage_percent", "cpu.usage_percent", "cpu_percent"],
             "memory_usage": ["memory_usage_percent", "memory.usage_percent", "mem_percent"],
             "disk_usage": ["disk_usage_percent", "disk.usage_percent", "disk_percent"],
-            "connections": ["threads_running", "connections_active", "active_connections", "connection_count"],
+            "connections_active": ["threads_running", "active_connections", "connection_count"],
         }
 
         if metric_name in mappings:

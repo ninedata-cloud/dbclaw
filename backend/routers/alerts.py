@@ -109,7 +109,7 @@ async def _build_event_baseline_comparisons(db: AsyncSession, event) -> list[Ale
             metric_names.append(metric_name)
 
     if not metric_names and getattr(event, "fault_domain", None) == "performance":
-        metric_names = ["cpu_usage", "disk_usage", "connections"]
+        metric_names = ["cpu_usage", "disk_usage", "connections_active"]
     if not metric_names:
         return []
 

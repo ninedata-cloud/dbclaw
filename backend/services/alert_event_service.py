@@ -30,7 +30,7 @@ def infer_event_strategy(alert_type: str | None, metric_name: str | None) -> tup
         return "storage", "storage"
     if "replication" in metric or "lag" in metric:
         return "replication", "replication"
-    if metric in {"cpu_usage", "memory_usage", "connections", "connections_active", "qps", "tps"}:
+    if metric in {"cpu_usage", "memory_usage", "connections_active", "qps", "tps"}:
         return "performance", "performance"
     if alert_kind == "baseline_deviation":
         return "baseline", "performance"

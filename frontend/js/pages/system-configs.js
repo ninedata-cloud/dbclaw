@@ -3,6 +3,10 @@ const SystemConfigsPage = {
     configs: [],
     filteredConfigs: [],
     editingId: null,
+    sortState: {
+        key: 'key',
+        direction: 'asc'
+    },
 
     render() {
         const content = DOM.$('#page-content');
@@ -50,6 +54,7 @@ const SystemConfigsPage = {
         try {
             this.configs = await API.get('/api/system-configs');
             this.filteredConfigs = [...this.configs];
+            this.applySort();
 
             Header.render('系统参数配置', this._buildHeaderActions(this.getCategories()));
 
@@ -59,11 +64,11 @@ const SystemConfigsPage = {
                         <table class="configs-table">
                             <thead>
                                 <tr>
-                                    <th>参数名</th>
-                                    <th>参数值</th>
-                                    <th>类型</th>
-                                    <th>分类</th>
-                                    <th>描述</th>
+                                    ${this.renderSortableHeader('key', '参数名')}
+                                    ${this.renderSortableHeader('value', '参数值')}
+                                    ${this.renderSortableHeader('value_type', '类型')}
+                                    ${this.renderSortableHeader('category', '分类')}
+                                    ${this.renderSortableHeader('description', '描述')}
                                     <th>操作</th>
                                 </tr>
                             </thead>
@@ -108,12 +113,76 @@ const SystemConfigsPage = {
             const matchesCategory = !category || config.category === category;
             return matchesSearch && matchesCategory;
         });
+        this.applySort();
 
         const tbody = DOM.$('#configs-tbody');
         if (tbody) {
             tbody.innerHTML = this.renderConfigRows();
             DOM.createIcons();
         }
+    },
+
+    renderSortableHeader(key, label) {
+        const isActive = this.sortState.key === key;
+        const sortIcon = isActive
+            ? (this.sortState.direction === 'asc' ? '↑' : '↓')
+            : '↕';
+        const sortClass = isActive ? 'active' : '';
+        return `
+            <th class="sortable-header ${sortClass}" onclick="SystemConfigsPage.toggleSort('${key}')">
+                <span>${label}</span>
+                <span class="sort-indicator">${sortIcon}</span>
+            </th>
+        `;
+    },
+
+    toggleSort(key) {
+        if (this.sortState.key === key) {
+            this.sortState.direction = this.sortState.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+            this.sortState.key = key;
+            this.sortState.direction = 'asc';
+        }
+        this.applySort();
+        this.renderTable();
+    },
+
+    applySort() {
+        const { key, direction } = this.sortState;
+        const multiplier = direction === 'asc' ? 1 : -1;
+
+        this.filteredConfigs.sort((a, b) => {
+            const left = this._getSortableValue(a, key);
+            const right = this._getSortableValue(b, key);
+            return left.localeCompare(right, 'zh-Hans-CN', { numeric: true }) * multiplier;
+        });
+    },
+
+    _getSortableValue(config, key) {
+        const value = config[key];
+        if (value === null || value === undefined) return '';
+        return String(value).toLowerCase();
+    },
+
+    renderTable() {
+        const table = DOM.$('.configs-table');
+        if (!table) return;
+        table.innerHTML = `
+            <thead>
+                <tr>
+                    ${this.renderSortableHeader('key', '参数名')}
+                    ${this.renderSortableHeader('value', '参数值')}
+                    ${this.renderSortableHeader('value_type', '类型')}
+                    ${this.renderSortableHeader('category', '分类')}
+                    ${this.renderSortableHeader('description', '描述')}
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="configs-tbody">
+                ${this.renderConfigRows()}
+            </tbody>
+        `;
+        DOM.createIcons();
     },
 
     renderConfigRows() {

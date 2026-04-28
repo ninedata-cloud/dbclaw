@@ -43,7 +43,7 @@ code: |
       if result.get("data") and len(result["data"]) > 0:
           data = result["data"][0]
           metrics["database_name"] = data[0]
-          metrics["active_connections"] = data[1]
+          metrics["connections_active"] = data[1]
           metrics["active_requests"] = data[2]
           metrics["blocked_sessions"] = data[5]
           metrics["data_size_mb"] = data[6]

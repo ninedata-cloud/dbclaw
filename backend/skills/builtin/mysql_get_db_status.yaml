@@ -34,12 +34,12 @@ code: |
 
       # Extract key metrics
       metrics = {
-          "connections": status_dict.get("Threads_connected", "0"),
+          "connections_total": status_dict.get("Threads_connected", "0"),
           "max_connections": status_dict.get("Max_used_connections", "0"),
           "queries": status_dict.get("Queries", "0"),
           "slow_queries": status_dict.get("Slow_queries", "0"),
           "uptime": status_dict.get("Uptime", "0"),
-          "threads_running": status_dict.get("Threads_running", "0"),
+          "connections_active": status_dict.get("Threads_running", "0"),
           "innodb_buffer_pool_hit_rate": "0",
       }
 

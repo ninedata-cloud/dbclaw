@@ -12,7 +12,8 @@
         linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 16px;
-    padding: 20px;
+    padding: 16px;
+    margin-bottom: 8px;
     box-shadow: var(--shadow-md);
 }
 

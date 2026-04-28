@@ -48,7 +48,7 @@ class InspectionConfig(Base):
     #           {"severity": "critical", "threshold": 95, "duration": 60}
     #       ]
     #   },
-    #   "connections": {
+    #   "connections_active": {
     #       "levels": [
     #           {"severity": "low", "threshold": 20, "duration": 60},
     #           {"severity": "medium", "threshold": 30, "duration": 60},

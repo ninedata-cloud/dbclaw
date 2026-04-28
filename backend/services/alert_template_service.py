@@ -29,7 +29,7 @@ DEFAULT_THRESHOLD_RULES = {
             {"severity": "critical", "threshold": 95, "duration": 0},
         ]
     },
-    "connections": {
+    "connections_active": {
         "levels": [
             {"severity": "low", "threshold": 20, "duration": 60},
             {"severity": "medium", "threshold": 30, "duration": 60},
@@ -188,7 +188,7 @@ DEFAULT_ALERT_TEMPLATES: list[dict[str, Any]] = [
                         {"severity": "critical", "threshold": 95, "duration": 0},
                     ]
                 },
-                "connections": {
+                "connections_active": {
                     "levels": [
                         {"severity": "low", "threshold": 20, "duration": 60},
                         {"severity": "medium", "threshold": 20, "duration": 60},
@@ -206,7 +206,7 @@ DEFAULT_ALERT_TEMPLATES: list[dict[str, Any]] = [
                 "metrics": {
                     "cpu_usage": {"enabled": True},
                     "disk_usage": {"enabled": True},
-                    "connections": {"enabled": True},
+                    "connections_active": {"enabled": True},
                 },
             },
             "event_ai_config": {
@@ -242,7 +242,7 @@ DEFAULT_ALERT_TEMPLATES: list[dict[str, Any]] = [
                         {"severity": "critical", "threshold": 95, "duration": 0},
                     ]
                 },
-                "connections": {
+                "connections_active": {
                     "levels": [
                         {"severity": "low", "threshold": 20, "duration": 60},
                         {"severity": "medium", "threshold": 20, "duration": 60},
@@ -260,7 +260,7 @@ DEFAULT_ALERT_TEMPLATES: list[dict[str, Any]] = [
                 "metrics": {
                     "cpu_usage": {"enabled": True},
                     "disk_usage": {"enabled": True},
-                    "connections": {"enabled": True},
+                    "connections_active": {"enabled": True},
                 },
             },
             "event_ai_config": {
@@ -297,7 +297,7 @@ DEFAULT_ALERT_TEMPLATES: list[dict[str, Any]] = [
                         {"severity": "critical", "threshold": 97, "duration": 0},
                     ]
                 },
-                "connections": {
+                "connections_active": {
                     "levels": [
                         {"severity": "low", "threshold": 20, "duration": 300},
                         {"severity": "medium", "threshold": 20, "duration": 300},
@@ -420,7 +420,7 @@ def summarize_alert_template_config(config: Optional[dict[str, Any]]) -> str:
             parts.append(f"表达式 {compact}")
         else:
             short_rules = []
-            for metric_name in ("cpu_usage", "disk_usage", "connections"):
+            for metric_name in ("cpu_usage", "disk_usage", "connections_active"):
                 rule = threshold_rules.get(metric_name)
                 if isinstance(rule, dict):
                     # Check if multi-level configuration

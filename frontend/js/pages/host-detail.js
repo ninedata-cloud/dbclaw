@@ -10,7 +10,7 @@ const HostDetailPage = {
     processFilters: { search: '', user: '' },
     processSort: { field: 'cpu_percent', direction: 'desc' },
     processPollTimer: null,
-    currentTimeRange: 1440, // default 24 hours in minutes
+    currentTimeRange: 60, // default 1 hour in minutes
 
     validTabs: ['info', 'monitor', 'ai', 'processes', 'network', 'terminal'],
 
@@ -52,6 +52,69 @@ const HostDetailPage = {
             return (0).toFixed(digits);
         }
         return numericValue.toFixed(digits);
+    },
+
+    _pickFirstNumeric(data, keys = []) {
+        for (const key of keys) {
+            const value = Number(data?.[key]);
+            if (Number.isFinite(value) && value >= 0) {
+                return value;
+            }
+        }
+        return null;
+    },
+
+    _parseSizeToBytes(value) {
+        if (value === null || value === undefined) return null;
+        const raw = String(value).trim();
+        if (!raw) return null;
+
+        // 支持 "20G" / "20GB" / "20GiB" / "1024" 等常见格式
+        const match = raw.match(/^([\d.]+)\s*([kmgtpe]?)(i?b?)?$/i);
+        if (!match) return null;
+
+        const numeric = Number(match[1]);
+        if (!Number.isFinite(numeric) || numeric < 0) return null;
+
+        const unit = (match[2] || '').toUpperCase();
+        const multipliers = {
+            '': 1,
+            K: 1024,
+            M: 1024 ** 2,
+            G: 1024 ** 3,
+            T: 1024 ** 4,
+            P: 1024 ** 5,
+            E: 1024 ** 6
+        };
+        const multiplier = multipliers[unit];
+        if (!multiplier) return null;
+
+        return numeric * multiplier;
+    },
+
+    _aggregateDiskCapacityFromConfig(hostConfig) {
+        const disks = Array.isArray(hostConfig?.disk) ? hostConfig.disk : [];
+        if (!disks.length) return { totalBytes: null, usedBytes: null };
+
+        let totalBytes = 0;
+        let usedBytes = 0;
+        let validCount = 0;
+
+        for (const disk of disks) {
+            const diskTotal = this._parseSizeToBytes(disk?.size);
+            const diskUsed = this._parseSizeToBytes(disk?.used);
+            if (!Number.isFinite(diskTotal) || !Number.isFinite(diskUsed) || diskTotal <= 0 || diskUsed < 0) {
+                continue;
+            }
+            totalBytes += diskTotal;
+            usedBytes += Math.min(diskUsed, diskTotal);
+            validCount += 1;
+        }
+
+        if (!validCount || totalBytes <= 0) {
+            return { totalBytes: null, usedBytes: null };
+        }
+        return { totalBytes, usedBytes };
     },
 
     async render(routeParam = '') {
@@ -656,10 +719,33 @@ const HostDetailPage = {
         const memoryUsage = this._formatPercent(metric?.memory_usage);
         const diskUsage = this._formatPercent(metric?.disk_usage);
 
-        const memoryTotal = data.memory_total_kb ? this._formatBytes(data.memory_total_kb * 1024) : '未知';
-        const diskTotal = data.disk_total ? this._formatBytes(data.disk_total) : '未知';
-        const memoryUsed = data.memory_used_kb ? this._formatBytes(data.memory_used_kb * 1024) : '未知';
-        const diskUsed = data.disk_used ? this._formatBytes(data.disk_used) : '未知';
+        const memoryTotalKb = this._pickFirstNumeric(data, ['memory_total_kb']);
+        const memoryUsedKb = this._pickFirstNumeric(data, ['memory_used_kb']);
+        const memoryTotalBytes = this._pickFirstNumeric(data, ['memory_total_bytes']) ?? (memoryTotalKb !== null ? memoryTotalKb * 1024 : null);
+        const memoryUsedBytes = this._pickFirstNumeric(data, ['memory_used_bytes']) ?? (memoryUsedKb !== null ? memoryUsedKb * 1024 : null);
+        let diskTotalBytes = this._pickFirstNumeric(data, ['disk_total_bytes', 'disk_total']);
+        let diskUsedBytes = this._pickFirstNumeric(data, ['disk_used_bytes', 'disk_used']);
+
+        // 兜底：监控指标缺少磁盘容量字段时，从主机配置 disk 列表聚合
+        if (!Number.isFinite(diskTotalBytes) || !Number.isFinite(diskUsedBytes)) {
+            try {
+                const hostConfig = await API.getHostConfig(this.currentHost.id);
+                const aggregatedDisk = this._aggregateDiskCapacityFromConfig(hostConfig);
+                if (!Number.isFinite(diskTotalBytes) && Number.isFinite(aggregatedDisk.totalBytes)) {
+                    diskTotalBytes = aggregatedDisk.totalBytes;
+                }
+                if (!Number.isFinite(diskUsedBytes) && Number.isFinite(aggregatedDisk.usedBytes)) {
+                    diskUsedBytes = aggregatedDisk.usedBytes;
+                }
+            } catch (error) {
+                console.warn('Failed to load host config disk fallback:', error);
+            }
+        }
+
+        const memoryTotal = Number.isFinite(memoryTotalBytes) ? this._formatBytes(memoryTotalBytes) : '未知';
+        const diskTotal = Number.isFinite(diskTotalBytes) ? this._formatBytes(diskTotalBytes) : '未知';
+        const memoryUsed = Number.isFinite(memoryUsedBytes) ? this._formatBytes(memoryUsedBytes) : '未知';
+        const diskUsed = Number.isFinite(diskUsedBytes) ? this._formatBytes(diskUsedBytes) : '未知';
 
         container.innerHTML = `
             <div class="host-monitor-page">
@@ -668,13 +754,13 @@ const HostDetailPage = {
                     <div class="instance-embedded-title">性能监控</div>
                     <div style="display: flex; gap: 12px; align-items: center;">
                         <select id="monitor-time-range" class="filter-select">
-                            <option value="1">最近 1 分钟</option>
-                            <option value="10">最近 10 分钟</option>
-                            <option value="60">最近 1 小时</option>
-                            <option value="360">最近 6 小时</option>
-                            <option value="1440" selected>最近 1 天</option>
-                            <option value="10080">最近 7 天</option>
-                            <option value="43200">最近 1 个月</option>
+                            <option value="1" ${this.currentTimeRange === 1 ? 'selected' : ''}>最近 1 分钟</option>
+                            <option value="10" ${this.currentTimeRange === 10 ? 'selected' : ''}>最近 10 分钟</option>
+                            <option value="60" ${this.currentTimeRange === 60 ? 'selected' : ''}>最近 1 小时</option>
+                            <option value="360" ${this.currentTimeRange === 360 ? 'selected' : ''}>最近 6 小时</option>
+                            <option value="1440" ${this.currentTimeRange === 1440 ? 'selected' : ''}>最近 1 天</option>
+                            <option value="10080" ${this.currentTimeRange === 10080 ? 'selected' : ''}>最近 7 天</option>
+                            <option value="43200" ${this.currentTimeRange === 43200 ? 'selected' : ''}>最近 1 个月</option>
                             <option value="custom">自定义时间</option>
                         </select>
                     </div>

@@ -161,6 +161,12 @@ async def lifespan(app: FastAPI):
             ("tencentcloud_secret_key", "", "string", "腾讯云 SecretKey（用于 RDS/TDSQL-C 监控数据采集）", True),
         ]
 
+        # Seed default DingTalk bot configs
+        dingtalk_bot_defaults = [
+            ("dingtalk_client_id", "", "string", "钉钉机器人 Client ID（用于 Stream 模式长连接）", False),
+            ("dingtalk_client_secret", "", "string", "钉钉机器人 Client Secret（用于 Stream 模式长连接）", True),
+        ]
+
         from sqlalchemy import select as _select
         from backend.models.system_config import SystemConfig as _SystemConfig
 
@@ -196,6 +202,17 @@ async def lifespan(app: FastAPI):
 
         # Seed Tencent Cloud configs
         for key, default_val, val_type, desc, encrypted in tencentcloud_defaults:
+            _exists = await _db.execute(_select(_SystemConfig).where(_SystemConfig.key == key))
+            if not _exists.scalar_one_or_none():
+                await _config_service.set_config(
+                    _db, key=key, value=default_val,
+                    value_type=val_type, description=desc,
+                    category="integration",
+                    is_encrypted=encrypted,
+                )
+
+        # Seed DingTalk bot configs
+        for key, default_val, val_type, desc, encrypted in dingtalk_bot_defaults:
             _exists = await _db.execute(_select(_SystemConfig).where(_SystemConfig.key == key))
             if not _exists.scalar_one_or_none():
                 await _config_service.set_config(

@@ -61,6 +61,15 @@ AI_POLICY_FALLBACK_TITLES = {
     "AI 智能判警",
     "AI 判警",
 }
+METRIC_DISPLAY_LABELS = {
+    "connections_active": "活跃连接数",
+    "active_connections": "活跃连接数",
+    "connection_count": "活跃连接数",
+    "threads_running": "活跃连接数",
+    "connections_total": "总连接数",
+    "total_connections": "总连接数",
+    "threads_connected": "总连接数",
+}
 DEFAULT_EVENT_AI_CONFIG = {
     "enabled": True,
     "trigger_on_create": True,
@@ -243,6 +252,22 @@ def _compact_summary_text(text: Optional[str], *, max_chars: int = 120) -> Optio
     return cleaned
 
 
+def _display_metric_name(metric_name: Optional[str]) -> Optional[str]:
+    normalized = (metric_name or "").strip()
+    if not normalized:
+        return None
+    return METRIC_DISPLAY_LABELS.get(normalized.lower(), normalized)
+
+
+def _build_metric_semantic_hint(metric_name: Optional[str]) -> Optional[str]:
+    normalized = (metric_name or "").strip().lower()
+    if normalized in {"connections_active", "active_connections", "connection_count", "threads_running"}:
+        return "指标口径说明：connections_active/threads_running 表示活跃连接数（当前执行或待执行的会话），不是最大连接数或总连接上限。"
+    if normalized in {"connections_total", "total_connections", "threads_connected"}:
+        return "指标口径说明：该指标表示总连接数（已建立会话总量）。"
+    return None
+
+
 def is_connection_status_alert(alert_type: Optional[str], metric_name: Optional[str]) -> bool:
     return (alert_type or "") == "system_error" and (metric_name or "") == "connection_status"
 
@@ -394,6 +419,8 @@ def build_alert_title_and_content(
     threshold_value: Optional[float],
     trigger_reason: Optional[str],
 ) -> tuple[str, str]:
+    metric_display_name = _display_metric_name(metric_name) or metric_name
+
     if is_connection_status_alert(alert_type, metric_name):
         detail = extract_connection_failure_detail(trigger_reason)
         title = "数据库连接失败"
@@ -402,10 +429,10 @@ def build_alert_title_and_content(
             content_parts.append(f"错误详情：{detail}")
         return title, "\n".join(content_parts)
 
-    if alert_type == "threshold_violation" and metric_name:
-        title = f"{metric_name} 阈值告警"
-    elif alert_type == "baseline_deviation" and metric_name:
-        title = f"{metric_name} 基线偏移告警"
+    if alert_type == "threshold_violation" and metric_display_name:
+        title = f"{metric_display_name} 阈值告警"
+    elif alert_type == "baseline_deviation" and metric_display_name:
+        title = f"{metric_display_name} 基线偏移告警"
     elif alert_type == "ai_policy_violation":
         title = build_alert_display_title(
             alert_type=alert_type,
@@ -417,8 +444,8 @@ def build_alert_title_and_content(
         title = f"{alert_type.replace('_', ' ').title()}"
 
     content_parts = []
-    if metric_name and metric_value is not None:
-        content_parts.append(f"指标：{metric_name} = {metric_value:.2f}")
+    if metric_display_name and metric_value is not None:
+        content_parts.append(f"指标：{metric_display_name} = {metric_value:.2f}")
     if threshold_value is not None:
         content_parts.append(f"阈值：{threshold_value:.2f}")
     if trigger_reason:
@@ -574,11 +601,13 @@ def _build_alert_diagnosis_draft(
         metric_value = getattr(latest_alert, "metric_value", None)
         threshold_value = getattr(latest_alert, "threshold_value", None)
 
+    metric_label = _display_metric_name(metric_name)
+    metric_semantic_hint = _build_metric_semantic_hint(metric_name)
     metric_info = "未知"
-    if metric_name and metric_value is not None:
-        metric_info = f"{metric_name}={metric_value}"
-    elif metric_name:
-        metric_info = metric_name
+    if metric_label and metric_value is not None:
+        metric_info = f"{metric_label}={metric_value}"
+    elif metric_label:
+        metric_info = metric_label
 
     threshold_info = f"阈值：{threshold_value}" if threshold_value is not None else None
     trigger_reason = _normalize_prompt_field(getattr(latest_alert, "trigger_reason", None), max_chars=320)
@@ -603,6 +632,7 @@ def _build_alert_diagnosis_draft(
         f"类型：{event.alert_type or '未知'}",
         f"指标：{metric_info}",
         threshold_info,
+        metric_semantic_hint,
         f"最近触发原因：{trigger_reason}" if trigger_reason else None,
         f"最近告警内容：{alert_content}" if alert_content else None,
         f"首次时间：{first_seen}",

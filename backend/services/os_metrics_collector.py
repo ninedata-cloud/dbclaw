@@ -54,6 +54,9 @@ class OSMetricsCollector:
             disk_usage = await OSMetricsCollector._get_linux_disk_usage(ssh_client)
             if disk_usage is not None:
                 metrics['disk_usage'] = disk_usage
+            disk_stats = await OSMetricsCollector._get_linux_disk_stats(ssh_client)
+            if disk_stats:
+                metrics.update(disk_stats)
 
             # 4. 磁盘 IO
             disk_io = await OSMetricsCollector._get_linux_disk_io(ssh_client)
@@ -79,6 +82,63 @@ class OSMetricsCollector:
             metrics['error'] = str(e)
 
         return metrics
+
+    @staticmethod
+    async def _get_linux_disk_stats(ssh_client) -> Dict[str, float]:
+        """获取根分区磁盘容量（字节）及使用率。"""
+        def _build_stats(total_bytes: int, used_bytes: int, free_bytes: int, usage_percent_raw: str | None = None) -> Dict[str, float]:
+            stats: Dict[str, float] = {
+                "disk_total_bytes": float(total_bytes),
+                "disk_used_bytes": float(used_bytes),
+                "disk_free_bytes": float(free_bytes),
+                # 兼容历史字段（字节）
+                "disk_total": float(total_bytes),
+                "disk_used": float(used_bytes),
+            }
+            if usage_percent_raw is not None:
+                try:
+                    stats["disk_usage_percent"] = float(str(usage_percent_raw).replace("%", ""))
+                except ValueError:
+                    pass
+            return stats
+
+        # GNU coreutils 路径（优先）
+        try:
+            output = await OSMetricsCollector._exec(
+                ssh_client,
+                "df -B1 / | awk 'NR==2 {print $2, $3, $4, $5}'"
+            )
+            if output:
+                parts = output.split()
+                if len(parts) >= 3:
+                    return _build_stats(
+                        int(parts[0]),
+                        int(parts[1]),
+                        int(parts[2]),
+                        parts[3] if len(parts) >= 4 else None,
+                    )
+        except Exception:
+            pass
+
+        # POSIX 兜底路径：-kP 在多数 Linux/Unix 上可用，单位为 KB
+        try:
+            output = await OSMetricsCollector._exec(
+                ssh_client,
+                "df -kP / | awk 'NR==2 {print $2, $3, $4, $5}'"
+            )
+            if output:
+                parts = output.split()
+                if len(parts) >= 3:
+                    return _build_stats(
+                        int(parts[0]) * 1024,
+                        int(parts[1]) * 1024,
+                        int(parts[2]) * 1024,
+                        parts[3] if len(parts) >= 4 else None,
+                    )
+        except Exception:
+            pass
+
+        return {}
 
     @staticmethod
     async def _exec(ssh_client, command: str) -> str:

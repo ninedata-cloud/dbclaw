@@ -1541,7 +1541,6 @@ const AlertsPage = {
         const labels = {
             cpu_usage: 'CPU 使用率',
             disk_usage: '磁盘使用率',
-            connections: '活跃连接',
             connections_active: '活跃连接',
             connection_status: '连接状态',
             qps: 'QPS',

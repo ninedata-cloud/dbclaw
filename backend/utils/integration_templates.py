@@ -1986,7 +1986,7 @@ DINGTALK_BOT_TEMPLATE = {
     "integration_type": "bot",
     "category": "im",
     "config_schema": {"type": "object", "properties": {}, "required": []},
-    "code": "CLIENT_ID = \"\"\nCLIENT_SECRET = \"\"\n\nasync def handle_event(context, params, payload):\n    return {\"success\": True, \"message\": \"DingTalk bot is handled by dedicated stream service\"}\n"
+    "code": "CLIENT_ID = context.get_system_config(\"dingtalk_client_id\")\nCLIENT_SECRET = context.get_system_config(\"dingtalk_client_secret\")\n\nasync def handle_event(context, params, payload):\n    return {\"success\": True, \"message\": \"DingTalk bot is handled by dedicated stream service\"}\n"
 }
 
 WEIXIN_BOT_TEMPLATE = {

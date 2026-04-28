@@ -176,13 +176,13 @@ const AlertTemplatesPage = {
                     <div class="alert-template-threshold-list">
                         ${this._renderMetricLevelEditor('cpu', 'CPU 使用率', '%', thresholdState.cpu)}
                         ${this._renderMetricLevelEditor('disk', '磁盘使用率', '%', thresholdState.disk)}
-                        ${this._renderMetricLevelEditor('connections', '活跃连接数', '', thresholdState.connections)}
+                        ${this._renderMetricLevelEditor('connections_active', '活跃连接数', '', thresholdState.connections_active)}
                     </div>
                     <div class="text-muted text-sm" style="margin-top:6px;">为每个指标配置多个告警等级，不同等级可设置不同的阈值、持续时长和确认次数。</div>
                 </div>
                 <div id="templateCustomExpressionSection" style="display:${thresholdState.useCustomExpression ? 'block' : 'none'};">
                     <label class="text-muted text-sm">表达式</label>
-                    <textarea name="custom_expression_text" class="form-textarea" rows="4" placeholder="例如：cpu_usage > 80 and connections > 120">${this._escapeHtml(thresholdState.customExpression.expression)}</textarea>
+                    <textarea name="custom_expression_text" class="form-textarea" rows="4" placeholder="例如：cpu_usage > 80 and connections_active > 120">${this._escapeHtml(thresholdState.customExpression.expression)}</textarea>
                     <div class="alert-ai-advanced-grid" style="margin-top:12px;">
                         <div>
                             <label class="text-muted text-sm">持续时长（秒）</label>
@@ -191,7 +191,7 @@ const AlertTemplatesPage = {
                     </div>
                     <div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap;">
                         <button type="button" class="btn btn-secondary" id="validateTemplateExpressionBtn">校验表达式</button>
-                        <div id="templateExpressionValidation" class="text-muted text-sm">可用指标：cpu_usage、memory_usage、disk_usage、connections、qps、tps</div>
+                        <div id="templateExpressionValidation" class="text-muted text-sm">可用指标：cpu_usage、memory_usage、disk_usage、connections_active、qps、tps</div>
                     </div>
                     <div class="text-muted text-sm" style="margin-top:6px;">适合组合条件或复杂判断，例如 CPU、连接数同时满足时才触发。</div>
                 </div>
@@ -395,7 +395,7 @@ const AlertTemplatesPage = {
                         { severity: 'critical', threshold: 95, duration: 0 },
                     ]
                 },
-                connections: {
+                connections_active: {
                     levels: [
                         { severity: 'low', threshold: 20, duration: 60 },
                         { severity: 'medium', threshold: 30, duration: 60 },
@@ -425,7 +425,7 @@ const AlertTemplatesPage = {
         const labels = [
             ['cpu_usage', 'CPU'],
             ['disk_usage', '磁盘'],
-            ['connections', '连接'],
+            ['connections_active', '连接'],
         ];
         const parts = labels.map(([key, label]) => {
             const rule = rules?.[key];
@@ -451,7 +451,7 @@ const AlertTemplatesPage = {
             };
         }
         const normalized = {};
-        ['cpu_usage', 'disk_usage', 'connections'].forEach((key) => {
+        ['cpu_usage', 'disk_usage', 'connections_active'].forEach((key) => {
             const rule = rules[key];
             if (!rule || typeof rule !== 'object') {
                 return;
@@ -481,7 +481,7 @@ const AlertTemplatesPage = {
             },
             cpu: this._metricRuleState(normalized.cpu_usage, 'cpu_usage'),
             disk: this._metricRuleState(normalized.disk_usage, 'disk_usage'),
-            connections: this._metricRuleState(normalized.connections, 'connections'),
+            connections_active: this._metricRuleState(normalized.connections_active, 'connections_active'),
         };
     },
 
@@ -503,7 +503,7 @@ const AlertTemplatesPage = {
                     { severity: 'critical', threshold: 95, duration: 0 },
                 ]
             },
-            connections: {
+            connections_active: {
                 levels: [
                     { severity: 'low', threshold: 20, duration: 60 },
                     { severity: 'medium', threshold: 30, duration: 60 },
@@ -607,7 +607,7 @@ const AlertTemplatesPage = {
         const metricFields = [
             ['cpu_usage', 'cpu', 100],
             ['disk_usage', 'disk', 100],
-            ['connections', 'connections', null],
+            ['connections_active', 'connections_active', null],
         ];
 
         metricFields.forEach(([metricName, fieldName, max]) => {
@@ -644,7 +644,7 @@ const AlertTemplatesPage = {
 
                 for (let i = 0; i < sortedLevels.length - 1; i++) {
                     if (sortedLevels[i].threshold > sortedLevels[i + 1].threshold) {
-                        Toast.error(`${fieldName === 'cpu' ? 'CPU' : fieldName === 'disk' ? '磁盘' : '连接数'}：${sortedLevels[i].severity} 的阈值必须小于 ${sortedLevels[i + 1].severity}`);
+                        Toast.error(`${fieldName === 'cpu' ? 'CPU' : fieldName === 'disk' ? '磁盘' : '活跃连接数'}：${sortedLevels[i].severity} 的阈值必须小于 ${sortedLevels[i + 1].severity}`);
                         return null;
                     }
                 }

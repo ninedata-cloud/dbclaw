@@ -448,7 +448,7 @@ async def get_datasource_health(
 def _prepare_eval_context(metrics: Dict[str, Any]) -> Dict[str, float]:
     """Prepare metrics context for expression evaluation"""
     context = {}
-    metric_names = ["cpu_usage", "memory_usage", "disk_usage", "connections", "qps", "tps"]
+    metric_names = ["cpu_usage", "memory_usage", "disk_usage", "connections_active", "qps", "tps"]
 
     for metric_name in metric_names:
         value = _extract_metric_value(metrics, metric_name)
@@ -470,7 +470,7 @@ def _extract_metric_value(metrics: Dict[str, Any], metric_name: str) -> Optional
         "cpu_usage": ["cpu_usage_percent", "cpu_percent"],
         "memory_usage": ["memory_usage_percent", "mem_percent"],
         "disk_usage": ["disk_usage_percent", "disk_percent"],
-        "connections": ["connections_active", "threads_running", "active_connections", "connection_count"],
+        "connections_active": ["connections_active", "threads_running", "active_connections", "connection_count"],
     }
 
     if metric_name in mappings:

@@ -381,21 +381,7 @@ const DocumentsPage = {
     },
 
     async saveDocument() {
-        if (!this.currentDoc || !this.monacoEditor) return;
-        const content = this.monacoEditor.getValue();
-        try {
-            const payload = {
-                ...this.readDocumentForm(),
-                content,
-            };
-            const doc = await API.updateDocument(this.currentDoc.id, payload);
-            this.currentDoc = doc;
-            this.renderEditor(doc);
-            Utils.showToast('保存成功', 'success');
-            if (this.currentCategory) await this.loadDocList(this.currentCategory.id);
-        } catch (e) {
-            Utils.showToast('保存失败: ' + e.message, 'error');
-        }
+        Utils.showToast('当前版本未支持，敬请期待', 'warning');
     },
 
     async recompileCurrentDocument() {

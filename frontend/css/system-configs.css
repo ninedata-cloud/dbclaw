@@ -1,8 +1,7 @@
 /* System Configs page styles */
 .system-configs-page {
-    padding: 20px;
+    padding: 8px;
     max-width: 1400px;
-    margin: 0 auto;
 }
 
 .page-header-actions {
@@ -71,6 +70,33 @@
     color: var(--text-secondary);
     border-bottom: 1px solid var(--border-color);
     white-space: nowrap;
+}
+
+.configs-table th.sortable-header {
+    cursor: pointer;
+    user-select: none;
+}
+
+.configs-table th.sortable-header span {
+    vertical-align: middle;
+}
+
+.configs-table th.sortable-header .sort-indicator {
+    margin-left: 6px;
+    color: var(--text-tertiary);
+    font-size: 12px;
+}
+
+.configs-table th.sortable-header:hover {
+    color: var(--text-primary);
+}
+
+.configs-table th.sortable-header.active {
+    color: var(--primary-color);
+}
+
+.configs-table th.sortable-header.active .sort-indicator {
+    color: var(--primary-color);
 }
 
 .configs-table tbody tr {

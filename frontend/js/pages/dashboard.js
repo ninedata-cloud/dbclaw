@@ -470,7 +470,7 @@ const DashboardPage = {
                 // Metric
                 const metricData = entry.metric ? (entry.metric.data || {}) : null;
                 if (metricData) {
-                    const active = metricData.connections ?? metricData.connections_active ?? metricData.connected_clients ?? metricData.user_sessions ?? metricData.connections_current ?? 0;
+                    const active = metricData.connections_active ?? metricData.connected_clients ?? metricData.user_sessions ?? metricData.connections_current ?? 0;
                     const cpuVal = metricData.cpu_usage != null ? metricData.cpu_usage : metricData.os_cpu_usage;
                     const cpu = cpuVal != null ? cpuVal.toFixed(1) : null;
                     const qps = metricData.qps != null ? metricData.qps.toFixed(1) : null;

@@ -75,7 +75,7 @@ class IntegrationsPage {
                 ? `
                 <div class="integration-modal-note">
                     当前默认使用钉钉 Stream Mode 长连接。
-                    直接修改代码顶部的 <code>CLIENT_ID</code>、<code>CLIENT_SECRET</code> 即可启用；
+                    请在系统参数中配置 <code>dingtalk_client_id</code>、<code>dingtalk_client_secret</code>；
                     保存并重启后端后，机器人会自动建立长连接收消息。
                 </div>
             `

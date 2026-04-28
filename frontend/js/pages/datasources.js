@@ -794,7 +794,7 @@ const DatasourcesPage = {
             : [
                 ['cpu_usage', 'CPU'],
                 ['disk_usage', '磁盘'],
-                ['connections', '连接'],
+                ['connections_active', '连接'],
             ].map(([key, label]) => {
                 const rule = config.threshold_rules?.[key];
                 return rule?.threshold != null ? `${label}>${rule.threshold}（${rule.duration || '-'}秒）` : null;
@@ -965,7 +965,7 @@ const DatasourcesPage = {
     },
 
     _getOrderedBaselineMetricGroups(groupedProfiles) {
-        const preferredOrder = ['cpu_usage', 'disk_usage', 'connections', 'connections_active', 'qps', 'tps'];
+        const preferredOrder = ['cpu_usage', 'disk_usage', 'connections_active', 'qps', 'tps'];
         const keys = Object.keys(groupedProfiles || {});
         return keys
             .sort((left, right) => {
@@ -1085,7 +1085,7 @@ const DatasourcesPage = {
             return 'baseline-level-high';
         }
 
-        if (metricName === 'connections' || metricName === 'connections_active') {
+        if (metricName === 'connections_active') {
             if (representativeValue < 5) return 'baseline-level-low';
             if (representativeValue <= 20) return 'baseline-level-medium';
             return 'baseline-level-high';
@@ -1124,7 +1124,6 @@ const DatasourcesPage = {
         return {
             cpu_usage: 'CPU 使用率',
             disk_usage: '磁盘使用率',
-            connections: '活跃连接数',
             connections_active: '活跃连接数',
             qps: 'QPS',
             tps: 'TPS',

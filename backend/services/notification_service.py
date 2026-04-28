@@ -30,6 +30,23 @@ logger = logging.getLogger(__name__)
 class NotificationService:
     """Notification dispatch service"""
 
+    _METRIC_DISPLAY_LABELS = {
+        "connections_active": "活跃连接数",
+        "active_connections": "活跃连接数",
+        "connection_count": "活跃连接数",
+        "threads_running": "活跃连接数",
+        "connections_total": "总连接数",
+        "total_connections": "总连接数",
+        "threads_connected": "总连接数",
+    }
+
+    @staticmethod
+    def _display_metric_name(metric_name: Optional[str]) -> Optional[str]:
+        normalized = (metric_name or "").strip()
+        if not normalized:
+            return None
+        return NotificationService._METRIC_DISPLAY_LABELS.get(normalized.lower(), normalized)
+
     @staticmethod
     def _format_diagnosis_markdown(text: Optional[str], *, max_items: int = 5) -> Optional[str]:
         content = str(text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
@@ -414,12 +431,13 @@ class NotificationService:
         """Build DingTalk markdown message payload"""
         severity_label = NotificationService._map_severity(alert.severity)
         alert_type_label = NotificationService._map_alert_type(alert.alert_type)
+        metric_display_name = NotificationService._display_metric_name(alert.metric_name)
         lines = [f'### [{severity_label}] {alert.title}']
         if datasource:
             lines.append(f'**数据库：** {datasource.name} ({datasource.db_type.upper()}) {datasource.host}:{datasource.port}')
         lines.append(f'**告警类型：** {alert_type_label}')
-        if alert.metric_name and alert.metric_value is not None:
-            lines.append(f'**指标：** {alert.metric_name} = {alert.metric_value:.2f}')
+        if metric_display_name and alert.metric_value is not None:
+            lines.append(f'**指标：** {metric_display_name} = {alert.metric_value:.2f}')
         if alert.threshold_value is not None:
             lines.append(f'**阈值：** {alert.threshold_value:.2f}')
         if alert.trigger_reason:
@@ -447,6 +465,7 @@ class NotificationService:
         color = severity_colors.get(severity, 'blue')
         severity_label = NotificationService._map_severity(alert.severity)
         alert_type_label = NotificationService._map_alert_type(alert.alert_type)
+        metric_display_name = NotificationService._display_metric_name(alert.metric_name)
 
         elements = []
 
@@ -457,10 +476,10 @@ class NotificationService:
             f"**告警类型：** {alert_type_label}",
         ]
         is_ai_policy = (alert.alert_type or "") == "ai_policy_violation"
-        if alert.metric_name and alert.metric_value is not None:
-            alert_info.append(f"**指标：** {alert.metric_name} = {alert.metric_value:.2f}")
-        elif alert.metric_name and not is_ai_policy:
-            alert_info.append(f"**指标：** {alert.metric_name}")
+        if metric_display_name and alert.metric_value is not None:
+            alert_info.append(f"**指标：** {metric_display_name} = {alert.metric_value:.2f}")
+        elif metric_display_name and not is_ai_policy:
+            alert_info.append(f"**指标：** {metric_display_name}")
         if alert.threshold_value is not None:
             alert_info.append(f"**阈值：** {alert.threshold_value:.2f}")
         if alert.trigger_reason:

@@ -241,13 +241,13 @@ class IntegrationService:
 
             if integration.integration_id == "builtin_dingtalk_bot":
                 try:
-                    from backend.services.dingtalk_bot_service import _extract_dingtalk_bot_config
+                    from backend.services.dingtalk_bot_service import get_dingtalk_bot_credentials
 
-                    config = _extract_dingtalk_bot_config(integration)
+                    config = await get_dingtalk_bot_credentials(db, integration=integration)
                     client_id = (config.get("client_id") or "").strip()
                     client_secret = (config.get("client_secret") or "").strip()
                     if not client_id or not client_secret:
-                        return {"success": False, "message": "请先在 Integration 代码中配置 CLIENT_ID 和 CLIENT_SECRET"}
+                        return {"success": False, "message": "请先在系统参数中配置 dingtalk_client_id 和 dingtalk_client_secret"}
 
                     try:
                         from dingtalk_stream import Credential, DingTalkStreamClient
@@ -302,8 +302,8 @@ class IntegrationService:
                         existing.description = template["description"]
                     if existing.config_schema in (None, {}, {"type": "object", "properties": {}, "required": []}):
                         existing.config_schema = template["config_schema"]
-                    preserve_marker = "APP_ID" if existing.integration_id == "builtin_feishu_bot" else "CLIENT_ID"
-                    fallback_marker = None if existing.integration_id == "builtin_feishu_bot" else "APP_KEY"
+                    preserve_marker = "APP_ID" if existing.integration_id == "builtin_feishu_bot" else "dingtalk_client_id"
+                    fallback_marker = None if existing.integration_id == "builtin_feishu_bot" else "CLIENT_ID"
                     if not existing.code or (
                         preserve_marker not in existing.code
                         and (fallback_marker is None or fallback_marker not in existing.code)

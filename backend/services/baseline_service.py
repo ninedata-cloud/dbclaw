@@ -29,15 +29,14 @@ DEFAULT_BASELINE_CONFIG: dict[str, Any] = {
     "metrics": {
         "cpu_usage": {"enabled": True, "duration": 300, "severity": "medium", "minimum": 20},
         "disk_usage": {"enabled": True, "duration": 600, "severity": "high", "minimum": 70},
-        "connections": {"enabled": True, "duration": 300, "severity": "medium", "minimum": 10},
+        "connections_active": {"enabled": True, "duration": 300, "severity": "medium", "minimum": 10},
     },
 }
 
 METRIC_ALIASES: dict[str, list[str]] = {
     "cpu_usage": ["cpu_usage", "cpu_usage_percent", "cpu_percent"],
     "disk_usage": ["disk_usage", "disk_usage_percent", "disk_percent"],
-    "connections": [
-        "connections",
+    "connections_active": [
         "connections_active",
         "threads_running",
         "active_connections",
