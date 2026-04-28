@@ -3,6 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from typing import List
 from time import perf_counter
+import json
+import logging
 
 from backend.database import get_db
 from backend.models.ai_model import AIModel
@@ -18,6 +20,35 @@ from backend.utils.encryption import encrypt_value, decrypt_value
 from backend.services.ai_agent import get_ai_client, request_text_response
 
 router = APIRouter(prefix="/api/ai-models", tags=["ai-models"], dependencies=[Depends(get_current_user)])
+logger = logging.getLogger(__name__)
+
+
+def _format_exception_response(exc: Exception) -> str:
+    response = getattr(exc, "response", None)
+    if response is None:
+        return ""
+
+    # Handle SDK response objects that expose to_dict/model_dump/json helpers.
+    for serializer in ("to_dict", "model_dump"):
+        serializer_fn = getattr(response, serializer, None)
+        if callable(serializer_fn):
+            try:
+                return json.dumps(serializer_fn(), ensure_ascii=False, default=str)
+            except Exception:
+                pass
+
+    json_fn = getattr(response, "json", None)
+    if callable(json_fn):
+        try:
+            return json.dumps(json_fn(), ensure_ascii=False, default=str)
+        except Exception:
+            pass
+
+    text = getattr(response, "text", None)
+    if text:
+        return str(text)
+
+    return str(response)
 
 
 def encrypt_api_key(api_key: str) -> str:
@@ -163,6 +194,14 @@ async def test_model_chat(model_id: int, data: AIModelTestChatRequest, db: Async
             max_tokens=data.max_tokens,
         )
     except Exception as e:
+        response_details = _format_exception_response(e)
+        if response_details:
+            logger.exception("模型调用失败，完整响应: %s", response_details)
+            raise HTTPException(
+                status_code=502,
+                detail=f"模型调用失败：{str(e)}；response={response_details}",
+            )
+        logger.exception("模型调用失败")
         raise HTTPException(status_code=502, detail=f"模型调用失败：{str(e)}")
 
     latency_ms = int((perf_counter() - started_at) * 1000)

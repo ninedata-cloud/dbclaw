@@ -76,6 +76,7 @@ RUN pip install -r requirements.txt  -i https://pypi.tuna.tsinghua.edu.cn/simple
 COPY backend ./backend
 COPY frontend ./frontend
 COPY docker ./docker
+COPY scripts ./scripts
 COPY run.py ./
 COPY .env.example ./
 
@@ -96,6 +97,7 @@ RUN mkdir -p \
     /etc/supervisor/conf.d \
     /home/dbclaw/.ssh \
     && chmod +x /app/docker/entrypoint.sh /app/docker/init-db.sh /app/docker/tee-log.sh \
+        /app/scripts/reset_admin_password.py \
     && useradd -m -u 1000 dbclaw \
     && chown -R dbclaw:dbclaw /app \
     && chown -R dbclaw:dbclaw /home/dbclaw/.ssh \

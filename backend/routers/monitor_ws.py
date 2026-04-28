@@ -93,6 +93,9 @@ async def monitor_websocket(websocket: WebSocket, conn_id: int):
             try:
                 data = await asyncio.wait_for(queue.get(), timeout=30)
                 await websocket.send_json(data)
+            except asyncio.CancelledError:
+                # Server shutdown may cancel this task while waiting on queue.get().
+                break
             except asyncio.TimeoutError:
                 user = await _authenticate_websocket(websocket)
                 if not user:
@@ -103,6 +106,9 @@ async def monitor_websocket(websocket: WebSocket, conn_id: int):
                 logger.error(f"Error sending metric: {e}")
                 break
     except WebSocketDisconnect:
+        pass
+    except asyncio.CancelledError:
+        # Graceful shutdown path for uvicorn/asyncio cancellation.
         pass
     finally:
         unsubscribe(conn_id, queue)

@@ -134,10 +134,10 @@ docker run -d \
 
 ```bash
 docker build \
-  --build-arg APP_VERSION=0.10.0 \
+  --build-arg APP_VERSION=1.0.0 \
   --build-arg BUILD_COMMIT=$(git rev-parse --short HEAD) \
   --build-arg BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-  -t dbclaw:0.10.0 .
+  -t dbclaw:1.0.0 .
 ```
 
 持久化目录：

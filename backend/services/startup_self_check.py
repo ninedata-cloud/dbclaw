@@ -15,6 +15,7 @@ from sqlalchemy.exc import ArgumentError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from backend.config import Settings
+from backend.utils.security import verify_password
 
 logger = logging.getLogger(__name__)
 
@@ -155,8 +156,8 @@ async def run_startup_self_check(
     checks = [
         _check_encryption_key(settings),
         _check_public_share_secret(settings),
-        _check_initial_admin_password(settings),
     ]
+    checks.append(await _check_initial_admin_password(settings))
     checks.extend(_check_runtime_paths())
     if include_app_port_check:
         checks.append(_check_app_port(settings))
@@ -239,23 +240,86 @@ def _check_public_share_secret(settings: Settings) -> CheckResult:
     )
 
 
-def _check_initial_admin_password(settings: Settings) -> CheckResult:
-    if (settings.initial_admin_password or DEFAULT_ADMIN_PASSWORD) == DEFAULT_ADMIN_PASSWORD:
+async def _check_initial_admin_password(settings: Settings) -> CheckResult:
+    initial_admin_password = settings.initial_admin_password or DEFAULT_ADMIN_PASSWORD
+    admin_password_hash, query_error = await _fetch_admin_password_hash(settings.database_url)
+
+    if query_error:
+        logger.warning("Failed to compare admin password with INITIAL_ADMIN_PASSWORD: %s", query_error)
+        return CheckResult(
+            name="INITIAL_ADMIN_PASSWORD",
+            status="pass",
+            severity="info",
+            summary="无法自动校验管理员密码与 INITIAL_ADMIN_PASSWORD 是否一致。",
+            detail="元数据库连接或 app_user 查询失败，已跳过该项比对。",
+            suggestion="请确认 DATABASE_URL 可访问，且已完成数据库初始化后重试自检。",
+        )
+
+    if not admin_password_hash:
+        return CheckResult(
+            name="INITIAL_ADMIN_PASSWORD",
+            status="pass",
+            severity="info",
+            summary="未检测到管理员账号，跳过 INITIAL_ADMIN_PASSWORD 比对。",
+            detail="当前数据库中不存在 admin 用户记录。",
+        )
+
+    try:
+        is_same_as_admin_password = verify_password(initial_admin_password, admin_password_hash)
+    except Exception as exc:
+        logger.warning("Failed to verify admin password hash during self-check: %s", exc)
+        return CheckResult(
+            name="INITIAL_ADMIN_PASSWORD",
+            status="pass",
+            severity="info",
+            summary="无法自动校验管理员密码与 INITIAL_ADMIN_PASSWORD 是否一致。",
+            detail=f"密码哈希校验失败: {exc}",
+            suggestion="请确认管理员密码哈希格式有效，必要时重置管理员密码后重试。",
+        )
+
+    if is_same_as_admin_password:
         return CheckResult(
             name="INITIAL_ADMIN_PASSWORD",
             status="warn",
             severity="warning",
-            summary="管理员仍在使用默认初始密码 admin1234。",
-            detail="默认密码不会阻止系统启动，但会显著降低首次部署的安全性。",
-            suggestion="建议在 .env 中覆盖 INITIAL_ADMIN_PASSWORD，或首次登录后立即修改管理员密码。",
+            summary="管理员密码与 INITIAL_ADMIN_PASSWORD 当前值一致。",
+            detail="共享或弱口令配置可能带来额外风险，建议避免将运行中管理员密码长期与初始化配置保持一致。",
+            suggestion="建议定期通过系统内密码修改流程更新管理员密码。",
         )
 
     return CheckResult(
         name="INITIAL_ADMIN_PASSWORD",
         status="pass",
         severity="info",
-        summary="管理员初始密码已覆盖默认值。",
+        summary="管理员密码与 INITIAL_ADMIN_PASSWORD 不一致。",
+        detail="说明管理员账号密码已独立于当前初始化配置。",
     )
+
+
+async def _fetch_admin_password_hash(database_url: str) -> tuple[str | None, str | None]:
+    if not (database_url or "").strip():
+        return None, "DATABASE_URL 未配置"
+
+    engine = None
+    try:
+        engine = create_async_engine(
+            database_url,
+            echo=False,
+            pool_pre_ping=True,
+            connect_args={"ssl": False},
+        )
+        async with engine.connect() as conn:
+            result = await conn.execute(
+                text("SELECT password_hash FROM app_user WHERE username = :username ORDER BY id ASC LIMIT 1"),
+                {"username": "admin"},
+            )
+            row = result.first()
+            return (str(row[0]), None) if row and row[0] else (None, None)
+    except Exception as exc:
+        return None, _format_exception_detail(exc)
+    finally:
+        if engine is not None:
+            await engine.dispose()
 
 
 def _check_runtime_paths() -> list[CheckResult]:

@@ -370,9 +370,14 @@ async def get_config(datasource_id: int, db: AsyncSession = Depends(get_db)):
         db.add(config)
         await db.commit()
         await db.refresh(config)
-    elif default_template and reset_inspection_config_to_template(config, default_template):
-        await db.commit()
-        await db.refresh(config)
+    elif default_template and not getattr(config, "alert_template_id", None):
+        # Historical records may not be bound to any template. In that case,
+        # bind once to the current default template. Do not overwrite explicit
+        # user bindings on read; otherwise GET /config would silently revert
+        # runtime thresholds back to default values.
+        if reset_inspection_config_to_template(config, default_template):
+            await db.commit()
+            await db.refresh(config)
     effective = await resolve_effective_inspection_config(db, _normalize_inspection_config_record(config))
     return InspectionConfigResponse(
         id=config.id,

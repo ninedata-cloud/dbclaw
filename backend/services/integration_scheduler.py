@@ -219,12 +219,9 @@ async def execute_integration(datasource_id: int):
 
                     # 补充直连采集的关键字段（max_connections、uptime、cache_hit_rate 等）
                     # 这些字段会强制覆盖集成采集的值，因为直连采集更准确
-                    logger.info(f"[补充采集] 开始补充采集数据源 {datasource.id}")
                     direct_metrics = await _collect_direct_metrics_supplement(datasource)
-                    logger.info(f"[补充采集] 数据源 {datasource.id} 补充采集结果: {direct_metrics}")
                     if direct_metrics:
                         for key, value in direct_metrics.items():
-                            logger.info(f"[补充采集] 覆盖字段 {key}: {merged_data.get(key)} -> {value}")
                             merged_data[key] = value  # 强制覆盖
                     snapshot = DatasourceMetric(
                         datasource_id=datasource.id,
