@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Boolean, Numeric, Index
+from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, Numeric, Index
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from backend.database import Base
 
@@ -19,10 +20,10 @@ class DiagnosisConclusion(Base):
     final_markdown = Column(Text, nullable=True)
 
     # Structured findings
-    findings = Column(JSON, nullable=True)  # [{severity, category, description, suggestion}]
-    action_items = Column(JSON, nullable=True)  # [{title, priority, description}]
-    evidence_refs = Column(JSON, nullable=True)  # [{type, ref, title, detail}]
-    knowledge_refs = Column(JSON, nullable=True)  # [{document_id, title}]
+    findings = Column(JSONB, nullable=True)  # [{severity, category, description, suggestion}]
+    action_items = Column(JSONB, nullable=True)  # [{title, priority, description}]
+    evidence_refs = Column(JSONB, nullable=True)  # [{type, ref, title, detail}]
+    knowledge_refs = Column(JSONB, nullable=True)  # [{document_id, title}]
 
     resolved = Column(Boolean, default=False)
     resolved_at = Column(DateTime(timezone=True), nullable=True)

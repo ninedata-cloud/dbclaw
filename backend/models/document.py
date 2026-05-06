@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, JSON, Index
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, Index
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from backend.database import Base
 from backend.models.soft_delete import SoftDeleteMixin
@@ -35,16 +36,16 @@ class DocDocument(SoftDeleteMixin, Base):
     is_active = Column(Boolean, default=True)
     scope = Column(String(20), default="builtin")
     doc_kind = Column(String(30), default="reference")
-    db_types = Column(JSON, nullable=True)
-    issue_categories = Column(JSON, nullable=True)
-    datasource_ids = Column(JSON, nullable=True)
-    host_ids = Column(JSON, nullable=True)
-    tags = Column(JSON, nullable=True)
+    db_types = Column(JSONB, nullable=True)
+    issue_categories = Column(JSONB, nullable=True)
+    datasource_ids = Column(JSONB, nullable=True)
+    host_ids = Column(JSONB, nullable=True)
+    tags = Column(JSONB, nullable=True)
     priority = Column(Integer, default=0)
     freshness_level = Column(String(20), default="stable")
     enabled_in_diagnosis = Column(Boolean, default=True)
-    diagnosis_profile = Column(JSON, nullable=True)
-    compiled_snapshot = Column(JSON, nullable=True)
+    diagnosis_profile = Column(JSONB, nullable=True)
+    compiled_snapshot = Column(JSONB, nullable=True)
     compiled_at = Column(DateTime(timezone=True), nullable=True)
     quality_status = Column(String(20), default="draft")
     sort_order = Column(Integer, default=0)

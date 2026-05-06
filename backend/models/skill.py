@@ -6,11 +6,11 @@ from sqlalchemy import (
     Text,
     Boolean,
     DateTime,
-    JSON,
     CheckConstraint,
     UniqueConstraint,
     Index,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 
 from backend.database import Base
@@ -25,10 +25,10 @@ class Skill(Base):
     author_id = Column(Integer, nullable=True)
     category = Column(String(50), nullable=True)
     description = Column(Text, nullable=True)
-    tags = Column(JSON, nullable=False, default=list)  # List of strings
-    parameters = Column(JSON, nullable=False, default=list)  # List of parameter definitions
-    dependencies = Column(JSON, nullable=False, default=list)  # List of dependency specifications
-    permissions = Column(JSON, nullable=False, default=list)  # List of required permissions
+    tags = Column(JSONB, nullable=False, default=list)  # List of strings
+    parameters = Column(JSONB, nullable=False, default=list)  # List of parameter definitions
+    dependencies = Column(JSONB, nullable=False, default=list)  # List of dependency specifications
+    permissions = Column(JSONB, nullable=False, default=list)  # List of required permissions
     timeout = Column(Integer, nullable=True)  # Execution timeout in seconds (optional)
     code = Column(Text, nullable=False)
     is_builtin = Column(Boolean, nullable=False, default=False)
@@ -47,8 +47,8 @@ class SkillExecution(Base):
     skill_id = Column(String(100), nullable=False, index=True)
     session_id = Column(Integer, nullable=True)
     user_id = Column(Integer, nullable=True)
-    parameters = Column(JSON, nullable=True)
-    result = Column(JSON, nullable=True)
+    parameters = Column(JSONB, nullable=True)
+    result = Column(JSONB, nullable=True)
     error = Column(Text, nullable=True)
     execution_time_ms = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)

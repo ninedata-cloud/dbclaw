@@ -1,5 +1,5 @@
 
-NineData DBClaw（数据库智能卫士）是一款 AI 原生的数据库诊断开源产品。它将数据库接入、指标监控、告警处理、自动巡检、知识增强和对话式诊断整合在一个私有化部署系统中，帮助 DBA、SRE 和平台团队更快发现问题、定位根因并沉淀运维经验。
+NineData DBClaw（数据库智能卫士）是一款 AI 原生的面向数据库智能诊断开源产品。提供了多种数据库的 AI 智能诊断、监控告警、自动巡检等功能，支持飞书、钉钉、微信等多种平台接入，帮助 DBA、SRE 等技术团队更快发现问题、定位根因并沉淀运维经验。
 
 ## 开源地址
 [https://github.com/ninedata-cloud/dbclaw](https://github.com/ninedata-cloud/dbclaw)

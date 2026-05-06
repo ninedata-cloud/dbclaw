@@ -6,7 +6,8 @@
 ![Frontend](https://img.shields.io/badge/frontend-Vanilla%20JS-ffb300.svg)
 ![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
 
-NineData DBClaw（数据库智能卫士）是一款 AI 原生的数据库诊断开源产品。它将数据库接入、指标监控、告警处理、自动巡检、知识增强和对话式诊断整合在一个私有化部署系统中，帮助 DBA、SRE 和平台团队更快发现问题、定位根因并沉淀运维经验。
+NineData DBClaw（数据库智能卫士）是一款 AI 原生的面向数据库智能诊断开源产品。提供了多种数据库的 AI 智能诊断、监控告警、自动巡检等功能，支持飞书、钉钉、微信等多种平台接入，帮助 DBA、SRE 等技术团队更快发现问题、定位根因并沉淀运维经验。
+
 
 ## 产品界面
 
@@ -45,7 +46,7 @@ docker run -itd -p 9939:9939 --name dbclaw swr.cn-east-3.myhuaweicloud.com/nined
 ### 环境要求
 
 - Python 3.10+
-- PostgreSQL 13+
+- PostgreSQL 13+（推荐安装 **TimescaleDB** 扩展以优化监控指标时序存储；连接串仍为 `postgresql+asyncpg://...`）
 - Linux 或 macOS 开发环境
 - AI 大模型服务
 
@@ -159,13 +160,23 @@ docker build \
 常用环境变量：
 
 - `APP_HOST` / `APP_PORT`：服务监听地址和端口，默认 `0.0.0.0:9939`
-- `DATABASE_URL`：PostgreSQL 元数据库连接串
+- `DATABASE_URL`：PostgreSQL 元数据库连接串（若使用 TimescaleDB，仍为同一连接串）
+- `TIMESCALE_*`：可选。控制是否启用 Timescale 迁移、扩展缺失是否中止启动、chunk 间隔、压缩与指标保留周期等，详见 `.env.example`
 - `ENCRYPTION_KEY`：数据库密码等敏感信息的 Fernet 加密密钥
 - `PUBLIC_SHARE_SECRET_KEY`：公开分享链接签名密钥
 - `INITIAL_ADMIN_PASSWORD`：初始管理员密码，默认 `admin1234`
 - `METRIC_INTERVAL`：首次启动时的指标采集周期，默认 `60` 秒
 
 AI 模型配置优先在 Web 控制台的“AI 大模型管理”中维护。`OPENAI_*` 环境变量仅作为兜底兼容配置。
+
+### 元数据库与 TimescaleDB
+
+DBClaw 将数据源与主机监控快照写入 `datasource_metric`、`host_metric` 等表。使用 **TimescaleDB**（PostgreSQL 上的扩展）可为这些时序数据启用按时间分区（hypertable）、chunk 级压缩与可选的数据保留策略。
+
+- **Docker 单容器镜像**：镜像内已安装 TimescaleDB，并在 PostgreSQL 启动参数中加载 `shared_preload_libraries=timescaledb`；首次初始化数据库时会执行 `CREATE EXTENSION IF NOT EXISTS timescaledb`。
+- **自建 PostgreSQL**：请安装与主版本匹配的 TimescaleDB，在 `postgresql.conf` 或启动命令中设置 `shared_preload_libraries = 'timescaledb'` 后重启，再以超级用户（或具备权限的角色）在目标库执行 `CREATE EXTENSION timescaledb;`。若暂时不安装扩展，可将 `TIMESCALE_REQUIRE_EXTENSION=false`（默认），应用会在日志中提示并跳过 hypertable 步骤，仍以普通 PostgreSQL 运行。
+- **升级已有实例**：启动时的迁移脚本会在需要时将上述表的主键调整为 `(id, collected_at)` 并创建 hypertable；表很大时主键调整可能带来短暂锁表，请在低峰操作并做好备份。
+- **指标自动删除**：仅当显式设置 `TIMESCALE_RETENTION_INTERVAL`（PostgreSQL `interval` 文本，如 `90 days`）时才会添加保留策略；留空则不按时间自动删除历史指标。
 
 ## 健康检查
 

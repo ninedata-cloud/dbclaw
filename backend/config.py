@@ -31,6 +31,13 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://dbclaw:dbclaw@localhost:5432/dbclaw"
 
+    # TimescaleDB（PostgreSQL 扩展）：时序表 hypertable / 压缩 / 可选保留策略
+    timescale_enable: bool = True
+    timescale_require_extension: bool = False
+    timescale_chunk_interval: str = "1 day"
+    timescale_compress_after: str = "7 days"
+    timescale_retention_interval: str = ""
+
     metric_interval: int = 60
 
     # Inspection trigger deduplication window (in minutes)

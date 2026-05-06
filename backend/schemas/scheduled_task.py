@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from backend.schemas.base import TimestampSerializerMixin
 
 
-ScheduleType = Literal["interval", "cron"]
+ScheduleType = Literal["cron"]
 RunStatus = Literal["pending", "running", "success", "failed", "skipped"]
 NotificationPolicy = Literal["never", "on_failure", "on_success", "always"]
 
@@ -24,7 +24,7 @@ class ScheduledTaskBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=200, description="任务名称")
     description: Optional[str] = Field(None, description="任务描述")
     script_code: str = Field(..., min_length=1, description="Python 脚本内容，需定义 run(context)")
-    schedule_type: ScheduleType = Field(..., description="调度类型：interval / cron")
+    schedule_type: ScheduleType = Field(default="cron", description="调度类型：仅支持 cron")
     schedule_config: Dict[str, Any] = Field(..., description="调度配置")
     enabled: bool = Field(default=True, description="是否启用")
     timeout_seconds: int = Field(default=60, ge=1, le=3600, description="执行超时时间（秒）")

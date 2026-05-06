@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, JSON, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import synonym
 from sqlalchemy.sql import func
 from backend.database import Base
@@ -20,10 +21,10 @@ class InspectionConfig(Base):
     # AI analysis
     use_ai_analysis = Column(Boolean, default=True, nullable=False)
     ai_model_id = Column(Integer, nullable=True)
-    kb_ids = Column(JSON, default=list, nullable=False)  # array of KB IDs
+    kb_ids = Column(JSONB, default=list, nullable=False)  # array of KB IDs
 
     # Threshold rules (multi-level configuration)
-    threshold_rules = Column(JSON, default=dict, nullable=False)
+    threshold_rules = Column(JSONB, default=dict, nullable=False)
     # Example: {
     #   "cpu_usage": {
     #       "levels": [
@@ -65,8 +66,8 @@ class InspectionConfig(Base):
     ai_policy_id = Column(Integer, nullable=True)
     alert_ai_model_id = Column(Integer, nullable=True)
     ai_shadow_enabled = Column(Boolean, default=False, nullable=False)
-    baseline_config = Column(JSON, default=dict, nullable=False)
-    event_ai_config = Column(JSON, default=dict, nullable=False)
+    baseline_config = Column(JSONB, default=dict, nullable=False)
+    event_ai_config = Column(JSONB, default=dict, nullable=False)
     alert_template_id = Column(Integer, nullable=True, index=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

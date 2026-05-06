@@ -33,8 +33,8 @@ chown postgres:postgres "$PG_BOOTSTRAP_LOG_FILE"
 chmod 664 "$PG_BOOTSTRAP_LOG_FILE"
 truncate -s 0 "$PG_BOOTSTRAP_LOG_FILE"
 
-# Start PostgreSQL temporarily to create user/database
-if ! su -c "$PG_BIN/pg_ctl -D $PG_DATA -l '$PG_BOOTSTRAP_LOG_FILE' start -w" postgres; then
+# Start PostgreSQL temporarily to create user/database (preload TimescaleDB for CREATE EXTENSION)
+if ! su -c "$PG_BIN/pg_ctl -D $PG_DATA -l '$PG_BOOTSTRAP_LOG_FILE' start -w -o '-c shared_preload_libraries=timescaledb'" postgres; then
     echo "PostgreSQL bootstrap failed. Contents of $PG_BOOTSTRAP_LOG_FILE:" >&2
     cat "$PG_BOOTSTRAP_LOG_FILE" >&2 || true
     exit 1
@@ -44,6 +44,8 @@ fi
 su -c "psql -v ON_ERROR_STOP=1 postgres -c \"DO \\\$\\\$ BEGIN IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${POSTGRES_USER}') THEN EXECUTE format('CREATE USER %I WITH LOGIN PASSWORD %L', '${POSTGRES_USER}', '${POSTGRES_PASSWORD}'); ELSE EXECUTE format('ALTER ROLE %I WITH PASSWORD %L', '${POSTGRES_USER}', '${POSTGRES_PASSWORD}'); END IF; END \\\$\\\$;\"" postgres
 
 su -c "psql -v ON_ERROR_STOP=1 postgres -tAc \"SELECT 1 FROM pg_database WHERE datname='${POSTGRES_DB}'\" | grep -q 1 || createdb -O '${POSTGRES_USER}' '${POSTGRES_DB}'" postgres
+
+su -c "psql -v ON_ERROR_STOP=1 -d '${POSTGRES_DB}' -c 'CREATE EXTENSION IF NOT EXISTS timescaledb;'" postgres
 
 # Stop temporary PostgreSQL instance (supervisord will restart it)
 su -c "$PG_BIN/pg_ctl -D $PG_DATA stop -m fast" postgres

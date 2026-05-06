@@ -1,4 +1,5 @@
-from sqlalchemy import BigInteger, Column, Integer, String, DateTime, Text, JSON, Index
+from sqlalchemy import BigInteger, Column, Integer, String, DateTime, Text, Index
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from backend.database import Base
 from backend.models.soft_delete import SoftDeleteMixin
@@ -23,14 +24,14 @@ class Report(SoftDeleteMixin, Base):
     summary = Column(Text, nullable=True)
     content_md = Column(Text, nullable=True)
     content_html = Column(Text, nullable=True)
-    findings = Column(JSON, nullable=True)
+    findings = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
     completed_at = Column(DateTime(timezone=True), nullable=True)  # Terminal timestamp once report leaves generating state
 
     # AI-related columns
     ai_model_id = Column(Integer, nullable=True)  # Which AI model was used
-    kb_ids = Column(JSON, nullable=True)  # Knowledge bases used during analysis
+    kb_ids = Column(JSONB, nullable=True)  # Knowledge bases used during analysis
     generation_method = Column(String(20), default="rule-based")  # "ai" or "rule-based"
     error_message = Column(Text, nullable=True)  # Error details if generation failed
 
@@ -41,5 +42,5 @@ class Report(SoftDeleteMixin, Base):
     trigger_reason = Column(String(500), nullable=True)  # e.g., "CPU 95% > 80% for 60s"
 
     # AI inspection columns
-    skill_executions = Column(JSON, nullable=True)  # Audit trail of skills called
+    skill_executions = Column(JSONB, nullable=True)  # Audit trail of skills called
     ai_conversation_id = Column(Integer, nullable=True)  # Link to diagnostic_session

@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import synonym
 from sqlalchemy.sql import func
 
@@ -13,7 +14,7 @@ class AlertTemplate(Base):
     description = Column(Text, nullable=True)
     is_enabled = Column("is_enabled", Boolean, nullable=False, default=True)
     is_default = Column(Boolean, nullable=False, default=False)
-    template_config = Column(JSON, nullable=False, default=dict)
+    template_config = Column(JSONB, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     enabled = synonym("is_enabled")

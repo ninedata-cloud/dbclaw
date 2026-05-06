@@ -1,5 +1,6 @@
 """User-managed scheduled Python task models."""
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -16,13 +17,13 @@ class ScheduledTask(SoftDeleteMixin, Base):
     name = Column(String(200), nullable=False, index=True)
     description = Column(Text, nullable=True)
     script_code = Column(Text, nullable=False)
-    schedule_type = Column(String(20), nullable=False, index=True)  # interval / cron
-    schedule_config = Column(JSON, nullable=False)
+    schedule_type = Column(String(20), nullable=False, index=True)  # cron（历史数据可能仍为 interval）
+    schedule_config = Column(JSONB, nullable=False)
     enabled = Column(Boolean, nullable=False, default=True, index=True)
     timeout_seconds = Column(Integer, nullable=False, default=60)
     max_concurrent_runs = Column(Integer, nullable=False, default=1)
     notification_policy = Column(String(20), nullable=False, default="never")
-    notification_targets = Column(JSON, nullable=False, default=list)
+    notification_targets = Column(JSONB, nullable=False, default=list)
     last_run_at = Column(DateTime(timezone=True), nullable=True)
     next_run_at = Column(DateTime(timezone=True), nullable=True)
     last_status = Column(String(20), nullable=True, index=True)
@@ -49,7 +50,7 @@ class ScheduledTaskRun(Base):
     started_at = Column(DateTime(timezone=True), nullable=True, index=True)
     finished_at = Column(DateTime(timezone=True), nullable=True)
     duration_ms = Column(Integer, nullable=True)
-    result = Column(JSON, nullable=True)
+    result = Column(JSONB, nullable=True)
     stdout = Column(Text, nullable=True)
     stderr = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)

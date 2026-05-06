@@ -1,4 +1,5 @@
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, Numeric, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Numeric, Integer, String, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import synonym
 from sqlalchemy.sql import func
 
@@ -23,16 +24,16 @@ class AlertAIRuntimeState(Base):
     last_decision = Column(String(20), nullable=True)
     last_confidence = Column(Numeric(22, 4), nullable=True)
     last_reason = Column(Text, nullable=True)
-    last_evidence = Column(JSON, nullable=True)
+    last_evidence = Column(JSONB, nullable=True)
     last_candidate_type = Column(String(32), nullable=True, index=True)
     last_candidate_fingerprint = Column(String(128), nullable=True)
     last_ai_evaluated_at = Column(DateTime(timezone=True), nullable=True, index=True)
     last_gate_reason = Column(String(64), nullable=True)
-    last_gate_metrics = Column(JSON, nullable=True)
+    last_gate_metrics = Column(JSONB, nullable=True)
     samples_seen = Column(Integer, nullable=False, default=0)
     candidate_hits = Column(Integer, nullable=False, default=0)
     ai_evaluations = Column(Integer, nullable=False, default=0)
-    gate_skips_by_reason = Column(JSON, nullable=True)
+    gate_skips_by_reason = Column(JSONB, nullable=True)
     last_evaluated_at = Column(DateTime(timezone=True), nullable=True, index=True)
     last_triggered_at = Column(DateTime(timezone=True), nullable=True, index=True)
     last_recovered_at = Column(DateTime(timezone=True), nullable=True, index=True)

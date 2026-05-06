@@ -1,4 +1,5 @@
-from sqlalchemy import BigInteger, Column, Integer, String, Boolean, DateTime, JSON, Text
+from sqlalchemy import BigInteger, Column, Integer, String, Boolean, DateTime, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import synonym
 from sqlalchemy.sql import func
 from backend.database import Base
@@ -12,7 +13,7 @@ class InspectionTrigger(Base):
     datasource_id = Column(Integer, nullable=False, index=True)
     trigger_type = Column(String(20), nullable=False)  # 'scheduled', 'manual', 'anomaly', 'connection_failure'
     trigger_reason = Column(String(500), nullable=True)  # e.g., "CPU 95% > 80% for 60s"
-    datasource_metric = Column(JSON, nullable=True)  # metrics at trigger time
+    datasource_metric = Column(JSONB, nullable=True)  # metrics at trigger time
     triggered_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
     is_processed = Column("is_processed", Boolean, default=False, nullable=False)
     report_id = Column(Integer, nullable=True)
