@@ -28,7 +28,7 @@ INTENT_KEYWORDS = {
         "执行", "execute", "运行", "run", "创建", "create", "修改", "modify",
         "删除", "delete", "更新", "update", "设置", "set", "启用", "enable",
         "禁用", "disable", "添加", "add", "移除", "remove", "配置", "configure",
-        "建索引", "kill ", "flush ", "grant ", "revoke ",
+        "建索引", "kill", "flush", "grant", "revoke",
     ],
 }
 
@@ -85,7 +85,15 @@ class IntentAnalysis:
 
 
 def _count_matches(message_lower: str, keywords: list[str]) -> int:
-    return sum(1 for keyword in keywords if keyword in message_lower)
+    count = 0
+    for keyword in keywords:
+        if keyword.isascii() and keyword.strip().isalpha():
+            if re.search(rf'\b{re.escape(keyword.strip())}\b', message_lower):
+                count += 1
+        else:
+            if keyword in message_lower:
+                count += 1
+    return count
 
 
 def _extract_symptoms(message: str, issue_category: str | None) -> list[str]:
@@ -182,7 +190,10 @@ def analyze_query_intent(message: str) -> IntentAnalysis:
     if intent == "diagnostic" and category_score >= 2:
         confidence = min(confidence + 0.05, 0.95)
 
-    needs_clarification = len(message_lower.strip()) < 8 and max_score <= 1
+    needs_clarification = (
+        (len(message_lower.strip()) < 8 and max_score <= 1)
+        or (max_score == 0 and len(message_lower.strip()) < 20)
+    )
 
     return IntentAnalysis(
         intent=intent,

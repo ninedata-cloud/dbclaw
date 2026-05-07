@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 from backend.agent.diagnosis_context import build_diagnostic_brief, render_diagnostic_brief_for_prompt
 from backend.agent.prompts import DIAGNOSTIC_PROMPT, INFORMATIONAL_PROMPT, ADMINISTRATIVE_PROMPT
-from backend.agent.intent_detector import analyze_query_intent
+from backend.agent.intent_detector import analyze_query_intent, IntentAnalysis, detect_intent_with_llm
 from backend.agent.skill_authorization import (
     is_static_tool_authorized,
     normalize_skill_authorizations,
@@ -44,6 +44,43 @@ ALERT_SETTINGS_WRITE_ACTIONS = {"create", "update", "delete", "test", "toggle", 
 
 READ_ONLY_SQL_KEYWORDS = {'SELECT', 'SHOW', 'EXPLAIN', 'EXEC', 'EXECUTE', 'DESCRIBE', 'DESC', 'WITH'}
 DANGEROUS_SQL_KEYWORDS = {'INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'TRUNCATE', 'CREATE', 'GRANT', 'REVOKE', 'CALL'}
+
+_TRUNCATION_MAX = 30000
+_TRUNCATION_HEAD = 22000
+_TRUNCATION_TAIL = 6000
+
+
+def _smart_truncate(text: str, max_chars: int = _TRUNCATION_MAX) -> str:
+    if len(text) <= max_chars:
+        return text
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            data_key = next((k for k in ("data", "result", "rows") if isinstance(parsed.get(k), list)), None)
+            if data_key:
+                data_list = parsed[data_key]
+                meta = {k: v for k, v in parsed.items() if k != data_key}
+                meta_json = json.dumps(meta, default=str, ensure_ascii=False)
+                budget = max_chars - len(meta_json) - 100
+                truncated_items = []
+                used = 0
+                for item in data_list:
+                    item_str = json.dumps(item, default=str, ensure_ascii=False)
+                    if used + len(item_str) > budget:
+                        break
+                    truncated_items.append(item)
+                    used += len(item_str)
+                parsed[data_key] = truncated_items
+                if len(truncated_items) < len(data_list):
+                    parsed["_truncated"] = True
+                    parsed["_total_items"] = len(data_list)
+                    parsed["_shown_items"] = len(truncated_items)
+                return json.dumps(parsed, default=str, ensure_ascii=False)
+    except (json.JSONDecodeError, TypeError, KeyError):
+        pass
+    marker = f"\n\n... [中间省略 {len(text) - _TRUNCATION_HEAD - _TRUNCATION_TAIL} 字符]\n\n"
+    return text[:_TRUNCATION_HEAD] + marker + text[-_TRUNCATION_TAIL:]
+
 
 ISSUE_CATEGORY_LABELS = {
     "performance": "性能问题",
@@ -431,6 +468,12 @@ async def assess_tool_risk(tool_name: str, arguments: Dict[str, Any], permission
     if command and keyword_risk.get('level') == 'safe' and looks_clearly_read_only_command(command):
         return keyword_risk
 
+    # 对明显只读的 SQL 同样跳过 LLM 判定，节省延迟
+    if sql and keyword_risk.get('level') == 'safe':
+        keyword = _normalize_sql_keyword(sql)
+        if keyword in READ_ONLY_SQL_KEYWORDS:
+            return keyword_risk
+
     # 有 client 且存在 sql/command 时，优先走 LLM 判定
     if client and (sql or command):
         llm_result = await _llm_assess_risk(client, sql=sql, command=command)
@@ -575,9 +618,23 @@ async def run_conversation_with_skills(
     else:
         intent_text = first_user_message
 
-    # 阶段1: 意图检测
+    # 阶段1: 意图检测（关键词匹配 + 低置信度 LLM 回退）
     yield {"type": "thinking_phase", "phase": "intent_detection", "message": "正在分析您的问题..."}
     intent_analysis = analyze_query_intent(intent_text)
+    if intent_analysis.confidence < 0.7 or intent_analysis.needs_clarification:
+        try:
+            llm_intent = await detect_intent_with_llm(intent_text)
+            if llm_intent != intent_analysis.intent:
+                logger.info("LLM intent override: %s -> %s (keyword confidence=%.2f)", intent_analysis.intent, llm_intent, intent_analysis.confidence)
+                intent_analysis = IntentAnalysis(
+                    intent=llm_intent,
+                    issue_category=intent_analysis.issue_category,
+                    confidence=0.80,
+                    symptoms=intent_analysis.symptoms,
+                    needs_clarification=False,
+                )
+        except Exception as exc:
+            logger.warning("LLM intent fallback failed, using keyword result: %s", exc)
     intent = intent_analysis.intent
     issue_category = intent_analysis.issue_category
 
@@ -623,6 +680,7 @@ async def run_conversation_with_skills(
     datasource_name = None
     diagnostic_brief = None
     host_id = None
+    datasource_ctx = None
 
     # 尝试从 knowledge_context 中提取 host_id（用于纯主机诊断场景）
     if knowledge_context and knowledge_context.get("host_context"):
@@ -637,6 +695,7 @@ async def run_conversation_with_skills(
         from sqlalchemy import select
         result = await db.execute(select(Datasource).filter(Datasource.id == datasource_id, alive_filter(Datasource)))
         datasource = result.scalar_one_or_none()
+        datasource_ctx = datasource
         if datasource:
             datasource_name = datasource.name
             datasource_db_type = datasource.db_type
@@ -785,7 +844,7 @@ async def run_conversation_with_skills(
             issue_category=issue_category,
         )
         if diagnostic_brief:
-            system_msg += "\n\n" + render_diagnostic_brief_for_prompt(diagnostic_brief)
+            system_msg += "\n\n" + render_diagnostic_brief_for_prompt(diagnostic_brief, include_datasource=False)
             yield {
                 "type": "diagnosis_state",
                 "intent": intent,
@@ -803,21 +862,14 @@ async def run_conversation_with_skills(
                 "recent_conclusion": diagnostic_brief.get("recent_conclusion"),
             }
 
-    # 阶段2: 数据源上下文构建完成
+    # 阶段2: 数据源上下文构建完成（复用阶段1已查询的 datasource_ctx）
     datasource_info = ""
-    datasource_ctx = None
-    if datasource_id and db:
-        from backend.models.datasource import Datasource
-        from backend.models.soft_delete import alive_filter
-        from sqlalchemy import select
-        result = await db.execute(select(Datasource).filter(Datasource.id == datasource_id, alive_filter(Datasource)))
-        datasource_ctx = result.scalar_one_or_none()
-        if datasource_ctx:
-            datasource_info = f"数据源: {datasource_ctx.name} ({datasource_ctx.db_type})"
-            if datasource_ctx.host_id:
-                datasource_info += " · 已关联主机"
-            else:
-                datasource_info += " · 未关联主机"
+    if datasource_ctx:
+        datasource_info = f"数据源: {datasource_ctx.name} ({datasource_ctx.db_type})"
+        if datasource_ctx.host_id:
+            datasource_info += " · 已关联主机"
+        else:
+            datasource_info += " · 未关联主机"
     yield {
         "type": "thinking_phase",
         "phase": "context_building",
@@ -862,6 +914,18 @@ async def run_conversation_with_skills(
 
     # 阶段4: 准备开始输出
     yield {"type": "thinking_complete", "message": "开始诊断..."}
+
+    # 预构建技能权限缓存，避免循环内重复查询 SkillRegistry
+    _skill_cache: Dict[str, Any] = {}
+    if db:
+        from backend.skills.registry import SkillRegistry
+        _skill_registry = SkillRegistry(db)
+        for tool_def in active_tools:
+            _tool_name = tool_def.get("function", {}).get("name")
+            if _tool_name and _tool_name not in KB_TOOL_NAMES:
+                _cached_skill = await _skill_registry.get_skill(_tool_name)
+                if _cached_skill:
+                    _skill_cache[_tool_name] = _cached_skill
 
     base_system_msg = system_msg
     full_messages = [{"role": "system", "content": _compose_system_message(base_system_msg, knowledge_context)}] + messages
@@ -1042,8 +1106,7 @@ async def run_conversation_with_skills(
                     })
                     continue
 
-                from backend.skills.registry import SkillRegistry
-                skill = await SkillRegistry(db).get_skill(tool_name) if db else None
+                skill = _skill_cache.get(tool_name)
                 risk = await assess_tool_risk(tool_name, tool_args, getattr(skill, 'permissions', None), client=client)
 
                 yield {
@@ -1126,10 +1189,7 @@ async def run_conversation_with_skills(
                     "error": step_error,
                 }
 
-                # Truncate result for AI model to avoid token limit issues
-                ai_result = tool_result
-                if len(tool_result) > 30000:
-                    ai_result = tool_result[:30000] + "\n\n... [数据过长，已截断。请基于以上数据进行分析]"
+                ai_result = _smart_truncate(tool_result)
                 full_messages.append({
                     "role": "tool",
                     "tool_call_id": tc["id"],

@@ -1,5 +1,6 @@
 """统一外部集成管理数据模型"""
-from sqlalchemy import BigInteger, Column, Integer, String, Text, Boolean, DateTime, JSON
+from sqlalchemy import BigInteger, Column, Integer, String, Text, Boolean, DateTime
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import synonym
 from sqlalchemy.sql import func
 from backend.database import Base
@@ -24,7 +25,7 @@ class Integration(SoftDeleteMixin, Base):
     # 可编程脚本
     code = Column(Text, nullable=False)
     # 参数 Schema（JSON Schema 格式）
-    config_schema = Column(JSON, nullable=True)
+    config_schema = Column(JSONB, nullable=True)
     is_enabled = Column("is_enabled", Boolean, nullable=False, default=True, index=True)
     # 上次执行信息
     last_run_at = Column(DateTime(timezone=True), nullable=True)
@@ -45,15 +46,15 @@ class IntegrationExecutionLog(Base):
     subscription_id = Column(Integer, nullable=True, index=True)
     datasource_id = Column(Integer, nullable=True, index=True)
     target_name = Column(String(255), nullable=True)
-    params_snapshot = Column(JSON, nullable=True)
-    payload_summary = Column(JSON, nullable=True)
+    params_snapshot = Column(JSONB, nullable=True)
+    payload_summary = Column(JSONB, nullable=True)
     # 触发来源: alert_dispatch, manual, scheduler
     trigger_source = Column(String(50), nullable=False, default="manual")
     # 关联对象 ID（如 alert_id）
     trigger_ref_id = Column(String(100), nullable=True)
     status = Column(String(20), nullable=False, default="pending")  # pending/success/failed
     execution_time_ms = Column(Integer, nullable=True)
-    result = Column(JSON, nullable=True)
+    result = Column(JSONB, nullable=True)
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())

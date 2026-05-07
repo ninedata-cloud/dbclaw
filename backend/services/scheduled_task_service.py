@@ -6,6 +6,7 @@ import inspect
 import io
 import json
 import logging
+import re
 import traceback
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -20,7 +21,7 @@ from backend.models.scheduled_task import ScheduledTask, ScheduledTaskRun
 from backend.models.soft_delete import alive_filter, alive_select, get_alive_by_id
 from backend.schemas.scheduled_task import ScheduledTaskCreate, ScheduledTaskUpdate
 from backend.services.integration_service import IntegrationService
-from backend.utils.datetime_helper import now
+from backend.utils.datetime_helper import format_local_datetime, now
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +96,7 @@ def _truncate_text(value: Any, max_chars: int = 1500) -> str:
 def _format_datetime(value: datetime | None) -> str:
     if not value:
         return "-"
-    return value.isoformat()
+    return format_local_datetime(value)
 
 
 def _status_label(status: str | None) -> str:
@@ -152,20 +153,106 @@ def normalize_schedule_config(schedule_type: str, schedule_config: Dict[str, Any
     if schedule_type == "cron":
         if not isinstance(schedule_config, dict):
             raise ValueError("cron 调度配置必须是对象")
+        preset = str(schedule_config.get("preset") or "").strip()
+        if preset:
+            return _normalize_cron_preset(schedule_config, preset)
+
         expression = str(schedule_config.get("expression") or "").strip()
         if not expression:
             raise ValueError("cron.expression 不能为空")
-        CronTrigger.from_crontab(expression)
+        _build_cron_trigger_from_expression(expression)
         return {"expression": expression}
 
-    raise ValueError("schedule_type 只能是 interval 或 cron")
+    raise ValueError("schedule_type 无效：仅支持 cron；历史数据可能仍为 interval")
 
 
 def build_trigger(schedule_type: str, schedule_config: Dict[str, Any]):
     normalized = normalize_schedule_config(schedule_type, schedule_config)
     if schedule_type == "interval":
         return IntervalTrigger(seconds=normalized["interval_seconds"])
-    return CronTrigger.from_crontab(normalized["expression"])
+    return _build_cron_trigger_from_expression(normalized["expression"])
+
+
+def _parse_hms(value: str) -> tuple[int, int, int]:
+    text = str(value or "").strip()
+    matched = re.fullmatch(r"(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?", text)
+    if not matched:
+        raise ValueError("时间格式必须是 HH:MM 或 HH:MM:SS")
+    hour = int(matched.group(1))
+    minute = int(matched.group(2))
+    second = int(matched.group(3) or 0)
+    if not (0 <= hour <= 23 and 0 <= minute <= 59 and 0 <= second <= 59):
+        raise ValueError("时间范围无效，小时需 0-23，分钟/秒需 0-59")
+    return hour, minute, second
+
+
+def _normalize_cron_preset(schedule_config: Dict[str, Any], preset: str) -> Dict[str, Any]:
+    if preset == "hourly":
+        try:
+            minute = int(schedule_config.get("minute", 0))
+            second = int(schedule_config.get("second", 0))
+        except (TypeError, ValueError):
+            raise ValueError("每小时调度的 minute/second 必须是整数")
+        if not (0 <= minute <= 59 and 0 <= second <= 59):
+            raise ValueError("每小时调度的 minute/second 必须在 0-59 之间")
+        expression = f"{second} {minute} * * * *"
+        return {"expression": expression, "preset": "hourly", "minute": minute, "second": second}
+
+    if preset == "daily":
+        hour, minute, second = _parse_hms(schedule_config.get("time", "00:00:00"))
+        expression = f"{second} {minute} {hour} * * *"
+        return {"expression": expression, "preset": "daily", "time": f"{hour:02d}:{minute:02d}:{second:02d}"}
+
+    if preset == "weekly":
+        hour, minute, second = _parse_hms(schedule_config.get("time", "00:00:00"))
+        try:
+            day_of_week = int(schedule_config.get("day_of_week"))
+        except (TypeError, ValueError):
+            raise ValueError("每周调度必须指定 day_of_week（0-6，0 表示周一）")
+        if not (0 <= day_of_week <= 6):
+            raise ValueError("day_of_week 必须在 0-6 之间（0 表示周一）")
+        expression = f"{second} {minute} {hour} * * {day_of_week}"
+        return {
+            "expression": expression,
+            "preset": "weekly",
+            "time": f"{hour:02d}:{minute:02d}:{second:02d}",
+            "day_of_week": day_of_week,
+        }
+
+    if preset == "monthly":
+        hour, minute, second = _parse_hms(schedule_config.get("time", "00:00:00"))
+        try:
+            day = int(schedule_config.get("day"))
+        except (TypeError, ValueError):
+            raise ValueError("每月调度必须指定 day（1-31）")
+        if not (1 <= day <= 31):
+            raise ValueError("day 必须在 1-31 之间")
+        expression = f"{second} {minute} {hour} {day} * *"
+        return {
+            "expression": expression,
+            "preset": "monthly",
+            "time": f"{hour:02d}:{minute:02d}:{second:02d}",
+            "day": day,
+        }
+
+    raise ValueError("cron.preset 仅支持 hourly/daily/weekly/monthly")
+
+
+def _build_cron_trigger_from_expression(expression: str) -> CronTrigger:
+    fields = expression.split()
+    if len(fields) == 5:
+        return CronTrigger.from_crontab(expression)
+    if len(fields) == 6:
+        second, minute, hour, day, month, day_of_week = fields
+        return CronTrigger(
+            second=second,
+            minute=minute,
+            hour=hour,
+            day=day,
+            month=month,
+            day_of_week=day_of_week,
+        )
+    raise ValueError("cron.expression 仅支持 5 段或 6 段格式")
 
 
 def get_task_job_id(task_id: int) -> str:
@@ -211,12 +298,12 @@ class ScheduledTaskService:
 
     @staticmethod
     async def create_task(db: AsyncSession, data: ScheduledTaskCreate, user_id: Optional[int]) -> ScheduledTask:
-        normalized_config = normalize_schedule_config(data.schedule_type, data.schedule_config)
+        normalized_config = normalize_schedule_config("cron", data.schedule_config)
         task = ScheduledTask(
             name=data.name,
             description=data.description,
             script_code=data.script_code,
-            schedule_type=data.schedule_type,
+            schedule_type="cron",
             schedule_config=normalized_config,
             enabled=data.enabled,
             timeout_seconds=data.timeout_seconds,
@@ -238,8 +325,12 @@ class ScheduledTaskService:
         if not task:
             raise ValueError("任务不存在")
 
-        next_schedule_type = data.schedule_type if data.schedule_type is not None else task.schedule_type
-        next_schedule_config = data.schedule_config if data.schedule_config is not None else task.schedule_config
+        if data.schedule_config is not None:
+            next_schedule_type = "cron"
+            next_schedule_config = data.schedule_config
+        else:
+            next_schedule_type = data.schedule_type if data.schedule_type is not None else task.schedule_type
+            next_schedule_config = task.schedule_config
         normalized_config = normalize_schedule_config(next_schedule_type, next_schedule_config)
 
         if data.name is not None:
@@ -248,7 +339,9 @@ class ScheduledTaskService:
             task.description = data.description
         if data.script_code is not None:
             task.script_code = data.script_code
-        if data.schedule_type is not None:
+        if data.schedule_config is not None:
+            task.schedule_type = "cron"
+        elif data.schedule_type is not None:
             task.schedule_type = data.schedule_type
         if data.schedule_config is not None or data.schedule_type is not None:
             task.schedule_config = normalized_config

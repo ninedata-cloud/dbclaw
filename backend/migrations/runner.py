@@ -24,6 +24,10 @@ POST_CREATE_MIGRATIONS: List[Callable[[], Awaitable[None]]] = [
     lambda: _run_add_scheduled_task_notifications(),
     # 移除 scheduled_task 任务级参数配置字段
     lambda: _run_remove_scheduled_task_params(),
+    # 将仍为 json 类型的列迁移为 jsonb（与 ORM 模型一致）
+    lambda: _run_convert_json_columns_to_jsonb(),
+    # TimescaleDB：时序表 hypertable / 压缩 / 可选保留策略
+    lambda: _run_ensure_timescale(),
 ]
 
 
@@ -50,6 +54,17 @@ async def _run_remove_scheduled_task_params():
     from backend.migrations.remove_scheduled_task_params import upgrade
     await upgrade()
 
+
+async def _run_convert_json_columns_to_jsonb():
+    """将 public schema 中 json 列转为 jsonb"""
+    from backend.migrations.convert_json_columns_to_jsonb import upgrade
+    await upgrade()
+
+
+async def _run_ensure_timescale():
+    """启用 TimescaleDB 扩展并对指标表建 hypertable"""
+    from backend.migrations.ensure_timescale import upgrade
+    await upgrade()
 
 
 async def run_pre_create_migrations():

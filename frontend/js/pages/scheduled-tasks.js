@@ -130,19 +130,45 @@ const ScheduledTasksPage = {
     },
 
     formatSchedule(task) {
+        const config = task.schedule_config || {};
         if (task.schedule_type === 'interval') {
-            const seconds = Number(task.schedule_config?.interval_seconds || 0);
-            return `<span class="task-mono">每 ${this.formatInterval(seconds)}</span>`;
+            const seconds = Number(config.interval_seconds || 0);
+            const expression = this.intervalSecondsToCronExpression(seconds || 60);
+            return `<span class="task-mono">cron: ${Utils.escapeHtml(expression)}</span> <span class="task-chip disabled">原间隔</span>`;
         }
-        return `<span class="task-mono">cron: ${Utils.escapeHtml(task.schedule_config?.expression || '-')}</span>`;
+        if (config.preset === 'hourly') {
+            return `<span class="task-mono">每小时 ${String(config.minute ?? 0).padStart(2, '0')}分${String(config.second ?? 0).padStart(2, '0')}秒</span>`;
+        }
+        if (config.preset === 'daily') {
+            return `<span class="task-mono">每天 ${Utils.escapeHtml(config.time || '00:00:00')}</span>`;
+        }
+        if (config.preset === 'weekly') {
+            return `<span class="task-mono">每周${this.weekdayLabel(config.day_of_week)} ${Utils.escapeHtml(config.time || '00:00:00')}</span>`;
+        }
+        if (config.preset === 'monthly') {
+            return `<span class="task-mono">每月${config.day ?? 1}日 ${Utils.escapeHtml(config.time || '00:00:00')}</span>`;
+        }
+        const expression = (config.expression || '').trim() || '-';
+        return `<span class="task-mono">cron: ${Utils.escapeHtml(expression)}</span>`;
     },
 
-    formatInterval(seconds) {
-        if (!seconds) return '-';
-        if (seconds % 86400 === 0) return `${seconds / 86400} 天`;
-        if (seconds % 3600 === 0) return `${seconds / 3600} 小时`;
-        if (seconds % 60 === 0) return `${seconds / 60} 分钟`;
-        return `${seconds} 秒`;
+    /** 将历史「间隔秒」近似为 5/6 段 Cron，便于迁移为纯 Cron 任务。 */
+    intervalSecondsToCronExpression(seconds) {
+        const sec = Math.max(1, Math.floor(Number(seconds) || 60));
+        if (sec <= 59) return `*/${sec} * * * * *`;
+        if (sec % 60 === 0) {
+            const m = sec / 60;
+            if (m > 0 && m < 1440) return `0 */${m} * * * *`;
+        }
+        if (sec % 3600 === 0) {
+            const h = sec / 3600;
+            if (h > 0 && h <= 23) return `0 0 */${h} * * *`;
+        }
+        if (sec % 86400 === 0) {
+            const d = sec / 86400;
+            if (d > 0) return `0 0 0 */${d} * *`;
+        }
+        return '0 * * * * *';
     },
 
     formatDate(value) {
@@ -222,37 +248,48 @@ const ScheduledTasksPage = {
 
                     <section class="scheduled-task-form-section">
                         <div class="scheduled-task-section-heading">
-                            <h4>调度规则</h4>
-                            <p>选择固定间隔或 Cron 表达式。短周期任务请设置合理超时时间，避免任务堆积。</p>
+                            <h4>Cron 调度</h4>
+                            <p>先选常用周期（底层均为 Cron）；最后一项可手写表达式。短周期请设置合理超时，避免任务堆积。</p>
                         </div>
                         <div class="scheduled-task-schedule-layout">
-                            <div class="form-group scheduled-task-type-field">
-                                <label>调度类型 *</label>
-                                <select id="task-schedule-type" class="form-select">
-                                    <option value="interval" ${config.type === 'interval' ? 'selected' : ''}>间隔执行</option>
-                                    <option value="cron" ${config.type === 'cron' ? 'selected' : ''}>Cron 表达式</option>
-                                </select>
-                            </div>
-                            <div id="task-interval-fields" class="scheduled-task-schedule-row">
+                            <div id="task-cron-fields" class="scheduled-task-schedule-row">
                                 <div class="form-group scheduled-task-compact-field">
-                                    <label>执行间隔</label>
-                                    <input id="task-interval-every" type="number" min="1" class="form-input" value="${config.every}">
+                                    <label>执行周期 *</label>
+                                    <select id="task-cron-preset" class="form-select">
+                                        <option value="hourly" ${config.preset === 'hourly' ? 'selected' : ''}>每小时</option>
+                                        <option value="daily" ${config.preset === 'daily' ? 'selected' : ''}>每天</option>
+                                        <option value="weekly" ${config.preset === 'weekly' ? 'selected' : ''}>每周</option>
+                                        <option value="monthly" ${config.preset === 'monthly' ? 'selected' : ''}>每月</option>
+                                        <option value="custom" ${config.preset === 'custom' ? 'selected' : ''}>自定义 Cron 表达式</option>
+                                    </select>
                                 </div>
-                                <div class="form-group scheduled-task-compact-field">
-                                    <label>单位</label>
-                                    <select id="task-interval-unit" class="form-select">
-                                        ${['seconds', 'minutes', 'hours', 'days'].map(unit => `
-                                            <option value="${unit}" ${config.unit === unit ? 'selected' : ''}>${this.unitLabel(unit)}</option>
+                                <div id="task-cron-hourly-fields" class="form-group scheduled-task-compact-field">
+                                    <label>分钟 / 秒</label>
+                                    <div class="scheduled-task-inline-fields">
+                                        <input id="task-cron-hourly-minute" type="number" min="0" max="59" class="form-input" value="${config.minute}" title="每小时内的第几分">
+                                        <input id="task-cron-hourly-second" type="number" min="0" max="59" class="form-input" value="${config.second}" title="该分钟内的第几秒">
+                                    </div>
+                                </div>
+                                <div id="task-cron-time-fields" class="form-group scheduled-task-compact-field">
+                                    <label>时间 (HH:MM:SS)</label>
+                                    <input id="task-cron-time" class="form-input task-mono" value="${this.escapeAttr(config.time)}" placeholder="02:30:00">
+                                </div>
+                                <div id="task-cron-weekly-fields" class="form-group scheduled-task-compact-field">
+                                    <label>星期</label>
+                                    <select id="task-cron-weekday" class="form-select">
+                                        ${[0, 1, 2, 3, 4, 5, 6].map(day => `
+                                            <option value="${day}" ${Number(config.day_of_week) === day ? 'selected' : ''}>周${this.weekdayLabel(day)}</option>
                                         `).join('')}
                                     </select>
                                 </div>
-                            </div>
-
-                            <div id="task-cron-fields" class="scheduled-task-schedule-row">
-                                <div class="form-group scheduled-task-cron-field">
+                                <div id="task-cron-monthly-fields" class="form-group scheduled-task-compact-field">
+                                    <label>每月几号</label>
+                                    <input id="task-cron-month-day" type="number" min="1" max="31" class="form-input" value="${config.day}">
+                                </div>
+                                <div id="task-cron-custom-fields" class="form-group scheduled-task-cron-field scheduled-task-full">
                                     <label>Cron 表达式</label>
-                                    <input id="task-cron-expression" class="form-input task-mono" placeholder="*/5 * * * *" value="${this.escapeAttr(config.expression)}">
-                                    <p class="form-hint">使用 5 段 crontab 格式：分钟 小时 日 月 星期。</p>
+                                    <input id="task-cron-expression" class="form-input task-mono" placeholder="0 */5 * * * *" value="${this.escapeAttr(config.expression)}">
+                                    <p class="form-hint">支持 5 段（分 时 日 月 周）或 6 段（秒 分 时 日 月 周）。</p>
                                 </div>
                             </div>
                         </div>
@@ -307,8 +344,8 @@ const ScheduledTasksPage = {
                 { text: isEdit ? '保存' : '创建', variant: 'primary', onClick: () => this.saveTask(task?.id || null) }
             ]
         });
-        this.updateScheduleFieldsVisibility();
-        DOM.$('#task-schedule-type')?.addEventListener('change', () => this.updateScheduleFieldsVisibility());
+        this.updateCronPresetFieldsVisibility();
+        DOM.$('#task-cron-preset')?.addEventListener('change', () => this.updateCronPresetFieldsVisibility());
         this.renderNotificationTargets(task?.notification_targets || []);
         this.updateNotificationFieldsVisibility();
         DOM.$('#task-notification-policy')?.addEventListener('change', () => this.updateNotificationFieldsVisibility());
@@ -426,22 +463,84 @@ const ScheduledTasksPage = {
     },
 
     denormalizeSchedule(task) {
-        if (!task || task.schedule_type === 'interval') {
-            const seconds = Number(task?.schedule_config?.interval_seconds || 300);
-            if (seconds % 86400 === 0) return { type: 'interval', every: seconds / 86400, unit: 'days', expression: '' };
-            if (seconds % 3600 === 0) return { type: 'interval', every: seconds / 3600, unit: 'hours', expression: '' };
-            if (seconds % 60 === 0) return { type: 'interval', every: seconds / 60, unit: 'minutes', expression: '' };
-            return { type: 'interval', every: seconds, unit: 'seconds', expression: '' };
+        const defaultExpr = '0 */5 * * * *';
+        const base = {
+            preset: 'custom',
+            expression: defaultExpr,
+            minute: 0,
+            second: 0,
+            time: '00:00:00',
+            day_of_week: 0,
+            day: 1,
+        };
+        if (!task) {
+            return { ...base, preset: 'hourly', minute: 0, second: 0 };
         }
-        return { type: 'cron', every: 5, unit: 'minutes', expression: task.schedule_config?.expression || '*/5 * * * *' };
+
+        const config = task.schedule_config || {};
+        if (task.schedule_type === 'interval') {
+            const seconds = Number(config.interval_seconds || 300);
+            return { ...base, preset: 'custom', expression: this.intervalSecondsToCronExpression(seconds) };
+        }
+
+        const preset = config.preset && ['hourly', 'daily', 'weekly', 'monthly', 'custom'].includes(config.preset)
+            ? config.preset
+            : 'custom';
+
+        if (preset !== 'custom') {
+            return {
+                preset,
+                expression: String(config.expression || defaultExpr).trim(),
+                minute: Number(config.minute ?? 0),
+                second: Number(config.second ?? 0),
+                time: config.time || '00:00:00',
+                day_of_week: Number(config.day_of_week ?? 0),
+                day: Number(config.day ?? 1),
+            };
+        }
+
+        const expr = String(config.expression || defaultExpr).trim();
+        const fields = expr.split(/\s+/).filter(Boolean);
+        let parsedMinute = 0;
+        let parsedSecond = 0;
+        let parsedTime = '00:00:00';
+        let parsedDayOfWeek = 0;
+        let parsedDay = 1;
+        if (fields.length === 6) {
+            parsedSecond = Number(fields[0]) || 0;
+            parsedMinute = Number(fields[1]) || 0;
+            const hour = Number(fields[2]) || 0;
+            parsedDay = Number(fields[3]) || 1;
+            parsedDayOfWeek = Number(fields[5]) || 0;
+            parsedTime = `${String(hour).padStart(2, '0')}:${String(parsedMinute).padStart(2, '0')}:${String(parsedSecond).padStart(2, '0')}`;
+        }
+        return {
+            preset: 'custom',
+            expression: expr,
+            minute: parsedMinute,
+            second: parsedSecond,
+            time: parsedTime,
+            day_of_week: parsedDayOfWeek,
+            day: parsedDay,
+        };
     },
 
-    updateScheduleFieldsVisibility() {
-        const type = DOM.$('#task-schedule-type')?.value || 'interval';
-        const intervalFields = DOM.$('#task-interval-fields');
-        const cronFields = DOM.$('#task-cron-fields');
-        if (intervalFields) intervalFields.style.display = type === 'interval' ? 'grid' : 'none';
-        if (cronFields) cronFields.style.display = type === 'cron' ? 'grid' : 'none';
+    updateCronPresetFieldsVisibility() {
+        const preset = DOM.$('#task-cron-preset')?.value || 'hourly';
+        const hourlyFields = DOM.$('#task-cron-hourly-fields');
+        const timeFields = DOM.$('#task-cron-time-fields');
+        const weeklyFields = DOM.$('#task-cron-weekly-fields');
+        const monthlyFields = DOM.$('#task-cron-monthly-fields');
+        const customFields = DOM.$('#task-cron-custom-fields');
+        if (hourlyFields) hourlyFields.style.display = preset === 'hourly' ? 'block' : 'none';
+        if (timeFields) timeFields.style.display = ['daily', 'weekly', 'monthly'].includes(preset) ? 'block' : 'none';
+        if (weeklyFields) weeklyFields.style.display = preset === 'weekly' ? 'block' : 'none';
+        if (monthlyFields) monthlyFields.style.display = preset === 'monthly' ? 'block' : 'none';
+        if (customFields) customFields.style.display = preset === 'custom' ? 'block' : 'none';
+    },
+
+    weekdayLabel(day) {
+        return ['一', '二', '三', '四', '五', '六', '日'][Number(day) || 0] || '一';
     },
 
     updateNotificationFieldsVisibility() {
@@ -450,22 +549,10 @@ const ScheduledTasksPage = {
         if (targets) targets.style.display = policy === 'never' ? 'none' : 'block';
     },
 
-    unitLabel(unit) {
-        return { seconds: '秒', minutes: '分钟', hours: '小时', days: '天' }[unit] || unit;
-    },
-
     collectFormData() {
-        const scheduleType = DOM.$('#task-schedule-type').value;
         const notificationPolicy = DOM.$('#task-notification-policy')?.value || 'never';
 
-        const scheduleConfig = scheduleType === 'interval'
-            ? {
-                every: Number(DOM.$('#task-interval-every').value || 0),
-                unit: DOM.$('#task-interval-unit').value
-            }
-            : {
-                expression: DOM.$('#task-cron-expression').value.trim()
-            };
+        const scheduleConfig = this.collectCronScheduleConfig();
 
         const notificationTargets = Array.from(DOM.$$('.scheduled-task-target-row')).map((row, index) => {
             const integrationId = parseInt(row.querySelector('.scheduled-task-target-integration')?.value, 10);
@@ -504,7 +591,7 @@ const ScheduledTasksPage = {
             name: DOM.$('#task-name').value.trim(),
             description: DOM.$('#task-description').value.trim() || null,
             script_code: DOM.$('#task-script-code').value,
-            schedule_type: scheduleType,
+            schedule_type: 'cron',
             schedule_config: scheduleConfig,
             enabled: DOM.$('#task-enabled').checked,
             timeout_seconds: Number(DOM.$('#task-timeout').value || 60),
@@ -512,6 +599,40 @@ const ScheduledTasksPage = {
             notification_policy: notificationPolicy,
             notification_targets: notificationTargets
         };
+    },
+
+    collectCronScheduleConfig() {
+        const preset = DOM.$('#task-cron-preset')?.value || 'hourly';
+        if (preset === 'hourly') {
+            return {
+                preset: 'hourly',
+                minute: Number(DOM.$('#task-cron-hourly-minute')?.value || 0),
+                second: Number(DOM.$('#task-cron-hourly-second')?.value || 0),
+            };
+        }
+        if (preset === 'daily') {
+            return {
+                preset: 'daily',
+                time: (DOM.$('#task-cron-time')?.value || '00:00:00').trim(),
+            };
+        }
+        if (preset === 'weekly') {
+            return {
+                preset: 'weekly',
+                time: (DOM.$('#task-cron-time')?.value || '00:00:00').trim(),
+                day_of_week: Number(DOM.$('#task-cron-weekday')?.value || 0),
+            };
+        }
+        if (preset === 'monthly') {
+            return {
+                preset: 'monthly',
+                time: (DOM.$('#task-cron-time')?.value || '00:00:00').trim(),
+                day: Number(DOM.$('#task-cron-month-day')?.value || 1),
+            };
+        }
+        const expression = (DOM.$('#task-cron-expression')?.value || '').trim();
+        if (!expression) throw new Error('自定义模式下 Cron 表达式不能为空');
+        return { expression };
     },
 
     getIntegrationName(integrationId) {

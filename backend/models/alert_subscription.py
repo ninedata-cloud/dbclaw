@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, Text, Boolean, DateTime, JSON
+from sqlalchemy import Column, Integer, Text, Boolean, DateTime
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import synonym
 from sqlalchemy.sql import func
 from backend.database import Base
@@ -10,10 +11,10 @@ class AlertSubscription(SoftDeleteMixin, Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, nullable=False, index=True)
-    datasource_ids = Column(JSON, nullable=False, default=list)  # empty = all datasource
-    severity_levels = Column(JSON, nullable=False, default=list)  # empty = all severities
-    time_ranges = Column(JSON, nullable=False, default=list)  # empty = 24/7
-    integration_targets = Column(JSON, nullable=False, default=list)
+    datasource_ids = Column(JSONB, nullable=False, default=list)  # empty = all datasource
+    severity_levels = Column(JSONB, nullable=False, default=list)  # empty = all severities
+    time_ranges = Column(JSONB, nullable=False, default=list)  # empty = 24/7
+    integration_targets = Column(JSONB, nullable=False, default=list)
     is_enabled = Column("is_enabled", Boolean, nullable=False, default=True, index=True)
     aggregation_script = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, DateTime, JSON, Index
+from sqlalchemy import Column, Integer, String, DateTime, Index
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from sqlalchemy.sql.expression import func as sql_func
 
@@ -26,8 +27,8 @@ class ChatChannelBinding(Base):
     integration_id = Column(Integer, nullable=True, index=True)
     default_datasource_id = Column(Integer, nullable=True)
     default_model_id = Column(Integer, nullable=True)
-    kb_ids = Column(JSON, nullable=True)
-    disabled_tools = Column(JSON, nullable=True)
+    kb_ids = Column(JSONB, nullable=True)
+    disabled_tools = Column(JSONB, nullable=True)
     last_message_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())

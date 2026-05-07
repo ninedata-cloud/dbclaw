@@ -1,4 +1,5 @@
-from sqlalchemy import Boolean, Column, DateTime, Numeric, Integer, JSON, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Numeric, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import synonym
 from sqlalchemy.sql import func
 
@@ -24,8 +25,8 @@ class AlertAIEvaluationLog(Base):
     is_accepted = Column("is_accepted", Boolean, nullable=False, default=False, index=True)
     error_message = Column(Text, nullable=True)
     reason = Column(Text, nullable=True)
-    evidence = Column(JSON, nullable=True)
-    feature_summary = Column(JSON, nullable=True)
+    evidence = Column(JSONB, nullable=True)
+    feature_summary = Column(JSONB, nullable=True)
     raw_response = Column(Text, nullable=True)
     prompt_tokens = Column(Integer, nullable=True)
     completion_tokens = Column(Integer, nullable=True)

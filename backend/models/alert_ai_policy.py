@@ -1,4 +1,5 @@
-from sqlalchemy import Boolean, Column, DateTime, Integer, JSON, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import synonym
 from sqlalchemy.sql import func
 
@@ -15,8 +16,8 @@ class AlertAIPolicy(Base):
     is_enabled = Column("is_enabled", Boolean, default=True, nullable=False, index=True)
     model_id = Column(Integer, nullable=True)
     analysis_strategy = Column(String(32), nullable=False, default="candidate_only")
-    analysis_config = Column(JSON, nullable=False, default=dict)
-    compiled_trigger_profile = Column(JSON, nullable=True)
+    analysis_config = Column(JSONB, nullable=False, default=dict)
+    compiled_trigger_profile = Column(JSONB, nullable=True)
     compile_status = Column(String(20), nullable=False, default="pending", index=True)
     compile_error = Column(Text, nullable=True)
     compiled_at = Column(DateTime(timezone=True), nullable=True)

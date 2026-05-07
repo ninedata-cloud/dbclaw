@@ -1,4 +1,5 @@
-from sqlalchemy import BigInteger, Column, Integer, String, DateTime, JSON, Index
+from sqlalchemy import BigInteger, Column, Integer, String, DateTime, Index
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 
 from backend.database import Base
@@ -17,6 +18,6 @@ class DiagnosisEvent(SoftDeleteMixin, Base):
     event_type = Column(String(50), nullable=False, index=True)
     sequence_no = Column(Integer, nullable=False, default=0)
     step_id = Column(String(100), nullable=True)
-    payload = Column(JSON, nullable=True)
+    payload = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

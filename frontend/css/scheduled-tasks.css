@@ -192,18 +192,24 @@
 }
 
 .scheduled-task-section-heading {
-    display: grid;
-    grid-template-columns: minmax(110px, 160px) minmax(0, 1fr);
-    gap: 14px;
-    align-items: start;
-    margin-bottom: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 16px;
+    margin-bottom: 10px;
 }
 
 .scheduled-task-section-heading h4 {
+    flex: 0 0 auto;
     margin: 0;
     color: var(--text-primary);
     font-size: 15px;
     font-weight: 800;
+}
+
+.scheduled-task-section-heading p {
+    flex: 1 1 220px;
+    min-width: 0;
 }
 
 .scheduled-task-form-grid {
@@ -232,30 +238,75 @@
 }
 
 .scheduled-task-schedule-layout {
-    display: grid;
-    grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
-    gap: 14px;
-    align-items: start;
+    display: block;
 }
 
 .scheduled-task-type-field {
     max-width: 220px;
 }
 
+/* Cron 调度：横排 + 换行，省纵向空间 */
 .scheduled-task-schedule-row {
-    display: grid;
-    grid-template-columns: minmax(120px, 160px) minmax(120px, 160px);
-    gap: 10px;
-    align-items: start;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 8px 12px;
 }
 
-#task-cron-fields {
-    grid-template-columns: minmax(280px, 520px);
+.scheduled-task-schedule-row .scheduled-task-compact-field {
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+.scheduled-task-schedule-row .scheduled-task-compact-field > label {
+    margin-bottom: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.scheduled-task-inline-fields {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.scheduled-task-inline-fields .form-input {
+    width: 52px;
+    min-width: 48px;
+}
+
+#task-cron-preset {
+    min-width: 8rem;
+    max-width: 11rem;
+}
+
+#task-cron-time-fields .form-input {
+    width: 7.5rem;
+    max-width: 100%;
+}
+
+#task-cron-weekday {
+    min-width: 5.25rem;
+}
+
+#task-cron-month-day {
+    width: 3.5rem;
 }
 
 .scheduled-task-cron-field {
+    flex: 1 1 220px;
+    min-width: min(100%, 200px);
+    max-width: 100%;
+}
+
+.scheduled-task-cron-field .form-input {
     width: 100%;
-    max-width: 520px;
+    max-width: none;
+}
+
+.scheduled-task-cron-field .form-hint {
+    max-width: none;
 }
 
 .scheduled-task-notification-layout {
@@ -460,13 +511,15 @@
         grid-template-columns: 1fr;
     }
 
-    #task-cron-fields {
-        grid-template-columns: 1fr;
+    .scheduled-task-section-heading {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
     }
 
-    .scheduled-task-section-heading {
-        grid-template-columns: 1fr;
-        gap: 6px;
+    .scheduled-task-section-heading p {
+        flex: none;
+        max-width: none;
     }
 
     .scheduled-task-full {
@@ -494,7 +547,21 @@
         padding: 14px;
     }
 
-    .scheduled-task-schedule-row,
+    #task-cron-fields.scheduled-task-schedule-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    #task-cron-fields .scheduled-task-compact-field .form-input,
+    #task-cron-fields .scheduled-task-compact-field .form-select {
+        width: 100%;
+        max-width: none;
+    }
+
+    #task-cron-preset {
+        max-width: none;
+    }
+
     .scheduled-task-target-top,
     .scheduled-task-target-param-row {
         grid-template-columns: 1fr;

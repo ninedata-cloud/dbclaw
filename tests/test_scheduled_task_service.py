@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -171,6 +172,30 @@ def test_build_notification_payload_includes_execution_logs_on_failure():
     assert "[stdout]\nstdout line" in payload["execution_log"]
     assert "[stderr]\ntraceback line" in payload["execution_log"]
     assert "[stderr]\ntraceback line" in payload["trigger_reason"]
+
+
+@pytest.mark.unit
+def test_build_notification_payload_formats_timestamp_without_iso_timezone():
+    task = SimpleNamespace(id=7, name="定时网络探测")
+    finished_at = datetime(2026, 5, 6, 11, 46, 29, 757745, tzinfo=timezone.utc)
+    run = SimpleNamespace(
+        id=33,
+        status="success",
+        trigger_source="scheduler",
+        started_at=finished_at,
+        finished_at=finished_at,
+        duration_ms=12,
+        error_message=None,
+        result=None,
+        stdout="",
+        stderr="",
+    )
+
+    payload = ScheduledTaskService._build_notification_payload(task, run)
+
+    assert payload["timestamp"] == "2026-05-06 19:46:29"
+    assert "触发时间" not in payload["content"]
+    assert "结束时间：2026-05-06 19:46:29" in payload["content"]
 
 
 @pytest.mark.unit
