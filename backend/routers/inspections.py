@@ -679,7 +679,6 @@ async def public_report_page(
     ds_port = datasource.port if datasource else '-'
     ds_db = datasource.database if datasource else '-'
     ds_remark = datasource.remark if datasource else ''
-    ds_level = datasource.importance_level if datasource else '-'
     ds_tags = ', '.join(datasource.tags) if datasource and datasource.tags else '-'
 
     # Fetch alert event for AI diagnosis
@@ -707,7 +706,6 @@ async def public_report_page(
     ds_host_esc = escape_html(ds_host)
     ds_db_esc = escape_html(ds_db)
     ds_remark_esc = escape_html(ds_remark)
-    ds_level_esc = escape_html(ds_level)
     ds_tags_esc = escape_html(ds_tags)
 
     severity_badge = ''
@@ -767,7 +765,6 @@ async def public_report_page(
                     <div class="ds-field"><div class="ds-label">类型</div><div class="ds-value">{ds_type.upper()}</div></div>
                     <div class="ds-field"><div class="ds-label">主机</div><div class="ds-value">{ds_host_esc}:{ds_port}</div></div>
                     <div class="ds-field"><div class="ds-label">数据库</div><div class="ds-value">{ds_db_esc or "-"}</div></div>
-                    <div class="ds-field"><div class="ds-label">重要等级</div><div class="ds-value">{ds_level_esc}</div></div>
                     <div class="ds-field"><div class="ds-label">标签</div><div class="ds-value">{ds_tags_esc}</div></div>
                 </div>
                 {f'<div class="ds-remark"><div class="ds-remark-label">备注</div>{ds_remark_esc}</div>' if ds_remark else ''}

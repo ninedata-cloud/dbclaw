@@ -24,6 +24,8 @@ POST_CREATE_MIGRATIONS: List[Callable[[], Awaitable[None]]] = [
     lambda: _run_add_scheduled_task_notifications(),
     # 移除 scheduled_task 任务级参数配置字段
     lambda: _run_remove_scheduled_task_params(),
+    # 移除 datasource.importance_level 字段
+    lambda: _run_remove_datasource_importance_level(),
     # 将仍为 json 类型的列迁移为 jsonb（与 ORM 模型一致）
     lambda: _run_convert_json_columns_to_jsonb(),
     # TimescaleDB：时序表 hypertable / 压缩 / 可选保留策略
@@ -52,6 +54,12 @@ async def _run_add_scheduled_task_notifications():
 async def _run_remove_scheduled_task_params():
     """移除 scheduled_task 任务级参数配置字段"""
     from backend.migrations.remove_scheduled_task_params import upgrade
+    await upgrade()
+
+
+async def _run_remove_datasource_importance_level():
+    """移除 datasource.importance_level 字段"""
+    from backend.migrations.remove_datasource_importance_level import upgrade
     await upgrade()
 
 

@@ -101,15 +101,6 @@ const DatasourceForm = {
                 </select>
             </div>
             <div class="form-group">
-                <label>重要性级别</label>
-                <select class="form-select" name="importance_level" required>
-                    <option value="core" ${datasource?.importance_level === 'core' ? 'selected' : ''}>核心系统</option>
-                    <option value="production" ${datasource?.importance_level === 'production' || !datasource ? 'selected' : ''}>生产系统</option>
-                    <option value="development" ${datasource?.importance_level === 'development' ? 'selected' : ''}>开发测试</option>
-                    <option value="temporary" ${datasource?.importance_level === 'temporary' ? 'selected' : ''}>临时</option>
-                </select>
-            </div>
-            <div class="form-group">
                 <label>监控数据来源</label>
                 <select class="form-select" name="metric_source" id="metric-source-select" required>
                     <option value="system" ${!datasource || datasource?.metric_source === 'system' ? 'selected' : ''}>系统采集（直连数据库）</option>

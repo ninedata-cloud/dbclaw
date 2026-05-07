@@ -45,7 +45,6 @@ class AlertDatasourceInfo(BaseModel):
     host: str
     port: int
     database: Optional[str] = None
-    importance_level: str
     remark: Optional[str] = None
     connection_status: str
     connection_error: Optional[str] = None

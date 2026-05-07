@@ -309,6 +309,11 @@ async def _fetch_admin_password_hash(database_url: str) -> tuple[str | None, str
             connect_args={"ssl": False},
         )
         async with engine.connect() as conn:
+            table_exists_result = await conn.execute(text("SELECT to_regclass('app_user')"))
+            table_exists_row = table_exists_result.first()
+            if not table_exists_row or not table_exists_row[0]:
+                return None, None
+
             result = await conn.execute(
                 text("SELECT password_hash FROM app_user WHERE username = :username ORDER BY id ASC LIMIT 1"),
                 {"username": "admin"},

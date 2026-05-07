@@ -32,7 +32,6 @@ code: |
               "has_ssh": datasource.host_id is not None,
               "tags": datasource.tags,
               "is_active": datasource.is_active,
-              "importance_level": datasource.importance_level,
               "remark": datasource.remark,
               "metric_source": datasource.metric_source,
               "external_instance_id": datasource.external_instance_id,

@@ -21,9 +21,6 @@ class Datasource(SoftDeleteMixin, Base):
     tags = Column(JSONB, nullable=False, default=list)
     is_active = Column(Boolean, default=True)
 
-    # 用户配置的重要等级
-    importance_level = Column(String(20), default='production')  # core, production, development, temporary
-
     # 备注信息
     remark = Column(Text, nullable=True)  # 备注，帮助 AI 诊断时理解数据源背景
 
