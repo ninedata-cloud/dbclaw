@@ -39,7 +39,7 @@ AI_ALLOWED_SEVERITIES = {"critical", "high", "medium", "low"}
 SEVERITY_SOURCE_EXPLICIT = "explicit"
 SEVERITY_SOURCE_INFERRED = "inferred"
 SEVERITY_SOURCE_INVALID = "invalid"
-DEFAULT_AI_ALERT_TIMEOUT_SECONDS = 3
+DEFAULT_AI_ALERT_TIMEOUT_SECONDS = 5
 DEFAULT_AI_ALERT_CONFIDENCE_THRESHOLD = 0.7
 DEFAULT_AI_ALERT_COOLDOWN_SECONDS = 900
 DEFAULT_REQUIRED_CONFIRMATIONS = 2
@@ -865,13 +865,25 @@ def _normalize_compiled_profile(raw: dict[str, Any], rule_text: str) -> dict[str
     return profile
 
 
-def _extract_focus_metric_names(rule_text: str, current_metrics: dict[str, Any]) -> list[str]:
+def _extract_focus_metric_names(
+    rule_text: str,
+    current_metrics: dict[str, Any],
+    compiled_focus_metrics: list[str] | None = None,
+) -> list[str]:
     text = (rule_text or "").lower()
     selected: list[str] = []
+
+    # 1) 从策略文本中提取提到的指标
     for metric_name, keywords in METRIC_KEYWORDS.items():
         if any(keyword.lower() in text for keyword in keywords):
             selected.append(metric_name)
 
+    # 2) 合并编译 profile 中的 focus_metrics
+    for metric_name in (compiled_focus_metrics or []):
+        if metric_name not in selected:
+            selected.append(metric_name)
+
+    # 3) 补充当前有值的优选指标
     for metric_name in PREFERRED_METRICS:
         if metric_name not in selected and _extract_metric_value(current_metrics, metric_name) is not None:
             selected.append(metric_name)
@@ -1228,6 +1240,7 @@ async def build_alert_ai_feature_summary(
         except ValueError:
             sampling_interval_seconds = None
     sampling_interval_seconds = _resolve_sampling_interval_seconds(snapshots_desc, sampling_interval_seconds)
+    profile_focus = set(profile.get("focus_metrics") or [])
     compact_metric_features = {
         metric: {
             "current": feature.get("current"),
@@ -1238,6 +1251,7 @@ async def build_alert_ai_feature_summary(
             "recent_samples_span_seconds": feature.get("recent_samples_span_seconds"),
         }
         for metric, feature in metric_features.items()
+        if not profile_focus or metric in profile_focus
     }
 
     return {
@@ -1245,7 +1259,6 @@ async def build_alert_ai_feature_summary(
             "id": datasource.id,
             "name": datasource.name,
             "db_type": datasource.db_type,
-            "importance_level": datasource.importance_level or "production",
         },
         "collected_at": collected_at.isoformat(),
         "sampling_interval_seconds": sampling_interval_seconds,

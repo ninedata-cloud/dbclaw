@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 from sqlalchemy import desc, select
@@ -12,6 +13,7 @@ from backend.models.host import Host
 from backend.models.datasource_metric import DatasourceMetric
 from backend.models.report import Report
 from backend.models.soft_delete import alive_filter
+from backend.utils.datetime_helper import now as utcnow
 
 
 def _safe_float(value: Any) -> float | None:
@@ -150,28 +152,31 @@ def build_focus_areas(
     return deduped[:6]
 
 
-def render_diagnostic_brief_for_prompt(brief: dict[str, Any]) -> str:
-    lines = ["System pre-diagnosis brief:"]
-    datasource = brief.get("datasource") or {}
-    if datasource:
-        lines.append(
-            f"- datasource: {datasource.get('name')} ({datasource.get('db_type')}) @ {datasource.get('host')}:{datasource.get('port')}"
-        )
+def render_diagnostic_brief_for_prompt(brief: dict[str, Any], include_datasource: bool = True) -> str:
+    lines = ["系统预诊断简报："]
+    if include_datasource:
+        datasource = brief.get("datasource") or {}
+        if datasource:
+            lines.append(
+                f"- 数据源：{datasource.get('name')} ({datasource.get('db_type')}) @ {datasource.get('host')}:{datasource.get('port')}"
+            )
     if brief.get("issue_category"):
-        lines.append(f"- likely_issue_category: {brief['issue_category']}")
+        lines.append(f"- 疑似问题类别：{brief['issue_category']}")
     if brief.get("user_symptoms"):
-        lines.append(f"- user_symptoms: {', '.join(brief['user_symptoms'])}")
+        lines.append(f"- 用户症状：{', '.join(brief['user_symptoms'])}")
     for signal in brief.get("abnormal_signals", [])[:6]:
-        lines.append(f"- abnormal_signal: [{signal['severity']}] {signal['label']}={signal['value']} | {signal['reason']}")
+        lines.append(f"- 异常信号：[{signal['severity']}] {signal['label']}={signal['value']} | {signal['reason']}")
     for alert in brief.get("active_alerts", [])[:3]:
-        lines.append(f"- recent_alert: [{alert['severity']}] {alert['title']} | {alert['status']}")
-    if brief.get("recent_conclusion"):
-        lines.append(f"- latest_related_conclusion: {brief['recent_conclusion']['summary']}")
+        lines.append(f"- 近期告警：[{alert['severity']}] {alert['title']} | {alert['status']}")
+    for conclusion in brief.get("recent_conclusions", [])[:3]:
+        lines.append(f"- 历史结论：{conclusion['summary']}（置信度 {conclusion.get('confidence', 'N/A')}）")
+    if not brief.get("recent_conclusions") and brief.get("recent_conclusion"):
+        lines.append(f"- 历史结论：{brief['recent_conclusion']['summary']}")
     if brief.get("recent_report"):
-        lines.append(f"- latest_report_summary: {brief['recent_report']['summary']}")
+        lines.append(f"- 最近报告摘要：{brief['recent_report']['summary']}")
     for focus in brief.get("focus_areas", [])[:5]:
-        lines.append(f"- investigation_focus: {focus}")
-    lines.append("- Use this brief as starting context, but verify every hypothesis with tools before concluding.")
+        lines.append(f"- 排查重点：{focus}")
+    lines.append("- 以上简报仅为参考起点，必须通过工具验证每一项假设后才能下结论。")
     return "\n".join(lines)
 
 
@@ -197,9 +202,13 @@ async def build_diagnostic_brief(
         host_result = await db.execute(select(Host).where(Host.id == datasource.host_id, alive_filter(Host)))
         host = host_result.scalar_one_or_none()
 
+    metric_cutoff = utcnow() - timedelta(hours=2)
     metric_result = await db.execute(
         select(DatasourceMetric)
-        .where(DatasourceMetric.datasource_id == datasource_id)
+        .where(
+            DatasourceMetric.datasource_id == datasource_id,
+            DatasourceMetric.collected_at >= metric_cutoff,
+        )
         .order_by(desc(DatasourceMetric.collected_at))
         .limit(8)
     )
@@ -214,9 +223,13 @@ async def build_diagnostic_brief(
             seen_labels.add(key)
             abnormal_signals.append(signal)
 
+    alert_cutoff = utcnow() - timedelta(hours=24)
     alert_result = await db.execute(
         select(AlertMessage)
-        .where(AlertMessage.datasource_id == datasource_id)
+        .where(
+            AlertMessage.datasource_id == datasource_id,
+            AlertMessage.created_at >= alert_cutoff,
+        )
         .order_by(desc(AlertMessage.created_at))
         .limit(5)
     )
@@ -245,9 +258,10 @@ async def build_diagnostic_brief(
         select(DiagnosisConclusion)
         .where(DiagnosisConclusion.datasource_id == datasource_id)
         .order_by(desc(DiagnosisConclusion.updated_at), desc(DiagnosisConclusion.id))
-        .limit(1)
+        .limit(3)
     )
-    conclusion = conclusion_result.scalars().first()
+    conclusions = list(conclusion_result.scalars().all())
+    conclusion = conclusions[0] if conclusions else None
 
     focus_areas = build_focus_areas(issue_category, abnormal_signals, active_alerts)
     triage_parts = []
@@ -255,8 +269,8 @@ async def build_diagnostic_brief(
         triage_parts.append(f"检测到 {len(abnormal_signals)} 个优先关注信号")
     if active_alerts:
         triage_parts.append(f"最近有 {len(active_alerts)} 条相关告警")
-    if conclusion and conclusion.summary:
-        triage_parts.append("存在历史诊断结论可参考")
+    if conclusions:
+        triage_parts.append(f"存在 {len(conclusions)} 条历史诊断结论可参考")
     if not triage_parts:
         triage_parts.append("暂无明显异常快照，需要依赖实时工具进一步收集证据")
 
@@ -288,6 +302,16 @@ async def build_diagnostic_brief(
             "confidence": conclusion.confidence,
             "updated_at": conclusion.updated_at.isoformat() if conclusion and conclusion.updated_at else None,
         } if conclusion and conclusion.summary else None,
+        "recent_conclusions": [
+            {
+                "id": c.id,
+                "summary": c.summary,
+                "confidence": c.confidence,
+                "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+            }
+            for c in conclusions
+            if c.summary
+        ],
         "focus_areas": focus_areas,
         "triage_summary": "；".join(triage_parts),
     }
