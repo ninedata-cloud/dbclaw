@@ -5,6 +5,7 @@ const HostTerminal = {
     ws: null,
     hostId: null,
     container: null,
+    _handleResizeBound: null,
 
     async render(container, hostId) {
         this.cleanup();
@@ -109,7 +110,8 @@ const HostTerminal = {
         });
 
         // 监听窗口大小变化
-        window.addEventListener('resize', this._handleResize.bind(this));
+        this._handleResizeBound = this._handleResize.bind(this);
+        window.addEventListener('resize', this._handleResizeBound);
     },
 
     _connect() {
@@ -173,7 +175,10 @@ const HostTerminal = {
     },
 
     cleanup() {
-        window.removeEventListener('resize', this._handleResize.bind(this));
+        if (this._handleResizeBound) {
+            window.removeEventListener('resize', this._handleResizeBound);
+            this._handleResizeBound = null;
+        }
 
         if (this.ws) {
             this.ws.close();

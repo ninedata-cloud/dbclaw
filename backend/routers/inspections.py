@@ -841,12 +841,14 @@ async def export_report_pdf(report_id: int, db: AsyncSession = Depends(get_db)):
             }
         )
     except ImportError as e:
+        logger.error(f"PDF export dependency missing: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"PDF export not available. Please install: pip install reportlab. Error: {str(e)}"
+            detail="PDF export not available. Please install: pip install reportlab"
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
+        logger.error(f"PDF generation failed for report {report_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="PDF generation failed")
 
 
 @router.delete("/reports/{report_id}")

@@ -378,7 +378,7 @@ async def get_host_network_topology(host_id: int, db: AsyncSession = Depends(get
             }
     except Exception as e:
         logger.error(f"Failed to get network topology for host {host_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get network topology: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get network topology")
 
 
 @router.get("/{host_id}/processes")
@@ -398,7 +398,7 @@ async def get_host_processes(host_id: int, db: AsyncSession = Depends(get_db)):
             return processes
     except Exception as e:
         logger.error(f"Failed to get processes for host {host_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get processes: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get processes")
 
 
 @router.get("/{host_id}/processes/{pid}")
@@ -418,7 +418,7 @@ async def get_process_detail(host_id: int, pid: int, db: AsyncSession = Depends(
             return detail
     except Exception as e:
         logger.error(f"Failed to get process detail for host {host_id}, pid {pid}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get process detail: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get process detail")
 
 
 @router.post("/test", response_model=SSHTestResult)

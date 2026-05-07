@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, Query, HTTPException, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
@@ -14,6 +16,8 @@ from backend.utils.datetime_helper import now, normalize_local_datetime, to_utc_
 from backend.services import metric_collector
 from backend.services.integration_scheduler import execute_integration
 from backend.services.alert_template_service import resolve_effective_inspection_config
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"], dependencies=[Depends(get_current_user)])
 
@@ -525,4 +529,5 @@ async def refresh_metrics(
             await metric_collector.collect_metrics_for_connection(conn_id)
         return {"success": True, "message": "指标采集已触发"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"采集失败: {str(e)}")
+        logger.error(f"Failed to collect metrics for datasource {conn_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="采集失败")

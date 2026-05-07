@@ -340,7 +340,8 @@ async def upload_attachment(
         metadata = await AttachmentHandler.save_attachment(file_content, file.filename, session_id)
         return metadata
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"保存附件失败: {str(e)}")
+        logger.error(f"Failed to save attachment for session {session_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="保存附件失败")
 
 
 @router.get("/api/chat/sessions/{session_id}/messages", response_model=List[ChatMessageResponse])

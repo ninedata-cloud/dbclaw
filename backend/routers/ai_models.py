@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
@@ -16,6 +18,8 @@ from backend.schemas.ai_model import (
 from backend.dependencies import get_current_user
 from backend.utils.encryption import encrypt_value, decrypt_value
 from backend.services.ai_agent import get_ai_client, request_text_response
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/ai-models", tags=["ai-models"], dependencies=[Depends(get_current_user)])
 
@@ -163,7 +167,8 @@ async def test_model_chat(model_id: int, data: AIModelTestChatRequest, db: Async
             max_tokens=data.max_tokens,
         )
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"模型调用失败：{str(e)}")
+        logger.error(f"AI model call failed: {e}", exc_info=True)
+        raise HTTPException(status_code=502, detail="模型调用失败，请检查模型配置")
 
     latency_ms = int((perf_counter() - started_at) * 1000)
     if not reply:

@@ -169,7 +169,7 @@ async def get_host_processes(host_id: int, db: AsyncSession = Depends(get_db)):
             return [HostProcessItem(**p) for p in processes]
     except Exception as e:
         logger.error(f"Failed to get processes for host {host_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"获取进程列表失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取进程列表失败")
 
 
 @router.post("/{host_id}/processes/{pid}/kill")
@@ -196,7 +196,7 @@ async def kill_host_process(
         raise
     except Exception as e:
         logger.error(f"Failed to kill process {pid} on host {host_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"终止进程失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="终止进程失败")
 
 
 @router.get("/{host_id}/connections", response_model=List[HostConnectionItem])
@@ -213,7 +213,7 @@ async def get_host_connections(host_id: int, db: AsyncSession = Depends(get_db))
             return [HostConnectionItem(**c) for c in connections]
     except Exception as e:
         logger.error(f"Failed to get connections for host {host_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"获取网络连接失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取网络连接失败")
 
 
 @router.get("/{host_id}/network-topology", response_model=HostNetworkTopologyResponse)
@@ -253,7 +253,7 @@ async def get_host_network_topology(host_id: int, db: AsyncSession = Depends(get
             )
     except Exception as e:
         logger.error(f"Failed to get network topology for host {host_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"获取网络拓扑失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取网络拓扑失败")
 
 
 @router.get("/{host_id}/config", response_model=HostConfigResponse)
@@ -479,7 +479,7 @@ async def get_host_config(
 
     except Exception as e:
         logger.error(f"Failed to get host config for {host_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"获取主机配置失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取主机配置失败")
 
 
 @router.post("/{host_id}/config/refresh", response_model=HostConfigResponse)
