@@ -6,6 +6,13 @@ from typing import List, Dict, Any
 logger = logging.getLogger(__name__)
 
 
+def _validate_pid(pid: int) -> int:
+    pid = int(pid)
+    if not (1 <= pid <= 4194304):
+        raise ValueError(f"Invalid PID: {pid}")
+    return pid
+
+
 class HostProcessService:
     """主机进程采集服务"""
 
@@ -61,6 +68,7 @@ class HostProcessService:
     @staticmethod
     async def get_process_detail(ssh_client, pid: int) -> Dict[str, Any]:
         """获取进程详细信息，包括命令详情、网络IO和磁盘IO"""
+        pid = _validate_pid(pid)
         try:
             loop = asyncio.get_event_loop()
 
@@ -257,6 +265,7 @@ class HostProcessService:
     @staticmethod
     async def kill_process(ssh_client, pid: int) -> bool:
         """终止进程"""
+        pid = _validate_pid(pid)
         try:
             loop = asyncio.get_event_loop()
 
