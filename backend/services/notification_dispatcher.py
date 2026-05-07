@@ -357,20 +357,29 @@ def _build_recovery_alert_payload(alert, datasource, diagnosis_summary: str | No
     return payload
 
 
+_dispatch_running = False
+
+
 async def start_notification_dispatcher():
     """
     Background task that processes pending alerts and sends notifications.
     Runs every 30 seconds.
     """
+    global _dispatch_running
     logger.info("Notification dispatcher started")
 
     while True:
-        try:
-            await _process_pending_alerts()
-        except Exception as e:
-            logger.error(f"Notification dispatcher error: {e}", exc_info=True)
+        if _dispatch_running:
+            logger.warning("Previous notification dispatch cycle still running, skipping")
+        else:
+            _dispatch_running = True
+            try:
+                await _process_pending_alerts()
+            except Exception as e:
+                logger.error(f"Notification dispatcher error: {e}", exc_info=True)
+            finally:
+                _dispatch_running = False
 
-        # Wait 30 seconds before next cycle
         await asyncio.sleep(30)
 
 
@@ -442,7 +451,7 @@ async def _process_pending_alerts():
                             event_obj = event_result.scalar_one_or_none()
                             event_ai_config = await get_event_ai_config_for_datasource(db, alert.datasource_id)
                             if event_obj and should_refresh_event_diagnosis(event_obj, event_ai_config):
-                                diagnosis_result = await run_sync_diagnosis(db, alert.event_id, timeout_seconds=600)
+                                diagnosis_result = await run_sync_diagnosis(db, alert.event_id, timeout_seconds=60)
                             elif event_obj:
                                 diagnosis_result = {
                                     "root_cause": event_obj.root_cause,
@@ -1005,6 +1014,7 @@ def _is_network_probe_alert(alert) -> bool:
 
 
 def _should_skip_for_probe_failure(alert, has_probe_failure: bool) -> bool:
+    # 网络探针失败期间，仅允许 network_probe 告警通知，其余一律抑制。
     return has_probe_failure and not _is_network_probe_alert(alert)
 
 

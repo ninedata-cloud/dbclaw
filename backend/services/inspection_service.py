@@ -48,6 +48,7 @@ class InspectionService:
     def __init__(self, db_session_factory):
         self.db_session_factory = db_session_factory
         self.running = False
+        self._background_tasks: set[asyncio.Task] = set()
 
     async def start(self):
         """Start background tasks for scheduled inspections"""
@@ -59,7 +60,13 @@ class InspectionService:
             await self.initialize_all_configs(db)
 
         # Start scheduler loop
-        asyncio.create_task(self._scheduler_loop())
+        self._create_tracked_task(self._scheduler_loop())
+
+    def _create_tracked_task(self, coro) -> asyncio.Task:
+        task = asyncio.create_task(coro)
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        return task
 
     async def stop(self):
         """Stop background tasks"""
@@ -139,8 +146,7 @@ class InspectionService:
 
         logger.info(f"Created {trigger_type} trigger {trigger.id} for datasource {datasource_id}")
 
-        # Always generate the report asynchronously so the caller only creates a task.
-        asyncio.create_task(self._generate_report_async(trigger.id))
+        self._create_tracked_task(self._generate_report_async(trigger.id))
 
         return trigger.id
 
@@ -196,11 +202,12 @@ class InspectionService:
                     configs = result.scalars().all()
 
                     for config in configs:
-                        await self.trigger_inspection(db, config.datasource_id, "scheduled", "Scheduled inspection")
                         config.last_scheduled_at = now
                         config.next_scheduled_at = now + timedelta(seconds=config.schedule_interval)
-
                     await db.commit()
+
+                    for config in configs:
+                        await self.trigger_inspection(db, config.datasource_id, "scheduled", "Scheduled inspection")
 
             except Exception as e:
                 logger.error(f"Error in scheduler loop: {e}", exc_info=True)

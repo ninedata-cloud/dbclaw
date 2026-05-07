@@ -590,7 +590,7 @@ async def get_datasource_top_sql(
         raise
     except Exception as e:
         logger.error(f"Failed to get TOP SQL for datasource {datasource_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"获取 TOP SQL 失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取 TOP SQL 失败")
 
 
 @router.post("/{datasource_id}/explain-sql")
@@ -691,7 +691,7 @@ async def explain_sql(
         raise
     except Exception as e:
         logger.error(f"Failed to explain SQL for datasource {datasource_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"获取执行计划失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取执行计划失败")
 
 
 @router.post("/{datasource_id}/diagnose-sql")
@@ -801,4 +801,4 @@ async def diagnose_sql(
         raise
     except Exception as e:
         logger.error(f"Failed to diagnose SQL for datasource {datasource_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"AI 诊断失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="AI 诊断失败")

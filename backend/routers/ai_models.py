@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
@@ -18,6 +20,8 @@ from backend.schemas.ai_model import (
 from backend.dependencies import get_current_user
 from backend.utils.encryption import encrypt_value, decrypt_value
 from backend.services.ai_agent import get_ai_client, request_text_response
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/ai-models", tags=["ai-models"], dependencies=[Depends(get_current_user)])
 logger = logging.getLogger(__name__)

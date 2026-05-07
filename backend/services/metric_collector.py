@@ -75,19 +75,22 @@ def unsubscribe(datasource_id: int, queue: asyncio.Queue):
 
 async def _push_to_subscribers(datasource_id: int, data: Dict[str, Any]):
     """Push metric data to all subscribers of a datasource."""
-    if datasource_id not in _metric_subscribers:
+    queues = _metric_subscribers.get(datasource_id)
+    if not queues:
         return
     dead_queues = []
-    for queue in _metric_subscribers[datasource_id]:
+    for queue in list(queues):
         try:
             queue.put_nowait(data)
         except asyncio.QueueFull:
             dead_queues.append(queue)
     for q in dead_queues:
         try:
-            _metric_subscribers[datasource_id].remove(q)
+            queues.remove(q)
         except ValueError:
             pass
+    if not queues:
+        _metric_subscribers.pop(datasource_id, None)
 
 
 async def collect_metrics_for_connection(datasource_id: int):
