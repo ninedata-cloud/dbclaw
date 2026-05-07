@@ -718,7 +718,6 @@ const InstanceDetailPage = {
                 ${this._configField('数据库', datasource.database || '-')}
                 ${this._configField('用户名', datasource.username || '-')}
                 ${this._configField('主机关联', datasource.host_id ? `Host #${datasource.host_id}` : '未配置')}
-                ${this._configField('重要级别', datasource.importance_level || 'production')}
                 ${this._configField('标签', (datasource.tags || []).join(', ') || '-')}
                 ${this._configField('备注', datasource.remark || '-')}
                 ${this._configField('连接检测时间', datasource.connection_checked_at ? Format.datetime(datasource.connection_checked_at) : '暂无')}

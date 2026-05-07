@@ -936,12 +936,6 @@ const AlertsPage = {
                         <span class="detail-value">${this._escapeHtml(dsInfo.host || '-')}:${dsInfo.port || '-'} / ${this._escapeHtml(dsInfo.database || '-')}</span>
                     </div>
                 </div>
-                <div class="detail-row">
-                    <div class="detail-row-item">
-                        <span class="detail-label">等级</span>
-                        <span class="detail-value">${this._getImportanceBadge(dsInfo.importance_level)}</span>
-                    </div>
-                </div>
                 ${dsInfo.remark ? `
                 <div class="detail-row">
                     <div class="detail-row-item full-width">
@@ -1204,14 +1198,6 @@ const AlertsPage = {
             hana: 'SAP HANA',
         };
         return labels[dbType] || dbType || '-';
-    },
-
-    // Helper: Get importance badge
-    _getImportanceBadge(level) {
-        const labels = { core: '核心', production: '生产', development: '开发', temporary: '临时' };
-        const label = labels[level] || level || '生产';
-        const colorClass = level === 'core' ? 'importance-core' : level === 'production' ? 'importance-production' : level === 'development' ? 'importance-development' : 'importance-temporary';
-        return `<span class="importance-badge ${colorClass}">● ${label}</span>`;
     },
 
     // Helper: Get connection status label

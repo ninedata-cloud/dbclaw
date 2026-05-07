@@ -164,7 +164,7 @@ erDiagram
 
 - 连接信息：`host`, `port`, `username`, `password_encrypted`, `database`
 - 监控来源：`metric_source`, `external_instance_id`, `inbound_source`
-- 业务标记：`importance_level`, `remark`, `tags`
+- 业务标记：`remark`, `tags`
 - 运维控制：`silence_until`, `silence_reason`
 - 连接健康：`connection_status`, `connection_error`, `connection_checked_at`
 

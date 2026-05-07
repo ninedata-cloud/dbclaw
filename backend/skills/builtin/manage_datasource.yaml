@@ -49,11 +49,6 @@ parameters:
     type: integer
     required: false
     description: SSH host ID for tunneling (optional for create/update)
-  - name: importance_level
-    type: string
-    required: false
-    description: Importance level (optional for create/update)
-    enum: [core, production, development, temporary]
   - name: extra_params
     type: object
     required: false
@@ -126,7 +121,6 @@ code: |
                       "host_id": ds.host_id,
                       "tags": ds.tags,
                       "is_active": ds.is_active,
-                      "importance_level": ds.importance_level,
                       "remark": ds.remark,
                       "metric_source": ds.metric_source,
                       "external_instance_id": ds.external_instance_id,
@@ -169,7 +163,6 @@ code: |
                   "host_id": datasource.host_id,
                   "tags": datasource.tags,
                   "is_active": datasource.is_active,
-                  "importance_level": datasource.importance_level,
                   "remark": datasource.remark,
                   "metric_source": datasource.metric_source,
                   "external_instance_id": datasource.external_instance_id,
@@ -204,7 +197,6 @@ code: |
               host_id=params.get('host_id'),
               tags=params.get('tags', []),
               is_active=params.get('is_active', True),
-              importance_level=params.get('importance_level', 'production'),
               remark=params.get('remark'),
               metric_source=params.get('metric_source', 'system'),
               external_instance_id=params.get('external_instance_id'),
@@ -264,8 +256,6 @@ code: |
               datasource.tags = params['tags']
           if 'is_active' in params:
               datasource.is_active = params['is_active']
-          if 'importance_level' in params:
-              datasource.importance_level = params['importance_level']
           if 'remark' in params:
               datasource.remark = params['remark']
           if 'metric_source' in params:

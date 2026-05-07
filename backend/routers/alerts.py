@@ -74,7 +74,6 @@ def _build_datasource_info(datasource: Optional[Datasource]) -> Optional[AlertDa
         host=datasource.host,
         port=datasource.port,
         database=datasource.database,
-        importance_level=datasource.importance_level or 'production',
         remark=datasource.remark,
         connection_status=datasource.connection_status or 'unknown',
         connection_error=datasource.connection_error,
@@ -620,9 +619,6 @@ async def public_alert_page(
     ds_host = escape_html(datasource.host if datasource else '-')
     ds_port = datasource.port if datasource else '-'
     ds_db = escape_html(datasource.database if datasource and datasource.database else '-')
-    ds_level = datasource.importance_level if datasource else 'production'
-    ds_level_label = {'core': '核心', 'production': '生产', 'development': '开发', 'temporary': '临时'}.get(ds_level, ds_level)
-    ds_level_color = {'core': '#dc2626', 'production': '#2563eb', 'development': '#7c3aed', 'temporary': '#6b7280'}.get(ds_level, '#6b7280')
     ds_remark = escape_html(datasource.remark if datasource and datasource.remark else '')
     ds_status = datasource.connection_status if datasource else 'unknown'
     ds_status_label = {'normal': '正常', 'warning': '警告', 'failed': '失败', 'unknown': '未知'}.get(ds_status, ds_status)
@@ -789,15 +785,6 @@ async def public_alert_page(
                         <div class="field">
                             <div class="field-label">连接</div>
                             <div class="field-value">{ds_host}:{ds_port} / {ds_db}</div>
-                        </div>
-                        <div class="field">
-                            <div class="field-label">等级</div>
-                            <div class="field-value">
-                                <span style="display:inline-flex;align-items:center;gap:4px;">
-                                    <span class="status-dot" style="background:{ds_level_color};"></span>
-                                    {ds_level_label}
-                                </span>
-                            </div>
                         </div>
                         <div class="field">
                             <div class="field-label">连接状态</div>

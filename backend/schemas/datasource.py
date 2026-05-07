@@ -15,7 +15,6 @@ class DatasourceCreate(BaseModel):
     host_id: Optional[int] = None
     extra_params: Optional[Dict[str, Any]] = None
     tags: List[str] = Field(default_factory=list)
-    importance_level: Optional[str] = Field(default='production', pattern="^(core|production|development|temporary)$")
     remark: Optional[str] = Field(None, description="备注，帮助 AI 诊断时理解数据源背景")
 
     # 监控数据来源配置
@@ -35,7 +34,6 @@ class DatasourceUpdate(BaseModel):
     host_id: Optional[int] = None
     extra_params: Optional[Dict[str, Any]] = None
     tags: Optional[List[str]] = None
-    importance_level: Optional[str] = Field(None, pattern="^(core|production|development|temporary)$")
     remark: Optional[str] = Field(None, description="备注，帮助 AI 诊断时理解数据源背景")
 
     # 监控数据来源配置
@@ -56,7 +54,6 @@ class DatasourceResponse(TimestampSerializerMixin, BaseModel):
     extra_params: Optional[Dict[str, Any]] = None
     tags: List[str] = Field(default_factory=list)
     is_active: bool = True
-    importance_level: str = 'production'
     remark: Optional[str] = None
 
     # 监控数据来源配置

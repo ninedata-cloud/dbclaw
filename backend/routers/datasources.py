@@ -73,7 +73,6 @@ router = APIRouter(prefix="/api/datasources", tags=["datasources"], dependencies
 async def list_datasource(
     q: str | None = None,
     db_type: str | None = None,
-    importance_level: str | None = None,
     tags: str | None = None,
     db: AsyncSession = Depends(get_db)
 ):
@@ -92,9 +91,6 @@ async def list_datasource(
 
     if db_type and db_type.strip():
         filters.append(Datasource.db_type == db_type.strip())
-
-    if importance_level and importance_level.strip():
-        filters.append(Datasource.importance_level == importance_level.strip())
 
     filter_tags = normalize_tags((tags or '').replace('，', ',').split(','))
     for tag in filter_tags:
@@ -225,7 +221,6 @@ async def create_datasource(data: DatasourceCreate, db: AsyncSession = Depends(g
         host_id=data.host_id,
         extra_params=data.extra_params,
         tags=normalize_tags(data.tags),
-        importance_level=data.importance_level,
         metric_source=data.metric_source,
         external_instance_id=data.external_instance_id,
         inbound_source=data.inbound_source,
