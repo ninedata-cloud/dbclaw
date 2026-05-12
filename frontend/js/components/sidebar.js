@@ -20,6 +20,7 @@ const Sidebar = {
             { id: 'ai-models', icon: 'brain', label: 'AI 大模型管理' },
             { id: 'skills', icon: 'wrench', label: '技能管理' },
             { id: 'documents', icon: 'book-open', label: '知识库' },
+            { id: 'evaluation', icon: 'gauge', label: 'AI 评测' },
         ]},
         { section: '系统配置', items: [
             { id: 'datasources', icon: 'database', label: '数据源管理' },

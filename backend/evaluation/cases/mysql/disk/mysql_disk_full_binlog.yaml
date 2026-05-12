@@ -1,0 +1,71 @@
+id: mysql_disk_full_binlog
+category: disk_full
+db_type: mysql
+title: "MySQL 磁盘满（binlog 堆积）"
+difficulty: medium
+description: "/data 目录使用率 95%，根因是 binlog 没有清理策略导致堆积"
+
+user_message: "数据库报磁盘空间不足了，写入开始报错，能帮我排查吗"
+
+fixtures:
+  - tool: diagnose_disk_space
+    args: any
+    response:
+      success: true
+      data:
+        partitions:
+          - mount: /
+            size_gb: 80
+            used_gb: 32
+            usage_percent: 40.0
+          - mount: /data
+            size_gb: 500
+            used_gb: 478
+            usage_percent: 95.6
+        largest_dirs:
+          - path: /data/mysql/binlog
+            size_gb: 320
+          - path: /data/mysql/data
+            size_gb: 145
+
+  - tool: mysql_get_db_size
+    args: any
+    response:
+      success: true
+      data:
+        databases:
+          - schema: shop
+            data_size_gb: 88
+            index_size_gb: 35
+          - schema: core
+            data_size_gb: 18
+            index_size_gb: 4
+        total_data_dir_gb: 145
+        binlog_dir_gb: 320
+
+  - tool: mysql_get_db_variables
+    args: any
+    response:
+      success: true
+      data:
+        log_bin: "ON"
+        binlog_expire_logs_seconds: 0
+        expire_logs_days: 0
+        binlog_format: "ROW"
+        max_binlog_size: 1073741824
+        sync_binlog: 1
+
+expected:
+  required_tools: [diagnose_disk_space, mysql_get_db_size]
+  forbidden_tools: [execute_any_sql, execute_any_os_command, manage_datasource]
+  min_tool_rounds: 2
+  max_tool_rounds: 6
+
+  root_causes:
+    - "/data 分区 95% 占用，根因为 binlog 目录占 320GB，binlog_expire_logs_seconds=0 表示永不过期"
+
+  required_actions:
+    - keywords: ["binlog_expire_logs_seconds", "PURGE BINARY LOGS"]
+
+  conclusion_must_contain: ["诊断结论", "建议动作", "风险"]
+  conclusion_must_not_contain: ["也许"]

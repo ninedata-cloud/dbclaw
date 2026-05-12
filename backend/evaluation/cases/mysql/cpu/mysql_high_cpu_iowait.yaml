@@ -1,0 +1,77 @@
+id: mysql_high_cpu_iowait
+category: high_cpu_iowait
+db_type: mysql
+title: "MySQL CPU 高 + iowait 高（条件分支）"
+difficulty: hard
+description: "OS 显示 iowait 偏高，需要 AI 主动追加调用 diagnose_disk_io 验证磁盘 I/O 瓶颈"
+
+user_message: "服务器 CPU 报警了，监控曲线一直在 80% 以上，请帮忙看看根因"
+
+fixtures:
+  - tool: get_os_metrics
+    args: any
+    response:
+      success: true
+      data:
+        cpu:
+          usage_percent: 88.0
+          user_percent: 22.0
+          system_percent: 8.0
+          iowait_percent: 56.0
+          idle_percent: 12.0
+        load_average:
+          one_min: 22.0
+          five_min: 21.5
+          fifteen_min: 19.8
+        cpu_cores: 8
+        memory:
+          total_gb: 32
+          used_gb: 28
+          free_gb: 0.5
+          buffers_cached_gb: 3
+          swap_used_gb: 4.2
+
+  - tool: diagnose_disk_io
+    args: any
+    response:
+      success: true
+      data:
+        devices:
+          - device: sda
+            tps: 2100
+            read_mb_s: 12
+            write_mb_s: 220
+            await_ms: 38
+            util_percent: 99.2
+          - device: sdb
+            tps: 5
+            read_mb_s: 0.1
+            write_mb_s: 0.0
+            await_ms: 0.4
+            util_percent: 1.0
+
+  - tool: mysql_get_db_status
+    args: any
+    response:
+      success: true
+      data:
+        version: "MySQL 8.0.32"
+        innodb_buffer_pool_pages_dirty: 480000
+        innodb_buffer_pool_pages_total: 524288
+        innodb_io_capacity: 200
+        innodb_log_waits: 1240
+
+expected:
+  required_tools: [get_os_metrics, diagnose_disk_io]
+  forbidden_tools: [execute_any_sql, execute_any_os_command]
+  min_tool_rounds: 2
+  max_tool_rounds: 8
+
+  root_causes:
+    - "CPU 表象主要由 iowait 56% 推高，根因在于 sda 磁盘 %util 99% 写延迟高，配合 InnoDB 脏页比例过高"
+
+  required_actions:
+    - keywords: ["innodb_io_capacity"]
+
+  conclusion_must_contain: ["诊断结论", "关键证据", "建议动作"]
+  conclusion_must_not_contain: ["也许"]

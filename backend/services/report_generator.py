@@ -59,10 +59,14 @@ class ReportGenerator:
         from backend.agent.conversation_skills import generate_report_with_skills
 
         result = await self.db.execute(select(InspectionTrigger).where(InspectionTrigger.id == trigger_id))
-        trigger = result.scalar_one()
+        trigger = result.scalar_one_or_none()
+        if not trigger:
+            raise ValueError(f"Inspection trigger {trigger_id} not found")
 
         result = await self.db.execute(select(Datasource).where(Datasource.id == trigger.datasource_id, alive_filter(Datasource)))
-        datasource = result.scalar_one()
+        datasource = result.scalar_one_or_none()
+        if not datasource:
+            return await self._create_failed_report_for_missing_datasource(trigger)
 
         result = await self.db.execute(select(InspectionConfig).where(InspectionConfig.datasource_id == trigger.datasource_id))
         config = result.scalar_one_or_none()
@@ -279,3 +283,32 @@ class ReportGenerator:
                 raise
 
         return report_id
+
+    async def _create_failed_report_for_missing_datasource(self, trigger) -> int:
+        message = (
+            f"Datasource {trigger.datasource_id} for inspection trigger {trigger.id} "
+            "was not found or has been deleted"
+        )
+        logger.warning(message)
+
+        report = Report(
+            datasource_id=trigger.datasource_id,
+            title=f"{trigger.trigger_type.capitalize()} Inspection - Datasource {trigger.datasource_id}",
+            report_type="inspection",
+            status="failed",
+            summary="报告生成失败：数据源不存在或已删除。",
+            content_md="",
+            content_html=None,
+            trigger_type=trigger.trigger_type,
+            trigger_id=trigger.id,
+            trigger_reason=trigger.trigger_reason,
+            generation_method="ai",
+            error_message=message,
+            skill_executions=[],
+            completed_at=now(),
+        )
+        self.db.add(report)
+        trigger.error_message = message
+        await self.db.flush()
+        await self.db.commit()
+        return report.id

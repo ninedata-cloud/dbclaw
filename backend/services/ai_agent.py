@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 import anthropic
+import httpx
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
 
@@ -65,6 +66,10 @@ def _extract_anthropic_reasoning_text(delta: Any) -> str:
 OPENAI_PROTOCOL = "openai"
 ANTHROPIC_PROTOCOL = "anthropic"
 DEFAULT_MODEL = "claude-opus-4-6"
+OFFICIAL_OPENAI_BASE_URLS = (
+    "https://api.openai.com",
+    "https://api.openai.com/v1",
+)
 
 
 @dataclass
@@ -101,7 +106,15 @@ def get_ai_client(
     if not model_name:
         return None
 
-    client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+    openai_kwargs: Dict[str, Any] = {"api_key": api_key, "base_url": base_url}
+    normalized_base_url = (base_url or "").rstrip("/")
+    if normalized_base_url and normalized_base_url not in OFFICIAL_OPENAI_BASE_URLS:
+        openai_kwargs["default_headers"] = {"User-Agent": "DBClaw/1.0"}
+        openai_kwargs["http_client"] = httpx.AsyncClient(
+            headers={"User-Agent": "DBClaw/1.0"},
+        )
+
+    client = AsyncOpenAI(**openai_kwargs)
     return AIClient(
         protocol=OPENAI_PROTOCOL,
         client=client,

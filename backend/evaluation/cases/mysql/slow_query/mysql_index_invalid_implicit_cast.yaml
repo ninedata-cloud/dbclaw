@@ -1,0 +1,74 @@
+id: mysql_index_invalid_implicit_cast
+category: slow_query
+db_type: mysql
+title: "MySQL 索引失效（隐式类型转换）"
+difficulty: medium
+description: "users.phone 是 varchar，业务用整数查询导致隐式类型转换，索引失效"
+
+user_message: "users 表按手机号查询非常慢，但我看 phone 字段是有索引的"
+
+fixtures:
+  - tool: mysql_get_slow_queries
+    args: any
+    response:
+      success: true
+      data:
+        - sql: "SELECT id, name, email FROM users WHERE phone = 13800138000"
+          digest: "a4c2..."
+          exec_count: 8200
+          avg_time_ms: 1850
+          rows_examined_avg: 9800000
+          rows_sent_avg: 1
+          schema: "core"
+
+  - tool: mysql_explain_query
+    args:
+      sql_pattern: "users.*phone.*=.*138"
+    response:
+      success: true
+      data:
+        plan:
+          - id: 1
+            select_type: SIMPLE
+            table: users
+            type: ALL
+            possible_keys: "idx_phone"
+            key: null
+            rows: 9800000
+            filtered: 10.0
+            Extra: "Using where"
+        warnings:
+          - "Cannot use index 'idx_phone' due to type conversion on column 'phone' (varchar -> bigint)"
+
+  - tool: mysql_get_table_stats
+    args: any
+    response:
+      success: true
+      data:
+        - table_schema: core
+          table_name: users
+          rows: 9800000
+          data_size_mb: 1100
+          indexes:
+            - name: PRIMARY
+              columns: [id]
+            - name: idx_phone
+              columns: [phone]
+              unique: false
+          column_types:
+            phone: "varchar(20)"
+
+expected:
+  required_tools: [mysql_get_slow_queries, mysql_explain_query]
+  forbidden_tools: [execute_any_sql, manage_datasource]
+  min_tool_rounds: 2
+  max_tool_rounds: 6
+
+  root_causes:
+    - "phone 字段是 varchar，但 SQL 用整数比较，发生隐式类型转换导致索引 idx_phone 失效"
+
+  required_actions:
+    - keywords: ["'", "phone"]
+
+  conclusion_must_contain: ["诊断结论", "关键证据"]
+  conclusion_must_not_contain: ["也许", "或许"]

@@ -210,7 +210,11 @@ async def _continue_conversation_after_tool(
 
 async def _get_owned_session(db: AsyncSession, session_id: int, user: User) -> DiagnosticSession:
     result = await db.execute(
-        alive_select(DiagnosticSession).where(DiagnosticSession.id == session_id, DiagnosticSession.user_id == user.id)
+        alive_select(DiagnosticSession).where(
+            DiagnosticSession.id == session_id,
+            DiagnosticSession.user_id == user.id,
+            DiagnosticSession.is_hidden == False,
+        )
     )
     session = result.scalar_one_or_none()
     if not session:
@@ -247,7 +251,11 @@ async def _authenticate_websocket_session(websocket: WebSocket, session_id: int)
         if not user or not user.is_active:
             return None, None
         chat_session_result = await db.execute(
-            alive_select(DiagnosticSession).where(DiagnosticSession.id == session_id, DiagnosticSession.user_id == user.id)
+            alive_select(DiagnosticSession).where(
+                DiagnosticSession.id == session_id,
+                DiagnosticSession.user_id == user.id,
+                DiagnosticSession.is_hidden == False,
+            )
         )
         chat_session = chat_session_result.scalar_one_or_none()
         if not chat_session:

@@ -1,0 +1,67 @@
+id: mysql_connection_failure_firewall
+category: connection_failure
+db_type: mysql
+title: "MySQL 连接失败（防火墙）"
+difficulty: medium
+description: "应用连不上 MySQL，TCP 端口被防火墙拦截"
+
+user_message: "应用连不上 MySQL 了，报 connection timeout，紧急排查"
+
+fixtures:
+  - tool: diagnose_datasource_connection
+    args: any
+    response:
+      success: true
+      data:
+        host: "10.0.2.20"
+        port: 3306
+        ping:
+          reachable: true
+          avg_rtt_ms: 0.4
+          packet_loss_percent: 0
+        tcp_probe:
+          status: "timeout"
+          message: "connection timed out after 10s"
+        dns:
+          resolved: true
+          ip: "10.0.2.20"
+        auth:
+          attempted: false
+
+  - tool: diagnose_network
+    args: any
+    response:
+      success: true
+      data:
+        listening_ports:
+          - port: 22
+            process: sshd
+          - port: 3306
+            process: mysqld
+        firewall_rules:
+          - chain: INPUT
+            target: ACCEPT
+            protocol: tcp
+            destination_port: 22
+            source: "0.0.0.0/0"
+          - chain: INPUT
+            target: DROP
+            protocol: tcp
+            destination_port: 3306
+            source: "0.0.0.0/0"
+        established_connections: 12
+
+expected:
+  required_tools: [diagnose_datasource_connection, diagnose_network]
+  forbidden_tools: [execute_any_os_command, manage_datasource]
+  min_tool_rounds: 2
+  max_tool_rounds: 6
+
+  root_causes:
+    - "TCP 3306 端口被 iptables/防火墙规则 DROP，导致应用连接超时；MySQL 服务本身正常监听"
+
+  required_actions:
+    - keywords: ["3306", "防火墙"]
+
+  conclusion_must_contain: ["诊断结论", "建议动作"]
+  conclusion_must_not_contain: ["也许"]

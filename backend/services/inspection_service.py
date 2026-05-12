@@ -12,7 +12,7 @@ from backend.models.inspection_trigger import InspectionTrigger
 from backend.models.datasource import Datasource
 from backend.models.datasource_metric import DatasourceMetric
 from backend.models.report import Report
-from backend.models.soft_delete import alive_select, get_alive_by_id
+from backend.models.soft_delete import alive_filter, alive_select, get_alive_by_id
 from backend.utils.datetime_helper import now as get_now
 
 logger = logging.getLogger(__name__)
@@ -192,10 +192,13 @@ class InspectionService:
                 async with self.db_session_factory() as db:
                     now = get_now()
                     result = await db.execute(
-                        select(InspectionConfig).where(
+                        select(InspectionConfig)
+                        .join(Datasource, Datasource.id == InspectionConfig.datasource_id)
+                        .where(
                             and_(
                                 InspectionConfig.is_enabled == True,
-                                InspectionConfig.next_scheduled_at <= now
+                                InspectionConfig.next_scheduled_at <= now,
+                                alive_filter(Datasource),
                             )
                         )
                     )

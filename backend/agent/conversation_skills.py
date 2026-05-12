@@ -21,6 +21,7 @@ from backend.agent.skill_authorization import (
 from backend.agent.skill_selector import get_available_skills_as_tools
 from backend.agent.tools import get_filtered_tools
 from backend.agent.context_builder import execute_tool
+from backend.agent.tool_override import get_tool_override
 from backend.models.diagnostic_session import DiagnosticSession
 from backend.services.knowledge_router import render_knowledge_plan_for_prompt, replan_with_evidence
 from backend.services.ai_agent import get_ai_client, stream_assistant_turn, request_text_response
@@ -484,6 +485,89 @@ async def assess_tool_risk(tool_name: str, arguments: Dict[str, Any], permission
     return keyword_risk
 
 
+def _build_datasource_context_prompt(
+    *,
+    datasource_id: int,
+    datasource_type: str,
+    datasource_name: str,
+    datasource_host: str,
+    datasource_port: Any,
+    host_id: Optional[int],
+    host_configured: bool,
+    db_version: Optional[str] = None,
+    host_os_version: Optional[str] = None,
+    host_ssh_port: Optional[Any] = None,
+    remark: Optional[str] = None,
+    host_name: Optional[str] = None,
+) -> str:
+    skill_prefix_map = {
+        'mysql': 'mysql',
+        'tdsql-c-mysql': 'mysql',
+        'postgresql': 'pg',
+        'sqlserver': 'mssql',
+        'oracle': 'oracle',
+        'opengauss': 'opengauss',
+    }
+    skill_prefix = skill_prefix_map.get(datasource_type, datasource_type)
+    db_version_info = f"\n- db_version: {db_version}" if db_version else ""
+    host_os_info = f"\n- host_os_version: {host_os_version}" if host_os_version else ""
+    host_ssh_info = f"\n- host_ssh_port: {host_ssh_port}" if host_ssh_port else ""
+
+    prompt = (
+        "\n\nCurrent conversation datasource context (stable unless the user explicitly asks to switch):"
+        f"\n- datasource_id: {datasource_id}"
+        f"\n- datasource_type: {datasource_type}"
+        f"\n- datasource_name: {datasource_name}"
+        f"\n- host_id: {host_id if host_id is not None else 'None'}"
+        f"\n- host_configured: {str(host_configured).lower()}"
+        f"\n- datasource_host: {datasource_host}"
+        f"\n- datasource_port: {datasource_port}"
+        f"{db_version_info}"
+        f"{host_os_info}"
+        f"{host_ssh_info}"
+    )
+    prompt += (
+        f"\n\nThe user is currently working with datasource ID: {datasource_id} "
+        f"(Type: {datasource_type.upper()}, Name: {datasource_name}). "
+        "Use this ID when calling tools unless they specify otherwise."
+    )
+    prompt += (
+        f"\n\nIMPORTANT: This is a {datasource_type.upper()} database. You MUST use "
+        f"{skill_prefix}_* skills (e.g., {skill_prefix}_get_db_status, "
+        f"{skill_prefix}_get_slow_queries, {skill_prefix}_get_table_stats, etc.). "
+        "Do NOT use skills for other database types like mysql_*, pg_*, mssql_*, or oracle_* unless they match this database type. "
+        "Unless the user explicitly asks to switch datasource, keep all diagnosis and tool calls scoped to this datasource."
+    )
+
+    if remark:
+        prompt += (
+            f"\n\n**数据源备注**：{remark}"
+            "\n此备注包含该数据源的业务背景、特殊配置或已知问题等重要上下文信息，诊断时请结合此备注进行分析。"
+        )
+
+    if host_configured:
+        host_parts = []
+        if host_name:
+            host_parts.append(f"主机名: {host_name}")
+        if host_os_version:
+            host_parts.append(f"OS版本: {host_os_version}")
+        if host_ssh_port:
+            host_parts.append(f"SSH端口: {host_ssh_port}")
+        host_detail = "，".join(host_parts) if host_parts else "已关联主机"
+        prompt += (
+            f"\n\n**主机连接已配置**：该数据源已关联主机（{host_detail}），host_id={host_id}。"
+            "你可以使用 OS 层面的诊断技能（get_os_metrics、diagnose_high_cpu、diagnose_high_memory、diagnose_disk_space、diagnose_disk_io、diagnose_network）进行操作系统级别的深度分析。"
+            "\n\n**重要**：调用这些 OS 诊断技能时，可以使用两种方式："
+            f"\n1. 传入 datasource_id（数据源场景）：`{{\"datasource_id\": {datasource_id}}}`"
+            f"\n2. 传入 host_id（主机场景）：`{{\"host_id\": {host_id}}}`"
+            "\n\n当前上下文中，如果是针对该数据源的诊断，使用 datasource_id；如果是纯主机层面的诊断，可以直接使用 host_id。遇到性能问题时，应同时从数据库和操作系统两个层面进行诊断。"
+        )
+    else:
+        prompt += "\n\n**注意**：该数据源未配置主机连接，host_id=None，无法进行操作系统层面的诊断（如 CPU、内存、磁盘、网络分析）。如需 OS 级别诊断，请建议用户在数据源配置中关联主机。"
+
+    return prompt
+
+
 async def execute_skill_call(
     skill_id: str, arguments: Dict[str, Any], db, user_id: int, session_id: Optional[int] = None
 ) -> tuple[str, int, Optional[int], Optional[Dict[str, Any]]]:
@@ -575,6 +659,7 @@ async def run_conversation_with_skills(
     disabled_tools: Optional[List[str]] = None,
     system_prompt_override: Optional[str] = None,
     skip_approval: bool = False,
+    context_override: Optional[Dict[str, Any]] = None,
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """Run the AI conversation loop with dynamic skill calling and streaming."""
     from backend.models.ai_model import AIModel
@@ -681,6 +766,7 @@ async def run_conversation_with_skills(
     diagnostic_brief = None
     host_id = None
     datasource_ctx = None
+    virtual_datasource_ctx = None
 
     # 尝试从 knowledge_context 中提取 host_id（用于纯主机诊断场景）
     if knowledge_context and knowledge_context.get("host_context"):
@@ -688,7 +774,34 @@ async def run_conversation_with_skills(
         if host_context.get("host_info"):
             host_id = host_context["host_info"].get("id")
 
-    if datasource_id and db:
+    if context_override and context_override.get("datasource"):
+        ds_ctx = context_override.get("datasource") or {}
+        host_ctx = context_override.get("host") or None
+        datasource_id = int(ds_ctx.get("id"))
+        datasource_name = ds_ctx.get("name") or f"eval-{ds_ctx.get('db_type') or 'datasource'}"
+        datasource_db_type = ds_ctx.get("db_type")
+        host_id = int(host_ctx["id"]) if isinstance(host_ctx, dict) and host_ctx.get("id") is not None else None
+        host_configured_for_tools = host_id is not None
+        virtual_datasource_ctx = {
+            "name": datasource_name,
+            "db_type": datasource_db_type,
+            "host_id": host_id,
+        }
+        system_msg += _build_datasource_context_prompt(
+            datasource_id=datasource_id,
+            datasource_type=datasource_db_type or "unknown",
+            datasource_name=datasource_name,
+            datasource_host=ds_ctx.get("host") or "unknown",
+            datasource_port=ds_ctx.get("port") or "unknown",
+            host_id=host_id,
+            host_configured=host_configured_for_tools,
+            db_version=ds_ctx.get("version"),
+            host_os_version=(host_ctx or {}).get("os_version") if isinstance(host_ctx, dict) else None,
+            host_ssh_port=(host_ctx or {}).get("ssh_port") if isinstance(host_ctx, dict) else None,
+            remark=ds_ctx.get("remark"),
+            host_name=(host_ctx or {}).get("name") if isinstance(host_ctx, dict) else None,
+        )
+    elif datasource_id and db:
         from backend.models.datasource import Datasource
         from backend.models.host import Host
         from backend.models.soft_delete import alive_filter
@@ -702,16 +815,6 @@ async def run_conversation_with_skills(
             host_id = datasource.host_id
             host_configured = host_id is not None
             host_configured_for_tools = host_configured
-
-            skill_prefix_map = {
-                'mysql': 'mysql',
-                'tdsql-c-mysql': 'mysql',
-                'postgresql': 'pg',
-                'sqlserver': 'mssql',
-                'oracle': 'oracle',
-                'opengauss': 'opengauss',
-            }
-            skill_prefix = skill_prefix_map.get(datasource.db_type, datasource.db_type)
 
             # 获取数据库版本信息
             db_version_info = ""
@@ -732,40 +835,20 @@ async def run_conversation_with_skills(
                     if host.port:
                         host_ssh_port = f"\n- host_ssh_port: {host.port}"
 
-            system_msg += (
-                "\n\nCurrent conversation datasource context (stable unless the user explicitly asks to switch):"
-                f"\n- datasource_id: {datasource_id}"
-                f"\n- datasource_type: {datasource.db_type}"
-                f"\n- datasource_name: {datasource.name}"
-                f"\n- host_id: {host_id if host_id is not None else 'None'}"
-                f"\n- host_configured: {str(host_configured).lower()}"
-                f"\n- datasource_host: {datasource.host}"
-                f"\n- datasource_port: {datasource.port}"
-                f"{db_version_info}"
-                f"{host_os_info}"
-                f"{host_ssh_port}"
+            system_msg += _build_datasource_context_prompt(
+                datasource_id=datasource_id,
+                datasource_type=datasource.db_type,
+                datasource_name=datasource.name,
+                datasource_host=datasource.host,
+                datasource_port=datasource.port,
+                host_id=host_id,
+                host_configured=host_configured,
+                db_version=datasource.db_version,
+                host_os_version=host_os_info.removeprefix("\n- host_os_version: ") if host_os_info else None,
+                host_ssh_port=host_ssh_port.removeprefix("\n- host_ssh_port: ") if host_ssh_port else None,
+                remark=datasource.remark,
+                host_name=host_name_for_display,
             )
-            system_msg += f"\n\nThe user is currently working with datasource ID: {datasource_id} (Type: {datasource.db_type.upper()}, Name: {datasource.name}). Use this ID when calling tools unless they specify otherwise."
-            system_msg += f"\n\nIMPORTANT: This is a {datasource.db_type.upper()} database. You MUST use {skill_prefix}_* skills (e.g., {skill_prefix}_get_db_status, {skill_prefix}_get_slow_queries, {skill_prefix}_get_table_stats, etc.). Do NOT use skills for other database types like mysql_*, pg_*, mssql_*, or oracle_* unless they match this database type. Unless the user explicitly asks to switch datasource, keep all diagnosis and tool calls scoped to this datasource."
-
-            if datasource.remark:
-                system_msg += (
-                    f"\n\n**数据源备注**：{datasource.remark}"
-                    "\n此备注包含该数据源的业务背景、特殊配置或已知问题等重要上下文信息，诊断时请结合此备注进行分析。"
-                )
-
-            if host_id and host_name_for_display:
-                host_info_parts = [f"主机名: {host_name_for_display}"]
-                if host and host.os_version:
-                    host_info_parts.append(f"OS版本: {host.os_version}")
-                if host and host.port:
-                    host_info_parts.append(f"SSH端口: {host.port}")
-                host_detail = "，".join(host_info_parts)
-                system_msg += f"\n\n**主机连接已配置**：该数据源已关联主机（{host_detail}），host_id={host_id}。你可以使用 OS 层面的诊断技能（get_os_metrics、diagnose_high_cpu、diagnose_high_memory、diagnose_disk_space、diagnose_disk_io、diagnose_network）进行操作系统级别的深度分析。\n\n**重要**：调用这些 OS 诊断技能时，可以使用两种方式：\n1. 传入 datasource_id（数据源场景）：`{{\"datasource_id\": {datasource_id}}}`\n2. 传入 host_id（主机场景）：`{{\"host_id\": {host_id}}}`\n\n当前上下文中，如果是针对该数据源的诊断，使用 datasource_id；如果是纯主机层面的诊断，可以直接使用 host_id。遇到性能问题时，应同时从数据库和操作系统两个层面进行诊断。"
-            elif host_id:
-                system_msg += f"\n\n**主机连接已配置**：该数据源已关联主机，host_id={host_id}。你可以使用 OS 层面的诊断技能（get_os_metrics、diagnose_high_cpu、diagnose_high_memory、diagnose_disk_space、diagnose_disk_io、diagnose_network）进行操作系统级别的深度分析。\n\n**重要**：调用这些 OS 诊断技能时，可以使用两种方式：\n1. 传入 datasource_id（数据源场景）：`{{\"datasource_id\": {datasource_id}}}`\n2. 传入 host_id（主机场景）：`{{\"host_id\": {host_id}}}`\n\n当前上下文中，如果是针对该数据源的诊断，使用 datasource_id；如果是纯主机层面的诊断，可以直接使用 host_id。遇到性能问题时，应同时从数据库和操作系统两个层面进行诊断。"
-            else:
-                system_msg += "\n\n**注意**：该数据源未配置主机连接，host_id=None，无法进行操作系统层面的诊断（如 CPU、内存、磁盘、网络分析）。如需 OS 级别诊断，请建议用户在数据源配置中关联主机。"
         else:
             system_msg += (
                 f"\n\nCurrent conversation datasource context (stable unless the user explicitly asks to switch):"
@@ -836,7 +919,7 @@ async def run_conversation_with_skills(
     elif kb_ids and knowledge_retrieval_enabled:
         system_msg += f"\n\nLegacy knowledge base IDs are present ({kb_ids}), but diagnosis should rely on the auto-built knowledge plan first. Use list_documents only as a fallback."
 
-    if intent == "diagnostic" and datasource_id and db:
+    if intent == "diagnostic" and datasource_id and db and not context_override:
         diagnostic_brief = await build_diagnostic_brief(
             db,
             datasource_id=datasource_id,
@@ -870,13 +953,19 @@ async def run_conversation_with_skills(
             datasource_info += " · 已关联主机"
         else:
             datasource_info += " · 未关联主机"
+    elif virtual_datasource_ctx:
+        datasource_info = f"数据源: {virtual_datasource_ctx['name']} ({virtual_datasource_ctx['db_type']})"
+        if virtual_datasource_ctx.get("host_id") is not None:
+            datasource_info += " · 已关联主机"
+        else:
+            datasource_info += " · 未关联主机"
     yield {
         "type": "thinking_phase",
         "phase": "context_building",
         "message": f"正在构建诊断上下文... {datasource_info}" if datasource_info else "正在构建诊断上下文...",
-        "datasource_name": datasource_ctx.name if datasource_ctx else None,
-        "datasource_type": datasource_ctx.db_type if datasource_ctx else None,
-        "host_configured": bool(datasource_ctx.host_id) if datasource_ctx else False,
+        "datasource_name": datasource_ctx.name if datasource_ctx else (virtual_datasource_ctx or {}).get("name"),
+        "datasource_type": datasource_ctx.db_type if datasource_ctx else (virtual_datasource_ctx or {}).get("db_type"),
+        "host_configured": bool(datasource_ctx.host_id) if datasource_ctx else bool((virtual_datasource_ctx or {}).get("host_id")),
     }
 
     active_tools = await get_available_skills_as_tools(
@@ -1064,7 +1153,11 @@ async def run_conversation_with_skills(
                         "tool_args": tool_args,
                         "tool_call_id": tc["id"],
                     }
-                    tool_result = await execute_tool(tool_name, tool_args)
+                    _override = get_tool_override()
+                    if _override is not None:
+                        tool_result, _exec_ms, _viz = await _override(tool_name, tool_args, "kb")
+                    else:
+                        tool_result = await execute_tool(tool_name, tool_args)
                     if tool_name == "list_documents":
                         try:
                             docs = json.loads(tool_result)
@@ -1150,9 +1243,16 @@ async def run_conversation_with_skills(
                     "tool_call_id": tc["id"],
                 }
 
-                tool_result, execution_time_ms, skill_execution_id, visualization = await execute_skill_call(
-                    tool_name, tool_args, db, user_id, session_id
-                )
+                _override = get_tool_override()
+                if _override is not None:
+                    _ov_result, _ov_ms, _ov_viz = await _override(tool_name, tool_args, "skill")
+                    tool_result, execution_time_ms, skill_execution_id, visualization = (
+                        _ov_result, _ov_ms, None, _ov_viz,
+                    )
+                else:
+                    tool_result, execution_time_ms, skill_execution_id, visualization = await execute_skill_call(
+                        tool_name, tool_args, db, user_id, session_id
+                    )
 
                 try:
                     result_data = json.loads(tool_result)

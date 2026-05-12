@@ -1,0 +1,92 @@
+id: mysql_high_cpu_dbprocess
+category: high_cpu
+db_type: mysql
+title: "MySQL 进程独占 CPU"
+difficulty: hard
+description: "OS CPU 高，且 Top 进程是 mysqld。需要交叉关联进程列表定位是哪类查询"
+
+user_message: "服务器 CPU 跑满了，监控显示 mysql 在烧 CPU，麻烦帮我定位下"
+
+fixtures:
+  - tool: get_os_metrics
+    args: any
+    response:
+      success: true
+      data:
+        cpu:
+          usage_percent: 92.5
+          user_percent: 86.0
+          system_percent: 4.5
+          iowait_percent: 1.2
+          idle_percent: 5.8
+        load_average:
+          one_min: 18.4
+          five_min: 16.1
+          fifteen_min: 12.0
+        cpu_cores: 8
+        memory:
+          total_gb: 32
+          used_gb: 14
+          free_gb: 8
+          buffers_cached_gb: 10
+          swap_used_gb: 0
+
+  - tool: diagnose_high_cpu
+    args: any
+    response:
+      success: true
+      data:
+        top_processes:
+          - pid: 4321
+            command: "/usr/sbin/mysqld --defaults-file=/etc/my.cnf"
+            cpu_percent: 743.0
+            mem_percent: 42.0
+          - pid: 5510
+            command: "node app/server.js"
+            cpu_percent: 12.5
+            mem_percent: 4.0
+
+  - tool: mysql_get_process_list
+    args: any
+    response:
+      success: true
+      data:
+        - id: 1201
+          user: analytics
+          host: "10.0.4.10:43210"
+          db: shop
+          command: Query
+          time_seconds: 240
+          state: "Sending data"
+          info: "SELECT user_id, SUM(amount) FROM orders GROUP BY user_id"
+        - id: 1202
+          user: analytics
+          host: "10.0.4.10:43211"
+          db: shop
+          command: Query
+          time_seconds: 235
+          state: "Sending data"
+          info: "SELECT user_id, SUM(amount) FROM orders GROUP BY user_id"
+        - id: 1203
+          user: analytics
+          host: "10.0.4.10:43212"
+          db: shop
+          command: Query
+          time_seconds: 230
+          state: "Sending data"
+          info: "SELECT user_id, SUM(amount) FROM orders GROUP BY user_id"
+
+expected:
+  required_tools: [get_os_metrics, mysql_get_process_list]
+  forbidden_tools: [execute_any_sql, execute_any_os_command]
+  min_tool_rounds: 2
+  max_tool_rounds: 8
+
+  root_causes:
+    - "mysqld 进程占用 CPU 高达 743%，根因是 analytics 用户并发执行 GROUP BY 全表聚合"
+
+  required_actions:
+    - keywords: ["索引", "GROUP BY"]
+
+  conclusion_must_contain: ["诊断结论", "关键证据", "建议动作"]
+  conclusion_must_not_contain: ["也许"]

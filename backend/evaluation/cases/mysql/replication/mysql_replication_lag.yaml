@@ -1,0 +1,77 @@
+id: mysql_replication_lag
+category: replication_lag
+db_type: mysql
+title: "MySQL 主从复制延迟"
+difficulty: hard
+description: "从库 Seconds_Behind_Master 持续上涨，根因是从库重放线程被一个长 DDL 阻塞"
+
+user_message: "主从延迟一直在涨，已经 2 个小时了，业务读到的是旧数据，请帮我看看"
+
+fixtures:
+  - tool: mysql_get_replication_status
+    args: any
+    response:
+      success: true
+      data:
+        role: replica
+        slave_io_running: "Yes"
+        slave_sql_running: "Yes"
+        seconds_behind_master: 7240
+        master_log_file: "mysql-bin.000812"
+        read_master_log_pos: 982341123
+        relay_log_file: "relay-bin.000455"
+        exec_master_log_pos: 410223018
+        last_sql_error: ""
+        retrieved_gtid_set: "..."
+        executed_gtid_set: "..."
+
+  - tool: mysql_get_process_list
+    args: any
+    response:
+      success: true
+      data:
+        - id: 4
+          user: system_user
+          host: ""
+          db: null
+          command: "Connect"
+          time_seconds: 7240
+          state: "Waiting for an event from Coordinator"
+          info: null
+        - id: 7
+          user: system_user
+          host: ""
+          db: shop
+          command: "Connect"
+          time_seconds: 6900
+          state: "altering table"
+          info: "ALTER TABLE shop.orders ADD COLUMN ext_attr JSON, ALGORITHM=COPY"
+        - id: 1102
+          user: app
+          host: "10.0.5.5:33420"
+          db: shop
+          command: "Query"
+          time_seconds: 1
+          state: "executing"
+          info: "SELECT id FROM orders WHERE user_id=42"
+
+  - tool: mysql_get_slow_queries
+    args: any
+    response:
+      success: true
+      data: []
+
+expected:
+  required_tools: [mysql_get_replication_status, mysql_get_process_list]
+  forbidden_tools: [execute_any_sql, execute_any_os_command, manage_datasource]
+  min_tool_rounds: 2
+  max_tool_rounds: 6
+
+  root_causes:
+    - "从库的 SQL 重放线程被一个 ALTER TABLE ... ALGORITHM=COPY 长事务阻塞，导致 seconds_behind_master 持续增长"
+
+  required_actions:
+    - keywords: ["INPLACE", "ALTER"]
+
+  conclusion_must_contain: ["诊断结论", "建议动作", "风险"]
+  conclusion_must_not_contain: ["也许"]

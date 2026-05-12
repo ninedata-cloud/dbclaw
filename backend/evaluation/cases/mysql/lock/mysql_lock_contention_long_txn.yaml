@@ -1,0 +1,81 @@
+id: mysql_lock_contention_long_txn
+category: lock_contention
+db_type: mysql
+title: "MySQL 长事务持锁阻塞"
+difficulty: hard
+description: "一个长事务持有 orders 表的行锁，阻塞了大量后续 UPDATE"
+
+user_message: "数据库突然好多 update 卡住了，业务报警了，赶紧帮我看看"
+
+fixtures:
+  - tool: mysql_get_db_status
+    args: any
+    response:
+      success: true
+      data:
+        version: "MySQL 8.0.32"
+        active_connections: 412
+        max_connections: 500
+        threads_running: 198
+        innodb_row_lock_waits: 1820
+        innodb_row_lock_time_avg_ms: 4500
+
+  - tool: mysql_get_process_list
+    args: any
+    response:
+      success: true
+      data:
+        - id: 9012
+          user: app
+          host: "10.0.1.5:54221"
+          db: shop
+          command: Sleep
+          time_seconds: 1840
+          state: ""
+          info: null
+          trx_started: "2026-05-07 14:01:22"
+          trx_query: "UPDATE orders SET status='paid' WHERE id=10231"
+          trx_state: "RUNNING"
+          trx_rows_locked: 1
+        - id: 9213
+          user: app
+          host: "10.0.1.7:32178"
+          db: shop
+          command: Query
+          time_seconds: 320
+          state: "updating"
+          info: "UPDATE orders SET status='paid' WHERE id=10231"
+          trx_state: "LOCK WAIT"
+        - id: 9214
+          user: app
+          host: "10.0.1.7:32179"
+          db: shop
+          command: Query
+          time_seconds: 318
+          state: "updating"
+          info: "UPDATE orders SET status='shipped' WHERE id=10231"
+          trx_state: "LOCK WAIT"
+        - id: 9215
+          user: app
+          host: "10.0.1.8:34002"
+          db: shop
+          command: Query
+          time_seconds: 310
+          state: "updating"
+          info: "UPDATE orders SET status='paid' WHERE id=10231"
+          trx_state: "LOCK WAIT"
+
+expected:
+  required_tools: [mysql_get_process_list]
+  forbidden_tools: [execute_any_sql, execute_any_os_command, manage_datasource]
+  min_tool_rounds: 1
+  max_tool_rounds: 6
+
+  root_causes:
+    - "MySQL 进程 9012 是一个 Sleep 状态的长事务（已持续 30 分钟），持有 orders 行锁导致后续 UPDATE 全部 LOCK WAIT"
+
+  required_actions:
+    - keywords: ["KILL", "9012"]
+
+  conclusion_must_contain: ["诊断结论", "建议动作", "风险"]
+  conclusion_must_not_contain: ["也许", "或许"]

@@ -1,0 +1,65 @@
+id: mysql_buffer_pool_too_small
+category: memory_config
+db_type: mysql
+title: "MySQL Buffer Pool 配置过小"
+difficulty: medium
+description: "16GB 物理内存只配了 1GB innodb_buffer_pool_size，缓存命中率低导致大量物理读"
+
+user_message: "感觉数据库读取性能不行，有没有什么参数可以调优"
+
+fixtures:
+  - tool: mysql_get_db_status
+    args: any
+    response:
+      success: true
+      data:
+        version: "MySQL 8.0.32"
+        innodb_buffer_pool_hit_rate: 0.78
+        innodb_buffer_pool_pages_total: 65536
+        innodb_buffer_pool_pages_free: 0
+        innodb_buffer_pool_bytes_data: 1073741824
+        innodb_data_reads: 18234500
+        innodb_pages_read: 18234500
+        innodb_buffer_pool_reads: 14500000
+
+  - tool: mysql_get_db_variables
+    args: any
+    response:
+      success: true
+      data:
+        innodb_buffer_pool_size: 1073741824            # 1 GB
+        innodb_buffer_pool_instances: 1
+        innodb_log_file_size: 268435456
+        max_connections: 500
+        version: "8.0.32"
+
+  - tool: get_os_metrics
+    args: any
+    response:
+      success: true
+      data:
+        memory:
+          total_gb: 16
+          used_gb: 4
+          free_gb: 8
+          buffers_cached_gb: 4
+          swap_total_gb: 4
+          swap_used_gb: 0
+        cpu:
+          usage_percent: 35.0
+          iowait_percent: 12.0
+
+expected:
+  required_tools: [mysql_get_db_status, mysql_get_db_variables, get_os_metrics]
+  forbidden_tools: [execute_any_sql, execute_any_os_command]
+  min_tool_rounds: 2
+  max_tool_rounds: 6
+
+  root_causes:
+    - "innodb_buffer_pool_size 仅 1GB 但物理内存 16GB，缓存命中率低（78% 远低于 99%+ 的健康线）导致频繁物理读"
+
+  required_actions:
+    - keywords: ["innodb_buffer_pool_size"]
+
+  conclusion_must_contain: ["诊断结论", "建议动作", "风险"]
+  conclusion_must_not_contain: ["也许"]

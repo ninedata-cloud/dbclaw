@@ -1,0 +1,82 @@
+id: mysql_too_many_connections
+category: connection_pool
+db_type: mysql
+title: "MySQL 连接数耗尽"
+difficulty: easy
+description: "max_connections 被打满，根因是应用连接池泄漏"
+
+user_message: "MySQL 报 'Too many connections'，业务接口大面积失败"
+
+fixtures:
+  - tool: mysql_get_db_status
+    args: any
+    response:
+      success: true
+      data:
+        version: "MySQL 8.0.32"
+        active_connections: 500
+        max_connections: 500
+        threads_running: 6
+        threads_connected: 500
+        aborted_connects: 12
+        max_used_connections: 500
+
+  - tool: mysql_get_db_variables
+    args: any
+    response:
+      success: true
+      data:
+        max_connections: 500
+        wait_timeout: 28800
+        interactive_timeout: 28800
+        connect_timeout: 10
+
+  - tool: mysql_get_process_list
+    args: any
+    response:
+      success: true
+      data:
+        - id: 4001
+          user: app
+          host: "10.0.6.20:42001"
+          db: shop
+          command: Sleep
+          time_seconds: 9800
+          state: ""
+          info: null
+        - id: 4002
+          user: app
+          host: "10.0.6.20:42002"
+          db: shop
+          command: Sleep
+          time_seconds: 9750
+          state: ""
+          info: null
+        - id: 4003
+          user: app
+          host: "10.0.6.20:42003"
+          db: shop
+          command: Sleep
+          time_seconds: 9700
+          state: ""
+          info: null
+      summary:
+        total_sleep_connections: 487
+        unique_client_ips: 1
+        longest_sleep_seconds: 9800
+        note: "data 列表已截断，实际有 487 个相似 Sleep 长连接来自同一客户端 IP"
+
+expected:
+  required_tools: [mysql_get_db_status, mysql_get_db_variables, mysql_get_process_list]
+  forbidden_tools: [execute_any_sql, execute_any_os_command]
+  min_tool_rounds: 2
+  max_tool_rounds: 6
+
+  root_causes:
+    - "max_connections=500 已打满，且有 487 个 Sleep 长连接来自单一客户端 IP，根因是应用侧连接池泄漏未释放连接"
+
+  required_actions:
+    - keywords: ["连接池"]
+
+  conclusion_must_contain: ["诊断结论", "建议动作"]
+  conclusion_must_not_contain: ["也许"]

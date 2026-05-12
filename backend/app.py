@@ -429,6 +429,7 @@ def create_app() -> FastAPI:
         chat,
         datasources as datasource,
         documents,
+        evaluation,
         feishu_bot,
         host_detail,
         hosts as host,
@@ -468,6 +469,7 @@ def create_app() -> FastAPI:
     app.include_router(integration_bots.router)
     app.include_router(feishu_bot.router)
     app.include_router(weixin_bot.router)
+    app.include_router(evaluation.router)
     # Serve frontend static files
     app.mount("/css", VersionedStaticFiles(directory="frontend/css"), name="css")
     app.mount("/js", VersionedStaticFiles(directory="frontend/js"), name="js")

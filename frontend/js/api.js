@@ -44,7 +44,9 @@ const API = {
                     Store.set('currentUser', null);
                     this.clearSessionMark();
                     window.location.hash = 'login';
-                    throw new Error('会话已过期，请重新登录');
+                    const authError = new Error('会话已过期，请重新登录');
+                    authError.status = response.status;
+                    throw authError;
                 }
 
                 const err = await response.json().catch(() => ({ detail: response.statusText }));
@@ -66,7 +68,9 @@ const API = {
                     errorMessage = typeof err.message === 'string' ? err.message : JSON.stringify(err.message);
                 }
 
-                throw new Error(errorMessage);
+                const requestError = new Error(errorMessage);
+                requestError.status = response.status;
+                throw requestError;
             }
             const contentType = response.headers.get('content-type');
             if (contentType && contentType.includes('application/json')) {
@@ -403,5 +407,29 @@ const API = {
     updateWeixinBotBinding(code, data) { return this.put(`/api/integration-bots/${code}`, data); },
     getWeixinBotStatus() { return this.get('/api/weixin/bot/binding/status'); },
     createWeixinLoginQrcode() { return this.post('/api/weixin/bot/login/qrcode', {}); },
-    pollWeixinLoginStatus(qrcode) { return this.post('/api/weixin/bot/login/status', { qrcode }); }
+    pollWeixinLoginStatus(qrcode) { return this.post('/api/weixin/bot/login/status', { qrcode }); },
+
+    // AI evaluation
+    listEvalCases(params) {
+        const qs = params ? `?${new URLSearchParams(params).toString()}` : '';
+        return this.get(`/api/eval/cases${qs}`);
+    },
+    getEvalCase(id) { return this.get(`/api/eval/cases/${id}`); },
+    listEvalSuites() { return this.get('/api/eval/suites'); },
+    createEvalRun(data) { return this.post('/api/eval/runs', data); },
+    listEvalRuns() { return this.get('/api/eval/runs'); },
+    getEvalRun(id) { return this.get(`/api/eval/runs/${id}`); },
+    async deleteEvalRun(id) {
+        try {
+            return await this.delete(`/api/eval/runs/${id}`);
+        } catch (err) {
+            if (err.status === 405) {
+                return await this.post(`/api/eval/runs/${id}/delete`, {});
+            }
+            throw err;
+        }
+    },
+    listEvalRunResults(id) { return this.get(`/api/eval/runs/${id}/results`); },
+    getEvalRunResult(runId, caseId) { return this.get(`/api/eval/runs/${runId}/results/${caseId}`); },
+    getEvalRunReplay(runId, caseId) { return this.get(`/api/eval/runs/${runId}/results/${caseId}/replay`); }
 };

@@ -1,0 +1,87 @@
+id: mysql_slow_query_missing_index
+category: slow_query
+db_type: mysql
+title: "MySQL 订单查询全表扫描"
+difficulty: medium
+description: "线上 SELECT 慢，根因为 orders.status 字段缺失索引导致全表扫描"
+
+user_message: "线上 orders 表的查询变慢了，请帮我看看是什么原因"
+
+fixtures:
+  - tool: mysql_get_db_status
+    args: any
+    response:
+      success: true
+      data:
+        version: "MySQL 8.0.32"
+        uptime_seconds: 2592000
+        qps: 4500
+        active_connections: 180
+        max_connections: 500
+        innodb_buffer_pool_hit_rate: 0.94
+        slow_queries_per_min: 35
+
+  - tool: mysql_get_slow_queries
+    args: any
+    response:
+      success: true
+      data:
+        - sql: "SELECT * FROM orders WHERE status='pending' ORDER BY created_at"
+          digest: "d1f3e7..."
+          exec_count: 5234
+          avg_time_ms: 2340
+          max_time_ms: 18200
+          rows_examined_avg: 1245000
+          rows_sent_avg: 12
+          schema: "shop"
+
+  - tool: mysql_explain_query
+    args:
+      sql_pattern: "orders.*status.*pending"
+    response:
+      success: true
+      data:
+        plan:
+          - id: 1
+            select_type: SIMPLE
+            table: orders
+            type: ALL
+            possible_keys: null
+            key: null
+            rows: 1245000
+            filtered: 10.0
+            Extra: "Using where; Using filesort"
+
+  - tool: mysql_get_table_stats
+    args: any
+    response:
+      success: true
+      data:
+        - table_schema: shop
+          table_name: orders
+          rows: 12450000
+          data_size_mb: 4200
+          index_size_mb: 280
+          indexes:
+            - name: PRIMARY
+              columns: [id]
+              unique: true
+            - name: idx_user_id
+              columns: [user_id]
+              unique: false
+
+expected:
+  required_tools: [mysql_get_slow_queries, mysql_explain_query]
+  forbidden_tools: [execute_any_sql, execute_any_os_command, manage_datasource]
+  min_tool_rounds: 2
+  max_tool_rounds: 8
+
+  root_causes:
+    - "orders.status 字段缺失索引，查询走全表扫描"
+    - "ORDER BY created_at 无索引引发 filesort"
+
+  required_actions:
+    - keywords: ["CREATE INDEX", "status"]
+
+  conclusion_must_contain: ["诊断结论", "建议动作"]
+  conclusion_must_not_contain: ["也许", "或许"]

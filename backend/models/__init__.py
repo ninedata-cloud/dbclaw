@@ -32,6 +32,7 @@ from backend.models.inspection_config import InspectionConfig
 from backend.models.inspection_trigger import InspectionTrigger
 from backend.models.skill import Skill, SkillExecution, SkillRating
 from backend.models.scheduled_task import ScheduledTask, ScheduledTaskRun
+from backend.models.evaluation import EvalSuite, EvalRun, EvalCaseResult
 
 __all__ = [
     "User",
@@ -71,4 +72,7 @@ __all__ = [
     "SkillRating",
     "ScheduledTask",
     "ScheduledTaskRun",
+    "EvalSuite",
+    "EvalRun",
+    "EvalCaseResult",
 ]
