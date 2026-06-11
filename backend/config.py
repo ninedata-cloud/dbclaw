@@ -1,14 +1,25 @@
-from pydantic_settings import BaseSettings
+from pathlib import Path
+
 from functools import lru_cache
 from urllib.parse import quote
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from backend.version import APP_VERSION, load_build_info
 
 
 _BUILD_INFO = load_build_info()
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+ENV_FILE = PROJECT_ROOT / ".env"
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=ENV_FILE,
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
     app_name: str = "DBClaw"
     app_version: str = _BUILD_INFO.get("APP_VERSION") or APP_VERSION
     build_commit: str = _BUILD_INFO.get("BUILD_COMMIT") or ""
@@ -60,11 +71,6 @@ class Settings(BaseSettings):
     # Bocha AI Web Search API
     bocha_api_key: str = ""
     bocha_api_url: str = "https://api.bochaai.com/v1/web-search"
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        extra = "ignore"
 
     @property
     def resolved_app_version(self) -> str:

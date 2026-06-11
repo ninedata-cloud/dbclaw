@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -5,7 +6,7 @@ import pytest
 from fastapi import HTTPException
 
 from backend.routers import chat
-from backend.routers.chat import _authenticate_websocket_session, _get_owned_session
+from backend.routers.chat import _authenticate_websocket_session, _get_owned_session, _serialize_chat_message
 
 
 class _Result:
@@ -64,3 +65,31 @@ async def test_websocket_auth_rejects_hidden_sessions_in_query(mocker):
     assert session is None
     executed_stmt = db.execute.await_args_list[1].args[0]
     assert "diagnostic_session.is_hidden = false" in str(executed_stmt)
+
+
+def test_serialize_chat_message_hides_reasoning_content():
+    message = SimpleNamespace(
+        id=1,
+        session_id=1,
+        role="tool_call",
+        content=json.dumps({
+            "tool_name": "get_os_metrics",
+            "tool_args": {"host_id": 1},
+            "tool_call_id": "call_1",
+            "reasoning_content": "内部推理",
+        }),
+        run_id="run_1",
+        render_segments=None,
+        status=None,
+        tool_calls=None,
+        attachments=None,
+        input_tokens=0,
+        output_tokens=0,
+        total_tokens=0,
+        created_at=None,
+    )
+
+    serialized = _serialize_chat_message(message)
+
+    assert "reasoning_content" not in serialized.content
+    assert json.loads(serialized.content)["tool_name"] == "get_os_metrics"

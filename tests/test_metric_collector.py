@@ -265,3 +265,46 @@ async def test_auto_resolve_recovered_alerts_resolves_below_original_threshold(m
     )
 
     resolve_alert.assert_awaited_once_with(db, 1, resolved_value=74.9)
+
+
+@pytest.mark.service
+@pytest.mark.asyncio
+async def test_auto_resolve_recovered_baseline_alerts_uses_recovered_sample_value(mocker):
+    db = AsyncMock()
+    alert = SimpleNamespace(
+        id=2,
+        metric_name="cpu_usage",
+    )
+    db.execute = AsyncMock(return_value=_ScalarsAllResult([alert]))
+    mocker.patch(
+        "backend.services.metric_collector.get_profiles_for_slot",
+        AsyncMock(
+            return_value={
+                "cpu_usage": SimpleNamespace(
+                    p95_value=26.54,
+                    avg_value=20.0,
+                    sample_count=109,
+                )
+            }
+        ),
+    )
+    resolve_alert = mocker.patch(
+        "backend.services.alert_service.AlertService.resolve_alert",
+        AsyncMock(),
+    )
+
+    await metric_collector._auto_resolve_recovered_baseline_alerts(
+        db=db,
+        datasource_id=10,
+        metrics={"cpu_percent": "25.00"},
+        collected_at=metric_collector.now(),
+        baseline_config={
+            "enabled": True,
+            "deviation_ratio": 3.0,
+            "min_absolute_delta": 10.0,
+            "metrics": {"cpu_usage": {"enabled": True}},
+        },
+        current_violations=[],
+    )
+
+    resolve_alert.assert_awaited_once_with(db, 2, resolved_value=25.0)

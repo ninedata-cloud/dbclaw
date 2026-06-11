@@ -74,6 +74,7 @@ async def run_conversation(
     for round_num in range(MAX_TOOL_ROUNDS):
         try:
             collected_content = ""
+            collected_reasoning_content = ""
             collected_tool_calls = []
 
             async for event in stream_assistant_turn(
@@ -86,6 +87,7 @@ async def run_conversation(
                     collected_content += event["content"]
                     yield {"type": "content", "content": event["content"]}
                 elif event["type"] == "message_complete":
+                    collected_reasoning_content = event.get("reasoning_content") or ""
                     collected_tool_calls = event.get("tool_calls", [])
                     if event.get("stop_reason") == "end_turn" and not collected_tool_calls:
                         yield {"type": "done", "content": collected_content}
@@ -96,6 +98,8 @@ async def run_conversation(
                 return
 
             assistant_msg = {"role": "assistant", "content": collected_content or None, "tool_calls": collected_tool_calls}
+            if collected_reasoning_content:
+                assistant_msg["reasoning_content"] = collected_reasoning_content
             full_messages.append(assistant_msg)
 
             for tc in collected_tool_calls:
@@ -112,6 +116,7 @@ async def run_conversation(
                         "tool_name": tool_name,
                         "tool_args": tool_args,
                         "tool_call_id": tc["id"],
+                        "reasoning_content": collected_reasoning_content or None,
                     }
                     yield {
                         "type": "tool_result",
@@ -131,6 +136,7 @@ async def run_conversation(
                     "tool_name": tool_name,
                     "tool_args": tool_args,
                     "tool_call_id": tc["id"],
+                    "reasoning_content": collected_reasoning_content or None,
                 }
 
                 tool_result = await execute_tool(tool_name, tool_args)

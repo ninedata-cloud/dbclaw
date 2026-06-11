@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 PendingApprovalsStore = dict[int, dict[str, dict[str, Any]]]
 EventCallback = Optional[Callable[[dict[str, Any]], Awaitable[None]]]
+INTERNAL_EVENT_FIELDS = {"reasoning_content"}
 TRACKED_DIAGNOSIS_EVENTS = {
     "thinking_phase",
     "thinking_complete",
@@ -328,6 +329,9 @@ async def rebuild_llm_messages(all_msgs):
                         }
                     }]
                 })
+                reasoning_content = data.get("reasoning_content")
+                if reasoning_content:
+                    messages[-1]["reasoning_content"] = reasoning_content
             except Exception as e:
                 logger.error(f"Error parsing tool_call message: {e}")
             continue
@@ -407,7 +411,12 @@ async def load_session_messages_for_llm(
 async def _emit(event: dict[str, Any], on_event: EventCallback = None):
     if on_event:
         try:
-            await on_event(event)
+            public_event = {
+                key: value
+                for key, value in event.items()
+                if key not in INTERNAL_EVENT_FIELDS
+            }
+            await on_event(public_event)
         except Exception:
             pass  # WebSocket may be disconnected; task continues in background
 
@@ -474,7 +483,7 @@ def _build_diagnosis_event_payload(event_type: str, event: dict[str, Any]) -> di
     return {
         key: value
         for key, value in event.items()
-        if key not in {"type", "content", "result"}
+        if key not in {"type", "content", "result", *INTERNAL_EVENT_FIELDS}
     }
 
 
@@ -611,6 +620,7 @@ async def _store_tool_call(db: AsyncSession, session_id: int, event: dict[str, A
             "tool_name": event["tool_name"],
             "tool_args": event["tool_args"],
             "tool_call_id": event.get("tool_call_id"),
+            "reasoning_content": event.get("reasoning_content"),
         }),
         tool_calls=[{
             "name": event["tool_name"],
@@ -664,6 +674,7 @@ async def _store_approval_request(
         "tool_name": event["tool_name"],
         "tool_args": event["tool_args"],
         "tool_call_id": event.get("tool_call_id"),
+        "reasoning_content": event.get("reasoning_content"),
         "datasource_id": datasource_id,
         "model_id": model_id,
         "kb_ids": kb_ids,
@@ -689,6 +700,7 @@ async def _store_approval_request(
             "tool_name": event["tool_name"],
             "tool_args": event["tool_args"],
             "tool_call_id": event.get("tool_call_id"),
+            "reasoning_content": event.get("reasoning_content"),
             "summary": event.get("summary"),
             "plan_markdown": event.get("plan_markdown"),
             "history_window_hours": history_window_hours,
@@ -748,6 +760,7 @@ async def _load_pending_approval_from_db(
         "tool_name": data.get("tool_name"),
         "tool_args": data.get("tool_args") or {},
         "tool_call_id": data.get("tool_call_id"),
+        "reasoning_content": data.get("reasoning_content"),
         "datasource_id": session.datasource_id if session else None,
         "model_id": session.ai_model_id if session else None,
         "kb_ids": session.kb_ids if session else None,
@@ -1529,6 +1542,7 @@ async def resolve_pending_approval(
         "tool_name": pending["tool_name"],
         "tool_args": pending["tool_args"],
         "tool_call_id": pending.get("tool_call_id"),
+        "reasoning_content": pending.get("reasoning_content"),
         "action_run_id": pending.get("action_run_id"),
         "recommendation_id": pending.get("recommendation_id"),
         "action_title": pending.get("action_title"),

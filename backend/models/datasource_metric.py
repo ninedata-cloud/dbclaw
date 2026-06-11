@@ -6,10 +6,6 @@ from backend.database import Base
 
 class DatasourceMetric(Base):
     __tablename__ = "datasource_metric"
-    __table_args__ = (
-        PrimaryKeyConstraint("id", "collected_at", name="datasource_metric_pkey"),
-        Index('idx_datasource_metric_composite', 'datasource_id', 'metric_type', 'collected_at'),
-    )
 
     id = Column(BigInteger, autoincrement=True, nullable=False)
     datasource_id = Column(Integer, nullable=False, index=True)
@@ -18,3 +14,9 @@ class DatasourceMetric(Base):
     collected_at = Column(DateTime(timezone=True), nullable=False, index=True)  # 移除 server_default，由代码显式设置本地时间
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        PrimaryKeyConstraint("id", "collected_at", name="datasource_metric_pkey"),
+        Index('idx_datasource_metric_composite', 'datasource_id', 'metric_type', 'collected_at'),
+        Index('idx_datasource_metric_latest_lookup', datasource_id, metric_type, collected_at.desc(), id.desc()),
+    )

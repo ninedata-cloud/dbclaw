@@ -305,9 +305,6 @@ def _build_recovery_alert_payload(alert, datasource, diagnosis_summary: str | No
     if alert.metric_name and alert.resolved_value is not None:
         recovery_value = alert.resolved_value
         recovery_metric_line = f"\n恢复后值：{alert.metric_name} = {alert.resolved_value:.2f}"
-    elif alert.metric_name and alert.metric_value is not None:
-        recovery_value = alert.metric_value
-        recovery_metric_line = f"\n恢复后值：{alert.metric_name} = {alert.metric_value:.2f}"
 
     payload = {
         "title": f"【已恢复】{datasource_name} 告警已恢复",

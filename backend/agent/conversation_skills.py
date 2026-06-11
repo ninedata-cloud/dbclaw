@@ -1026,6 +1026,7 @@ async def run_conversation_with_skills(
     for round_num in range(MAX_TOOL_ROUNDS):
         try:
             collected_content = ""
+            collected_reasoning_content = ""
             collected_tool_calls = []
             round_usage = None
 
@@ -1077,6 +1078,7 @@ async def run_conversation_with_skills(
                             collected_content += event["content"]
                             yield {"type": "content", "content": event["content"]}
                         elif event["type"] == "message_complete":
+                            collected_reasoning_content = event.get("reasoning_content") or ""
                             collected_tool_calls = event.get("tool_calls", [])
                             round_usage = event.get("usage")
                             if round_usage:
@@ -1098,6 +1100,8 @@ async def run_conversation_with_skills(
                 return
 
             assistant_msg = {"role": "assistant", "content": collected_content or None, "tool_calls": collected_tool_calls}
+            if collected_reasoning_content:
+                assistant_msg["reasoning_content"] = collected_reasoning_content
             full_messages.append(assistant_msg)
 
             for tc in collected_tool_calls:
@@ -1123,6 +1127,7 @@ async def run_conversation_with_skills(
                         "tool_name": tool_name,
                         "tool_args": tool_args,
                         "tool_call_id": tc["id"],
+                        "reasoning_content": collected_reasoning_content or None,
                     }
                     yield {
                         "type": "tool_result",
@@ -1152,6 +1157,7 @@ async def run_conversation_with_skills(
                         "tool_name": tool_name,
                         "tool_args": tool_args,
                         "tool_call_id": tc["id"],
+                        "reasoning_content": collected_reasoning_content or None,
                     }
                     _override = get_tool_override()
                     if _override is not None:
@@ -1219,6 +1225,7 @@ async def run_conversation_with_skills(
                         "tool_name": tool_name,
                         "tool_args": tool_args,
                         "tool_call_id": tc["id"],
+                        "reasoning_content": collected_reasoning_content or None,
                         "summary": f"技能 {tool_name} 可能带来数据库或主机状态变更，需要确认后再执行。",
                         "plan_markdown": f"1. 执行技能 `{tool_name}`\n2. 观察执行结果\n3. 继续完成本轮诊断",
                         "risk_level": risk.get("level", "high"),
@@ -1241,6 +1248,7 @@ async def run_conversation_with_skills(
                     "tool_name": tool_name,
                     "tool_args": tool_args,
                     "tool_call_id": tc["id"],
+                    "reasoning_content": collected_reasoning_content or None,
                 }
 
                 _override = get_tool_override()

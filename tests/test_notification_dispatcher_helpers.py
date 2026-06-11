@@ -158,6 +158,29 @@ def test_build_recovery_payload_uses_resolved_value_when_available():
     assert "已恢复" in payload["title"]
 
 
+@pytest.mark.unit
+def test_build_recovery_payload_does_not_fallback_to_trigger_value():
+    alert = SimpleNamespace(
+        id=11,
+        severity="medium",
+        content="阈值：79.62\n原因：cpu_usage=100.00 高于该实例基线窗口上界 79.62",
+        created_at=now() - timedelta(minutes=6),
+        resolved_at=now(),
+        alert_type="baseline_deviation",
+        metric_name="cpu_usage",
+        metric_value=100.0,
+        resolved_value=None,
+        threshold_value=79.62,
+        trigger_reason="cpu_usage=100.00 高于该实例基线窗口上界 79.62",
+    )
+
+    payload = dispatcher._build_recovery_alert_payload(alert, datasource=SimpleNamespace(name="prod"))
+
+    assert payload["recovery_value"] is None
+    assert payload["resolved_value"] is None
+    assert "恢复后值" not in payload["content"]
+
+
 @pytest.mark.service
 @pytest.mark.asyncio
 async def test_already_delivered_true_when_sent_log_exists():

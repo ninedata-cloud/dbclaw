@@ -44,9 +44,26 @@ def _coerce_stream_text(value: Any) -> str:
     return ""
 
 
+def _get_model_field(value: Any, key: str) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return value.get(key)
+
+    attr_value = getattr(value, key, None)
+    if attr_value is not None:
+        return attr_value
+
+    model_extra = getattr(value, "model_extra", None)
+    if isinstance(model_extra, dict):
+        return model_extra.get(key)
+
+    return None
+
+
 def _extract_openai_reasoning_text(delta: Any) -> str:
     for attr in ("reasoning_content", "reasoning"):
-        text = _coerce_stream_text(getattr(delta, attr, None))
+        text = _coerce_stream_text(_get_model_field(delta, attr))
         if text:
             return text
     return ""
@@ -425,6 +442,7 @@ async def _stream_openai_turn(
     response = await ai_client.client.chat.completions.create(**request_kwargs)
 
     collected_content = ""
+    collected_reasoning_content = ""
     collected_tool_calls: Dict[int, Dict[str, Any]] = {}
     final_stop_reason = "end_turn"
     usage = _normalize_usage()
@@ -444,6 +462,10 @@ async def _stream_openai_turn(
         if delta.content:
             collected_content += delta.content
             yield {"type": "content", "content": delta.content}
+
+        reasoning_delta = _coerce_stream_text(_get_model_field(delta, "reasoning_content"))
+        if reasoning_delta:
+            collected_reasoning_content += reasoning_delta
 
         if delta.tool_calls:
             for tc in delta.tool_calls:
@@ -472,6 +494,7 @@ async def _stream_openai_turn(
     yield {
         "type": "message_complete",
         "content": collected_content,
+        "reasoning_content": collected_reasoning_content,
         "tool_calls": tool_calls,
         "stop_reason": final_stop_reason if tool_calls else "end_turn",
         "usage": usage,
