@@ -500,7 +500,7 @@ async def _auto_resolve_recovered_baseline_alerts(
             if not alert.metric_name or alert.metric_name in violating_metrics:
                 continue
 
-            current_value = _threshold_checker._extract_metric_value(metrics, alert.metric_name)
+            current_value = extract_metric_value(metrics, alert.metric_name)
             if current_value is None:
                 continue
 

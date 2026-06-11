@@ -69,6 +69,42 @@ def _serialize_chat_session(session: DiagnosticSession) -> ChatSessionResponse:
     )
 
 
+def _strip_internal_message_content(role: str, content: str) -> str:
+    if role not in {"tool_call", "approval_request"}:
+        return content
+
+    try:
+        data = json.loads(content)
+    except Exception:
+        return content
+
+    if not isinstance(data, dict) or "reasoning_content" not in data:
+        return content
+
+    data.pop("reasoning_content", None)
+    return json.dumps(data, ensure_ascii=False)
+
+
+def _serialize_chat_message(message: ChatMessage) -> ChatMessageResponse:
+    return ChatMessageResponse.model_validate(
+        {
+            "id": message.id,
+            "session_id": message.session_id,
+            "role": message.role,
+            "content": _strip_internal_message_content(message.role, message.content),
+            "run_id": message.run_id,
+            "render_segments": message.render_segments,
+            "status": message.status,
+            "tool_calls": message.tool_calls,
+            "attachments": message.attachments,
+            "input_tokens": message.input_tokens,
+            "output_tokens": message.output_tokens,
+            "total_tokens": message.total_tokens,
+            "created_at": message.created_at,
+        }
+    )
+
+
 def _register_socket(session_id: int, websocket: WebSocket) -> None:
     ACTIVE_CHAT_SOCKETS.setdefault(session_id, []).append(websocket)
 
@@ -360,7 +396,7 @@ async def get_messages(session_id: int, db: AsyncSession = Depends(get_db), user
         .where(ChatMessage.session_id == session_id)
         .order_by(ChatMessage.id)
     )
-    return result.scalars().all()
+    return [_serialize_chat_message(message) for message in result.scalars().all()]
 
 
 @router.get("/api/chat/sessions/{session_id}/insights")

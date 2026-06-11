@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_, and_, cast, Text
+from sqlalchemy import select, or_, and_, cast, Text, desc, true
 from typing import List
 import asyncio
 import logging
 
-from backend.database import get_db, async_session
+from backend.database import get_db
 from backend.models.datasource import Datasource
+from backend.models.datasource_metric import DatasourceMetric
 from backend.models.integration import Integration
 from backend.models.soft_delete import alive_filter, alive_select, get_alive_by_id
 from backend.schemas.datasource import (
@@ -117,26 +118,42 @@ async def get_datasource_latest_metrics(
     db: AsyncSession = Depends(get_db)
 ):
     """获取所有数据源的最新指标（轻量级接口，列表页使用）"""
-    from sqlalchemy import select, desc
-    from backend.models.datasource_metric import DatasourceMetric
-
-    # Get all datasource with their latest db_status metric
-    result = await db.execute(
-        select(DatasourceMetric)
-        .where(DatasourceMetric.metric_type == 'db_status')
-        .order_by(DatasourceMetric.datasource_id, desc(DatasourceMetric.id))
-        .distinct(DatasourceMetric.datasource_id)
+    latest_metric = (
+        select(
+            DatasourceMetric.data['cpu_usage'].label('cpu_usage'),
+            DatasourceMetric.data['qps'].label('qps'),
+            DatasourceMetric.data['connections_active'].label('connections_active'),
+        )
+        .where(
+            DatasourceMetric.datasource_id == Datasource.id,
+            DatasourceMetric.metric_type == 'db_status',
+        )
+        .order_by(desc(DatasourceMetric.collected_at), desc(DatasourceMetric.id))
+        .limit(1)
+        .correlate(Datasource)
+        .lateral("latest_metric")
     )
-    metrics = result.scalars().all()
+
+    result = await db.execute(
+        select(
+            Datasource.id,
+            latest_metric.c.cpu_usage,
+            latest_metric.c.qps,
+            latest_metric.c.connections_active,
+        )
+        .select_from(Datasource)
+        .join(latest_metric, true())
+        .where(alive_filter(Datasource))
+    )
 
     # Return as dict keyed by datasource_id
     return {
-        m.datasource_id: {
-            'cpu_usage': m.data.get('cpu_usage') if m.data else None,
-            'qps': m.data.get('qps') if m.data else None,
-            'connections_active': m.data.get('connections_active') if m.data else None,
+        datasource_id: {
+            'cpu_usage': cpu_usage,
+            'qps': qps,
+            'connections_active': connections_active,
         }
-        for m in metrics
+        for datasource_id, cpu_usage, qps, connections_active in result.all()
     }
 
 

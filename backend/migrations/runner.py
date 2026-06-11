@@ -28,6 +28,8 @@ POST_CREATE_MIGRATIONS: List[Callable[[], Awaitable[None]]] = [
     lambda: _run_remove_datasource_importance_level(),
     # 将仍为 json 类型的列迁移为 jsonb（与 ORM 模型一致）
     lambda: _run_convert_json_columns_to_jsonb(),
+    # 指标列表页：按数据源快速定位最新 db_status 快照
+    lambda: _run_add_datasource_metric_latest_index(),
     # TimescaleDB：时序表 hypertable / 压缩 / 可选保留策略
     lambda: _run_ensure_timescale(),
 ]
@@ -66,6 +68,12 @@ async def _run_remove_datasource_importance_level():
 async def _run_convert_json_columns_to_jsonb():
     """将 public schema 中 json 列转为 jsonb"""
     from backend.migrations.convert_json_columns_to_jsonb import upgrade
+    await upgrade()
+
+
+async def _run_add_datasource_metric_latest_index():
+    """添加 datasource_metric 最新指标查询索引"""
+    from backend.migrations.add_datasource_metric_latest_index import upgrade
     await upgrade()
 
 
