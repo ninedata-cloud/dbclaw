@@ -23,7 +23,7 @@ NineData DBClaw（数据库智能卫士）是一款 AI 原生的面向数据库�
 - 云数据库集成：支持阿里云、腾讯云、华为云RDS数据库监控指标接入。
 - 主流及时通信软件对接：支持飞书、钉钉、企业微信 webhook 告警对接。
 - 机器人对话：支持飞书、钉钉、微信机器人对接。
-- 多数据库统一纳管：支持 MySQL、OceanBase MySQL、PostgreSQL、Oracle、SQL Server、openGauss 和 SAP HANA。
+- 多数据库统一纳管：支持 MySQL、PostgreSQL、Oracle、SQL Server、openGauss、OceanBase MySQL 和 SAP HANA。
 - 主动监控与实时看板：持续采集数据库指标，并可通过 SSH 关联主机指标。
 - 告警与通知分发：支持阈值告警、AI 判警、事件追踪、自动恢复、Webhook、邮件、钉钉、飞书和企业微信通知。
 - 自动巡检：支持定时巡检、事件触发巡检、规则检查和结构化巡检报告。
