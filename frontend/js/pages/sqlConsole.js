@@ -796,11 +796,13 @@ const SqlConsolePage = {
             'postgresql': 'PostgreSQL',
             'oracle': 'Oracle',
             'sqlserver': 'SQL Server',
+            'tdsql-c-mysql': 'TDSQL-C MySQL',
             'mongodb': 'MongoDB',
             'redis': 'Redis',
             'clickhouse': 'ClickHouse',
             'tidb': 'TiDB',
             'oceanbase': 'OceanBase',
+            'oceanbase-mysql': 'OceanBase MySQL',
             'dameng': '达梦',
             'kingbase': '人大金仓',
             'gbase': 'GBase',
@@ -886,7 +888,8 @@ const SqlConsolePage = {
             'sqlserver': /Microsoft SQL Server\s+([\d.]+)/i,
             'opengauss': /openGauss\s+([\d.]+)/i,
             'hana': /HDB\s+([\d.]+)/i,
-            'tdsql': /([\d.]+)/
+            'tdsql': /([\d.]+)/,
+            'oceanbasemysql': /([\d.]+)/
         };
 
         const dbTypeNormalized = (dbType || '').toLowerCase().replace(/[_-]/g, '');
@@ -903,7 +906,8 @@ const SqlConsolePage = {
                     'sqlserver': 'SQL Server',
                     'opengauss': 'openGauss',
                     'hana': 'SAP HANA',
-                    'tdsql': 'TDSQL-C'
+                    'tdsql': 'TDSQL-C',
+                    'oceanbasemysql': 'OceanBase MySQL'
                 };
                 const displayName = dbDisplayNames[dbTypeNormalized] || dbType.toUpperCase();
                 const short = `${displayName} ${versionNum}`;

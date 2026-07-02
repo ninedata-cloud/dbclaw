@@ -48,6 +48,7 @@ const DatasourceForm = {
                         <option value="oracle" ${datasource?.db_type === 'oracle' ? 'selected' : ''}>Oracle</option>
                         <option value="sqlserver" ${datasource?.db_type === 'sqlserver' ? 'selected' : ''}>SQL Server</option>
                         <option value="tdsql-c-mysql" ${datasource?.db_type === 'tdsql-c-mysql' ? 'selected' : ''}>TDSQL-C MySQL</option>
+                        <option value="oceanbase-mysql" ${datasource?.db_type === 'oceanbase-mysql' ? 'selected' : ''}>OceanBase MySQL</option>
                         <option value="opengauss" ${datasource?.db_type === 'opengauss' ? 'selected' : ''}>openGauss</option>
                         <option value="hana" ${datasource?.db_type === 'hana' ? 'selected' : ''}>SAP HANA</option>
                     </select>
@@ -451,6 +452,7 @@ const DatasourceForm = {
             oracle: 1521,
             sqlserver: 1433,
             'tdsql-c-mysql': 3306,
+            'oceanbase-mysql': 2883,
             opengauss: 5432,
             hana: 30015
         };

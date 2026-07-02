@@ -9,12 +9,14 @@ from backend.services.builtin_docs.mysql_docs import MYSQL_DOCS
 from backend.services.builtin_docs.postgresql_docs import POSTGRESQL_DOCS
 from backend.services.builtin_docs.oracle_docs import ORACLE_DOCS
 from backend.services.builtin_docs.sqlserver_docs import SQLSERVER_DOCS
+from backend.services.builtin_docs.oceanbase_mysql_docs import OCEANBASE_MYSQL_DOCS
 
 logger = logging.getLogger(__name__)
 
 # 一级分类（数据库类型）
 DB_TYPES = [
     {"db_type": "mysql",      "name": "MySQL"},
+    {"db_type": "oceanbase-mysql", "name": "OceanBase MySQL"},
     {"db_type": "postgresql", "name": "PostgreSQL"},
     {"db_type": "oracle",     "name": "Oracle"},
     {"db_type": "sqlserver",  "name": "SQL Server"},
@@ -27,6 +29,7 @@ SCENARIO_CATEGORIES = [
 
 DOCS_MAP = {
     "mysql":      MYSQL_DOCS,
+    "oceanbase-mysql": OCEANBASE_MYSQL_DOCS,
     "postgresql": POSTGRESQL_DOCS,
     "oracle":     ORACLE_DOCS,
     "sqlserver":  SQLSERVER_DOCS,

@@ -11,6 +11,7 @@ from backend.services.sqlserver_service import SQLServerConnector
 from backend.services.oracle_service import OracleConnector
 from backend.services.opengauss_service import OpenGaussConnector
 from backend.services.hana_service import HANAConnector
+from backend.services.db_types import is_mysql_family
 from backend.utils.encryption import decrypt_value
 
 logger = logging.getLogger(__name__)
@@ -100,13 +101,14 @@ async def execute_query(datasource: Datasource, query: str, allow_write: bool = 
         password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
 
         # Get appropriate service
-        if datasource.db_type in {"mysql", "tdsql-c-mysql"}:
+        if is_mysql_family(datasource.db_type):
             service = MySQLConnector(
                 host=datasource.host,
                 port=datasource.port,
                 username=datasource.username,
                 password=password,
                 database=datasource.database,
+                db_type=datasource.db_type,
             )
         elif datasource.db_type == "postgresql":
             service = PostgreSQLConnector(

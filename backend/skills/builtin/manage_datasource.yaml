@@ -24,7 +24,7 @@ parameters:
     type: string
     required: false
     description: Database type (required for create)
-    enum: [mysql, postgresql, oracle, sqlserver, tdsql-c-mysql, opengauss]
+    enum: [mysql, postgresql, oracle, sqlserver, tdsql-c-mysql, oceanbase-mysql, opengauss, hana]
   - name: host
     type: string
     required: false

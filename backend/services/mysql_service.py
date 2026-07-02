@@ -2,6 +2,7 @@ import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 from backend.services.db_connector import DBConnector
+from backend.services.db_types import OCEANBASE_MYSQL
 from backend.services.query_execution_state import QueryCancelledError
 
 logger = logging.getLogger(__name__)
@@ -37,26 +38,6 @@ class MySQLConnector(DBConnector):
         conn = await self._connect()
         try:
             async with conn.cursor() as cur:
-                await cur.execute("SHOW GLOBAL STATUS")
-                rows = await cur.fetchall()
-                status = {r[0]: r[1] for r in rows}
-
-                await cur.execute(
-                    "SELECT "
-                    "COUNT(*) as total, "
-                    "SUM(CASE WHEN COMMAND != 'Sleep' THEN 1 ELSE 0 END) as active "
-                    "FROM information_schema.PROCESSLIST "
-                )
-                process_stats = await cur.fetchone()
-                process_count = process_stats[0] if process_stats else 0
-
-                await cur.execute("SHOW GLOBAL VARIABLES LIKE 'max_connections'")
-                max_conn_row = await cur.fetchone()
-                max_connections = int(max_conn_row[1]) if max_conn_row and max_conn_row[1] is not None else 0
-
-                uptime = max(int(status.get("Uptime", 1)), 1)
-
-                # 优先使用 SHOW GLOBAL STATUS 的值（更准确且不受权限限制）
                 # 安全转换：处理字符串、None、空值等情况
                 def safe_int(value, default=0):
                     if value is None or value == '':
@@ -66,6 +47,39 @@ class MySQLConnector(DBConnector):
                     except (ValueError, TypeError):
                         return default
 
+                try:
+                    await cur.execute("SHOW GLOBAL STATUS")
+                    rows = await cur.fetchall()
+                    status = {r[0]: r[1] for r in rows}
+                except Exception as exc:
+                    logger.warning("MySQL-compatible status query failed: %s", exc)
+                    status = {}
+
+                try:
+                    await cur.execute(
+                        "SELECT "
+                        "COUNT(*) as total, "
+                        "SUM(CASE WHEN COMMAND != 'Sleep' THEN 1 ELSE 0 END) as active "
+                        "FROM information_schema.PROCESSLIST "
+                    )
+                    process_stats = await cur.fetchone()
+                except Exception as exc:
+                    logger.warning("MySQL-compatible processlist stats query failed: %s", exc)
+                    process_stats = None
+
+                process_count = safe_int(process_stats[0]) if process_stats else 0
+
+                try:
+                    await cur.execute("SHOW GLOBAL VARIABLES LIKE 'max_connections'")
+                    max_conn_row = await cur.fetchone()
+                    max_connections = safe_int(max_conn_row[1]) if max_conn_row and max_conn_row[1] is not None else 0
+                except Exception as exc:
+                    logger.warning("MySQL-compatible max_connections query failed: %s", exc)
+                    max_connections = 0
+
+                uptime = max(safe_int(status.get("Uptime"), 1), 1)
+
+                # 优先使用 SHOW GLOBAL STATUS 的值（更准确且不受权限限制）
                 global_threads_running = safe_int(status.get("Threads_running"))
                 global_threads_connected = safe_int(status.get("Threads_connected"))
 
@@ -93,45 +107,45 @@ class MySQLConnector(DBConnector):
                     "process_count": process_count,
                     "threads_running": threads_running,
                     "threads_connected": threads_connected,
-                    "uptime": int(status.get("Uptime", 0)),
-                    "slow_queries": int(status.get("Slow_queries", 0)),
-                    "open_tables": int(status.get("Open_tables", 0)),
+                    "uptime": safe_int(status.get("Uptime")),
+                    "slow_queries": safe_int(status.get("Slow_queries")),
+                    "open_tables": safe_int(status.get("Open_tables")),
                     # 原始累积值 - 供 MetricNormalizer 计算实时速率
-                    "questions": int(status.get("Questions", 0)),
-                    "com_commit": int(status.get("Com_commit", 0)),
-                    "com_rollback": int(status.get("Com_rollback", 0)),
-                    "com_select": int(status.get("Com_select", 0)),
-                    "com_insert": int(status.get("Com_insert", 0)),
-                    "com_update": int(status.get("Com_update", 0)),
-                    "com_delete": int(status.get("Com_delete", 0)),
+                    "questions": safe_int(status.get("Questions")),
+                    "com_commit": safe_int(status.get("Com_commit")),
+                    "com_rollback": safe_int(status.get("Com_rollback")),
+                    "com_select": safe_int(status.get("Com_select")),
+                    "com_insert": safe_int(status.get("Com_insert")),
+                    "com_update": safe_int(status.get("Com_update")),
+                    "com_delete": safe_int(status.get("Com_delete")),
                     # 网络流量（累积值，供 normalizer 计算速率）
-                    "bytes_received": int(status.get("Bytes_received", 0)),
-                    "bytes_sent": int(status.get("Bytes_sent", 0)),
+                    "bytes_received": safe_int(status.get("Bytes_received")),
+                    "bytes_sent": safe_int(status.get("Bytes_sent")),
                     # InnoDB 缓冲池
                     "cache_hit_rate": self._calc_bp_hit_rate(status),
                     "buffer_pool_hit_rate": self._calc_bp_hit_rate(status),
                     # InnoDB 行操作（累积值）
-                    "innodb_rows_read": int(status.get("Innodb_rows_read", 0)),
-                    "innodb_rows_inserted": int(status.get("Innodb_rows_inserted", 0)),
-                    "innodb_rows_updated": int(status.get("Innodb_rows_updated", 0)),
-                    "innodb_rows_deleted": int(status.get("Innodb_rows_deleted", 0)),
+                    "innodb_rows_read": safe_int(status.get("Innodb_rows_read")),
+                    "innodb_rows_inserted": safe_int(status.get("Innodb_rows_inserted")),
+                    "innodb_rows_updated": safe_int(status.get("Innodb_rows_updated")),
+                    "innodb_rows_deleted": safe_int(status.get("Innodb_rows_deleted")),
                     # InnoDB 磁盘 IO（累积值，供 normalizer 计算速率）
-                    "innodb_data_reads": int(status.get("Innodb_data_reads", 0)),
-                    "innodb_data_writes": int(status.get("Innodb_data_writes", 0)),
+                    "innodb_data_reads": safe_int(status.get("Innodb_data_reads")),
+                    "innodb_data_writes": safe_int(status.get("Innodb_data_writes")),
                     # 锁相关
-                    "innodb_row_lock_waits": int(status.get("Innodb_row_lock_waits", 0)),
-                    "innodb_row_lock_time": int(status.get("Innodb_row_lock_time", 0)),
-                    "table_locks_waited": int(status.get("Table_locks_waited", 0)),
+                    "innodb_row_lock_waits": safe_int(status.get("Innodb_row_lock_waits")),
+                    "innodb_row_lock_time": safe_int(status.get("Innodb_row_lock_time")),
+                    "table_locks_waited": safe_int(status.get("Table_locks_waited")),
                     # 连接异常
-                    "aborted_connections": int(status.get("Aborted_connects", 0)),
-                    "aborted_clients": int(status.get("Aborted_clients", 0)),
+                    "aborted_connections": safe_int(status.get("Aborted_connects")),
+                    "aborted_clients": safe_int(status.get("Aborted_clients")),
                     # 临时表
-                    "created_tmp_tables": int(status.get("Created_tmp_tables", 0)),
-                    "created_tmp_disk_tables": int(status.get("Created_tmp_disk_tables", 0)),
+                    "created_tmp_tables": safe_int(status.get("Created_tmp_tables")),
+                    "created_tmp_disk_tables": safe_int(status.get("Created_tmp_disk_tables")),
                     # 平均 QPS/TPS（基于 uptime 的全局平均值，作为备用）
-                    "qps": round(int(status.get("Questions", 0)) / uptime, 2),
+                    "qps": round(safe_int(status.get("Questions")) / uptime, 2),
                     "tps": round(
-                        (int(status.get("Com_commit", 0)) + int(status.get("Com_rollback", 0)))
+                        (safe_int(status.get("Com_commit")) + safe_int(status.get("Com_rollback")))
                         / uptime, 2
                     ),
                 }
@@ -139,8 +153,11 @@ class MySQLConnector(DBConnector):
             conn.close()
 
     def _calc_bp_hit_rate(self, status):
-        reads = int(status.get("Innodb_buffer_pool_read_requests", 0))
-        disk_reads = int(status.get("Innodb_buffer_pool_reads", 0))
+        try:
+            reads = int(status.get("Innodb_buffer_pool_read_requests", 0) or 0)
+            disk_reads = int(status.get("Innodb_buffer_pool_reads", 0) or 0)
+        except (TypeError, ValueError):
+            return 100.0
         if reads == 0:
             return 100.0
         return round((1 - disk_reads / reads) * 100, 2)
@@ -149,9 +166,13 @@ class MySQLConnector(DBConnector):
         conn = await self._connect()
         try:
             async with conn.cursor() as cur:
-                await cur.execute("SHOW GLOBAL VARIABLES")
-                rows = await cur.fetchall()
-                return {r[0]: r[1] for r in rows}
+                try:
+                    await cur.execute("SHOW GLOBAL VARIABLES")
+                    rows = await cur.fetchall()
+                    return {r[0]: r[1] for r in rows}
+                except Exception as exc:
+                    logger.warning("MySQL-compatible variables query failed: %s", exc)
+                    return {"warning": f"SHOW GLOBAL VARIABLES not accessible: {exc}"}
         finally:
             conn.close()
 
@@ -169,13 +190,17 @@ class MySQLConnector(DBConnector):
                 return [dict(r) for r in rows]
         except Exception:
             async with conn.cursor() as cur:
-                await cur.execute("SHOW PROCESSLIST")
-                rows = await cur.fetchall()
-                return [
-                    {"id": r[0], "user": r[1], "host": r[2], "db": r[3],
-                     "command": r[4], "time": r[5], "state": r[6], "info": r[7]}
-                    for r in rows
-                ]
+                try:
+                    await cur.execute("SHOW PROCESSLIST")
+                    rows = await cur.fetchall()
+                    return [
+                        {"id": r[0], "user": r[1], "host": r[2], "db": r[3],
+                         "command": r[4], "time": r[5], "state": r[6], "info": r[7]}
+                        for r in rows
+                    ]
+                except Exception as exc:
+                    logger.warning("MySQL-compatible process list query failed: %s", exc)
+                    return [{"message": f"Process list not accessible: {exc}"}]
         finally:
             conn.close()
 
@@ -222,8 +247,36 @@ class MySQLConnector(DBConnector):
                          "rows_sent": r[2], "rows_examined": r[3], "sql": r[4]}
                         for r in rows
                     ]
-                except Exception:
-                    return [{"message": "Slow query log table not accessible"}]
+                except Exception as mysql_exc:
+                    logger.debug("mysql.slow_log not accessible: %s", mysql_exc)
+
+                for query in (
+                    "SELECT elapsed_time, queue_time, row_count, affected_rows, query_sql "
+                    "FROM oceanbase.GV$OB_SQL_AUDIT "
+                    "WHERE query_sql IS NOT NULL "
+                    "ORDER BY request_time DESC LIMIT 20",
+                    "SELECT elapsed_time, queue_time, row_count, affected_rows, query_sql "
+                    "FROM GV$OB_SQL_AUDIT "
+                    "WHERE query_sql IS NOT NULL "
+                    "ORDER BY request_time DESC LIMIT 20",
+                ):
+                    try:
+                        await cur.execute(query)
+                        rows = await cur.fetchall()
+                        return [
+                            {
+                                "query_time": str(r[0]),
+                                "lock_time": str(r[1]),
+                                "rows_sent": r[2],
+                                "rows_examined": r[3],
+                                "sql": r[4],
+                            }
+                            for r in rows
+                        ]
+                    except Exception as ob_exc:
+                        logger.debug("OceanBase slow query audit query failed: %s", ob_exc)
+
+                return [{"message": "Slow query data not accessible; enable mysql.slow_log or grant OceanBase GV$OB_SQL_AUDIT read permission."}]
         finally:
             conn.close()
 
@@ -517,10 +570,154 @@ class MySQLConnector(DBConnector):
         finally:
             conn.close()
 
+    async def _get_oceanbase_audit_columns(self, cur, view_name: str) -> set[str]:
+        table_name = view_name.split(".")[-1].strip("`")
+        columns: set[str] = set()
+        try:
+            await cur.execute(
+                "SELECT COLUMN_NAME "
+                "FROM information_schema.COLUMNS "
+                "WHERE TABLE_SCHEMA = 'oceanbase' "
+                "AND UPPER(TABLE_NAME) = UPPER(%s)",
+                (table_name,),
+            )
+            columns = {str(row[0]).upper() for row in (await cur.fetchall() or [])}
+        except Exception as exc:
+            logger.debug("OceanBase audit column lookup failed for %s: %s", view_name, exc)
+
+        if columns:
+            return columns
+
+        try:
+            await cur.execute(f"SELECT * FROM {view_name} LIMIT 0")
+            return {str(desc[0]).upper() for desc in (cur.description or [])}
+        except Exception as exc:
+            logger.debug("OceanBase audit metadata probe failed for %s: %s", view_name, exc)
+            raise
+
+    def _build_oceanbase_top_sql_query(self, view_name: str, columns: set[str], limit: int) -> str:
+        def has(column: str) -> bool:
+            return column.upper() in columns
+
+        if not has("QUERY_SQL"):
+            raise RuntimeError(f"{view_name} 缺少 QUERY_SQL 字段，无法汇总 TOP SQL。")
+
+        sql_id_expr = "sql_id" if has("SQL_ID") else "MD5(query_sql)"
+        elapsed_expr = (
+            "COALESCE(elapsed_time, 0)"
+            if has("ELAPSED_TIME") else
+            ("COALESCE(execute_time, 0)" if has("EXECUTE_TIME") else "0")
+        )
+        row_read_parts = [
+            f"COALESCE({column.lower()}, 0)"
+            for column in ("MEMSTORE_READ_ROW_COUNT", "SSSTORE_READ_ROW_COUNT")
+            if has(column)
+        ]
+        if row_read_parts:
+            row_read_expr = " + ".join(row_read_parts)
+        elif has("ROW_COUNT"):
+            row_read_expr = "COALESCE(row_count, 0)"
+        else:
+            row_read_expr = "0"
+
+        if has("TOTAL_WAIT_TIME_MICRO"):
+            wait_expr = "COALESCE(total_wait_time_micro, 0)"
+        else:
+            wait_parts = [
+                f"COALESCE({column.lower()}, 0)"
+                for column in (
+                    "APPLICATION_WAIT_TIME",
+                    "CONCURRENCY_WAIT_TIME",
+                    "USER_IO_WAIT_TIME",
+                    "SCHEDULE_TIME",
+                )
+                if has(column)
+            ]
+            wait_expr = " + ".join(wait_parts) if wait_parts else "0"
+
+        last_exec_expr = (
+            "FROM_UNIXTIME(MAX(request_time) / 1000000)"
+            if has("REQUEST_TIME") else
+            "NULL"
+        )
+        filters = ["query_sql IS NOT NULL", "query_sql <> ''"]
+        if has("IS_INNER_SQL"):
+            filters.append("is_inner_sql = 0")
+        if has("IS_EXECUTOR_RPC"):
+            filters.append("is_executor_rpc = 0")
+        where_clause = " AND ".join(filters)
+        safe_limit = max(1, min(int(limit or 100), 500))
+
+        return (
+            "SELECT query_sql, "
+            f"{sql_id_expr} AS sql_id, "
+            "COUNT(*) AS exec_count, "
+            f"ROUND(SUM({elapsed_expr}) / 1000000, 6) AS total_time_sec, "
+            f"SUM({row_read_expr}) AS total_rows_scanned, "
+            f"ROUND(SUM({wait_expr}) / 1000000, 6) AS total_wait_time_sec, "
+            f"ROUND(AVG({elapsed_expr}) / 1000000, 6) AS avg_time_sec, "
+            f"ROUND(AVG({row_read_expr}), 2) AS avg_rows_scanned, "
+            f"ROUND(AVG({wait_expr}) / 1000000, 6) AS avg_wait_time_sec, "
+            f"{last_exec_expr} AS last_exec_time "
+            f"FROM {view_name} "
+            f"WHERE {where_clause} "
+            f"GROUP BY query_sql, {sql_id_expr} "
+            f"ORDER BY SUM({elapsed_expr}) DESC "
+            f"LIMIT {safe_limit}"
+        )
+
+    async def _get_oceanbase_top_sql(self, cur, limit: int) -> List[Dict[str, Any]]:
+        """Fallback TOP SQL query for OceanBase MySQL mode."""
+        audit_views = [
+            "`oceanbase`.`GV$OB_SQL_AUDIT`",
+            "`oceanbase`.`GV$SQL_AUDIT`",
+        ]
+        last_error: Optional[Exception] = None
+        for view_name in audit_views:
+            try:
+                columns = await self._get_oceanbase_audit_columns(cur, view_name)
+                query = self._build_oceanbase_top_sql_query(view_name, columns, limit)
+                await cur.execute(query)
+                rows = await cur.fetchall()
+                if not rows:
+                    return []
+                return [
+                    {
+                        "sql_text": r[0],
+                        "sql_id": r[1],
+                        "exec_count": int(r[2] or 0),
+                        "total_time_sec": float(r[3] or 0),
+                        "total_rows_scanned": int(r[4] or 0),
+                        "total_wait_time_sec": float(r[5] or 0),
+                        "avg_time_sec": float(r[6] or 0),
+                        "avg_rows_scanned": float(r[7] or 0),
+                        "avg_wait_time_sec": float(r[8] or 0),
+                        "last_exec_time": str(r[9]) if r[9] else None,
+                    }
+                    for r in rows
+                ]
+            except Exception as exc:
+                last_error = exc
+                logger.debug("OceanBase TOP SQL fallback failed: %s", exc)
+        raise RuntimeError(
+            "读取 OceanBase TOP SQL 失败，请确认账号具备 oceanbase.GV$OB_SQL_AUDIT "
+            "或 oceanbase.GV$SQL_AUDIT 读取权限。"
+            f"原始错误: {last_error}"
+        )
+
     async def get_top_sql(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Get TOP SQL statistics from performance_schema."""
         conn = await self._connect()
+        oceanbase_first_error: Optional[Exception] = None
         try:
+            if self.db_type == OCEANBASE_MYSQL:
+                async with conn.cursor() as ob_cur:
+                    try:
+                        return await self._get_oceanbase_top_sql(ob_cur, limit)
+                    except Exception as exc:
+                        oceanbase_first_error = exc
+                        logger.debug("OceanBase TOP SQL primary query failed: %s", exc)
+
             async with conn.cursor() as cur:
                 def _enabled(value: Any) -> bool:
                     text = str(value or "").strip().lower()
@@ -675,23 +872,44 @@ class MySQLConnector(DBConnector):
                     }
                     for r in rows
                 ]
-        except RuntimeError:
-            raise
+        except RuntimeError as e:
+            try:
+                async with conn.cursor() as fallback_cur:
+                    return await self._get_oceanbase_top_sql(fallback_cur, limit)
+            except Exception as ob_exc:
+                if self.db_type == OCEANBASE_MYSQL:
+                    raise (oceanbase_first_error or ob_exc) from e
+                raise e
         except Exception as e:
             import logging
             err = str(e)
             err_lower = err.lower()
+            if self.db_type == OCEANBASE_MYSQL and oceanbase_first_error is not None:
+                raise oceanbase_first_error from e
             if "access denied" in err_lower or "permission denied" in err_lower:
-                raise RuntimeError(
-                    f"读取 performance_schema 权限不足，请为监控账号授予对应读取权限。原始错误: {err}"
-                ) from e
+                try:
+                    async with conn.cursor() as fallback_cur:
+                        return await self._get_oceanbase_top_sql(fallback_cur, limit)
+                except Exception:
+                    raise RuntimeError(
+                        "读取 performance_schema 权限不足；如为 OceanBase MySQL，请授予 "
+                        f"oceanbase.GV$OB_SQL_AUDIT 或 oceanbase.GV$SQL_AUDIT 读取权限。原始错误: {err}"
+                    ) from e
             if "unknown column" in err_lower:
-                raise RuntimeError(
-                    "当前数据库版本的 performance_schema 字段与 TOP SQL 查询不兼容，"
-                    f"请升级版本或调整采集 SQL。原始错误: {err}"
-                ) from e
+                try:
+                    async with conn.cursor() as fallback_cur:
+                        return await self._get_oceanbase_top_sql(fallback_cur, limit)
+                except Exception:
+                    raise RuntimeError(
+                        "当前数据库版本的 performance_schema 字段与 TOP SQL 查询不兼容，"
+                        f"请升级版本或调整采集 SQL。原始错误: {err}"
+                    ) from e
             logging.getLogger(__name__).warning(f"Failed to get TOP SQL: {e}")
-            raise RuntimeError(f"读取 MySQL TOP SQL 失败: {e}") from e
+            try:
+                async with conn.cursor() as fallback_cur:
+                    return await self._get_oceanbase_top_sql(fallback_cur, limit)
+            except Exception:
+                raise RuntimeError(f"读取 MySQL/OceanBase TOP SQL 失败: {e}") from e
         finally:
             conn.close()
 
@@ -701,13 +919,20 @@ class MySQLConnector(DBConnector):
         try:
             async with conn.cursor() as cur:
                 # 使用 EXPLAIN FORMAT=JSON 获取详细执行计划
-                await cur.execute(f"EXPLAIN FORMAT=JSON {sql_text}")
-                row = await cur.fetchone()
-                if row and row[0]:
-                    import json
-                    explain_json = json.loads(row[0])
-                    return {"format": "json", "plan": explain_json}
-                return {"format": "json", "plan": {}}
+                try:
+                    await cur.execute(f"EXPLAIN FORMAT=JSON {sql_text}")
+                    row = await cur.fetchone()
+                    if row and row[0]:
+                        import json
+                        explain_json = json.loads(row[0])
+                        return {"format": "json", "plan": explain_json}
+                    return {"format": "json", "plan": {}}
+                except Exception as json_exc:
+                    logger.debug("EXPLAIN FORMAT=JSON failed, falling back to table EXPLAIN: %s", json_exc)
+                    await cur.execute(f"EXPLAIN {sql_text}")
+                    columns = [d[0] for d in cur.description]
+                    rows = await cur.fetchall()
+                    return {"format": "table", "columns": columns, "rows": [list(r) for r in rows]}
         except Exception as e:
             import logging
             logging.getLogger(__name__).error(f"Failed to explain SQL: {e}")

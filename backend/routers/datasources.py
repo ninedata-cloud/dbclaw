@@ -16,6 +16,7 @@ from backend.schemas.datasource import (
 )
 from backend.utils.encryption import encrypt_value, decrypt_value
 from backend.services.connection_diagnostic_service import ConnectionDiagnosticService
+from backend.services.db_types import is_mysql_family
 from backend.services.integration_scheduler import sync_datasource_schedule, unschedule_datasource
 from backend.dependencies import get_current_user
 
@@ -529,13 +530,14 @@ async def get_datasource_top_sql(
         password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
 
         # 根据数据库类型创建服务
-        if datasource.db_type in {"mysql", "tdsql-c-mysql"}:
+        if is_mysql_family(datasource.db_type):
             service = MySQLConnector(
                 host=datasource.host,
                 port=datasource.port,
                 username=datasource.username,
                 password=password,
                 database=datasource.database,
+                db_type=datasource.db_type,
             )
         elif datasource.db_type == "postgresql":
             service = PostgreSQLConnector(
@@ -632,13 +634,14 @@ async def explain_sql(
         password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
 
         # 根据数据库类型创建服务
-        if datasource.db_type in {"mysql", "tdsql-c-mysql"}:
+        if is_mysql_family(datasource.db_type):
             service = MySQLConnector(
                 host=datasource.host,
                 port=datasource.port,
                 username=datasource.username,
                 password=password,
                 database=datasource.database,
+                db_type=datasource.db_type,
             )
         elif datasource.db_type == "postgresql":
             service = PostgreSQLConnector(

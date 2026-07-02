@@ -64,6 +64,7 @@ const DatasourcesPage = {
             sqlserver: 'SQL Server',
             oracle: 'Oracle',
             'tdsql-c-mysql': 'TDSQL-C MySQL',
+            'oceanbase-mysql': 'OceanBase MySQL',
             opengauss: 'openGauss',
             hana: 'SAP HANA',
         };
@@ -156,6 +157,7 @@ const DatasourcesPage = {
                 <option value="oracle">Oracle</option>
                 <option value="sqlserver">SQL Server</option>
                 <option value="tdsql-c-mysql">TDSQL-C MySQL</option>
+                <option value="oceanbase-mysql">OceanBase MySQL</option>
                 <option value="opengauss">openGauss</option>
                 <option value="hana">SAP HANA</option>
             </select>
@@ -417,7 +419,7 @@ const DatasourcesPage = {
                                                     onClick: `DatasourcesPage._editDatasource(${conn.id})`
                                                 })}
                                                 ${this._renderActionMenuItem({
-                                                    label: '立即诊断',
+                                                    label: '立即巡检',
                                                     icon: 'zap',
                                                     onClick: `DatasourcesPage._triggerInspection(${conn.id}, event)`
                                                 })}
@@ -1190,7 +1192,8 @@ const DatasourcesPage = {
             'sqlserver': /Microsoft SQL Server\s+([\d.]+)/i,
             'opengauss': /openGauss\s+([\d.]+)/i,
             'hana': /HDB\s+([\d.]+)/i,
-            'tdsql': /([\d.]+)/
+            'tdsql': /([\d.]+)/,
+            'oceanbasemysql': /([\d.]+)/
         };
 
         const dbTypeNormalized = (dbType || '').toLowerCase().replace(/[_-]/g, '');
@@ -1207,7 +1210,8 @@ const DatasourcesPage = {
                     'sqlserver': 'SQL Server',
                     'opengauss': 'openGauss',
                     'hana': 'SAP HANA',
-                    'tdsql': 'TDSQL-C'
+                    'tdsql': 'TDSQL-C',
+                    'oceanbasemysql': 'OceanBase MySQL'
                 };
                 const displayName = dbDisplayNames[dbTypeNormalized] || dbType.toUpperCase();
                 const short = `${displayName} ${versionNum}`;

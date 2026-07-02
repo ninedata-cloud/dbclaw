@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Set
 
 from backend.agent.skill_authorization import filter_skills_by_authorization
 from backend.models.skill import Skill
+from backend.services.db_types import OCEANBASE_MYSQL, normalize_db_type as normalize_known_db_type
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,11 @@ DB_TOOL_FAMILY_MAP: dict[str, dict[str, Set[str]]] = {
         "categories": {"mysql"},
         "tags": {"mysql", "tdsql-c-mysql", "tdsql_c_mysql"},
     },
+    OCEANBASE_MYSQL: {
+        "prefixes": {"mysql_"},
+        "categories": {"mysql"},
+        "tags": {"mysql", "oceanbase", OCEANBASE_MYSQL, "oceanbase_mysql"},
+    },
     "postgresql": {
         "prefixes": {"pg_"},
         "categories": {"postgresql"},
@@ -91,17 +97,7 @@ DB_TOOL_FAMILY_MAP: dict[str, dict[str, Set[str]]] = {
 
 
 def normalize_db_type(db_type: Optional[str]) -> Optional[str]:
-    if not db_type:
-        return None
-    value = db_type.strip().lower()
-    aliases = {
-        "postgres": "postgresql",
-        "pg": "postgresql",
-        "mssql": "sqlserver",
-        "sql_server": "sqlserver",
-        "tdsql_c_mysql": "tdsql-c-mysql",
-    }
-    return aliases.get(value, value)
+    return normalize_known_db_type(db_type)
 
 
 def is_global_skill(skill: Skill) -> bool:

@@ -13,7 +13,7 @@ class DocCategory(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), nullable=False)
-    db_type = Column(String(50), nullable=False)  # mysql/postgresql/oracle/sqlserver/general
+    db_type = Column(String(50), nullable=False)  # mysql/oceanbase-mysql/postgresql/oracle/sqlserver/general
     parent_id = Column(Integer, nullable=True)
     sort_order = Column(Integer, default=0)
     icon = Column(String(50), nullable=True)

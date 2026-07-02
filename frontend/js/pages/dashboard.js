@@ -41,6 +41,7 @@ const DashboardPage = {
             oracle: 'db-dot-oracle',
             sqlserver: 'db-dot-sqlserver',
             'tdsql-c-mysql': 'db-dot-tdsql-c-mysql',
+            'oceanbase-mysql': 'db-dot-oceanbase-mysql',
             opengauss: 'db-dot-postgresql',
             hana: 'db-dot-hana'
         };

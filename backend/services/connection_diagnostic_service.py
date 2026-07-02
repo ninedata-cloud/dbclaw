@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.datasource import Datasource
 from backend.models.soft_delete import alive_filter
 from backend.services.db_connector import get_connector
+from backend.services.db_types import is_supported_db_type
 from backend.utils.encryption import decrypt_value
 from backend.utils.host_executor import execute_host_command
 
@@ -179,8 +180,7 @@ class ConnectionDiagnosticService:
             )
 
     def _validate_config(self, db_type: Optional[str], host: Optional[str], port: Optional[int]) -> Optional[str]:
-        supported = {"mysql", "postgresql", "sqlserver", "oracle", "tdsql-c-mysql", "opengauss", "hana"}
-        if not db_type or db_type not in supported:
+        if not is_supported_db_type(db_type):
             return f"不支持的数据库类型: {db_type}"
         if not host or not str(host).strip():
             return "数据库主机不能为空"

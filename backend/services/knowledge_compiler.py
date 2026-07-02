@@ -43,6 +43,7 @@ _GENERIC_DB_SKILL_ALIASES = {
 _DB_PREFIX_BY_TYPE = {
     "mysql": "mysql",
     "tdsql-c-mysql": "mysql",
+    "oceanbase-mysql": "mysql",
     "postgresql": "pg",
     "oracle": "oracle",
     "sqlserver": "mssql",

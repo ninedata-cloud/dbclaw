@@ -31,7 +31,10 @@ def simplify_version(full_version: str, db_type: str) -> Dict[str, str]:
         "sqlserver": r"Microsoft SQL Server\s+([\d.]+)",
         "opengauss": r"openGauss\s+([\d.]+)",
         "hana": r"HDB\s+([\d.]+)",
-        "tdsql": r"([\d.]+)"
+        "tdsql": r"([\d.]+)",
+        "tdsql-c-mysql": r"([\d.]+)",
+        "oceanbase-mysql": r"([\d.]+)",
+        "oceanbasemysql": r"([\d.]+)",
     }
 
     db_type_lower = db_type.lower() if db_type else ""
@@ -50,7 +53,10 @@ def simplify_version(full_version: str, db_type: str) -> Dict[str, str]:
                 "sqlserver": "SQL Server",
                 "opengauss": "openGauss",
                 "hana": "SAP HANA",
-                "tdsql": "TDSQL-C"
+                "tdsql": "TDSQL-C",
+                "tdsql-c-mysql": "TDSQL-C MySQL",
+                "oceanbase-mysql": "OceanBase MySQL",
+                "oceanbasemysql": "OceanBase MySQL",
             }.get(db_type_lower, db_type.upper())
 
             short = f"{db_display_name} {version_num}"

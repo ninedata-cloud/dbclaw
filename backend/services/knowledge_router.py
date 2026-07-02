@@ -17,6 +17,7 @@ from backend.models.document import DocCategory, DocDocument
 from backend.models.soft_delete import alive_filter
 from backend.services.document_service import ensure_document_compiled
 from backend.services.knowledge_compiler import build_default_stop_conditions, normalize_diagnosis_profile
+from backend.services.db_types import compatibility_db_types as resolve_compatibility_db_types
 
 
 ISSUE_KEYWORDS: dict[str, list[str]] = {
@@ -36,6 +37,7 @@ HOST_SKILL_PREFIXES = ("get_os_metrics", "diagnose_", "execute_os_command")
 DB_TYPE_COMPATIBILITY = {
     "mysql": ["mysql", "general"],
     "tdsql-c-mysql": ["tdsql-c-mysql", "mysql", "general"],
+    "oceanbase-mysql": ["oceanbase-mysql", "oceanbase", "mysql", "general"],
     "postgresql": ["postgresql", "general"],
     "oracle": ["oracle", "general"],
     "sqlserver": ["sqlserver", "general"],
@@ -97,9 +99,7 @@ def _tokenize_text(text: str) -> list[str]:
 
 
 def _compatibility_db_types(db_type: Optional[str]) -> list[str]:
-    if not db_type:
-        return ["general"]
-    return DB_TYPE_COMPATIBILITY.get(db_type.lower(), [db_type.lower(), "general"])
+    return resolve_compatibility_db_types(db_type)
 
 
 def _needs_host(unit: dict[str, Any]) -> bool:

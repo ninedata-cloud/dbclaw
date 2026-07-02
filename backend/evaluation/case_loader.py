@@ -16,6 +16,7 @@ DEFAULT_EVAL_HOST_ID = 900101
 DEFAULT_PORT_BY_DB_TYPE = {
     "mysql": 3306,
     "tdsql-c-mysql": 3306,
+    "oceanbase-mysql": 2883,
     "postgresql": 5432,
     "oracle": 1521,
     "sqlserver": 1433,

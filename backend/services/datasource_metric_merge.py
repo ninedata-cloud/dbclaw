@@ -1,5 +1,7 @@
 from typing import Any, Mapping
 
+from backend.services.db_types import is_mysql_family
+
 
 # 云监控更适合作为权威来源的性能指标。
 # 对这些字段，外部集成值优先；直连采集只在字段缺失时补充。
@@ -75,7 +77,7 @@ def cleanup_obsolete_integration_keys(
     cleaned = dict(data or {})
     db_key = (db_type or "").strip().lower()
 
-    if db_key == "mysql":
+    if is_mysql_family(db_key):
         has_canonical_connection_fields = any(
             key in cleaned
             for key in ("connections_active", "connections_total", "threads_running", "threads_connected")

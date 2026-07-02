@@ -1,17 +1,21 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
+from backend.services.db_types import OCEANBASE_MYSQL, normalize_db_type
+
 
 class DBConnector(ABC):
     """Abstract base class for all database connectors."""
 
     def __init__(self, host: str, port: int, username: str = None,
-                 password: str = None, database: str = None):
+                 password: str = None, database: str = None,
+                 db_type: str = None):
         self.host = host
         self.port = port
         self.username = username
         self.password = password
         self.database = database
+        self.db_type = normalize_db_type(db_type)
 
     @abstractmethod
     async def test_connection(self) -> str:
@@ -114,6 +118,7 @@ def get_connector(db_type: str, host: str, port: int, username: str = None,
     connectors = {
         "mysql": "backend.services.mysql_service.MySQLConnector",
         "tdsql-c-mysql": "backend.services.mysql_service.MySQLConnector",
+        OCEANBASE_MYSQL: "backend.services.mysql_service.MySQLConnector",
         "postgresql": "backend.services.postgres_service.PostgreSQLConnector",
         "sqlserver": "backend.services.sqlserver_service.SQLServerConnector",
         "oracle": "backend.services.oracle_service.OracleConnector",
@@ -121,6 +126,7 @@ def get_connector(db_type: str, host: str, port: int, username: str = None,
         "hana": "backend.services.hana_service.HANAConnector",
     }
 
+    db_type = normalize_db_type(db_type) or ""
     if db_type not in connectors:
         raise ValueError(f"Unsupported database type: {db_type}")
 
@@ -143,4 +149,5 @@ def get_connector(db_type: str, host: str, port: int, username: str = None,
     module = importlib.import_module(module_path)
     connector_class = getattr(module, class_name)
     return connector_class(host=host, port=port, username=username,
-                           password=password, database=database, **kwargs)
+                           password=password, database=database,
+                           db_type=db_type, **kwargs)

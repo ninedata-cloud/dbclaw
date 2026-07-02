@@ -209,7 +209,7 @@ TOOL_DEFINITIONS = [
                 "properties": {
                     "db_type": {
                         "type": "string",
-                        "description": "数据库类型过滤，可选值: mysql, postgresql, oracle, sqlserver，不传则返回所有类型"
+                        "description": "数据库类型过滤，可选值: mysql, postgresql, oracle, sqlserver, tdsql-c-mysql, oceanbase-mysql, opengauss, hana，不传则返回所有类型"
                     }
                 }
             }

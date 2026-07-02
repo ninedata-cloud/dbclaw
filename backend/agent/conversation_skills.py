@@ -503,6 +503,7 @@ def _build_datasource_context_prompt(
     skill_prefix_map = {
         'mysql': 'mysql',
         'tdsql-c-mysql': 'mysql',
+        'oceanbase-mysql': 'mysql',
         'postgresql': 'pg',
         'sqlserver': 'mssql',
         'oracle': 'oracle',

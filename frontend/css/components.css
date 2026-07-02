@@ -43,6 +43,7 @@
 .type-postgresql { background: rgba(51,103,214,0.15); color: #6c9df7; }
 .type-sqlserver { background: rgba(163,113,247,0.15); color: var(--accent-purple); }
 .type-hana { background: rgba(0,180,240,0.15); color: #00b4f0; }
+.type-oceanbase-mysql { background: rgba(0,160,130,0.16); color: #44d7b6; }
 
 .datasource-card-info {
     display: flex;
