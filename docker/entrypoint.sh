@@ -9,6 +9,37 @@ LOG_DIR="${LOG_DIR:-/app/data/logs}"
 UPLOAD_DIR="${UPLOAD_DIR:-/app/uploads}"
 CHAT_ATTACHMENTS_DIR="${CHAT_ATTACHMENTS_DIR:-$UPLOAD_DIR/chat_attachments}"
 DBCLAW_FIX_UPLOAD_PERMISSIONS="${DBCLAW_FIX_UPLOAD_PERMISSIONS:-true}"
+SUPERVISOR_CONF="${SUPERVISOR_CONF:-/etc/supervisor/conf.d/supervisord.conf}"
+
+# Capture an explicitly provided DATABASE_URL (docker -e / compose) before the
+# persisted runtime.env is sourced, so an external DB configured by the operator
+# always wins over a value baked into runtime.env on a previous boot.
+ENV_DATABASE_URL="${DATABASE_URL:-}"
+
+# Returns "external" when the DATABASE_URL host is not the in-container loopback,
+# otherwise "local". An empty/unparseable host is treated as local (built-in PG).
+classify_database_host() {
+    python - "${1:-}" <<'PY'
+import sys
+from urllib.parse import urlsplit
+
+url = sys.argv[1] if len(sys.argv) > 1 else ""
+try:
+    host = (urlsplit(url).hostname or "").lower()
+except Exception:
+    host = ""
+local_hosts = {"", "127.0.0.1", "localhost", "::1", "0.0.0.0"}
+print("local" if host in local_hosts else "external")
+PY
+}
+
+# Set autostart=<true|false> only within the [program:postgresql] section.
+set_builtin_pg_autostart() {
+    local value="$1"
+    if [ -f "$SUPERVISOR_CONF" ]; then
+        sed -i "/^\[program:postgresql\]/,/^\[/ s/^autostart=.*/autostart=$value/" "$SUPERVISOR_CONF"
+    fi
+}
 
 generate_fernet_key() {
     python - <<'PY'
@@ -62,6 +93,11 @@ if [ -f "$RUNTIME_ENV_FILE" ]; then
     set +a
 fi
 
+# An operator-provided DATABASE_URL takes precedence over the persisted value.
+if [ -n "$ENV_DATABASE_URL" ]; then
+    DATABASE_URL="$ENV_DATABASE_URL"
+fi
+
 POSTGRES_DB="${POSTGRES_DB:-dbclaw}"
 POSTGRES_USER="${POSTGRES_USER:-dbclaw}"
 
@@ -112,6 +148,23 @@ if [ "$INITIAL_ADMIN_PASSWORD" = "$DEFAULT_ADMIN_PASSWORD" ]; then
     echo "Please change the admin password after first login."
 fi
 
-/app/docker/init-db.sh
+# Decide whether to run the bundled PostgreSQL. An operator may force the choice
+# via DBCLAW_USE_BUILTIN_DB=true|false; otherwise it is inferred from the
+# DATABASE_URL host (external host => skip the built-in database entirely).
+if [ -n "${DBCLAW_USE_BUILTIN_DB:-}" ]; then
+    USE_BUILTIN_DB="$DBCLAW_USE_BUILTIN_DB"
+elif [ "$(classify_database_host "$DATABASE_URL")" = "external" ]; then
+    USE_BUILTIN_DB=false
+else
+    USE_BUILTIN_DB=true
+fi
 
-exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+if [ "$USE_BUILTIN_DB" = "true" ]; then
+    set_builtin_pg_autostart true
+    /app/docker/init-db.sh
+else
+    echo "Detected external database in DATABASE_URL; skipping built-in PostgreSQL init and startup."
+    set_builtin_pg_autostart false
+fi
+
+exec /usr/bin/supervisord -c "$SUPERVISOR_CONF"
