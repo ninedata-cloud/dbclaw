@@ -18,7 +18,7 @@ from backend.schemas.query import (
     TableInfo, ColumnInfo, QueryContextResponse
 )
 from backend.services.db_connector import get_connector
-from backend.services.db_types import MYSQL_FAMILY_DB_TYPES
+from backend.services.db_types import MYSQL_SCHEMA_DATABASE_LIST_DB_TYPES
 from backend.services.asyncpg_query_executor import execute_asyncpg_query
 from backend.services.query_execution_state import QueryExecutionState, QueryCancelledError
 from backend.utils.encryption import decrypt_value
@@ -33,7 +33,7 @@ router = APIRouter(prefix="/api/query", tags=["query"], dependencies=[Depends(ge
 _query_history_by_user: dict[int, deque] = defaultdict(lambda: deque(maxlen=100))
 _active_queries_by_request_id: dict[str, QueryExecutionState] = {}
 _active_queries_lock = asyncio.Lock()
-_DB_TYPES_WITH_DATABASE_LIST_FROM_SCHEMAS = MYSQL_FAMILY_DB_TYPES
+_DB_TYPES_WITH_DATABASE_LIST_FROM_SCHEMAS = MYSQL_SCHEMA_DATABASE_LIST_DB_TYPES
 _DB_TYPES_WITH_SCHEMA_SELECTOR = {"postgresql", "sqlserver", "hana"}
 _DEFAULT_SCHEMA_BY_DB_TYPE = {
     "postgresql": "public",

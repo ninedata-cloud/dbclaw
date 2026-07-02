@@ -5,13 +5,7 @@ from typing import Dict, Any
 import logging
 import re
 from backend.models.datasource import Datasource
-from backend.services.mysql_service import MySQLConnector
-from backend.services.postgres_service import PostgreSQLConnector
-from backend.services.sqlserver_service import SQLServerConnector
-from backend.services.oracle_service import OracleConnector
-from backend.services.opengauss_service import OpenGaussConnector
-from backend.services.hana_service import HANAConnector
-from backend.services.db_types import is_mysql_family
+from backend.services.db_connector import get_connector
 from backend.utils.encryption import decrypt_value
 
 logger = logging.getLogger(__name__)
@@ -100,61 +94,15 @@ async def execute_query(datasource: Datasource, query: str, allow_write: bool = 
         # Decrypt password
         password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
 
-        # Get appropriate service
-        if is_mysql_family(datasource.db_type):
-            service = MySQLConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-                db_type=datasource.db_type,
-            )
-        elif datasource.db_type == "postgresql":
-            service = PostgreSQLConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-            )
-        elif datasource.db_type == "sqlserver":
-            service = SQLServerConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-                **(datasource.extra_params or {}),
-            )
-        elif datasource.db_type == "oracle":
-            service = OracleConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-                **(datasource.extra_params or {}),
-            )
-        elif datasource.db_type == "opengauss":
-            service = OpenGaussConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-            )
-        elif datasource.db_type == "hana":
-            service = HANAConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-                **(datasource.extra_params or {}),
-            )
-        else:
-            return {"success": False, "error": f"Unsupported database type: {datasource.db_type}"}
+        service = get_connector(
+            db_type=datasource.db_type,
+            host=datasource.host,
+            port=datasource.port,
+            username=datasource.username,
+            password=password,
+            database=datasource.database,
+            extra_params=datasource.extra_params,
+        )
 
         # Execute query
         result = await service.execute_query(query)

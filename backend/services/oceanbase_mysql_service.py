@@ -1,0 +1,712 @@
+import logging
+from typing import Any, Dict, List, Optional
+
+from backend.services.db_connector import DBConnector
+from backend.services.query_execution_state import QueryCancelledError
+
+logger = logging.getLogger(__name__)
+
+
+class OceanBaseMySQLConnector(DBConnector):
+    """OceanBase MySQL mode connector using the MySQL wire protocol."""
+
+    def _get_conn_params(self):
+        return dict(
+            host=self.host,
+            port=self.port,
+            user=self.username,
+            password=self.password or "",
+            db=self.database or "",
+        )
+
+    async def _connect(self):
+        import aiomysql
+
+        return await aiomysql.connect(**self._get_conn_params(), connect_timeout=5)
+
+    @staticmethod
+    def _safe_int(value, default=0):
+        if value is None or value == "":
+            return default
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return default
+
+    def _calc_bp_hit_rate(self, status):
+        try:
+            reads = int(status.get("Innodb_buffer_pool_read_requests", 0) or 0)
+            disk_reads = int(status.get("Innodb_buffer_pool_reads", 0) or 0)
+        except (TypeError, ValueError):
+            return 100.0
+        if reads == 0:
+            return 100.0
+        return round((1 - disk_reads / reads) * 100, 2)
+
+    async def test_connection(self) -> str:
+        conn = await self._connect()
+        try:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT VERSION()")
+                row = await cur.fetchone()
+                return row[0] if row else "unknown"
+        finally:
+            conn.close()
+
+    async def get_status(self) -> Dict[str, Any]:
+        conn = await self._connect()
+        try:
+            async with conn.cursor() as cur:
+                try:
+                    await cur.execute("SHOW GLOBAL STATUS")
+                    rows = await cur.fetchall()
+                    status = {r[0]: r[1] for r in rows}
+                except Exception as exc:
+                    logger.warning("OceanBase MySQL status query failed: %s", exc)
+                    status = {}
+
+                try:
+                    await cur.execute(
+                        "SELECT "
+                        "COUNT(*) as total, "
+                        "SUM(CASE WHEN COMMAND != 'Sleep' THEN 1 ELSE 0 END) as active "
+                        "FROM information_schema.PROCESSLIST "
+                    )
+                    process_stats = await cur.fetchone()
+                except Exception as exc:
+                    logger.warning("OceanBase MySQL processlist stats query failed: %s", exc)
+                    process_stats = None
+
+                try:
+                    await cur.execute("SHOW GLOBAL VARIABLES LIKE 'max_connections'")
+                    max_conn_row = await cur.fetchone()
+                    max_connections = self._safe_int(max_conn_row[1]) if max_conn_row and max_conn_row[1] is not None else 0
+                except Exception as exc:
+                    logger.warning("OceanBase MySQL max_connections query failed: %s", exc)
+                    max_connections = 0
+
+                uptime = max(self._safe_int(status.get("Uptime"), 1), 1)
+                global_threads_running = self._safe_int(status.get("Threads_running"))
+                global_threads_connected = self._safe_int(status.get("Threads_connected"))
+                visible_threads_running = self._safe_int(process_stats[1]) if process_stats else 0
+                visible_threads_connected = self._safe_int(process_stats[0]) if process_stats else 0
+
+                threads_running = global_threads_running if global_threads_running > 0 else visible_threads_running
+                threads_connected = global_threads_connected if global_threads_connected > 0 else visible_threads_connected
+                process_count = self._safe_int(process_stats[0]) if process_stats else 0
+
+                if threads_connected == 0 or threads_running == 0:
+                    logger.warning(
+                        "OceanBase MySQL connection metrics may be incomplete - "
+                        "global: connected=%s, running=%s; visible: connected=%s, running=%s; "
+                        "final: connected=%s, running=%s",
+                        global_threads_connected,
+                        global_threads_running,
+                        visible_threads_connected,
+                        visible_threads_running,
+                        threads_connected,
+                        threads_running,
+                    )
+
+                return {
+                    "connections_active": threads_running,
+                    "connections_total": threads_connected,
+                    "max_connections": max_connections,
+                    "process_count": process_count,
+                    "threads_running": threads_running,
+                    "threads_connected": threads_connected,
+                    "uptime": self._safe_int(status.get("Uptime")),
+                    "slow_queries": self._safe_int(status.get("Slow_queries")),
+                    "open_tables": self._safe_int(status.get("Open_tables")),
+                    "questions": self._safe_int(status.get("Questions")),
+                    "com_commit": self._safe_int(status.get("Com_commit")),
+                    "com_rollback": self._safe_int(status.get("Com_rollback")),
+                    "com_select": self._safe_int(status.get("Com_select")),
+                    "com_insert": self._safe_int(status.get("Com_insert")),
+                    "com_update": self._safe_int(status.get("Com_update")),
+                    "com_delete": self._safe_int(status.get("Com_delete")),
+                    "bytes_received": self._safe_int(status.get("Bytes_received")),
+                    "bytes_sent": self._safe_int(status.get("Bytes_sent")),
+                    "cache_hit_rate": self._calc_bp_hit_rate(status),
+                    "buffer_pool_hit_rate": self._calc_bp_hit_rate(status),
+                    "innodb_rows_read": self._safe_int(status.get("Innodb_rows_read")),
+                    "innodb_rows_inserted": self._safe_int(status.get("Innodb_rows_inserted")),
+                    "innodb_rows_updated": self._safe_int(status.get("Innodb_rows_updated")),
+                    "innodb_rows_deleted": self._safe_int(status.get("Innodb_rows_deleted")),
+                    "innodb_data_reads": self._safe_int(status.get("Innodb_data_reads")),
+                    "innodb_data_writes": self._safe_int(status.get("Innodb_data_writes")),
+                    "innodb_row_lock_waits": self._safe_int(status.get("Innodb_row_lock_waits")),
+                    "innodb_row_lock_time": self._safe_int(status.get("Innodb_row_lock_time")),
+                    "table_locks_waited": self._safe_int(status.get("Table_locks_waited")),
+                    "aborted_connections": self._safe_int(status.get("Aborted_connects")),
+                    "aborted_clients": self._safe_int(status.get("Aborted_clients")),
+                    "created_tmp_tables": self._safe_int(status.get("Created_tmp_tables")),
+                    "created_tmp_disk_tables": self._safe_int(status.get("Created_tmp_disk_tables")),
+                    "qps": round(self._safe_int(status.get("Questions")) / uptime, 2),
+                    "tps": round(
+                        (self._safe_int(status.get("Com_commit")) + self._safe_int(status.get("Com_rollback")))
+                        / uptime,
+                        2,
+                    ),
+                }
+        finally:
+            conn.close()
+
+    async def get_variables(self) -> Dict[str, Any]:
+        conn = await self._connect()
+        try:
+            async with conn.cursor() as cur:
+                try:
+                    await cur.execute("SHOW GLOBAL VARIABLES")
+                    rows = await cur.fetchall()
+                    return {r[0]: r[1] for r in rows}
+                except Exception as exc:
+                    logger.warning("OceanBase MySQL variables query failed: %s", exc)
+                    return {"warning": f"SHOW GLOBAL VARIABLES not accessible: {exc}"}
+        finally:
+            conn.close()
+
+    async def get_process_list(self) -> List[Dict[str, Any]]:
+        import aiomysql
+
+        conn = await self._connect()
+        try:
+            async with conn.cursor(aiomysql.DictCursor) as cur:
+                await cur.execute(
+                    "SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO "
+                    "FROM information_schema.PROCESSLIST "
+                    "ORDER BY TIME DESC",
+                )
+                rows = await cur.fetchall()
+                return [dict(r) for r in rows]
+        except Exception:
+            async with conn.cursor() as cur:
+                try:
+                    await cur.execute("SHOW PROCESSLIST")
+                    rows = await cur.fetchall()
+                    return [
+                        {
+                            "id": r[0],
+                            "user": r[1],
+                            "host": r[2],
+                            "db": r[3],
+                            "command": r[4],
+                            "time": r[5],
+                            "state": r[6],
+                            "info": r[7],
+                        }
+                        for r in rows
+                    ]
+                except Exception as exc:
+                    logger.warning("OceanBase MySQL process list query failed: %s", exc)
+                    return [{"message": f"Process list not accessible: {exc}"}]
+        finally:
+            conn.close()
+
+    async def terminate_session(self, session_id: int) -> Dict[str, Any]:
+        conn = await self._connect()
+        try:
+            target_session_id = int(session_id)
+            async with conn.cursor() as cur:
+                await cur.execute(f"KILL {target_session_id}")
+            return {
+                "success": True,
+                "session_id": target_session_id,
+                "message": f"OceanBase MySQL 会话 {target_session_id} 已终止",
+            }
+        finally:
+            conn.close()
+
+    async def cancel_query(self, session_id: int) -> Dict[str, Any]:
+        conn = await self._connect()
+        try:
+            target_session_id = int(session_id)
+            async with conn.cursor() as cur:
+                await cur.execute(f"KILL QUERY {target_session_id}")
+            return {
+                "success": True,
+                "session_id": target_session_id,
+                "message": f"OceanBase MySQL 查询 {target_session_id} 已取消",
+            }
+        finally:
+            conn.close()
+
+    async def _register_execution_session(self, conn, execution_state) -> None:
+        if execution_state is None:
+            return
+
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT CONNECTION_ID()")
+            row = await cur.fetchone()
+
+        execution_state.session_id = str(row[0]) if row and row[0] is not None else None
+        if execution_state.cancel_requested:
+            raise QueryCancelledError("查询已取消")
+
+    async def execute_query(
+        self,
+        sql: str,
+        max_rows: int = 1000,
+        execution_state: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        import time
+
+        conn = await self._connect()
+        try:
+            await self._register_execution_session(conn, execution_state)
+            async with conn.cursor() as cur:
+                start = time.time()
+                await cur.execute(f"SET SQL_SELECT_LIMIT = {max_rows + 1}")
+                try:
+                    await cur.execute(sql)
+                    elapsed = round((time.time() - start) * 1000, 2)
+
+                    if cur.description:
+                        columns = [d[0] for d in cur.description]
+                        fetched_rows = await cur.fetchall()
+                        truncated = len(fetched_rows) > max_rows
+                        visible_rows = fetched_rows[:max_rows]
+                        return {
+                            "columns": columns,
+                            "rows": [list(r) for r in visible_rows],
+                            "row_count": len(visible_rows),
+                            "execution_time_ms": elapsed,
+                            "truncated": truncated,
+                        }
+
+                    row_count = cur.rowcount if cur.rowcount >= 0 else 0
+                    await conn.commit()
+                    return {
+                        "columns": [],
+                        "rows": [],
+                        "row_count": row_count,
+                        "execution_time_ms": elapsed,
+                        "truncated": False,
+                        "message": f"Query OK, {row_count} rows affected",
+                    }
+                finally:
+                    await cur.execute("SET SQL_SELECT_LIMIT = DEFAULT")
+        except QueryCancelledError:
+            raise
+        except Exception as exc:
+            if execution_state is not None and execution_state.cancel_requested:
+                raise QueryCancelledError("查询已取消") from exc
+            raise
+        finally:
+            conn.close()
+
+    async def explain_query(self, sql: str) -> Dict[str, Any]:
+        conn = await self._connect()
+        try:
+            async with conn.cursor() as cur:
+                await cur.execute(f"EXPLAIN {sql}")
+                columns = [d[0] for d in cur.description]
+                rows = await cur.fetchall()
+                return {"columns": columns, "rows": [list(r) for r in rows]}
+        finally:
+            conn.close()
+
+    async def get_table_stats(self) -> List[Dict[str, Any]]:
+        conn = await self._connect()
+        try:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, "
+                    "AUTO_INCREMENT, ENGINE, TABLE_COLLATION "
+                    "FROM information_schema.TABLES "
+                    "WHERE TABLE_SCHEMA NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys', 'oceanbase') "
+                    "ORDER BY DATA_LENGTH DESC LIMIT 50"
+                )
+                columns = [d[0] for d in cur.description]
+                rows = await cur.fetchall()
+                return [dict(zip(columns, r)) for r in rows]
+        finally:
+            conn.close()
+
+    async def get_replication_status(self) -> Dict[str, Any]:
+        conn = await self._connect()
+        try:
+            async with conn.cursor() as cur:
+                for query in (
+                    "SELECT zone, svr_ip, svr_port, status, start_service_time "
+                    "FROM oceanbase.DBA_OB_SERVERS ORDER BY zone, svr_ip, svr_port",
+                    "SELECT zone, svr_ip, svr_port, status, start_service_time "
+                    "FROM DBA_OB_SERVERS ORDER BY zone, svr_ip, svr_port",
+                ):
+                    try:
+                        await cur.execute(query)
+                        columns = [d[0] for d in cur.description]
+                        rows = await cur.fetchall()
+                        return {
+                            "status": "available",
+                            "servers": [dict(zip(columns, row)) for row in rows],
+                        }
+                    except Exception as exc:
+                        logger.debug("OceanBase server status query failed: %s", exc)
+                return {"status": "not accessible"}
+        finally:
+            conn.close()
+
+    async def get_db_size(self) -> Dict[str, Any]:
+        conn = await self._connect()
+        try:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "SELECT table_schema, "
+                    "SUM(data_length + index_length) as total_size, "
+                    "SUM(data_length) as data_size, "
+                    "SUM(index_length) as index_size "
+                    "FROM information_schema.tables "
+                    "WHERE table_schema NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys', 'oceanbase') "
+                    "GROUP BY table_schema "
+                    "ORDER BY total_size DESC"
+                )
+                rows = await cur.fetchall()
+                databases = [
+                    {
+                        "database": row[0],
+                        "total_size_bytes": int(row[1] or 0),
+                        "data_size_bytes": int(row[2] or 0),
+                        "index_size_bytes": int(row[3] or 0),
+                    }
+                    for row in rows
+                ]
+                return {
+                    "databases": databases,
+                    "total_size_bytes": sum(item["total_size_bytes"] for item in databases),
+                }
+        finally:
+            conn.close()
+
+    async def get_schemas(self) -> List[str]:
+        conn = await self._connect()
+        try:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA "
+                    "WHERE SCHEMA_NAME NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys', 'oceanbase') "
+                    "ORDER BY SCHEMA_NAME"
+                )
+                rows = await cur.fetchall()
+                return [row[0] for row in rows]
+        finally:
+            conn.close()
+
+    async def get_tables(self, schema: Optional[str] = None) -> List[Dict[str, Any]]:
+        conn = await self._connect()
+        try:
+            async with conn.cursor() as cur:
+                target_schema = schema or self.database
+                await cur.execute(
+                    "SELECT TABLE_NAME, TABLE_TYPE, ENGINE, TABLE_COMMENT "
+                    "FROM information_schema.TABLES "
+                    "WHERE TABLE_SCHEMA = %s "
+                    "ORDER BY TABLE_NAME",
+                    (target_schema,),
+                )
+                rows = await cur.fetchall()
+                return [
+                    {
+                        "name": row[0],
+                        "schema": target_schema,
+                        "type": row[1],
+                        "engine": row[2],
+                        "comment": row[3],
+                    }
+                    for row in rows
+                ]
+        finally:
+            conn.close()
+
+    async def get_columns(self, table: str, schema: Optional[str] = None) -> List[Dict[str, Any]]:
+        conn = await self._connect()
+        try:
+            async with conn.cursor() as cur:
+                target_schema = schema or self.database
+                await cur.execute(
+                    "SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, "
+                    "COLUMN_TYPE, COLUMN_KEY, EXTRA, COLUMN_COMMENT "
+                    "FROM information_schema.COLUMNS "
+                    "WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s "
+                    "ORDER BY ORDINAL_POSITION",
+                    (target_schema, table),
+                )
+                rows = await cur.fetchall()
+                return [
+                    {
+                        "name": row[0],
+                        "type": row[1],
+                        "nullable": row[2] == "YES",
+                        "default": row[3],
+                        "full_type": row[4],
+                        "key": row[5],
+                        "extra": row[6],
+                        "comment": row[7],
+                    }
+                    for row in rows
+                ]
+        finally:
+            conn.close()
+
+    async def get_index_stats(self) -> List[Dict[str, Any]]:
+        conn = await self._connect()
+        try:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "SELECT TABLE_SCHEMA, TABLE_NAME, INDEX_NAME, NON_UNIQUE, SEQ_IN_INDEX, COLUMN_NAME, CARDINALITY "
+                    "FROM information_schema.STATISTICS "
+                    "WHERE TABLE_SCHEMA NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys', 'oceanbase') "
+                    "ORDER BY TABLE_SCHEMA, TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX"
+                )
+                rows = await cur.fetchall()
+                return [
+                    {
+                        "schema": r[0],
+                        "table": r[1],
+                        "index": r[2],
+                        "non_unique": r[3],
+                        "seq": r[4],
+                        "column": r[5],
+                        "cardinality": r[6],
+                    }
+                    for r in rows
+                ]
+        finally:
+            conn.close()
+
+    async def get_lock_waits(self) -> List[Dict[str, Any]]:
+        conn = await self._connect()
+        try:
+            async with conn.cursor() as cur:
+                for query in (
+                    "SELECT request_id, session_id, blocking_session_id, table_id, lock_id, lock_type, lock_mode "
+                    "FROM oceanbase.GV$OB_LOCKS WHERE blocking_session_id IS NOT NULL LIMIT 50",
+                    "SELECT request_id, session_id, blocking_session_id, table_id, lock_id, lock_type, lock_mode "
+                    "FROM GV$OB_LOCKS WHERE blocking_session_id IS NOT NULL LIMIT 50",
+                ):
+                    try:
+                        await cur.execute(query)
+                        columns = [d[0] for d in cur.description]
+                        rows = await cur.fetchall()
+                        return [dict(zip(columns, row)) for row in rows]
+                    except Exception as exc:
+                        logger.debug("OceanBase lock wait query failed: %s", exc)
+                return []
+        finally:
+            conn.close()
+
+    async def get_table_fragmentation(self) -> List[Dict[str, Any]]:
+        return []
+
+    async def _get_audit_columns(self, cur, view_name: str) -> set[str]:
+        table_name = view_name.split(".")[-1].strip("`")
+        columns: set[str] = set()
+        try:
+            await cur.execute(
+                "SELECT COLUMN_NAME "
+                "FROM information_schema.COLUMNS "
+                "WHERE TABLE_SCHEMA = 'oceanbase' "
+                "AND UPPER(TABLE_NAME) = UPPER(%s)",
+                (table_name,),
+            )
+            columns = {str(row[0]).upper() for row in (await cur.fetchall() or [])}
+        except Exception as exc:
+            logger.debug("OceanBase audit column lookup failed for %s: %s", view_name, exc)
+
+        if columns:
+            return columns
+
+        try:
+            await cur.execute(f"SELECT * FROM {view_name} LIMIT 0")
+            return {str(desc[0]).upper() for desc in (cur.description or [])}
+        except Exception as exc:
+            logger.debug("OceanBase audit metadata probe failed for %s: %s", view_name, exc)
+            raise
+
+    def _build_top_sql_query(self, view_name: str, columns: set[str], limit: int) -> str:
+        def has(column: str) -> bool:
+            return column.upper() in columns
+
+        if not has("QUERY_SQL"):
+            raise RuntimeError(f"{view_name} 缺少 QUERY_SQL 字段，无法汇总 TOP SQL。")
+
+        sql_id_expr = "sql_id" if has("SQL_ID") else "MD5(query_sql)"
+        elapsed_expr = (
+            "COALESCE(elapsed_time, 0)"
+            if has("ELAPSED_TIME")
+            else ("COALESCE(execute_time, 0)" if has("EXECUTE_TIME") else "0")
+        )
+        row_read_parts = [
+            f"COALESCE({column.lower()}, 0)"
+            for column in ("MEMSTORE_READ_ROW_COUNT", "SSSTORE_READ_ROW_COUNT")
+            if has(column)
+        ]
+        row_read_expr = " + ".join(row_read_parts) if row_read_parts else ("COALESCE(row_count, 0)" if has("ROW_COUNT") else "0")
+
+        if has("TOTAL_WAIT_TIME_MICRO"):
+            wait_expr = "COALESCE(total_wait_time_micro, 0)"
+        else:
+            wait_parts = [
+                f"COALESCE({column.lower()}, 0)"
+                for column in (
+                    "APPLICATION_WAIT_TIME",
+                    "CONCURRENCY_WAIT_TIME",
+                    "USER_IO_WAIT_TIME",
+                    "SCHEDULE_TIME",
+                )
+                if has(column)
+            ]
+            wait_expr = " + ".join(wait_parts) if wait_parts else "0"
+
+        last_exec_expr = "FROM_UNIXTIME(MAX(request_time) / 1000000)" if has("REQUEST_TIME") else "NULL"
+        filters = ["query_sql IS NOT NULL", "query_sql <> ''"]
+        if has("IS_INNER_SQL"):
+            filters.append("is_inner_sql = 0")
+        if has("IS_EXECUTOR_RPC"):
+            filters.append("is_executor_rpc = 0")
+        where_clause = " AND ".join(filters)
+        safe_limit = max(1, min(int(limit or 100), 500))
+
+        return (
+            "SELECT query_sql, "
+            f"{sql_id_expr} AS sql_id, "
+            "COUNT(*) AS exec_count, "
+            f"ROUND(SUM({elapsed_expr}) / 1000000, 6) AS total_time_sec, "
+            f"SUM({row_read_expr}) AS total_rows_scanned, "
+            f"ROUND(SUM({wait_expr}) / 1000000, 6) AS total_wait_time_sec, "
+            f"ROUND(AVG({elapsed_expr}) / 1000000, 6) AS avg_time_sec, "
+            f"ROUND(AVG({row_read_expr}), 2) AS avg_rows_scanned, "
+            f"ROUND(AVG({wait_expr}) / 1000000, 6) AS avg_wait_time_sec, "
+            f"{last_exec_expr} AS last_exec_time "
+            f"FROM {view_name} "
+            f"WHERE {where_clause} "
+            f"GROUP BY query_sql, {sql_id_expr} "
+            f"ORDER BY SUM({elapsed_expr}) DESC "
+            f"LIMIT {safe_limit}"
+        )
+
+    def _build_slow_query(self, view_name: str, columns: set[str], limit: int) -> str:
+        def has(column: str) -> bool:
+            return column.upper() in columns
+
+        if not has("QUERY_SQL"):
+            raise RuntimeError(f"{view_name} 缺少 QUERY_SQL 字段，无法读取慢 SQL。")
+
+        elapsed_expr = (
+            "COALESCE(elapsed_time, 0)"
+            if has("ELAPSED_TIME")
+            else ("COALESCE(execute_time, 0)" if has("EXECUTE_TIME") else "0")
+        )
+        queue_expr = "COALESCE(queue_time, 0)" if has("QUEUE_TIME") else "0"
+        rows_examined_expr = (
+            "COALESCE(memstore_read_row_count, 0) + COALESCE(ssstore_read_row_count, 0)"
+            if has("MEMSTORE_READ_ROW_COUNT") and has("SSSTORE_READ_ROW_COUNT")
+            else ("COALESCE(row_count, 0)" if has("ROW_COUNT") else "0")
+        )
+        rows_sent_expr = "COALESCE(row_count, 0)" if has("ROW_COUNT") else "0"
+        order_expr = "request_time DESC" if has("REQUEST_TIME") else f"{elapsed_expr} DESC"
+        filters = ["query_sql IS NOT NULL", "query_sql <> ''"]
+        if has("IS_INNER_SQL"):
+            filters.append("is_inner_sql = 0")
+        if has("IS_EXECUTOR_RPC"):
+            filters.append("is_executor_rpc = 0")
+        safe_limit = max(1, min(int(limit or 20), 200))
+
+        return (
+            "SELECT "
+            f"ROUND({elapsed_expr} / 1000000, 6) AS query_time, "
+            f"ROUND({queue_expr} / 1000000, 6) AS lock_time, "
+            f"{rows_sent_expr} AS rows_sent, "
+            f"{rows_examined_expr} AS rows_examined, "
+            "query_sql AS sql_text "
+            f"FROM {view_name} "
+            f"WHERE {' AND '.join(filters)} "
+            f"ORDER BY {order_expr} "
+            f"LIMIT {safe_limit}"
+        )
+
+    async def _query_audit_views(self, cur, query_builder, limit: int):
+        audit_views = [
+            "`oceanbase`.`GV$OB_SQL_AUDIT`",
+            "`oceanbase`.`GV$SQL_AUDIT`",
+        ]
+        last_error: Optional[Exception] = None
+        for view_name in audit_views:
+            try:
+                columns = await self._get_audit_columns(cur, view_name)
+                query = query_builder(view_name, columns, limit)
+                await cur.execute(query)
+                return await cur.fetchall()
+            except Exception as exc:
+                last_error = exc
+                logger.debug("OceanBase audit query failed for %s: %s", view_name, exc)
+        raise RuntimeError(
+            "读取 OceanBase 诊断视图失败，请确认账号具备 oceanbase.GV$OB_SQL_AUDIT "
+            "或 oceanbase.GV$SQL_AUDIT 读取权限。"
+            f"原始错误: {last_error}"
+        )
+
+    async def get_slow_queries(self) -> List[Dict[str, Any]]:
+        conn = await self._connect()
+        try:
+            async with conn.cursor() as cur:
+                rows = await self._query_audit_views(cur, self._build_slow_query, 20)
+                return [
+                    {
+                        "query_time": str(r[0]),
+                        "lock_time": str(r[1]),
+                        "rows_sent": r[2],
+                        "rows_examined": r[3],
+                        "sql": r[4],
+                    }
+                    for r in rows
+                ]
+        finally:
+            conn.close()
+
+    async def get_top_sql(self, limit: int = 100) -> List[Dict[str, Any]]:
+        conn = await self._connect()
+        try:
+            async with conn.cursor() as cur:
+                rows = await self._query_audit_views(cur, self._build_top_sql_query, limit)
+                return [
+                    {
+                        "sql_text": r[0],
+                        "sql_id": r[1],
+                        "exec_count": int(r[2] or 0),
+                        "total_time_sec": float(r[3] or 0),
+                        "total_rows_scanned": int(r[4] or 0),
+                        "total_wait_time_sec": float(r[5] or 0),
+                        "avg_time_sec": float(r[6] or 0),
+                        "avg_rows_scanned": float(r[7] or 0),
+                        "avg_wait_time_sec": float(r[8] or 0),
+                        "last_exec_time": str(r[9]) if r[9] else None,
+                    }
+                    for r in rows
+                ]
+        finally:
+            conn.close()
+
+    async def explain_sql(self, sql_text: str) -> Dict[str, Any]:
+        conn = await self._connect()
+        try:
+            async with conn.cursor() as cur:
+                try:
+                    await cur.execute(f"EXPLAIN FORMAT=JSON {sql_text}")
+                    row = await cur.fetchone()
+                    if row and row[0]:
+                        import json
+
+                        return {"format": "json", "plan": json.loads(row[0])}
+                    return {"format": "json", "plan": {}}
+                except Exception as json_exc:
+                    logger.debug("OceanBase EXPLAIN FORMAT=JSON failed, falling back to table EXPLAIN: %s", json_exc)
+                    await cur.execute(f"EXPLAIN {sql_text}")
+                    columns = [d[0] for d in cur.description]
+                    rows = await cur.fetchall()
+                    return {"format": "table", "columns": columns, "rows": [list(r) for r in rows]}
+        except Exception as exc:
+            logger.error("Failed to explain OceanBase MySQL SQL: %s", exc)
+            raise
+        finally:
+            conn.close()

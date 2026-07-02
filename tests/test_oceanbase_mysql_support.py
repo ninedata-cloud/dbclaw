@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -8,20 +9,24 @@ from backend.schemas.datasource import DatasourceCreate, DatasourceTestRequest
 from backend.services.connection_diagnostic_service import ConnectionDiagnosticService
 from backend.services.datasource_metric_merge import cleanup_obsolete_integration_keys
 from backend.services.db_connector import get_connector
-from backend.services.db_types import compatibility_db_types, is_mysql_family, normalize_db_type
+from backend.services.db_types import compatibility_db_types, is_mysql_family, is_oceanbase_mysql, normalize_db_type
+from backend.services.knowledge_compiler import compile_document_knowledge
 from backend.services.metric_normalizer import MetricNormalizer
 from backend.services.mysql_service import MySQLConnector
+from backend.services.oceanbase_mysql_service import OceanBaseMySQLConnector
+from backend.skills.builtin_metadata import normalize_builtin_skill_definition
+from backend.skills.loader import SkillLoader
 from backend.utils.version_parser import simplify_version
 
 
 @pytest.mark.unit
-def test_oceanbase_mysql_is_supported_as_mysql_family():
+def test_oceanbase_mysql_is_supported_as_independent_db_type():
     assert normalize_db_type("oceanbase_mysql") == "oceanbase-mysql"
-    assert is_mysql_family("oceanbase-mysql")
+    assert is_oceanbase_mysql("oceanbase-mysql")
+    assert not is_mysql_family("oceanbase-mysql")
     assert compatibility_db_types("oceanbase-mysql") == [
         "oceanbase-mysql",
         "oceanbase",
-        "mysql",
         "general",
     ]
 
@@ -45,9 +50,10 @@ def test_datasource_schemas_accept_oceanbase_mysql():
 
 
 @pytest.mark.unit
-def test_oceanbase_mysql_uses_mysql_connector_and_query_database_selector():
+def test_oceanbase_mysql_uses_independent_connector_and_query_database_selector():
     connector = get_connector("oceanbase-mysql", "127.0.0.1", 2883)
-    assert isinstance(connector, MySQLConnector)
+    assert isinstance(connector, OceanBaseMySQLConnector)
+    assert not isinstance(connector, MySQLConnector)
     assert "oceanbase-mysql" in query_router._DB_TYPES_WITH_DATABASE_LIST_FROM_SCHEMAS
 
 
@@ -58,8 +64,8 @@ def test_connection_diagnostic_accepts_oceanbase_mysql():
 
 
 @pytest.mark.unit
-def test_oceanbase_mysql_metric_normalizer_reuses_mysql_rules(mocker):
-    mocker.patch.object(MetricNormalizer, "_calculate_rate", return_value=12.5)
+def test_oceanbase_mysql_metric_normalizer_uses_independent_rate_keys(mocker):
+    calculate_rate = mocker.patch.object(MetricNormalizer, "_calculate_rate", return_value=12.5)
     normalized = MetricNormalizer.normalize(
         "oceanbase-mysql",
         9001,
@@ -76,18 +82,68 @@ def test_oceanbase_mysql_metric_normalizer_reuses_mysql_rules(mocker):
     assert normalized["tps"] == 12.5
     assert normalized["cache_hit_rate"] == 99.1
     assert normalized["disk_reads_per_sec"] == 12.5
+    called_keys = [call.args[1] for call in calculate_rate.call_args_list]
+    assert "oceanbase_mysql_questions" in called_keys
+    assert "oceanbase_mysql_total_xact" in called_keys
+    assert "questions" not in called_keys
+    assert "mysql_total_xact" not in called_keys
 
 
 @pytest.mark.unit
-def test_oceanbase_mysql_reuses_mysql_skills_and_metric_cleanup():
-    skill = SimpleNamespace(id="mysql_get_db_status", category="mysql", tags=["mysql"])
+def test_oceanbase_mysql_uses_independent_skills_and_metric_cleanup():
+    ob_skill = SimpleNamespace(
+        id="oceanbase_mysql_get_db_status",
+        category="OceanBase MySQL",
+        tags=["oceanbase", "oceanbase-mysql", "oceanbase_mysql"],
+    )
+    mysql_skill = SimpleNamespace(id="mysql_get_db_status", category="mysql", tags=["mysql"])
 
-    assert skill_matches_datasource(skill, "oceanbase-mysql")
+    assert skill_matches_datasource(ob_skill, "oceanbase-mysql")
+    assert not skill_matches_datasource(mysql_skill, "oceanbase-mysql")
     cleaned = cleanup_obsolete_integration_keys(
         "oceanbase-mysql",
         {"connections_active": 1, "active_connections": 2},
     )
-    assert "active_connections" not in cleaned
+    assert cleaned["active_connections"] == 2
+
+
+@pytest.mark.unit
+def test_oceanbase_mysql_knowledge_alias_resolves_to_oceanbase_skill():
+    compiled = compile_document_knowledge(
+        title="OceanBase status runbook",
+        content="## Check status\nCall `get_db_status` before deeper analysis.",
+        db_types=["oceanbase-mysql"],
+        valid_skill_ids={"oceanbase_mysql_get_db_status", "mysql_get_db_status"},
+    )
+
+    units = compiled["compiled_snapshot"]["units"]
+    assert units[0]["recommended_skills"] == ["oceanbase_mysql_get_db_status"]
+
+
+@pytest.mark.unit
+def test_oceanbase_mysql_builtin_skills_load_with_independent_category_and_tags():
+    expected_ids = {
+        "oceanbase_mysql_get_db_status",
+        "oceanbase_mysql_get_process_list",
+        "oceanbase_mysql_get_slow_queries",
+        "oceanbase_mysql_get_top_sql",
+        "oceanbase_mysql_explain_query",
+        "oceanbase_mysql_get_table_stats",
+        "oceanbase_mysql_get_db_size",
+        "oceanbase_mysql_get_db_variables",
+        "oceanbase_mysql_get_replication_status",
+    }
+    builtin_dir = Path(__file__).resolve().parents[1] / "backend" / "skills" / "builtin"
+    loaded_ids = set()
+
+    for yaml_file in builtin_dir.glob("oceanbase_mysql_*.yaml"):
+        skill_def = SkillLoader.load_from_yaml(yaml_file.read_text())
+        normalized = normalize_builtin_skill_definition(skill_def)
+        loaded_ids.add(normalized.id)
+        assert normalized.category == "OceanBase MySQL"
+        assert "mysql" not in normalized.tags
+
+    assert expected_ids == loaded_ids
 
 
 @pytest.mark.unit
@@ -198,8 +254,23 @@ async def test_mysql_connector_status_degrades_when_global_status_missing(mocker
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_mysql_connector_top_sql_falls_back_to_oceanbase_audit(mocker):
-    connector = MySQLConnector("127.0.0.1", 2883, db_type="oceanbase-mysql")
+async def test_mysql_connector_top_sql_does_not_fall_back_to_oceanbase_audit(mocker):
+    connector = MySQLConnector("127.0.0.1", 3306, db_type="mysql")
+    fake_conn = _FakeConnection()
+    mocker.patch.object(connector, "_connect", return_value=fake_conn)
+
+    with pytest.raises(RuntimeError, match="MySQL TOP SQL"):
+        await connector.get_top_sql(limit=10)
+
+    executed = "\n".join(sql for cursor in fake_conn.cursors for sql in cursor.executed_sql)
+    assert "GV$OB_SQL_AUDIT" not in executed
+    assert "GV$SQL_AUDIT" not in executed
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_oceanbase_mysql_connector_top_sql_reads_oceanbase_audit(mocker):
+    connector = OceanBaseMySQLConnector("127.0.0.1", 2883, db_type="oceanbase-mysql")
     fake_conn = _FakeConnection()
     mocker.patch.object(connector, "_connect", return_value=fake_conn)
 
@@ -217,8 +288,8 @@ async def test_mysql_connector_top_sql_falls_back_to_oceanbase_audit(mocker):
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_mysql_connector_top_sql_supports_oceanbase_3_sql_audit_view(mocker):
-    connector = MySQLConnector("127.0.0.1", 2883, db_type="oceanbase-mysql")
+async def test_oceanbase_mysql_connector_top_sql_supports_oceanbase_3_sql_audit_view(mocker):
+    connector = OceanBaseMySQLConnector("127.0.0.1", 2883, db_type="oceanbase-mysql")
     fake_conn = _FakeConnection(audit_view="GV$SQL_AUDIT")
     mocker.patch.object(connector, "_connect", return_value=fake_conn)
 

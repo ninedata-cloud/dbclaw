@@ -37,7 +37,7 @@ HOST_SKILL_PREFIXES = ("get_os_metrics", "diagnose_", "execute_os_command")
 DB_TYPE_COMPATIBILITY = {
     "mysql": ["mysql", "general"],
     "tdsql-c-mysql": ["tdsql-c-mysql", "mysql", "general"],
-    "oceanbase-mysql": ["oceanbase-mysql", "oceanbase", "mysql", "general"],
+    "oceanbase-mysql": ["oceanbase-mysql", "oceanbase", "general"],
     "postgresql": ["postgresql", "general"],
     "oracle": ["oracle", "general"],
     "sqlserver": ["sqlserver", "general"],

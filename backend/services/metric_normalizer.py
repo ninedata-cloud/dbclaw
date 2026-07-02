@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Dict, Any, Optional
 from datetime import datetime
 from backend.utils.datetime_helper import now
-from backend.services.db_types import is_mysql_family, is_postgres_family
+from backend.services.db_types import is_mysql_family, is_oceanbase_mysql, is_postgres_family
 
 
 class MetricNormalizer:
@@ -31,6 +31,8 @@ class MetricNormalizer:
 
         if is_postgres_family(db_type):
             normalized.update(cls._normalize_postgresql(datasource_id, raw_metrics))
+        elif is_oceanbase_mysql(db_type):
+            normalized.update(cls._normalize_oceanbase_mysql(datasource_id, raw_metrics))
         elif is_mysql_family(db_type):
             normalized.update(cls._normalize_mysql(datasource_id, raw_metrics))
         elif db_type == 'sqlserver':
@@ -159,6 +161,68 @@ class MetricNormalizer:
         if 'innodb_row_lock_waits' in metrics:
             lock_waits_sec = cls._calculate_rate(
                 datasource_id, 'innodb_row_lock_waits', metrics['innodb_row_lock_waits']
+            )
+            if lock_waits_sec is not None:
+                normalized['lock_waits_per_sec'] = lock_waits_sec
+
+        return normalized
+
+    @classmethod
+    def _normalize_oceanbase_mysql(cls, datasource_id: int, metrics: Dict[str, Any]) -> Dict[str, Any]:
+        """OceanBase MySQL 指标标准化"""
+        normalized = {}
+
+        if 'questions' in metrics:
+            qps = cls._calculate_rate(
+                datasource_id, 'oceanbase_mysql_questions', metrics['questions']
+            )
+            if qps is not None:
+                normalized['qps'] = qps
+
+        com_commit = metrics.get('com_commit', 0)
+        com_rollback = metrics.get('com_rollback', 0)
+        total_xact = com_commit + com_rollback
+        if total_xact > 0:
+            tps = cls._calculate_rate(
+                datasource_id, 'oceanbase_mysql_total_xact', total_xact
+            )
+            if tps is not None:
+                normalized['tps'] = tps
+
+        if 'cache_hit_rate' in metrics:
+            normalized['cache_hit_rate'] = metrics['cache_hit_rate']
+
+        if 'innodb_data_reads' in metrics:
+            reads_sec = cls._calculate_rate(
+                datasource_id, 'oceanbase_mysql_innodb_data_reads', metrics['innodb_data_reads']
+            )
+            if reads_sec is not None:
+                normalized['disk_reads_per_sec'] = reads_sec
+
+        if 'innodb_data_writes' in metrics:
+            writes_sec = cls._calculate_rate(
+                datasource_id, 'oceanbase_mysql_innodb_data_writes', metrics['innodb_data_writes']
+            )
+            if writes_sec is not None:
+                normalized['disk_writes_per_sec'] = writes_sec
+
+        if 'bytes_received' in metrics:
+            net_rx = cls._calculate_rate(
+                datasource_id, 'oceanbase_mysql_bytes_received', metrics['bytes_received']
+            )
+            if net_rx is not None:
+                normalized['network_rx_rate'] = net_rx
+
+        if 'bytes_sent' in metrics:
+            net_tx = cls._calculate_rate(
+                datasource_id, 'oceanbase_mysql_bytes_sent', metrics['bytes_sent']
+            )
+            if net_tx is not None:
+                normalized['network_tx_rate'] = net_tx
+
+        if 'innodb_row_lock_waits' in metrics:
+            lock_waits_sec = cls._calculate_rate(
+                datasource_id, 'oceanbase_mysql_innodb_row_lock_waits', metrics['innodb_row_lock_waits']
             )
             if lock_waits_sec is not None:
                 normalized['lock_waits_per_sec'] = lock_waits_sec

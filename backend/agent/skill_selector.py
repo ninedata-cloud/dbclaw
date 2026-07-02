@@ -64,9 +64,9 @@ DB_TOOL_FAMILY_MAP: dict[str, dict[str, Set[str]]] = {
         "tags": {"mysql", "tdsql-c-mysql", "tdsql_c_mysql"},
     },
     OCEANBASE_MYSQL: {
-        "prefixes": {"mysql_"},
-        "categories": {"mysql"},
-        "tags": {"mysql", "oceanbase", OCEANBASE_MYSQL, "oceanbase_mysql"},
+        "prefixes": {"oceanbase_mysql_"},
+        "categories": {"oceanbase mysql"},
+        "tags": {"oceanbase", OCEANBASE_MYSQL, "oceanbase_mysql"},
     },
     "postgresql": {
         "prefixes": {"pg_"},

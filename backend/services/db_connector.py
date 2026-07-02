@@ -118,7 +118,7 @@ def get_connector(db_type: str, host: str, port: int, username: str = None,
     connectors = {
         "mysql": "backend.services.mysql_service.MySQLConnector",
         "tdsql-c-mysql": "backend.services.mysql_service.MySQLConnector",
-        OCEANBASE_MYSQL: "backend.services.mysql_service.MySQLConnector",
+        OCEANBASE_MYSQL: "backend.services.oceanbase_mysql_service.OceanBaseMySQLConnector",
         "postgresql": "backend.services.postgres_service.PostgreSQLConnector",
         "sqlserver": "backend.services.sqlserver_service.SQLServerConnector",
         "oracle": "backend.services.oracle_service.OracleConnector",

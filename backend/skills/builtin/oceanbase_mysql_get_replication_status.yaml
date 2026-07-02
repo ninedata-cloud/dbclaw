@@ -1,0 +1,37 @@
+id: oceanbase_mysql_get_replication_status
+name: OceanBase MySQL Cluster Status
+version: 1.0.0
+author: DBClaw
+category: OceanBase MySQL
+description: Get OceanBase MySQL tenant cluster/server status from OceanBase system views
+tags: [oceanbase, oceanbase-mysql, oceanbase_mysql, cluster, replication, topology]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The OceanBase MySQL datasource ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+      query = (
+          "SELECT zone, svr_ip, svr_port, status, start_service_time "
+          "FROM oceanbase.DBA_OB_SERVERS "
+          "ORDER BY zone, svr_ip, svr_port"
+      )
+      result = await context.execute_query(query, datasource_id)
+      if result.get("success"):
+          return {"success": True, "servers": result.get("data", []), "columns": result.get("columns", []), "source": "oceanbase.DBA_OB_SERVERS"}
+
+      fallback = await context.execute_query(
+          "SELECT zone, svr_ip, svr_port, status, start_service_time FROM DBA_OB_SERVERS ORDER BY zone, svr_ip, svr_port",
+          datasource_id,
+      )
+      if fallback.get("success"):
+          return {"success": True, "servers": fallback.get("data", []), "columns": fallback.get("columns", []), "source": "DBA_OB_SERVERS"}
+
+      return {"success": False, "error": result.get("error") or fallback.get("error") or "OceanBase server status is not accessible"}

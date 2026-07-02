@@ -48,17 +48,29 @@ async def upgrade():
             category_map[scenario] = category.id
 
         inserted = 0
+        updated = 0
         for sort_order, doc_def in enumerate(OCEANBASE_MYSQL_DOCS):
-            exists = await db.execute(
+            existing = await db.execute(
                 select(DocDocument).where(
                     DocDocument.is_builtin == True,
                     DocDocument.title == doc_def["title"],
                 )
             )
-            if exists.scalar_one_or_none():
+            existing_doc = existing.scalar_one_or_none()
+            category = doc_def["category"]
+            if existing_doc:
+                existing_doc.category_id = category_map[category]
+                existing_doc.content = doc_def["content"]
+                existing_doc.summary = auto_summary(doc_def["content"])
+                existing_doc.db_types = [DB_TYPE, "oceanbase"]
+                existing_doc.tags = [DB_TYPE, "oceanbase", category]
+                existing_doc.compiled_snapshot = None
+                existing_doc.compiled_at = None
+                existing_doc.enabled_in_diagnosis = True
+                existing_doc.sort_order = sort_order
+                updated += 1
                 continue
 
-            category = doc_def["category"]
             doc = DocDocument(
                 category_id=category_map[category],
                 title=doc_def["title"],
@@ -68,7 +80,7 @@ async def upgrade():
                 is_active=True,
                 scope="builtin",
                 doc_kind="reference" if category == "技术参考" else ("sop" if category == "综合诊断" else "runbook"),
-                db_types=[DB_TYPE, "oceanbase", "mysql"],
+                db_types=[DB_TYPE, "oceanbase"],
                 issue_categories={
                     "综合诊断": ["general", "performance"],
                     "性能诊断": ["performance", "sql", "resource"],
@@ -77,7 +89,7 @@ async def upgrade():
                     "安全与权限": ["error", "configuration"],
                     "技术参考": ["general"],
                 }.get(category, ["general"]),
-                tags=[DB_TYPE, "oceanbase", "mysql", category],
+                tags=[DB_TYPE, "oceanbase", category],
                 freshness_level="stable",
                 enabled_in_diagnosis=True,
                 sort_order=sort_order,
@@ -86,7 +98,7 @@ async def upgrade():
             inserted += 1
 
         await db.commit()
-        logger.info("Seeded %d OceanBase MySQL builtin docs", inserted)
+        logger.info("Seeded %d and updated %d OceanBase MySQL builtin docs", inserted, updated)
 
 
 async def downgrade():

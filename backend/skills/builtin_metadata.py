@@ -11,6 +11,7 @@ from backend.skills.schema import SkillDefinition
 BUILTIN_SKILL_CATEGORY_ORDER: list[str] = [
     "通用诊断",
     "MySQL",
+    "OceanBase MySQL",
     "PostgreSQL",
     "SQL Server",
     "Oracle",
@@ -87,6 +88,7 @@ DATABASE_KEYWORD_FALLBACK = (
 
 DB_CATEGORY_BY_PREFIX: list[tuple[str, str]] = [
     ("mysql_", "MySQL"),
+    ("oceanbase_mysql_", "OceanBase MySQL"),
     ("pg_", "PostgreSQL"),
     ("mssql_", "SQL Server"),
     ("oracle_", "Oracle"),

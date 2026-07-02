@@ -1,0 +1,50 @@
+id: oceanbase_mysql_get_top_sql
+name: OceanBase MySQL TOP SQL
+version: 1.0.0
+author: DBClaw
+category: OceanBase MySQL
+description: Get OceanBase MySQL TOP SQL statistics from OceanBase audit views
+tags: [oceanbase, oceanbase-mysql, oceanbase_mysql, top-sql, performance, audit]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The OceanBase MySQL datasource ID
+  - name: limit
+    type: integer
+    required: false
+    default: 50
+    description: Maximum number of SQL digests to return
+    min: 1
+    max: 500
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+      limit = max(1, min(int(params.get('limit') or 50), 500))
+      query_template = (
+          "SELECT query_sql AS sql_text, "
+          "COALESCE(sql_id, MD5(query_sql)) AS sql_id, "
+          "COUNT(*) AS exec_count, "
+          "ROUND(SUM(COALESCE(elapsed_time, 0)) / 1000000, 6) AS total_time_sec, "
+          "SUM(COALESCE(memstore_read_row_count, 0) + COALESCE(ssstore_read_row_count, 0)) AS total_rows_scanned, "
+          "ROUND(SUM(COALESCE(total_wait_time_micro, 0)) / 1000000, 6) AS total_wait_time_sec, "
+          "ROUND(AVG(COALESCE(elapsed_time, 0)) / 1000000, 6) AS avg_time_sec, "
+          "ROUND(AVG(COALESCE(memstore_read_row_count, 0) + COALESCE(ssstore_read_row_count, 0)), 2) AS avg_rows_scanned "
+          "FROM {view_name} "
+          "WHERE query_sql IS NOT NULL AND query_sql <> '' AND is_inner_sql = 0 "
+          "GROUP BY query_sql, COALESCE(sql_id, MD5(query_sql)) "
+          "ORDER BY SUM(COALESCE(elapsed_time, 0)) DESC "
+          "LIMIT {limit}"
+      )
+      errors = []
+      for view_name in ("oceanbase.GV$OB_SQL_AUDIT", "oceanbase.GV$SQL_AUDIT"):
+          result = await context.execute_query(query_template.format(view_name=view_name, limit=limit), datasource_id)
+          if result.get("success"):
+              return {"success": True, "top_sql": result.get("data", []), "columns": result.get("columns", []), "source": view_name}
+          errors.append(result.get("error", view_name))
+      return {"success": False, "error": "OceanBase audit views are not accessible", "details": errors}

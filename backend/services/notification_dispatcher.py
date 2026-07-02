@@ -58,7 +58,6 @@ AI_ALERT_METRIC_ALIASES = {
 AI_ALERT_PERCENT_METRICS = {"cpu_usage", "memory_usage", "disk_usage", "cache_hit_rate"}
 AI_ALERT_INTEGER_METRICS = {"connections_active", "connections_total", "connections_waiting", "lock_waiting"}
 NETWORK_PROBE_METRIC_NAME = "network_probe"
-MAX_ALERT_HISTORY_DAYS = 3
 
 
 def _get_required_integration_params(integration) -> list[str]:
@@ -399,14 +398,6 @@ async def _process_pending_alerts():
             else:
                 # Process each alert
                 for alert in alerts:
-                    if _is_historical_alert(alert):
-                        logger.info(
-                            "Skipping alert %s: historical alert older than %s days",
-                            alert.id,
-                            MAX_ALERT_HISTORY_DAYS,
-                        )
-                        continue
-
                     if _should_skip_for_probe_failure(alert, has_probe_failure):
                         logger.info(
                             "Skipping alert %s: active network probe failure, only %s alert can be sent",
@@ -998,14 +989,6 @@ async def _is_datasource_silenced(db, datasource_id: int) -> bool:
     return False
 
 
-def _is_historical_alert(alert) -> bool:
-    created_at = getattr(alert, "created_at", None)
-    if not created_at:
-        return False
-    cutoff = now() - timedelta(days=MAX_ALERT_HISTORY_DAYS)
-    return created_at < cutoff
-
-
 def _is_network_probe_alert(alert) -> bool:
     return getattr(alert, "metric_name", None) == NETWORK_PROBE_METRIC_NAME
 
@@ -1047,14 +1030,6 @@ async def _process_recovery_notifications(db):
     has_probe_failure = await _has_active_network_probe_failure(db)
 
     for alert in resolved_alerts:
-        if _is_historical_alert(alert):
-            logger.info(
-                "Skipping recovery for alert %s: historical alert older than %s days",
-                alert.id,
-                MAX_ALERT_HISTORY_DAYS,
-            )
-            continue
-
         if _should_skip_for_probe_failure(alert, has_probe_failure):
             logger.info(
                 "Skipping recovery for alert %s: active network probe failure, only %s alert can be sent",

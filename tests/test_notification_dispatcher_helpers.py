@@ -16,6 +16,17 @@ class _ScalarOneOrNoneResult:
         return self._value
 
 
+class _AsyncSessionContext:
+    def __init__(self, db):
+        self._db = db
+
+    async def __aenter__(self):
+        return self._db
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
 @pytest.mark.unit
 def test_coerce_float_supports_percent_strings():
     assert dispatcher._coerce_float("91.5%") == 91.5
@@ -61,18 +72,6 @@ def test_format_diagnosis_markdown_deduplicates_and_limits_items():
     text = "1. 扩容连接池\n2. 扩容连接池\n3. 优化慢 SQL"
     output = dispatcher._format_diagnosis_markdown(text, max_items=2)
     assert output == "- 扩容连接池\n- 优化慢 SQL"
-
-
-@pytest.mark.unit
-def test_is_historical_alert_true_when_older_than_max_days():
-    alert = SimpleNamespace(created_at=now() - timedelta(days=4))
-    assert dispatcher._is_historical_alert(alert) is True
-
-
-@pytest.mark.unit
-def test_is_historical_alert_false_when_within_max_days():
-    alert = SimpleNamespace(created_at=now() - timedelta(days=2))
-    assert dispatcher._is_historical_alert(alert) is False
 
 
 @pytest.mark.unit
@@ -299,3 +298,74 @@ async def test_send_recovery_via_integration_records_missing_required_params(moc
     assert "缺少必填参数" in logs[0].error_message
     assert db.commit.await_count == 1
     assert len(added) >= 2
+
+
+@pytest.mark.service
+@pytest.mark.asyncio
+async def test_process_pending_alerts_notifies_old_still_active_alert(mocker):
+    alert = SimpleNamespace(
+        id=42,
+        datasource_id=1,
+        event_id=None,
+        metric_name="cpu_usage",
+        created_at=now() - timedelta(days=10),
+    )
+    subscription = SimpleNamespace(id=7, integration_targets=[{"integration_id": 1}])
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=_ScalarOneOrNoneResult(SimpleNamespace(name="prod-db")))
+
+    mocker.patch("backend.services.notification_dispatcher.async_session", return_value=_AsyncSessionContext(db))
+    mocker.patch.object(dispatcher.AggregationEngine, "_get_notification_cooldown_minutes", AsyncMock(return_value=60))
+    mocker.patch.object(dispatcher.AlertService, "get_pending_notifications", AsyncMock(return_value=[alert]))
+    mocker.patch.object(dispatcher.AlertService, "get_all_subscriptions", AsyncMock(return_value=[subscription]))
+    mocker.patch.object(dispatcher.NotificationService, "check_subscription_match", AsyncMock(return_value=True))
+    mocker.patch.object(dispatcher.AggregationEngine, "should_send_alert", AsyncMock(return_value=True))
+    mocker.patch("backend.services.notification_dispatcher._has_active_network_probe_failure", AsyncMock(return_value=False))
+    mocker.patch("backend.services.notification_dispatcher._is_datasource_silenced", AsyncMock(return_value=False))
+    mocker.patch("backend.services.notification_dispatcher._already_delivered", AsyncMock(return_value=False))
+    send_mock = mocker.patch(
+        "backend.services.notification_dispatcher._send_via_integration",
+        AsyncMock(return_value=[SimpleNamespace(status="sent")]),
+    )
+    mark_mock = mocker.patch("backend.services.notification_dispatcher._mark_alert_notified", AsyncMock())
+    mocker.patch("backend.services.notification_dispatcher._process_recovery_notifications", AsyncMock())
+
+    await dispatcher._process_pending_alerts()
+
+    send_mock.assert_awaited_once_with(db, alert, subscription, {
+        "root_cause": None,
+        "recommended_actions": None,
+        "summary": None,
+        "status": None,
+    })
+    mark_mock.assert_awaited_once_with(db, alert)
+
+
+@pytest.mark.service
+@pytest.mark.asyncio
+async def test_process_recovery_notifications_notifies_old_alert_resolved_recently(mocker):
+    alert = SimpleNamespace(
+        id=43,
+        datasource_id=1,
+        metric_name="cpu_usage",
+        created_at=now() - timedelta(days=10),
+        resolved_at=now(),
+    )
+    subscription = SimpleNamespace(id=8)
+    db = AsyncMock()
+
+    mocker.patch.object(dispatcher.AlertService, "get_pending_recovery_notifications", AsyncMock(return_value=[alert]))
+    mocker.patch.object(dispatcher.AlertService, "get_all_subscriptions", AsyncMock(return_value=[subscription]))
+    mocker.patch.object(dispatcher.AlertService, "has_alert_notification_for_subscription", AsyncMock(return_value=True))
+    mocker.patch.object(dispatcher.AlertService, "has_recovery_notification_for_subscription", AsyncMock(return_value=False))
+    mocker.patch.object(dispatcher.NotificationService, "check_subscription_match", AsyncMock(return_value=True))
+    mocker.patch("backend.services.notification_dispatcher._has_active_network_probe_failure", AsyncMock(return_value=False))
+    mocker.patch("backend.services.notification_dispatcher._is_datasource_silenced", AsyncMock(return_value=False))
+    send_mock = mocker.patch(
+        "backend.services.notification_dispatcher._send_recovery_via_integration",
+        AsyncMock(return_value=[SimpleNamespace(status="sent")]),
+    )
+
+    await dispatcher._process_recovery_notifications(db)
+
+    send_mock.assert_awaited_once_with(db, alert, subscription)

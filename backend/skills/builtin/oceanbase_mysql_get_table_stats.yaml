@@ -1,0 +1,31 @@
+id: oceanbase_mysql_get_table_stats
+name: OceanBase MySQL Table Stats
+version: 1.0.0
+author: DBClaw
+category: OceanBase MySQL
+description: Get OceanBase MySQL table-level statistics including row counts and sizes
+tags: [oceanbase, oceanbase-mysql, oceanbase_mysql, table-stats, capacity]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The OceanBase MySQL datasource ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+      query = (
+          "SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, "
+          "ENGINE, TABLE_COLLATION "
+          "FROM information_schema.TABLES "
+          "WHERE TABLE_SCHEMA NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys', 'oceanbase') "
+          "ORDER BY DATA_LENGTH DESC LIMIT 50"
+      )
+      result = await context.execute_query(query, datasource_id)
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get table stats")}
+      return {"success": True, "tables": result.get("data", []), "columns": result.get("columns", [])}

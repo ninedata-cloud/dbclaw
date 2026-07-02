@@ -1,0 +1,28 @@
+id: oceanbase_mysql_get_db_variables
+name: OceanBase MySQL Variables
+version: 1.0.0
+author: DBClaw
+category: OceanBase MySQL
+description: Get OceanBase MySQL tenant variables and parameters
+tags: [oceanbase, oceanbase-mysql, oceanbase_mysql, variables, configuration]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The OceanBase MySQL datasource ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+      result = await context.execute_query("SHOW GLOBAL VARIABLES", datasource_id)
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get variables")}
+      variables = {}
+      for row in result.get("data", []):
+          if len(row) >= 2:
+              variables[str(row[0])] = row[1]
+      return {"success": True, "variables": variables}

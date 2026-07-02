@@ -16,7 +16,7 @@ from backend.schemas.datasource import (
 )
 from backend.utils.encryption import encrypt_value, decrypt_value
 from backend.services.connection_diagnostic_service import ConnectionDiagnosticService
-from backend.services.db_types import is_mysql_family
+from backend.services.db_connector import get_connector
 from backend.services.integration_scheduler import sync_datasource_schedule, unschedule_datasource
 from backend.dependencies import get_current_user
 
@@ -514,14 +514,6 @@ async def get_datasource_top_sql(
     db: AsyncSession = Depends(get_db)
 ):
     """获取数据源 TOP SQL 统计信息"""
-    from backend.services.mysql_service import MySQLConnector
-    from backend.services.postgres_service import PostgreSQLConnector
-    from backend.services.sqlserver_service import SQLServerConnector
-    from backend.services.oracle_service import OracleConnector
-    from backend.services.opengauss_service import OpenGaussConnector
-    from backend.services.hana_service import HANAConnector
-    from backend.utils.encryption import decrypt_value
-
     datasource = await get_alive_by_id(db, Datasource, datasource_id)
     if not datasource:
         raise HTTPException(status_code=404, detail="数据源不存在")
@@ -529,61 +521,15 @@ async def get_datasource_top_sql(
     try:
         password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
 
-        # 根据数据库类型创建服务
-        if is_mysql_family(datasource.db_type):
-            service = MySQLConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-                db_type=datasource.db_type,
-            )
-        elif datasource.db_type == "postgresql":
-            service = PostgreSQLConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-            )
-        elif datasource.db_type == "sqlserver":
-            service = SQLServerConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-                **(datasource.extra_params or {}),
-            )
-        elif datasource.db_type == "oracle":
-            service = OracleConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-                **(datasource.extra_params or {}),
-            )
-        elif datasource.db_type == "opengauss":
-            service = OpenGaussConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-            )
-        elif datasource.db_type == "hana":
-            service = HANAConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-                **(datasource.extra_params or {}),
-            )
-        else:
-            raise HTTPException(status_code=400, detail=f"不支持的数据库类型: {datasource.db_type}")
+        service = get_connector(
+            db_type=datasource.db_type,
+            host=datasource.host,
+            port=datasource.port,
+            username=datasource.username,
+            password=password,
+            database=datasource.database,
+            extra_params=datasource.extra_params,
+        )
 
         # 检查服务是否支持 get_top_sql 方法
         if not hasattr(service, 'get_top_sql'):
@@ -614,14 +560,6 @@ async def explain_sql(
     db: AsyncSession = Depends(get_db)
 ):
     """获取 SQL 执行计划"""
-    from backend.services.mysql_service import MySQLConnector
-    from backend.services.postgres_service import PostgreSQLConnector
-    from backend.services.sqlserver_service import SQLServerConnector
-    from backend.services.oracle_service import OracleConnector
-    from backend.services.opengauss_service import OpenGaussConnector
-    from backend.services.hana_service import HANAConnector
-    from backend.utils.encryption import decrypt_value
-
     sql_text = request.get("sql_text")
     if not sql_text:
         raise HTTPException(status_code=400, detail="SQL 文本不能为空")
@@ -633,61 +571,15 @@ async def explain_sql(
     try:
         password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
 
-        # 根据数据库类型创建服务
-        if is_mysql_family(datasource.db_type):
-            service = MySQLConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-                db_type=datasource.db_type,
-            )
-        elif datasource.db_type == "postgresql":
-            service = PostgreSQLConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-            )
-        elif datasource.db_type == "sqlserver":
-            service = SQLServerConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-                **(datasource.extra_params or {}),
-            )
-        elif datasource.db_type == "oracle":
-            service = OracleConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-                **(datasource.extra_params or {}),
-            )
-        elif datasource.db_type == "opengauss":
-            service = OpenGaussConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-            )
-        elif datasource.db_type == "hana":
-            service = HANAConnector(
-                host=datasource.host,
-                port=datasource.port,
-                username=datasource.username,
-                password=password,
-                database=datasource.database,
-                **(datasource.extra_params or {}),
-            )
-        else:
-            raise HTTPException(status_code=400, detail=f"不支持的数据库类型: {datasource.db_type}")
+        service = get_connector(
+            db_type=datasource.db_type,
+            host=datasource.host,
+            port=datasource.port,
+            username=datasource.username,
+            password=password,
+            database=datasource.database,
+            extra_params=datasource.extra_params,
+        )
 
         # 检查服务是否支持 explain_sql 方法
         if not hasattr(service, 'explain_sql'):

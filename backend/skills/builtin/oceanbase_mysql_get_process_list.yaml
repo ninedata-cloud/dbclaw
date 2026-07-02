@@ -1,0 +1,29 @@
+id: oceanbase_mysql_get_process_list
+name: OceanBase MySQL Process List
+version: 1.0.0
+author: DBClaw
+category: OceanBase MySQL
+description: Get active OceanBase MySQL sessions to identify blocking or long-running queries
+tags: [oceanbase, oceanbase-mysql, oceanbase_mysql, processes, sessions, blocking]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The OceanBase MySQL datasource ID
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+      query = (
+          "SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO "
+          "FROM information_schema.PROCESSLIST "
+          "ORDER BY TIME DESC"
+      )
+      result = await context.execute_query(query, datasource_id)
+      if not result.get("success"):
+          return {"success": False, "error": result.get("error", "Failed to get process list")}
+      return {"success": True, "processes": result.get("data", []), "columns": result.get("columns", [])}

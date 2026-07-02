@@ -8,7 +8,7 @@ OCEANBASE_MYSQL_DOCS = [
 
 ## 适用范围
 
-本文适用于 OceanBase MySQL 模式租户的直连监控与诊断。DBClaw 将该类型作为独立数据源展示，但运行时复用 MySQL 协议、MySQL SQL 控制台能力和 `mysql_*` 诊断技能。
+本文适用于 OceanBase MySQL 模式租户的直连监控与诊断。DBClaw 将该类型作为独立数据源处理，使用 `oceanbase_mysql_*` 诊断技能，并将 OceanBase 专有诊断 SQL 与 MySQL 诊断能力隔离。
 
 ## 连接参数
 
@@ -19,7 +19,7 @@ OCEANBASE_MYSQL_DOCS = [
 
 ## 基础检查
 
-### 调用 `mysql_get_db_status` skill
+### 调用 `oceanbase_mysql_get_db_status` skill
 
 ```sql
 SELECT VERSION();
@@ -31,7 +31,7 @@ ORDER BY TIME DESC
 LIMIT 20;
 ```
 
-关注连接数、活跃会话、慢查询计数、网络流量和 InnoDB 相关指标。OceanBase 不同版本对 MySQL 系统表兼容程度不同，若某些指标缺失，应结合 OceanBase 专有视图继续诊断。
+关注连接数、活跃会话、慢查询计数、网络流量和缓存命中率等指标。OceanBase 不同版本对部分基础状态变量支持程度不同，若某些指标缺失，应结合 OceanBase 专有视图继续诊断。
 
 ## OceanBase 增强诊断
 
@@ -53,7 +53,7 @@ ORDER BY request_time DESC
 LIMIT 20;
 ```
 
-若该视图不可读，DBClaw 会保留 MySQL 兼容路径结果，并提示补充权限。
+若该视图不可读，`oceanbase_mysql_get_top_sql` 与 `oceanbase_mysql_get_slow_queries` 会返回明确权限提示；基础连接测试、SQL 控制台和基础状态采集仍可继续使用。
 """,
     },
     {
@@ -96,13 +96,13 @@ SELECT query_sql FROM oceanbase.GV$SQL_AUDIT LIMIT 1;    -- OceanBase 3.x
 ## 常见现象
 
 - `SHOW GLOBAL STATUS` 部分变量缺失
-- `performance_schema.events_statements_summary_by_digest` 不存在或权限不足
-- `mysql.slow_log` 不可访问
+- `oceanbase.GV$OB_SQL_AUDIT` 不存在或权限不足
+- `oceanbase.GV$SQL_AUDIT` 不存在或权限不足
 - `EXPLAIN FORMAT=JSON` 不支持
 
 ## 处理策略
 
-DBClaw 首先使用 MySQL 兼容 SQL；失败后尝试 OceanBase 诊断视图；仍失败时返回明确的权限或兼容提示，不应导致数据源基础监控失败。
+DBClaw 使用独立的 OceanBase MySQL connector 和 `oceanbase_mysql_*` 技能。基础状态、会话和对象元数据通过 MySQL 模式可读的系统表采集；慢 SQL/TOP SQL 等增强诊断通过 OceanBase `GV$` 视图采集。
 
 ## 排查顺序
 
@@ -113,7 +113,7 @@ DBClaw 首先使用 MySQL 兼容 SQL；失败后尝试 OceanBase 诊断视图；
 
 ## 建议
 
-生产环境优先使用 OceanBase 官方代理端口接入，并为 DBClaw 账号授予只读监控权限。若企业安全策略不允许读取 `GV$` 视图，DBClaw 仍可保留连接测试、SQL 控制台和基础 MySQL 兼容指标。
+生产环境优先使用 OceanBase 官方代理端口接入，并为 DBClaw 账号授予只读监控权限。若企业安全策略不允许读取 `GV$` 视图，DBClaw 仍可保留连接测试、SQL 控制台和基础状态指标。
 """,
     },
 ]

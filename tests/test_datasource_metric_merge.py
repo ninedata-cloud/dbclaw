@@ -66,3 +66,9 @@ def test_cleanup_obsolete_integration_keys_mysql_keeps_obsolete_without_canonica
 def test_cleanup_obsolete_integration_keys_non_mysql_unchanged():
     data = {"active_connections": 1}
     assert cleanup_obsolete_integration_keys("postgresql", data) == data
+
+
+@pytest.mark.unit
+def test_cleanup_obsolete_integration_keys_oceanbase_mysql_unchanged():
+    data = {"connections_active": 1, "active_connections": 2}
+    assert cleanup_obsolete_integration_keys("oceanbase-mysql", data) == data

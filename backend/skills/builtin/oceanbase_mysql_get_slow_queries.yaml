@@ -1,0 +1,46 @@
+id: oceanbase_mysql_get_slow_queries
+name: OceanBase MySQL Slow Queries
+version: 1.0.0
+author: DBClaw
+category: OceanBase MySQL
+description: Get recent OceanBase MySQL slow SQL from OceanBase audit views
+tags: [oceanbase, oceanbase-mysql, oceanbase_mysql, slow-query, performance, audit]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The OceanBase MySQL datasource ID
+  - name: limit
+    type: integer
+    required: false
+    default: 20
+    description: Maximum number of SQL records to return
+    min: 1
+    max: 200
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+      limit = max(1, min(int(params.get('limit') or 20), 200))
+      query_template = (
+          "SELECT ROUND(COALESCE(elapsed_time, 0) / 1000000, 6) AS query_time, "
+          "ROUND(COALESCE(queue_time, 0) / 1000000, 6) AS queue_time, "
+          "COALESCE(row_count, 0) AS rows_sent, "
+          "COALESCE(memstore_read_row_count, 0) + COALESCE(ssstore_read_row_count, 0) AS rows_examined, "
+          "query_sql "
+          "FROM {view_name} "
+          "WHERE query_sql IS NOT NULL AND query_sql <> '' "
+          "ORDER BY request_time DESC "
+          "LIMIT {limit}"
+      )
+      errors = []
+      for view_name in ("oceanbase.GV$OB_SQL_AUDIT", "oceanbase.GV$SQL_AUDIT"):
+          result = await context.execute_query(query_template.format(view_name=view_name, limit=limit), datasource_id)
+          if result.get("success"):
+              return {"success": True, "slow_queries": result.get("data", []), "columns": result.get("columns", []), "source": view_name}
+          errors.append(result.get("error", view_name))
+      return {"success": False, "error": "OceanBase audit views are not accessible", "details": errors}

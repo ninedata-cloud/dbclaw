@@ -1,0 +1,39 @@
+id: oceanbase_mysql_explain_query
+name: OceanBase MySQL Explain Query
+version: 1.0.0
+author: DBClaw
+category: OceanBase MySQL
+description: Get the OceanBase MySQL execution plan for a SQL query
+tags: [oceanbase, oceanbase-mysql, oceanbase_mysql, explain, query-plan, optimization]
+
+parameters:
+  - name: datasource_id
+    type: integer
+    required: true
+    description: The OceanBase MySQL datasource ID
+  - name: sql
+    type: string
+    required: true
+    description: SQL query to explain
+
+permissions:
+  - execute_query
+
+code: |
+  async def execute(context, params):
+      datasource_id = params['datasource_id']
+      sql = params['sql'].strip()
+      if not sql:
+          return {"success": False, "error": "SQL query is required"}
+
+      explain_result = await context.execute_query(f"EXPLAIN {sql}", datasource_id)
+      if not explain_result.get("success"):
+          return {"success": False, "error": explain_result.get("error", "Failed to explain query")}
+
+      json_result = await context.execute_query(f"EXPLAIN FORMAT=JSON {sql}", datasource_id)
+      return {
+          "success": True,
+          "plan": explain_result.get("data", []),
+          "columns": explain_result.get("columns", []),
+          "json_plan": json_result.get("data", []) if json_result.get("success") else None,
+      }

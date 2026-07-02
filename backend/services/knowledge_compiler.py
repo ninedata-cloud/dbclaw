@@ -43,7 +43,7 @@ _GENERIC_DB_SKILL_ALIASES = {
 _DB_PREFIX_BY_TYPE = {
     "mysql": "mysql",
     "tdsql-c-mysql": "mysql",
-    "oceanbase-mysql": "mysql",
+    "oceanbase-mysql": "oceanbase_mysql",
     "postgresql": "pg",
     "oracle": "oracle",
     "sqlserver": "mssql",
@@ -193,7 +193,7 @@ def _extract_candidate_skill_ids(text: str) -> list[str]:
     for match in _KNOWN_SKILL_PATTERN.findall(text or ""):
         if "_" not in match:
             continue
-        if match.startswith(("idx_", "trx_", "pg_", "mysql_", "mssql_", "oracle_", "opengauss_")) or match in _GENERIC_DB_SKILL_ALIASES:
+        if match.startswith(("idx_", "trx_", "pg_", "mysql_", "oceanbase_mysql_", "mssql_", "oracle_", "opengauss_")) or match in _GENERIC_DB_SKILL_ALIASES:
             candidates.append(match)
             continue
         if match in {

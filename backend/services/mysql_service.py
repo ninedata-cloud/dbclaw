@@ -2,7 +2,6 @@ import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 from backend.services.db_connector import DBConnector
-from backend.services.db_types import OCEANBASE_MYSQL
 from backend.services.query_execution_state import QueryCancelledError
 
 logger = logging.getLogger(__name__)
@@ -250,33 +249,7 @@ class MySQLConnector(DBConnector):
                 except Exception as mysql_exc:
                     logger.debug("mysql.slow_log not accessible: %s", mysql_exc)
 
-                for query in (
-                    "SELECT elapsed_time, queue_time, row_count, affected_rows, query_sql "
-                    "FROM oceanbase.GV$OB_SQL_AUDIT "
-                    "WHERE query_sql IS NOT NULL "
-                    "ORDER BY request_time DESC LIMIT 20",
-                    "SELECT elapsed_time, queue_time, row_count, affected_rows, query_sql "
-                    "FROM GV$OB_SQL_AUDIT "
-                    "WHERE query_sql IS NOT NULL "
-                    "ORDER BY request_time DESC LIMIT 20",
-                ):
-                    try:
-                        await cur.execute(query)
-                        rows = await cur.fetchall()
-                        return [
-                            {
-                                "query_time": str(r[0]),
-                                "lock_time": str(r[1]),
-                                "rows_sent": r[2],
-                                "rows_examined": r[3],
-                                "sql": r[4],
-                            }
-                            for r in rows
-                        ]
-                    except Exception as ob_exc:
-                        logger.debug("OceanBase slow query audit query failed: %s", ob_exc)
-
-                return [{"message": "Slow query data not accessible; enable mysql.slow_log or grant OceanBase GV$OB_SQL_AUDIT read permission."}]
+                return [{"message": "Slow query data not accessible; enable mysql.slow_log and grant read permission."}]
         finally:
             conn.close()
 
@@ -570,154 +543,10 @@ class MySQLConnector(DBConnector):
         finally:
             conn.close()
 
-    async def _get_oceanbase_audit_columns(self, cur, view_name: str) -> set[str]:
-        table_name = view_name.split(".")[-1].strip("`")
-        columns: set[str] = set()
-        try:
-            await cur.execute(
-                "SELECT COLUMN_NAME "
-                "FROM information_schema.COLUMNS "
-                "WHERE TABLE_SCHEMA = 'oceanbase' "
-                "AND UPPER(TABLE_NAME) = UPPER(%s)",
-                (table_name,),
-            )
-            columns = {str(row[0]).upper() for row in (await cur.fetchall() or [])}
-        except Exception as exc:
-            logger.debug("OceanBase audit column lookup failed for %s: %s", view_name, exc)
-
-        if columns:
-            return columns
-
-        try:
-            await cur.execute(f"SELECT * FROM {view_name} LIMIT 0")
-            return {str(desc[0]).upper() for desc in (cur.description or [])}
-        except Exception as exc:
-            logger.debug("OceanBase audit metadata probe failed for %s: %s", view_name, exc)
-            raise
-
-    def _build_oceanbase_top_sql_query(self, view_name: str, columns: set[str], limit: int) -> str:
-        def has(column: str) -> bool:
-            return column.upper() in columns
-
-        if not has("QUERY_SQL"):
-            raise RuntimeError(f"{view_name} 缺少 QUERY_SQL 字段，无法汇总 TOP SQL。")
-
-        sql_id_expr = "sql_id" if has("SQL_ID") else "MD5(query_sql)"
-        elapsed_expr = (
-            "COALESCE(elapsed_time, 0)"
-            if has("ELAPSED_TIME") else
-            ("COALESCE(execute_time, 0)" if has("EXECUTE_TIME") else "0")
-        )
-        row_read_parts = [
-            f"COALESCE({column.lower()}, 0)"
-            for column in ("MEMSTORE_READ_ROW_COUNT", "SSSTORE_READ_ROW_COUNT")
-            if has(column)
-        ]
-        if row_read_parts:
-            row_read_expr = " + ".join(row_read_parts)
-        elif has("ROW_COUNT"):
-            row_read_expr = "COALESCE(row_count, 0)"
-        else:
-            row_read_expr = "0"
-
-        if has("TOTAL_WAIT_TIME_MICRO"):
-            wait_expr = "COALESCE(total_wait_time_micro, 0)"
-        else:
-            wait_parts = [
-                f"COALESCE({column.lower()}, 0)"
-                for column in (
-                    "APPLICATION_WAIT_TIME",
-                    "CONCURRENCY_WAIT_TIME",
-                    "USER_IO_WAIT_TIME",
-                    "SCHEDULE_TIME",
-                )
-                if has(column)
-            ]
-            wait_expr = " + ".join(wait_parts) if wait_parts else "0"
-
-        last_exec_expr = (
-            "FROM_UNIXTIME(MAX(request_time) / 1000000)"
-            if has("REQUEST_TIME") else
-            "NULL"
-        )
-        filters = ["query_sql IS NOT NULL", "query_sql <> ''"]
-        if has("IS_INNER_SQL"):
-            filters.append("is_inner_sql = 0")
-        if has("IS_EXECUTOR_RPC"):
-            filters.append("is_executor_rpc = 0")
-        where_clause = " AND ".join(filters)
-        safe_limit = max(1, min(int(limit or 100), 500))
-
-        return (
-            "SELECT query_sql, "
-            f"{sql_id_expr} AS sql_id, "
-            "COUNT(*) AS exec_count, "
-            f"ROUND(SUM({elapsed_expr}) / 1000000, 6) AS total_time_sec, "
-            f"SUM({row_read_expr}) AS total_rows_scanned, "
-            f"ROUND(SUM({wait_expr}) / 1000000, 6) AS total_wait_time_sec, "
-            f"ROUND(AVG({elapsed_expr}) / 1000000, 6) AS avg_time_sec, "
-            f"ROUND(AVG({row_read_expr}), 2) AS avg_rows_scanned, "
-            f"ROUND(AVG({wait_expr}) / 1000000, 6) AS avg_wait_time_sec, "
-            f"{last_exec_expr} AS last_exec_time "
-            f"FROM {view_name} "
-            f"WHERE {where_clause} "
-            f"GROUP BY query_sql, {sql_id_expr} "
-            f"ORDER BY SUM({elapsed_expr}) DESC "
-            f"LIMIT {safe_limit}"
-        )
-
-    async def _get_oceanbase_top_sql(self, cur, limit: int) -> List[Dict[str, Any]]:
-        """Fallback TOP SQL query for OceanBase MySQL mode."""
-        audit_views = [
-            "`oceanbase`.`GV$OB_SQL_AUDIT`",
-            "`oceanbase`.`GV$SQL_AUDIT`",
-        ]
-        last_error: Optional[Exception] = None
-        for view_name in audit_views:
-            try:
-                columns = await self._get_oceanbase_audit_columns(cur, view_name)
-                query = self._build_oceanbase_top_sql_query(view_name, columns, limit)
-                await cur.execute(query)
-                rows = await cur.fetchall()
-                if not rows:
-                    return []
-                return [
-                    {
-                        "sql_text": r[0],
-                        "sql_id": r[1],
-                        "exec_count": int(r[2] or 0),
-                        "total_time_sec": float(r[3] or 0),
-                        "total_rows_scanned": int(r[4] or 0),
-                        "total_wait_time_sec": float(r[5] or 0),
-                        "avg_time_sec": float(r[6] or 0),
-                        "avg_rows_scanned": float(r[7] or 0),
-                        "avg_wait_time_sec": float(r[8] or 0),
-                        "last_exec_time": str(r[9]) if r[9] else None,
-                    }
-                    for r in rows
-                ]
-            except Exception as exc:
-                last_error = exc
-                logger.debug("OceanBase TOP SQL fallback failed: %s", exc)
-        raise RuntimeError(
-            "读取 OceanBase TOP SQL 失败，请确认账号具备 oceanbase.GV$OB_SQL_AUDIT "
-            "或 oceanbase.GV$SQL_AUDIT 读取权限。"
-            f"原始错误: {last_error}"
-        )
-
     async def get_top_sql(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Get TOP SQL statistics from performance_schema."""
         conn = await self._connect()
-        oceanbase_first_error: Optional[Exception] = None
         try:
-            if self.db_type == OCEANBASE_MYSQL:
-                async with conn.cursor() as ob_cur:
-                    try:
-                        return await self._get_oceanbase_top_sql(ob_cur, limit)
-                    except Exception as exc:
-                        oceanbase_first_error = exc
-                        logger.debug("OceanBase TOP SQL primary query failed: %s", exc)
-
             async with conn.cursor() as cur:
                 def _enabled(value: Any) -> bool:
                     text = str(value or "").strip().lower()
@@ -872,44 +701,20 @@ class MySQLConnector(DBConnector):
                     }
                     for r in rows
                 ]
-        except RuntimeError as e:
-            try:
-                async with conn.cursor() as fallback_cur:
-                    return await self._get_oceanbase_top_sql(fallback_cur, limit)
-            except Exception as ob_exc:
-                if self.db_type == OCEANBASE_MYSQL:
-                    raise (oceanbase_first_error or ob_exc) from e
-                raise e
         except Exception as e:
-            import logging
             err = str(e)
             err_lower = err.lower()
-            if self.db_type == OCEANBASE_MYSQL and oceanbase_first_error is not None:
-                raise oceanbase_first_error from e
             if "access denied" in err_lower or "permission denied" in err_lower:
-                try:
-                    async with conn.cursor() as fallback_cur:
-                        return await self._get_oceanbase_top_sql(fallback_cur, limit)
-                except Exception:
-                    raise RuntimeError(
-                        "读取 performance_schema 权限不足；如为 OceanBase MySQL，请授予 "
-                        f"oceanbase.GV$OB_SQL_AUDIT 或 oceanbase.GV$SQL_AUDIT 读取权限。原始错误: {err}"
-                    ) from e
+                raise RuntimeError(
+                    f"读取 MySQL performance_schema 权限不足，请授予相关读取权限。原始错误: {err}"
+                ) from e
             if "unknown column" in err_lower:
-                try:
-                    async with conn.cursor() as fallback_cur:
-                        return await self._get_oceanbase_top_sql(fallback_cur, limit)
-                except Exception:
-                    raise RuntimeError(
-                        "当前数据库版本的 performance_schema 字段与 TOP SQL 查询不兼容，"
-                        f"请升级版本或调整采集 SQL。原始错误: {err}"
-                    ) from e
-            logging.getLogger(__name__).warning(f"Failed to get TOP SQL: {e}")
-            try:
-                async with conn.cursor() as fallback_cur:
-                    return await self._get_oceanbase_top_sql(fallback_cur, limit)
-            except Exception:
-                raise RuntimeError(f"读取 MySQL/OceanBase TOP SQL 失败: {e}") from e
+                raise RuntimeError(
+                    "当前 MySQL 版本的 performance_schema 字段与 TOP SQL 查询不兼容，"
+                    f"请升级版本或调整采集 SQL。原始错误: {err}"
+                ) from e
+            logger.warning("Failed to get MySQL TOP SQL: %s", e)
+            raise RuntimeError(f"读取 MySQL TOP SQL 失败: {e}") from e
         finally:
             conn.close()
 

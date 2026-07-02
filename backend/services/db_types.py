@@ -7,7 +7,8 @@ from typing import Optional
 
 OCEANBASE_MYSQL = "oceanbase-mysql"
 
-MYSQL_FAMILY_DB_TYPES = {"mysql", "tdsql-c-mysql", OCEANBASE_MYSQL}
+MYSQL_FAMILY_DB_TYPES = {"mysql", "tdsql-c-mysql"}
+MYSQL_SCHEMA_DATABASE_LIST_DB_TYPES = {*MYSQL_FAMILY_DB_TYPES, OCEANBASE_MYSQL}
 POSTGRES_FAMILY_DB_TYPES = {"postgresql", "opengauss"}
 
 SUPPORTED_DB_TYPES = {
@@ -50,6 +51,10 @@ def is_mysql_family(db_type: Optional[str]) -> bool:
     return normalize_db_type(db_type) in MYSQL_FAMILY_DB_TYPES
 
 
+def is_oceanbase_mysql(db_type: Optional[str]) -> bool:
+    return normalize_db_type(db_type) == OCEANBASE_MYSQL
+
+
 def is_postgres_family(db_type: Optional[str]) -> bool:
     return normalize_db_type(db_type) in POSTGRES_FAMILY_DB_TYPES
 
@@ -65,7 +70,7 @@ def compatibility_db_types(db_type: Optional[str]) -> list[str]:
     if normalized == "tdsql-c-mysql":
         return ["tdsql-c-mysql", "mysql", "general"]
     if normalized == OCEANBASE_MYSQL:
-        return [OCEANBASE_MYSQL, "oceanbase", "mysql", "general"]
+        return [OCEANBASE_MYSQL, "oceanbase", "general"]
     if normalized == "opengauss":
         return ["opengauss", "postgresql", "general"]
     return [normalized, "general"]
