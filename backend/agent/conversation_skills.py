@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 MAX_TOOL_ROUNDS = 1000
 # 单轮 AI API 调用超时（秒），防止 LLM 提供商 API 挂起导致会话卡死
-STREAM_ROUND_TIMEOUT = 600
+STREAM_ROUND_TIMEOUT = 900
 KB_TOOL_NAMES = {"list_documents", "read_document"}
 ALERT_SETTINGS_READ_ACTIONS = {"list", "get"}
 ALERT_SETTINGS_WRITE_ACTIONS = {"create", "update", "delete", "test", "toggle", "set_default", "set", "cancel"}

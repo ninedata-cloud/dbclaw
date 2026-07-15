@@ -11,7 +11,7 @@ const ChatWidget = {
     autoScrollEnabled: true,
     hasUnreadWhileDetached: false,
     _streamTimeoutTimer: null,
-    _streamTimeoutMs: 120 * 1000,
+    _streamTimeoutMs: 10 * 60 * 1000,
     _bottomThresholdPx: 48,
     _ignoreScrollStateChanges: false,
     _scrollResumeRaf: null,
