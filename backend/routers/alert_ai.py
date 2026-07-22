@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +16,8 @@ from backend.models.datasource import Datasource
 from backend.models.datasource_metric import DatasourceMetric
 from backend.models.soft_delete import alive_filter
 from backend.models.user import User
+from backend.i18n.errors import ApiError
+from backend.i18n.locale import get_active_locale
 from backend.schemas.alert_ai import (
     AlertAIEvaluationLogResponse,
     AlertAIPolicyCreate,
@@ -73,7 +75,7 @@ async def create_alert_ai_policy(
 ):
     existing = await db.execute(select(AlertAIPolicy).where(AlertAIPolicy.name == data.name))
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="AI 告警模板名称已存在")
+        raise ApiError(400, "operation.not_allowed")
 
     policy = AlertAIPolicy(
         name=data.name,
@@ -102,12 +104,12 @@ async def update_alert_ai_policy(
 ):
     policy = await db.get(AlertAIPolicy, policy_id)
     if not policy:
-        raise HTTPException(status_code=404, detail="AI 告警模板不存在")
+        raise ApiError(404, "resource.not_found")
 
     if data.name and data.name != policy.name:
         existing = await db.execute(select(AlertAIPolicy).where(AlertAIPolicy.name == data.name))
         if existing.scalar_one_or_none():
-            raise HTTPException(status_code=400, detail="AI 告警模板名称已存在")
+            raise ApiError(400, "operation.not_allowed")
         policy.name = data.name
 
     if data.description is not None:
@@ -139,7 +141,7 @@ async def toggle_alert_ai_policy(
 ):
     policy = await db.get(AlertAIPolicy, policy_id)
     if not policy:
-        raise HTTPException(status_code=404, detail="AI 告警模板不存在")
+        raise ApiError(404, "resource.not_found")
     policy.is_enabled = data.enabled
     policy.updated_by = current_user.id
     await db.commit()
@@ -222,7 +224,7 @@ async def evaluate_alert_ai_preview(
     )
     datasource = ds_result.scalar_one_or_none()
     if not datasource:
-        raise HTTPException(status_code=404, detail="数据源不存在")
+        raise ApiError(404, "datasource.not_found")
 
     binding = await resolve_alert_ai_policy_binding(
         db,
@@ -232,7 +234,7 @@ async def evaluate_alert_ai_preview(
         alert_ai_model_id=data.alert_ai_model_id,
     )
     if not binding:
-        raise HTTPException(status_code=400, detail="AI 告警规则未配置或模板不可用")
+        raise ApiError(400, "operation.not_allowed")
 
     result = await db.execute(
         select(DatasourceMetric)
@@ -288,6 +290,7 @@ async def evaluate_alert_ai_preview(
             feature_summary,
             runtime_state,
             mode="preview",
+            locale=get_active_locale(),
         )
         transition = compute_ai_transition(
             active=bool(runtime_state.is_active),

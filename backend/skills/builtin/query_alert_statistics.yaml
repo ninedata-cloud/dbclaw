@@ -70,3 +70,33 @@ code: |
           bucket=params.get("bucket", "auto"),
           top_n=params.get("top_n", 5),
       )
+
+i18n:
+  zh-CN:
+    name: 查询告警统计
+    description: 执行“查询告警统计”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      scope: scope。
+      datasource_ids: 数据源 ID 列表。
+      start_time: 开始时间。
+      end_time: 结束时间。
+      status: 状态。
+      severity: severity。
+      bucket: bucket。
+      top_n: TOP 数量。
+    permission_descriptions:
+      read_datasource: 允许读取数据源和平台元数据
+  en-US:
+    name: Query Alert Statistics
+    description: Query alert and alert event statistics with overview, trend, and top dimensions
+    parameter_descriptions:
+      scope: 统计范围，events 为告警事件，alerts 为原始告警
+      datasource_ids: 数据源 ID 列表，留空表示全部
+      start_time: 开始时间，支持 ISO 8601 或 YYYY-MM-DD HH:MM[:SS]，默认最近 24 小时
+      end_time: 结束时间，支持 ISO 8601 或 YYYY-MM-DD HH:MM[:SS]，默认当前时间
+      status: 状态过滤
+      severity: 严重级别过滤
+      bucket: 趋势聚合粒度
+      top_n: Top 维度返回数量
+    permission_descriptions:
+      read_datasource: Read datasource and platform metadata

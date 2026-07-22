@@ -124,6 +124,7 @@ class DatasourceDiagnosticHints(BaseModel):
 class DatasourceTestResult(BaseModel):
     success: bool
     message: str
+    error_code: Optional[str] = None
     version: Optional[str] = None
     summary: Optional[str] = None
     classification: Optional[DatasourceDiagnosticClassification] = None

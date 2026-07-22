@@ -3,9 +3,12 @@
   "private": true,
   "scripts": {
     "test:i18n": "node --test tests/frontend/i18n.test.js",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "lint:i18n": "node scripts/i18n-frontend-audit.js && python3 scripts/i18n-backend-audit.py && python3 scripts/i18n-content-audit.py",
+    "lint:i18n:strict": "node scripts/i18n-frontend-audit.js --strict && python3 scripts/i18n-backend-audit.py --strict && python3 scripts/i18n-content-audit.py"
   },
   "devDependencies": {
-    "@playwright/test": "^1.54.0"
+    "@playwright/test": "^1.54.0",
+    "acorn": "^8.17.0"
   }
 }

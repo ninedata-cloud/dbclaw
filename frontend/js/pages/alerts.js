@@ -557,7 +557,7 @@ const AlertsPage = {
 
             const typeMetric = event.metric_name ? this.getMetricLabel(event.metric_name) : this.getAlertTypeLabel(event.alert_type);
             row.appendChild(DOM.el('td', { textContent: typeMetric || '-' }));
-            row.appendChild(DOM.el('td', { textContent: event.title || '-' }));
+            row.appendChild(DOM.el('td', { textContent: this.formatAlertTitle(event) }));
             const eventStartTime = event.event_started_at || event.event_start_time || null;
             row.appendChild(DOM.el('td', {
                 textContent: eventStartTime ? Format.datetime(eventStartTime) : '-'
@@ -1012,7 +1012,7 @@ const AlertsPage = {
                 <div class="detail-row">
                     <div class="detail-row-item full-width">
                         <span class="detail-label">${this._t('detail.triggerReason')}</span>
-                        <span class="detail-value">${this._escapeHtml(alert.trigger_reason)}</span>
+                        <span class="detail-value">${this._escapeHtml(this.formatAlertTriggerReason(alert))}</span>
                     </div>
                 </div>` : ''}
                 ${alert.acknowledged_at ? `
@@ -1032,7 +1032,7 @@ const AlertsPage = {
                 <div class="detail-row">
                     <div class="detail-row-item full-width">
                         <span class="detail-label">${this._t('detail.alertTitle')}</span>
-                        <span class="detail-value">${this._escapeHtml(alert.title || '-')}</span>
+                        <span class="detail-value">${this._escapeHtml(this.formatAlertTitle(alert))}</span>
                     </div>
                 </div>
             </div>
@@ -1106,7 +1106,7 @@ const AlertsPage = {
                     <div class="report-info">
                         <div class="report-meta">
                             <span class="report-time">${linkedReport.created_at ? I18n.formatDate(linkedReport.created_at, { dateStyle: 'medium', timeStyle: 'medium' }) : '-'}</span>
-                            <span class="report-title">${this._escapeHtml(linkedReport.title || this._t('detail.reportFallback', { id: linkedReport.report_id }))}</span>
+                            <span class="report-title">${this._escapeHtml(this.formatLinkedReportTitle(linkedReport, dsInfo.name))}</span>
                             <span class="report-status">${this._getReportStatusLabel(linkedReport.status)}</span>
                         </div>
                         <button class="btn btn-sm btn-secondary" onclick="AlertsPage.viewReport(${linkedReport.report_id})">${this._t('detail.viewReport')}</button>
@@ -1148,7 +1148,7 @@ const AlertsPage = {
 
     _navigateToDiagnosis(event) {
         const prompt = this._t('prompt', {
-            title: event.title || '-',
+            title: this.formatAlertTitle(event),
             severity: this.getSeverityLabel(event.severity) || '-',
             type: this.getAlertTypeLabel(event.alert_type) || '-',
             metric: this.getMetricLabel(event.metric_name) || '-',
@@ -1522,7 +1522,7 @@ const AlertsPage = {
         const localeKey = metadata[integration?.integration_id]?.[key]?.[field];
         if (localeKey) return I18n.t(`integrations.schemaFields.${localeKey}`);
         const fallback = field === 'title' ? (prop.title || key) : (prop.description || '');
-        return I18n.translateLegacyText(fallback);
+        return fallback;
     },
 
     async testNotification(subscriptionId) {
@@ -1587,14 +1587,60 @@ const AlertsPage = {
     getMetricLabel(metric) {
         const labels = {
             cpu_usage: 'cpu',
+            memory_usage: 'memory',
             disk_usage: 'disk',
             connections_active: 'activeConnections',
+            active_connections: 'activeConnections',
+            connection_count: 'activeConnections',
+            threads_running: 'activeConnections',
+            connections_total: 'totalConnections',
+            total_connections: 'totalConnections',
+            threads_connected: 'totalConnections',
             connection_status: 'connectionStatus',
             qps: 'QPS',
             tps: 'TPS'
         };
         if (['qps', 'tps'].includes(metric)) return labels[metric];
         return labels[metric] ? this._t(`metrics.${labels[metric]}`) : metric || '-';
+    },
+
+    formatAlertTitle(alert) {
+        const alertType = alert?.alert_type;
+        const metricName = alert?.metric_name;
+        const storedTitle = String(alert?.title || '').trim();
+        const isLegacyConnectionTitle = /^(?:Database connection failed|\u6570\u636e\u5e93\u8fde\u63a5\u5931\u8d25)$/i.test(storedTitle);
+        if ((alertType === 'system_error' && metricName === 'connection_status') || isLegacyConnectionTitle) {
+            return this._t('titles.connectionFailure');
+        }
+        const metricLabel = this.getMetricLabel(metricName);
+        if (alertType === 'threshold_violation' && metricName) {
+            return this._t('titles.thresholdAlert', { metric: metricLabel });
+        }
+        if (alertType === 'baseline_deviation' && metricName) {
+            return this._t('titles.baselineAlert', { metric: metricLabel });
+        }
+        return storedTitle || '-';
+    },
+
+    formatAlertTriggerReason(alert) {
+        const reason = String(alert?.trigger_reason || '').trim();
+        if (!reason) return '-';
+        if (alert?.alert_type === 'system_error' && alert?.metric_name === 'connection_status') {
+            const match = reason.match(/^(?:(?:database )?connection failed|\u6570\u636e\u5e93\u8fde\u63a5\u5931\u8d25)\s*[:：]?\s*(.*)$/i);
+            if (match) {
+                return match[1]
+                    ? this._t('reasons.connectionFailureDetail', { detail: match[1] })
+                    : this._t('reasons.connectionFailure');
+            }
+        }
+        return reason;
+    },
+
+    formatLinkedReportTitle(report, datasourceName) {
+        if (typeof InspectionPage !== 'undefined' && report?.trigger_type && datasourceName) {
+            return InspectionPage.formatReportTitle({ ...report, datasource_name: datasourceName });
+        }
+        return report?.title || this._t('detail.reportFallback', { id: report?.report_id || '-' });
     },
 
     getBaselineStatusLabel(status) {

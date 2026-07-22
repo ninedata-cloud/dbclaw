@@ -10,6 +10,7 @@ from backend.services.builtin_docs.postgresql_docs import POSTGRESQL_DOCS
 from backend.services.builtin_docs.oracle_docs import ORACLE_DOCS
 from backend.services.builtin_docs.sqlserver_docs import SQLSERVER_DOCS
 from backend.services.builtin_docs.oceanbase_mysql_docs import OCEANBASE_MYSQL_DOCS
+from backend.services.builtin_docs.english_docs import ENGLISH_DOCS_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,25 @@ DB_TYPES = [
 SCENARIO_CATEGORIES = [
     "综合诊断", "性能诊断", "故障排查", "配置与会话", "安全与权限", "技术参考"
 ]
+SCENARIO_CODES = {
+    "综合诊断": "general-diagnostics",
+    "性能诊断": "performance-diagnostics",
+    "故障排查": "troubleshooting",
+    "配置与会话": "configuration-sessions",
+    "安全与权限": "security-permissions",
+    "技术参考": "technical-reference",
+}
+SCENARIO_NAMES = {
+    "zh-CN": {code: name for name, code in SCENARIO_CODES.items()},
+    "en-US": {
+        "general-diagnostics": "General diagnostics",
+        "performance-diagnostics": "Performance diagnostics",
+        "troubleshooting": "Troubleshooting",
+        "configuration-sessions": "Configuration and sessions",
+        "security-permissions": "Security and permissions",
+        "technical-reference": "Technical reference",
+    },
+}
 
 DOCS_MAP = {
     "mysql":      MYSQL_DOCS,
@@ -35,76 +55,116 @@ DOCS_MAP = {
     "sqlserver":  SQLSERVER_DOCS,
 }
 
+ISSUE_CATEGORIES = {
+    "general-diagnostics": ["general", "performance"],
+    "performance-diagnostics": ["performance", "sql", "resource"],
+    "troubleshooting": ["error", "connectivity", "locking", "replication"],
+    "configuration-sessions": ["configuration", "connectivity"],
+    "security-permissions": ["error", "configuration"],
+    "technical-reference": ["general"],
+}
+
 
 async def seed_builtin_docs(db: AsyncSession):
-    """启动时写入内置文档，已存在则跳过（按是否已有内置文档判断）"""
-    existing = await db.execute(
-        select(DocDocument).where(DocDocument.is_builtin == True).limit(1)
-    )
-    if existing.scalar_one_or_none():
-        logger.info("Builtin docs already seeded, skipping.")
-        return
+    """Idempotently seed independent Chinese and English built-in documents."""
+    logger.info("Synchronizing bilingual built-in docs...")
+    category_map = {}  # (db_type, scenario_code) -> category_id
 
-    logger.info("Seeding builtin docs...")
-    category_map = {}  # (db_type, scenario_name) -> category_id
-
-    # 创建一级分类（db 类型）和二级分类（场景）
     for sort_i, db_type_def in enumerate(DB_TYPES):
         db_type = db_type_def["db_type"]
-        root_cat = DocCategory(
-            name=db_type_def["name"],
-            db_type=db_type,
-            parent_id=None,
-            sort_order=sort_i,
+        root_result = await db.execute(
+            select(DocCategory).where(
+                DocCategory.db_type == db_type,
+                DocCategory.parent_id.is_(None),
+            ).order_by(DocCategory.id.asc())
         )
-        db.add(root_cat)
-        await db.flush()  # 获取 root_cat.id
+        root_cat = root_result.scalars().first()
+        if root_cat is None:
+            root_cat = DocCategory(db_type=db_type, parent_id=None)
+            db.add(root_cat)
+        root_cat.name = db_type_def["name"]
+        root_cat.code = f"database.{db_type}"
+        root_cat.sort_order = sort_i
+        await db.flush()
 
         for sort_j, scenario in enumerate(SCENARIO_CATEGORIES):
-            child_cat = DocCategory(
-                name=scenario,
-                db_type=db_type,
-                parent_id=root_cat.id,
-                sort_order=sort_j,
+            scenario_code = SCENARIO_CODES[scenario]
+            child_result = await db.execute(
+                select(DocCategory).where(
+                    DocCategory.db_type == db_type,
+                    DocCategory.parent_id == root_cat.id,
+                    DocCategory.code == f"scenario.{scenario_code}",
+                ).order_by(DocCategory.id.asc())
             )
-            db.add(child_cat)
+            child_cat = child_result.scalars().first()
+            if child_cat is None:
+                # Compatibility with categories created before stable codes.
+                legacy_result = await db.execute(
+                    select(DocCategory).where(
+                        DocCategory.db_type == db_type,
+                        DocCategory.parent_id == root_cat.id,
+                        DocCategory.name == scenario,
+                    ).order_by(DocCategory.id.asc())
+                )
+                child_cat = legacy_result.scalars().first()
+            if child_cat is None:
+                child_cat = DocCategory(db_type=db_type, parent_id=root_cat.id)
+                db.add(child_cat)
+            child_cat.name = scenario
+            child_cat.code = f"scenario.{scenario_code}"
+            child_cat.sort_order = sort_j
             await db.flush()
-            category_map[(db_type, scenario)] = child_cat.id
+            category_map[(db_type, scenario_code)] = child_cat.id
 
-    # 写入文档
-    doc_count = 0
-    for db_type, docs in DOCS_MAP.items():
-        for sort_k, doc_def in enumerate(docs):
-            cat_id = category_map.get((db_type, doc_def["category"]))
-            if not cat_id:
-                logger.warning(f"Unknown category: {doc_def['category']} for {db_type}")
-                continue
-            content = doc_def["content"]
-            doc = DocDocument(
-                category_id=cat_id,
-                title=doc_def["title"],
-                content=content,
-                summary=auto_summary(content),
-                is_builtin=True,
-                is_active=True,
-                scope="builtin",
-                doc_kind="reference" if doc_def["category"] == "技术参考" else ("sop" if doc_def["category"] == "综合诊断" else "runbook"),
-                db_types=[db_type],
-                issue_categories={
-                    "综合诊断": ["general", "performance"],
-                    "性能诊断": ["performance", "sql", "resource"],
-                    "故障排查": ["error", "connectivity", "locking", "replication"],
-                    "配置与会话": ["configuration", "connectivity"],
-                    "安全与权限": ["error", "configuration"],
-                    "技术参考": ["general"],
-                }.get(doc_def["category"], ["general"]),
-                tags=[db_type, doc_def["category"]],
-                freshness_level="stable",
-                enabled_in_diagnosis=True,
-                sort_order=sort_k,
-            )
-            db.add(doc)
-            doc_count += 1
+    synchronized = 0
+    for locale, localized_map in (("zh-CN", DOCS_MAP), ("en-US", ENGLISH_DOCS_MAP)):
+        for db_type, docs in localized_map.items():
+            expected_count = len(DOCS_MAP[db_type])
+            if len(docs) != expected_count:
+                raise ValueError(f"Incomplete {locale} built-in document set for {db_type}")
+            for sort_k, doc_def in enumerate(docs):
+                scenario_code = doc_def.get("category_code") or SCENARIO_CODES[doc_def["category"]]
+                cat_id = category_map[(db_type, scenario_code)]
+                group_id = f"builtin:{db_type}:{sort_k}"
+                existing_result = await db.execute(
+                    select(DocDocument).where(
+                        DocDocument.is_builtin == True,
+                        DocDocument.translation_group_id == group_id,
+                        DocDocument.content_locale == locale,
+                    ).order_by(DocDocument.id.asc())
+                )
+                doc = existing_result.scalars().first()
+                if doc is None and locale == "zh-CN":
+                    legacy_result = await db.execute(
+                        select(DocDocument).where(
+                            DocDocument.is_builtin == True,
+                            DocDocument.category_id == cat_id,
+                            DocDocument.sort_order == sort_k,
+                            DocDocument.content_locale == "zh-CN",
+                        ).order_by(DocDocument.id.asc())
+                    )
+                    doc = legacy_result.scalars().first()
+                if doc is None:
+                    doc = DocDocument(is_builtin=True)
+                    db.add(doc)
+
+                content = doc_def["content"]
+                doc.category_id = cat_id
+                doc.title = doc_def["title"]
+                doc.content = content
+                doc.content_locale = locale
+                doc.translation_group_id = group_id
+                doc.summary = auto_summary(content)
+                doc.is_active = True
+                doc.scope = "builtin"
+                doc.doc_kind = "reference" if scenario_code == "technical-reference" else ("sop" if scenario_code == "general-diagnostics" else "runbook")
+                doc.db_types = [db_type]
+                doc.issue_categories = ISSUE_CATEGORIES[scenario_code]
+                doc.tags = [db_type, SCENARIO_NAMES[locale][scenario_code]]
+                doc.freshness_level = "stable"
+                doc.enabled_in_diagnosis = True
+                doc.sort_order = sort_k
+                synchronized += 1
 
     await db.commit()
-    logger.info(f"Seeded {doc_count} builtin docs successfully.")
+    logger.info("Synchronized %s bilingual built-in document records", synchronized)

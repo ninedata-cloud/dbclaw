@@ -215,7 +215,7 @@ def test_create_eval_run_rejects_inactive_ai_model(mocker):
     response = _client(db).post("/api/eval/runs", json={"suite_id": 1, "ai_model_id": 99})
 
     assert response.status_code == 404
-    assert "ai_model" in response.text
+    assert response.json()["detail"] == "resource.not_found"
 
 
 @pytest.mark.api
@@ -234,7 +234,7 @@ def test_create_eval_run_rejects_inactive_judge_model(mocker):
     )
 
     assert response.status_code == 404
-    assert "judge_model" in response.text
+    assert response.json()["detail"] == "resource.not_found"
 
 
 @pytest.mark.api

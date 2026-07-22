@@ -19,6 +19,7 @@ class DiagnosticSession(SoftDeleteMixin, Base):
     disabled_tools = Column(JSONB, nullable=True)
     skill_authorizations = Column(JSONB, nullable=True)
     is_hidden = Column(Boolean, default=False)  # System-created hidden sessions (e.g., auto-diagnosis)
+    default_locale = Column(String(35), nullable=False, default="zh-CN", server_default="zh-CN")
     input_tokens = Column(Integer, nullable=False, default=0)
     output_tokens = Column(Integer, nullable=False, default=0)
     total_tokens = Column(Integer, nullable=False, default=0)
@@ -33,6 +34,7 @@ class ChatMessage(SoftDeleteMixin, Base):
     session_id = Column(Integer, nullable=False, index=True)
     role = Column(String(20), nullable=False)  # user, assistant, tool_call, tool_result, approval_request, approval_response
     content = Column(Text, nullable=False)
+    content_locale = Column(String(35), nullable=False, default="und", server_default="und")
     run_id = Column(String(64), nullable=True, index=True)
     render_segments = Column(JSONB, nullable=True)
     status = Column(String(32), nullable=True)

@@ -110,7 +110,8 @@ def test_logout_revokes_current_session_when_cookie_present(mocker):
     client.cookies.set("dbclaw_session_id", "sid-1")
     resp = client.post("/api/auth/logout")
     assert resp.status_code == 200
-    assert resp.json()["message"] == "Logged out"
+    assert resp.json()["message"] == "已退出登录"
+    assert resp.json()["message_code"] == "auth.logout.success"
     get_active.assert_awaited_once()
     revoke.assert_awaited_once()
     db.commit.assert_awaited_once()

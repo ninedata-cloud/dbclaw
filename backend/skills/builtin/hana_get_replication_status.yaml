@@ -50,3 +50,19 @@ code: |
           "replication_status": replicas,
           "count": len(replicas)
       }
+
+i18n:
+  zh-CN:
+    name: SAP HANA 复制状态
+    description: 执行“SAP HANA 复制状态”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+    permission_descriptions:
+      execute_query: 允许执行受控数据库查询
+  en-US:
+    name: HANA Replication Status
+    description: Get SAP HANA system replication status including mode, status, and secondary server information
+    parameter_descriptions:
+      datasource_id: The database connection ID
+    permission_descriptions:
+      execute_query: Execute governed database queries

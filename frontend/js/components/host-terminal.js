@@ -127,7 +127,7 @@ const HostTerminal = {
 
         // 建立 WebSocket 连接
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/ws/terminal/${this.hostId}`;
+        const wsUrl = `${protocol}//${window.location.host}/ws/terminal/${this.hostId}?lang=${encodeURIComponent(I18n.getLocale())}`;
 
         this.ws = new WebSocket(wsUrl);
 

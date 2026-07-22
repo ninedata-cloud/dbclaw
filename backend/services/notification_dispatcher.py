@@ -15,11 +15,13 @@ from backend.services.alert_service import (
     AlertService,
     extract_connection_failure_detail,
     is_connection_status_alert,
+    render_alert_title_and_content,
 )
 from backend.services.notification_service import NotificationService
 from backend.services.aggregation_engine import AggregationEngine
 from backend.models.soft_delete import alive_filter, get_alive_by_id
-from backend.utils.datetime_helper import now, format_local_datetime
+from backend.utils.datetime_helper import format_in_timezone, now
+from backend.i18n.locale import resolve_background_preferences, translate
 
 logger = logging.getLogger(__name__)
 
@@ -67,23 +69,48 @@ def _get_required_integration_params(integration) -> list[str]:
     return [key for key in required if isinstance(key, str) and key.strip()]
 
 
-def _alert_type_display(alert_type: str | None) -> str:
-    return {
+def _alert_type_display(alert_type: str | None, locale: str = "zh-CN") -> str:
+    labels = {
         "threshold_violation": "超过阈值",
         "baseline_deviation": "偏离基线",
         "custom_expression": "自定义表达式",
         "system_error": "系统错误",
         "ai_policy_violation": "AI 判警",
-    }.get(alert_type or "", alert_type or "未知")
+    } if locale == "zh-CN" else {
+        "threshold_violation": "Threshold exceeded",
+        "baseline_deviation": "Baseline deviation",
+        "custom_expression": "Custom expression",
+        "system_error": "System error",
+        "ai_policy_violation": "AI policy alert",
+    }
+    return labels.get(alert_type or "", alert_type or translate(locale, "alert.value.unknown"))
 
 
-def _severity_display(severity: str | None) -> str:
-    return {
+def _severity_display(severity: str | None, locale: str = "zh-CN") -> str:
+    labels = {
         "critical": "严重",
         "high": "高",
         "medium": "中",
         "low": "低",
-    }.get(severity or "", severity or "未知")
+    } if locale == "zh-CN" else {
+        "critical": "Critical",
+        "high": "High",
+        "medium": "Medium",
+        "low": "Low",
+    }
+    return labels.get(severity or "", severity or translate(locale, "alert.value.unknown"))
+
+
+async def _resolve_subscription_preferences(db, subscription) -> tuple[str, str]:
+    from backend.models.user import User
+
+    user_id = getattr(subscription, "user_id", None)
+    user = await get_alive_by_id(db, User, user_id) if user_id is not None else None
+    return await resolve_background_preferences(
+        db,
+        locale=getattr(subscription, "locale", None) or getattr(user, "locale", None),
+        timezone=getattr(subscription, "timezone", None) or getattr(user, "timezone", None),
+    )
 
 
 def _coerce_float(value) -> float | None:
@@ -243,13 +270,16 @@ def _build_active_alert_payload(
     alert_url: str | None,
     report_url: str | None,
     native_metric_summary: str | None = None,
+    locale: str = "zh-CN",
+    timezone: str = "Asia/Shanghai",
 ) -> dict:
-    datasource_name = datasource.name if datasource else "未知数据源"
-    timestamp = format_local_datetime(alert.created_at) if alert.created_at else format_local_datetime(now())
+    datasource_name = datasource.name if datasource else translate(locale, "notification.datasource.unknown")
+    timestamp = format_in_timezone(alert.created_at or now(), timezone)
+    _title, localized_content = render_alert_title_and_content(alert, locale)
 
     payload = {
-        "title": f"【{alert.severity.upper()}】{datasource_name} 告警",
-        "content": alert.content,
+        "title": translate(locale, "notification.alert.title", {"severity": alert.severity.upper(), "datasource": datasource_name}),
+        "content": localized_content,
         "severity": alert.severity,
         "datasource_name": datasource_name,
         "alert_id": alert.id,
@@ -277,43 +307,52 @@ def _build_active_alert_payload(
 
     if _is_connection_failure_alert(alert):
         detail = extract_connection_failure_detail(alert.trigger_reason)
-        content_lines = ["状态：数据库连接失败"]
+        content_lines = [
+            f"{translate(locale, 'alert.field.status')}: {translate(locale, 'alert.connection_failed.status')}"
+        ]
         if detail:
-            content_lines.append(f"错误详情：{detail}")
+            content_lines.append(f"{translate(locale, 'alert.field.error_detail')}: {detail}")
         payload.update({
-            "title": f"【{alert.severity.upper()}】{datasource_name} 数据库连接失败",
+            "title": translate(locale, "notification.connection_failed.title", {"severity": alert.severity.upper(), "datasource": datasource_name}),
             "content": "\n".join(content_lines),
             "alert_type": "连接失败",
             "metric_name": None,
             "metric_value": None,
             "threshold_value": None,
-            "trigger_reason": detail or "数据库连接失败",
+            "trigger_reason": detail or translate(locale, "alert.connection_failed.status"),
         })
 
     return payload
 
 
-def _build_recovery_alert_payload(alert, datasource, diagnosis_summary: str | None = None) -> dict:
-    datasource_name = datasource.name if datasource else "未知数据源"
-    created_at_str = format_local_datetime(alert.created_at) if alert.created_at else None
-    resolved_at_str = format_local_datetime(alert.resolved_at) if alert.resolved_at else format_local_datetime(now())
-    diagnosis_summary_line = f"AI 总结：{diagnosis_summary}\n" if diagnosis_summary else ""
+def _build_recovery_alert_payload(
+    alert,
+    datasource,
+    diagnosis_summary: str | None = None,
+    locale: str = "zh-CN",
+    timezone: str = "Asia/Shanghai",
+) -> dict:
+    datasource_name = datasource.name if datasource else translate(locale, "notification.datasource.unknown")
+    created_at_str = format_in_timezone(alert.created_at, timezone) if alert.created_at else None
+    resolved_at_str = format_in_timezone(alert.resolved_at or now(), timezone)
+    diagnosis_summary_line = f"{translate(locale, 'alert.field.ai_summary')}: {diagnosis_summary}\n" if diagnosis_summary else ""
+    _title, localized_content = render_alert_title_and_content(alert, locale)
 
     recovery_metric_line = ""
     recovery_value = None
     if alert.metric_name and alert.resolved_value is not None:
         recovery_value = alert.resolved_value
-        recovery_metric_line = f"\n恢复后值：{alert.metric_name} = {alert.resolved_value:.2f}"
+        recovery_metric_line = f"\n{translate(locale, 'alert.field.recovered_value')}: {alert.metric_name} = {alert.resolved_value:.2f}"
 
     payload = {
-        "title": f"【已恢复】{datasource_name} 告警已恢复",
+        "title": translate(locale, "notification.recovery.title", {"datasource": datasource_name}),
         "content": (
-            f"告警类型：{_alert_type_display(alert.alert_type)}\n"
-            f"严重程度：{_severity_display(alert.severity)}\n\n"
-            f"{alert.content}{recovery_metric_line}\n\n"
+            f"{translate(locale, 'alert.field.alert_type')}: {_alert_type_display(alert.alert_type, locale)}\n"
+            f"{translate(locale, 'alert.field.severity')}: {_severity_display(alert.severity, locale)}\n\n"
+            f"{localized_content}{recovery_metric_line}\n\n"
             f"{diagnosis_summary_line}"
-            f"告警时间：{created_at_str or '未知'}\n"
-            f"恢复时间：{resolved_at_str}"
+            f"{translate(locale, 'alert.field.alert_time')}: {created_at_str or translate(locale, 'alert.value.unknown')}\n"
+            f"{translate(locale, 'alert.field.recovery_time')}: {resolved_at_str}"
         ),
         "severity": alert.severity,
         "alert_type": alert.alert_type,
@@ -333,13 +372,13 @@ def _build_recovery_alert_payload(alert, datasource, diagnosis_summary: str | No
 
     if _is_connection_failure_alert(alert):
         detail = extract_connection_failure_detail(alert.trigger_reason)
-        content_lines = ["状态：数据库连接已恢复"]
+        content_lines = [f"{translate(locale, 'alert.field.status')}: {translate(locale, 'alert.connection_recovered.status')}"]
         if detail:
-            content_lines.append(f"上一条错误：{detail}")
-        content_lines.append(f"告警时间：{created_at_str or '未知'}")
-        content_lines.append(f"恢复时间：{resolved_at_str}")
+            content_lines.append(f"{translate(locale, 'alert.field.previous_error')}: {detail}")
+        content_lines.append(f"{translate(locale, 'alert.field.alert_time')}: {created_at_str or translate(locale, 'alert.value.unknown')}")
+        content_lines.append(f"{translate(locale, 'alert.field.recovery_time')}: {resolved_at_str}")
         payload.update({
-            "title": f"【已恢复】{datasource_name} 数据库连接已恢复",
+            "title": translate(locale, "notification.connection_recovered.title", {"datasource": datasource_name}),
             "content": "\n".join(content_lines),
             "alert_type": "连接恢复",
             "metric_name": None,
@@ -347,7 +386,7 @@ def _build_recovery_alert_payload(alert, datasource, diagnosis_summary: str | No
             "resolved_value": None,
             "recovery_value": None,
             "threshold_value": None,
-            "trigger_reason": detail or "数据库连接已恢复",
+            "trigger_reason": detail or translate(locale, "alert.connection_recovered.status"),
         })
 
     return payload
@@ -446,7 +485,13 @@ async def _process_pending_alerts():
                             event_obj = event_result.scalar_one_or_none()
                             event_ai_config = await get_event_ai_config_for_datasource(db, alert.datasource_id)
                             if event_obj and should_refresh_event_diagnosis(event_obj, event_ai_config):
-                                diagnosis_result = await run_sync_diagnosis(db, alert.event_id, timeout_seconds=60)
+                                diagnosis_locale, _diagnosis_timezone = await resolve_background_preferences(db)
+                                diagnosis_result = await run_sync_diagnosis(
+                                    db,
+                                    alert.event_id,
+                                    timeout_seconds=60,
+                                    locale=diagnosis_locale,
+                                )
                             elif event_obj:
                                 diagnosis_result = {
                                     "root_cause": event_obj.root_cause,
@@ -563,7 +608,10 @@ async def _trigger_alert_auto_diagnosis(alert_event_id: int):
     try:
         from backend.services.alert_service import AlertService
         async with async_session() as db:
-            await AlertService.trigger_auto_diagnosis(db, alert_event_id)
+            locale, _timezone = await resolve_background_preferences(db)
+            await AlertService.trigger_auto_diagnosis(
+                db, alert_event_id, locale=locale
+            )
     except Exception as e:
         logger.error(f"Failed to trigger auto-diagnosis for alert event {alert_event_id}: {e}", exc_info=True)
 
@@ -588,6 +636,7 @@ async def _send_via_integration(db, alert, subscription, diagnosis_result=None):
     from datetime import datetime
 
     delivery_logs = []
+    locale, timezone = await _resolve_subscription_preferences(db, subscription)
 
     datasource = None
     if alert.datasource_id:
@@ -609,7 +658,7 @@ async def _send_via_integration(db, alert, subscription, diagnosis_result=None):
     base_url = await PublicShareService.get_external_base_url(db)
     if base_url:
         alert_token = PublicShareService.create_alert_share_token(alert.id, settings.public_share_expire_minutes)
-        alert_url = f"{base_url}/api/alerts/public/{alert.id}/page?token={alert_token}"
+        alert_url = f"{base_url}/api/alerts/public/{alert.id}/page?token={alert_token}&lang={locale}"
 
         linked_report = await PublicShareService.get_report_by_alert_id(db, alert.id)
         if linked_report:
@@ -678,6 +727,8 @@ async def _send_via_integration(db, alert, subscription, diagnosis_result=None):
             alert_url,
             report_url,
             native_metric_summary=native_metric_summary,
+            locale=locale,
+            timezone=timezone,
         )
 
         params = target.get("params") or {}
@@ -727,6 +778,8 @@ async def _send_via_integration(db, alert, subscription, diagnosis_result=None):
                 status="failed",
                 sent_at=now(),
                 error_message=error_message,
+                rendered_locale=locale,
+                rendered_timezone=timezone,
             )
             db.add(delivery_log)
             delivery_logs.append(delivery_log)
@@ -750,7 +803,7 @@ async def _send_via_integration(db, alert, subscription, diagnosis_result=None):
                 status="success" if result.get("success") else "failed",
                 execution_time_ms=execution_time_ms,
                 result=result,
-                error_message=result.get("message") if not result.get("success") else None
+                error_message=result.get("message") if not result.get("success") else None,
             )
             db.add(exec_log)
 
@@ -764,7 +817,9 @@ async def _send_via_integration(db, alert, subscription, diagnosis_result=None):
                 recipient=target_name,
                 status="sent" if result.get("success") else "failed",
                 sent_at=now(),
-                error_message=result.get("message") if not result.get("success") else None
+                error_message=result.get("message") if not result.get("success") else None,
+                rendered_locale=locale,
+                rendered_timezone=timezone,
             )
             db.add(delivery_log)
             delivery_logs.append(delivery_log)
@@ -784,7 +839,7 @@ async def _send_via_integration(db, alert, subscription, diagnosis_result=None):
                 trigger_ref_id=str(alert.id),
                 status="failed",
                 execution_time_ms=0,
-                error_message=str(e)
+                error_message=str(e),
             )
             db.add(exec_log)
 
@@ -798,7 +853,9 @@ async def _send_via_integration(db, alert, subscription, diagnosis_result=None):
                 recipient=target_name,
                 status="failed",
                 sent_at=now(),
-                error_message=str(e)
+                error_message=str(e),
+                rendered_locale=locale,
+                rendered_timezone=timezone,
             )
             db.add(delivery_log)
             delivery_logs.append(delivery_log)
@@ -817,6 +874,7 @@ async def _send_recovery_via_integration(db, alert, subscription):
     from datetime import datetime
 
     delivery_logs = []
+    locale, timezone = await _resolve_subscription_preferences(db, subscription)
 
     datasource = None
     diagnosis_summary = None
@@ -856,7 +914,13 @@ async def _send_recovery_via_integration(db, alert, subscription):
             logger.warning(f"Integration {integration_id} does not exist or is disabled")
             continue
 
-        payload = _build_recovery_alert_payload(alert, datasource, diagnosis_summary)
+        payload = _build_recovery_alert_payload(
+            alert,
+            datasource,
+            diagnosis_summary,
+            locale=locale,
+            timezone=timezone,
+        )
 
         params = target.get("params") or {}
         target_id = target.get("target_id")
@@ -905,6 +969,8 @@ async def _send_recovery_via_integration(db, alert, subscription):
                 status="failed",
                 sent_at=now(),
                 error_message=error_message,
+                rendered_locale=locale,
+                rendered_timezone=timezone,
             )
             db.add(delivery_log)
             delivery_logs.append(delivery_log)
@@ -928,7 +994,7 @@ async def _send_recovery_via_integration(db, alert, subscription):
                 status="success" if result.get("success") else "failed",
                 execution_time_ms=execution_time_ms,
                 result=result,
-                error_message=result.get("message") if not result.get("success") else None
+                error_message=result.get("message") if not result.get("success") else None,
             )
             db.add(exec_log)
 
@@ -942,7 +1008,9 @@ async def _send_recovery_via_integration(db, alert, subscription):
                 recipient=target_name,
                 status="sent" if result.get("success") else "failed",
                 sent_at=now(),
-                error_message=result.get("message") if not result.get("success") else None
+                error_message=result.get("message") if not result.get("success") else None,
+                rendered_locale=locale,
+                rendered_timezone=timezone,
             )
             db.add(delivery_log)
             delivery_logs.append(delivery_log)
@@ -962,7 +1030,7 @@ async def _send_recovery_via_integration(db, alert, subscription):
                 trigger_ref_id=str(alert.id),
                 status="failed",
                 execution_time_ms=0,
-                error_message=str(e)
+                error_message=str(e),
             )
             db.add(exec_log)
 
@@ -976,7 +1044,9 @@ async def _send_recovery_via_integration(db, alert, subscription):
                 recipient=target_name,
                 status="failed",
                 sent_at=now(),
-                error_message=str(e)
+                error_message=str(e),
+                rendered_locale=locale,
+                rendered_timezone=timezone,
             )
             db.add(delivery_log)
             delivery_logs.append(delivery_log)

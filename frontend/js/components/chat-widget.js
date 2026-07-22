@@ -26,14 +26,11 @@ const ChatWidget = {
             type: 'button',
             className: 'chat-scroll-bottom-btn',
             id: 'chat-scroll-bottom-btn',
-            title: '回到底部',
+            title: I18n.t('pageCopy.chatWidget.backToBottom'),
             onClick: () => this.scrollToBottomAndResume({ smooth: true })
         });
 
-        scrollBtn.innerHTML = `
-            <i data-lucide="arrow-down"></i>
-            <span class="chat-scroll-bottom-label">回到底部</span>
-        `;
+        scrollBtn.innerHTML = I18n.t('pageCopy.chatWidget.backToBottom2');
 
         messages.addEventListener('scroll', () => this._handleMessagesScroll());
         shell.appendChild(messages);
@@ -98,7 +95,7 @@ const ChatWidget = {
         const attachBtn = DOM.el('button', {
             className: 'chat-attach-btn',
             innerHTML: '<i data-lucide="paperclip"></i>',
-            title: '附加文件',
+            title: I18n.t('pageCopy.chatWidget.attachedFiles'),
             onClick: () => fileInput.click()
         });
 
@@ -136,7 +133,7 @@ const ChatWidget = {
                 className: 'chat-send-btn',
                 id: 'chat-clear-btn',
                 innerHTML: '<i data-lucide="eraser"></i>',
-                title: 'Clear session',
+                title: I18n.t('pageCopy.diagnosis.clearCurrentSession'),
                 onClick: () => {
                     if (this.onClear) this.onClear();
                 }
@@ -164,7 +161,7 @@ const ChatWidget = {
             const formData = new FormData();
             formData.append('file', file);
 
-            const response = await fetch(`/api/chat/sessions/${sessionId}/upload`, {
+            const response = await API.fetch(`/api/chat/sessions/${sessionId}/upload`, {
                 method: 'POST',
                 credentials: 'same-origin',
                 body: formData
@@ -255,13 +252,7 @@ const ChatWidget = {
             ? `<div class="chat-user-text">${this._escapeHtml(text)}</div>`
             : '';
 
-        msg.innerHTML = `
-            <div class="chat-avatar">U</div>
-            <div class="chat-bubble">${attachmentHtml}${textHtml}</div>
-            <button class="message-copy-btn" title="复制内容">
-                <i data-lucide="copy"></i>
-            </button>
-        `;
+        msg.innerHTML = I18n.t('pageCopy.chatWidget.uValueValue', { value0: attachmentHtml, value1: textHtml });
 
         // Add copy functionality
         const copyBtn = msg.querySelector('.message-copy-btn');
@@ -480,13 +471,13 @@ const ChatWidget = {
                 id: lookupId || `tool_${Date.now()}_${normalized.length + 1}`,
                 type: 'tool',
                 tool_call_id: toolCallId || patch.tool_call_id || null,
-                tool_name: toolName || patch.tool_name || '工具',
+                tool_name: toolName || patch.tool_name || I18n.t('pageCopy.chatWidget.tool'),
                 status: patch.status || 'running',
             };
             normalized.push(segment);
         }
 
-        segment.tool_name = toolName || patch.tool_name || segment.tool_name || '工具';
+        segment.tool_name = toolName || patch.tool_name || segment.tool_name || I18n.t('pageCopy.chatWidget.tool');
         if (toolCallId || patch.tool_call_id) {
             segment.tool_call_id = toolCallId || patch.tool_call_id;
         }
@@ -541,12 +532,7 @@ const ChatWidget = {
 
     _buildThinkBlockHtml(content) {
         const thinkHtml = this._renderMarkdown(content || '');
-        return `
-            <details class="assistant-think-block">
-                <summary class="assistant-think-summary">推理过程</summary>
-                <div class="assistant-think-content">${thinkHtml}</div>
-            </details>
-        `;
+        return I18n.t('pageCopy.chatWidget.reasoningProcessValue', { value0: thinkHtml });
     },
 
     _getThinkBlockOpenStates(container) {
@@ -588,10 +574,10 @@ const ChatWidget = {
         const parsed = this._parseToolResultPayload(segment.result);
         const status = segment.status || (parsed.isError ? 'failed' : (segment.result ? 'completed' : 'running'));
         const statusMap = {
-            running: { label: '执行中', className: 'running' },
-            completed: { label: '完成', className: 'success' },
-            failed: { label: '失败', className: 'error' },
-            waiting_approval: { label: '待确认', className: 'pending' },
+            running: { label: I18n.t('pageCopy.chatWidget.executing'), className: 'running' },
+            completed: { label: I18n.t('pageCopy.chatWidget.complete'), className: 'success' },
+            failed: { label: I18n.t('pageCopy.chatWidget.failed'), className: 'error' },
+            waiting_approval: { label: I18n.t('pageCopy.chatWidget.toBeConfirmed'), className: 'pending' },
         };
         const meta = statusMap[status] || statusMap.running;
         const metadata = segment.metadata || {};
@@ -601,13 +587,13 @@ const ChatWidget = {
 
         return {
             toolId: segment.tool_call_id || segment.id || `inline-tool-${segment.tool_name || 'tool'}`,
-            toolName: segment.tool_name || '工具',
+            toolName: segment.tool_name || I18n.t('pageCopy.chatWidget.tool'),
             toolCallId: segment.tool_call_id || segment.id || null,
             args: segment.args || {},
             argsStr: segment.args ? this._stringifyData(segment.args) : '',
             statusLabel: meta.label,
             statusClass: meta.className,
-            summary: segment.summary || parsed.summary || (status === 'failed' ? '执行失败' : '已发起调用，等待返回结果'),
+            summary: segment.summary || parsed.summary || (status === 'failed' ? I18n.t('pageCopy.chatWidget.executionFailed') : I18n.t('pageCopy.chatWidget.theCallHasBeenInitiatedWaitingFor')),
             executionTimeMs: segment.execution_time_ms ?? null,
             metadata,
             displayResultStr: parsed.displayResultStr,
@@ -692,7 +678,7 @@ const ChatWidget = {
             // Add copy button to finished message
             const copyBtn = DOM.el('button', {
                 className: 'message-copy-btn',
-                title: '复制',
+                title: I18n.t('pageCopy.chatWidget.copy'),
                 innerHTML: '<i data-lucide="copy"></i>'
             });
             streamingMsg.appendChild(copyBtn);
@@ -722,18 +708,7 @@ const ChatWidget = {
 
         panel.style.display = 'block';
         panel.style.background = tone.bg;
-        panel.innerHTML = `
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-                <div style="display:flex;gap:16px;flex-wrap:wrap;">
-                    <span><strong>本次会话已用</strong> ${I18n.formatNumber(usage.total_tokens)} tokens</span>
-                    <span>输入 ${I18n.formatNumber(usage.input_tokens)}</span>
-                    <span>输出 ${I18n.formatNumber(usage.output_tokens)}</span>
-                    <span>${contextWindow ? `上限 ${String(Number(contextWindow))}` : '未配置上下文上限'}</span>
-                    <span>${usageRate !== null ? `使用率 ${usageRate.toFixed(1)}%` : ''}</span>
-                </div>
-                ${warningText ? `<div style="color:${tone.text};font-weight:600;">${this._escapeHtml(warningText)}</div>` : ''}
-            </div>
-        `;
+        panel.innerHTML = I18n.t('pageCopy.chatWidget.thisSessionHasBeenUsedValueTokens', { value0: I18n.formatNumber(usage.total_tokens), value1: I18n.formatNumber(usage.input_tokens), value2: I18n.formatNumber(usage.output_tokens), value3: contextWindow ? I18n.t('pageCopy.chatWidget.aggregateBadge2', { value0: String(Number(contextWindow)) }) : I18n.t('pageCopy.chatWidget.contextLimitNotConfigured'), value4: usageRate !== null ? I18n.t('pageCopy.chatWidget.usageValue', { value0: usageRate.toFixed(1) }) : '', value5: warningText ? `<div style="color:${tone.text};font-weight:600;">${this._escapeHtml(warningText)}</div>` : '' });
     },
 
     resetTokenUsage() {
@@ -806,7 +781,7 @@ const ChatWidget = {
         const maxPreviewLength = 2000;
         const isTruncated = resultStr.length > maxPreviewLength;
         const displayResultStr = isTruncated
-            ? `${resultStr.slice(0, maxPreviewLength).trimEnd()}\n...（已截断）`
+            ? I18n.t('pageCopy.chatWidget.truncatedPreview', { value0: resultStr.slice(0, maxPreviewLength).trimEnd() })
             : resultStr;
 
         return {
@@ -815,14 +790,14 @@ const ChatWidget = {
             displayResultStr,
             isError,
             isTruncated,
-            summary: this._buildSummary(parsedResult, isError ? '执行失败' : '已返回结果'),
+            summary: this._buildSummary(parsedResult, isError ? I18n.t('pageCopy.chatWidget.executionFailed') : I18n.t('pageCopy.chatWidget.resultsReturned')),
         };
     },
 
     _buildToolMetadataItems(metadata = {}) {
         const items = [
-            metadata.action_title ? { label: '动作', value: metadata.action_title } : null,
-            metadata.phase ? { label: '阶段', value: metadata.phase } : null,
+            metadata.action_title ? { label: I18n.t('pageCopy.chatWidget.action'), value: metadata.action_title } : null,
+            metadata.phase ? { label: I18n.t('pageCopy.chatWidget.stage'), value: metadata.phase } : null,
             metadata.skill_execution_id ? { label: 'skill_execution_id', value: metadata.skill_execution_id, code: true } : null,
             metadata.action_run_id ? { label: 'action_run_id', value: metadata.action_run_id, code: true } : null,
         ].filter(Boolean);
@@ -831,38 +806,19 @@ const ChatWidget = {
 
     _buildToolTextSectionHtml(title, elementId, content) {
         if (!content) return '';
-        return `
-            <div class="chat-tool-section">
-                <div class="chat-tool-section-title">
-                    <span>${this._escapeHtml(title)}</span>
-                    <button class="chat-tool-copy-btn" onclick="ChatWidget.copyToClipboard('${elementId}', event)">
-                        <i data-lucide="copy"></i> 复制
-                    </button>
-                </div>
-                <div class="chat-tool-content" id="${elementId}">${this._escapeHtml(content)}</div>
-            </div>
-        `;
+        return I18n.t('pageCopy.chatWidget.copyableSection', { value0: this._escapeHtml(title), value1: elementId, value2: elementId, value3: this._escapeHtml(content) });
     },
 
     _buildToolMetadataHtml(metadata = {}) {
         const items = this._buildToolMetadataItems(metadata);
         if (items.length === 0) return '';
 
-        return `
-            <div class="chat-tool-section">
-                <div class="chat-tool-section-title">
-                    <span>元信息</span>
-                </div>
-                <div class="chat-tool-meta-list">
-                    ${items.map((item) => `
+        return I18n.t('pageCopy.chatWidget.metaInformationValue', { value0: items.map((item) => `
                         <div class="chat-tool-meta-item">
                             <span class="chat-tool-meta-label">${this._escapeHtml(item.label)}</span>
                             <span class="chat-tool-meta-value${item.code ? ' is-code' : ''}">${this._escapeHtml(item.value)}</span>
                         </div>
-                    `).join('')}
-                </div>
-            </div>
-        `;
+                    `).join('') });
     },
 
     _buildToolApprovalHtml(toolState) {
@@ -873,54 +829,15 @@ const ChatWidget = {
             : '';
 
         if (toolState.approvalStatus === 'pending' && toolState.statusClass === 'pending') {
-            return `
-                <div class="chat-tool-section">
-                    <div class="chat-tool-section-title">
-                        <span>审批确认</span>
-                    </div>
-                    ${riskText}
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
-                        <button
-                            type="button"
-                            class="btn btn-sm"
-                            style="background:var(--accent-green);color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;"
-                            onclick="DiagnosisPage._resolveApproval('${this._escapeHtml(toolState.approvalId)}', 'approved')"
-                        >
-                            批准执行
-                        </button>
-                        <button
-                            type="button"
-                            class="btn btn-sm"
-                            style="background:var(--accent-red);color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;"
-                            onclick="DiagnosisPage._resolveApproval('${this._escapeHtml(toolState.approvalId)}', 'rejected')"
-                        >
-                            拒绝
-                        </button>
-                    </div>
-                </div>
-            `;
+            return I18n.t('pageCopy.chatWidget.approvalValueApprovalForExecutionReject', { value0: riskText, value1: this._escapeHtml(toolState.approvalId), value2: this._escapeHtml(toolState.approvalId) });
         }
 
         if (toolState.approvalStatus === 'approving' && toolState.statusClass === 'running') {
-            return `
-                <div class="chat-tool-section">
-                    <div class="chat-tool-section-title">
-                        <span>审批确认</span>
-                    </div>
-                    <div class="chat-tool-approval-reason" style="color:var(--accent-green);">已批准，正在执行...</div>
-                </div>
-            `;
+            return I18n.t('pageCopy.chatWidget.approvalApprovedExecuting');
         }
 
         if (toolState.approvalStatus === 'rejected') {
-            return `
-                <div class="chat-tool-section">
-                    <div class="chat-tool-section-title">
-                        <span>审批确认</span>
-                    </div>
-                    <div class="chat-tool-approval-reason" style="color:var(--accent-red);">已拒绝执行</div>
-                </div>
-            `;
+            return I18n.t('pageCopy.chatWidget.approvalExecutionRefused');
         }
 
         return '';
@@ -930,23 +847,14 @@ const ChatWidget = {
         if (!toolState?.visualization || toolState.visualization.type !== 'monitoring_history') return '';
 
         const visualizationId = toolState.toolCallId || toolState.toolName;
-        return `
-            <div class="chat-tool-section">
-                <div class="chat-tool-section-title">
-                    <span>监控图表</span>
-                </div>
-                <div class="chat-tool-visualization-host" data-tool-visualization-host="${this._escapeHtml(visualizationId)}">
-                    ${this._buildToolVisualizationCard(toolState.toolName, toolState.visualization, visualizationId)}
-                </div>
-            </div>
-        `;
+        return I18n.t('pageCopy.chatWidget.monitoringChartsValue', { value0: this._escapeHtml(visualizationId), value1: this._buildToolVisualizationCard(toolState.toolName, toolState.visualization, visualizationId) });
     },
 
     _buildToolCardHtml(toolState, options = {}) {
         const executionTime = toolState.executionTimeMs !== null && toolState.executionTimeMs !== undefined
             ? `${toolState.executionTimeMs} ms`
             : '';
-        const summaryText = toolState.summary || '已发起调用，等待返回结果';
+        const summaryText = toolState.summary || I18n.t('pageCopy.chatWidget.theCallHasBeenInitiatedWaitingFor');
         const detailClass = `chat-tool-details tool-tone-${toolState.statusClass || 'running'}`;
         const wrapperClass = options.inline ? 'assistant-tool-block' : 'chat-system-body';
         const shouldOpenByDefault = toolState.approvalStatus === 'pending' && toolState.statusClass === 'pending';
@@ -965,7 +873,7 @@ const ChatWidget = {
                             <div class="chat-tool-main">
                                 <div class="chat-tool-title-row">
                                     <span class="chat-tool-name">${this._escapeHtml(toolState.toolName)}</span>
-                                    <span class="chat-tool-status ${toolState.statusClass || 'running'}">${this._escapeHtml(toolState.statusLabel || '执行中')}</span>
+                                    <span class="chat-tool-status ${toolState.statusClass || 'running'}">${this._escapeHtml(toolState.statusLabel || I18n.t('pageCopy.chatWidget.executing'))}</span>
                                     ${executionTime ? `<span class="chat-tool-time">${this._escapeHtml(executionTime)}</span>` : ''}
                                 </div>
                                 <div class="chat-tool-summary-text">${this._escapeHtml(summaryText)}</div>
@@ -973,12 +881,12 @@ const ChatWidget = {
                         </div>
                     </summary>
                     <div class="chat-tool-body">
-                        ${this._buildToolTextSectionHtml('入参', `${toolState.toolId}-args`, toolState.argsStr)}
-                        ${this._buildToolTextSectionHtml('结果', `${toolState.toolId}-result-content`, toolState.displayResultStr)}
+                        ${this._buildToolTextSectionHtml(I18n.t('pageCopy.chatWidget.addGinseng'), `${toolState.toolId}-args`, toolState.argsStr)}
+                        ${this._buildToolTextSectionHtml(I18n.t('pageCopy.chatWidget.result'), `${toolState.toolId}-result-content`, toolState.displayResultStr)}
                         ${this._buildToolVisualizationSectionHtml(toolState)}
                         ${this._buildToolApprovalHtml(toolState)}
                         ${this._buildToolMetadataHtml(toolState.metadata)}
-                        ${toolState.isTruncated ? '<div class="chat-tool-truncate">结果过长，当前仅展示前 2000 个字符</div>' : ''}
+                        ${toolState.isTruncated ? I18n.t('pageCopy.chatWidget.resultCurrent2000') : ''}
                     </div>
                 </details>
             </div>
@@ -1023,7 +931,7 @@ const ChatWidget = {
 
     _renderSimpleList(items, formatter) {
         if (!items || items.length === 0) {
-            return '<div style="font-size:12px;color:var(--text-muted);">暂无</div>';
+            return I18n.t('pageCopy.chatWidget.noneYet');
         }
         return `<div style="display:flex;flex-direction:column;gap:6px;">${items.map(formatter).join('')}</div>`;
     },
@@ -1089,7 +997,7 @@ const ChatWidget = {
             const trimmed = data.trim();
             return trimmed.length > 120 ? `${trimmed.slice(0, 117)}...` : trimmed;
         }
-        if (Array.isArray(data)) return `返回 ${data.length} 条记录`;
+        if (Array.isArray(data)) return I18n.t('pageCopy.chatWidget.backValueRecords', { value0: data.length });
         if (typeof data === 'object') {
             if (data.error) return String(data.error);
             if (data.message) return String(data.message);
@@ -1120,7 +1028,7 @@ const ChatWidget = {
         this.currentRenderSegments = this._upsertToolRenderSegment(this.currentRenderSegments, toolName, toolCallId, {
             status: 'running',
             args: args || {},
-            summary: '已发起调用，等待返回结果',
+            summary: I18n.t('pageCopy.chatWidget.theCallHasBeenInitiatedWaitingFor'),
             metadata: this._getToolSegmentMetadata({}, metadata),
         });
         return this._renderStreamingAssistantSegments();
@@ -1136,7 +1044,7 @@ const ChatWidget = {
             status: parsed.isError ? 'failed' : 'completed',
             result,
             execution_time_ms: executionTimeMs,
-            summary: parsed.summary || (parsed.isError ? '执行失败' : '执行完成'),
+            summary: parsed.summary || (parsed.isError ? I18n.t('pageCopy.chatWidget.executionFailed') : I18n.t('pageCopy.chatWidget.executionCompleted')),
             metadata: this._getToolSegmentMetadata({}, metadata),
             visualization,
         });
@@ -1173,9 +1081,9 @@ const ChatWidget = {
             toolCallId,
             args,
             argsStr: this._stringifyData(args),
-            statusLabel: previousState.statusLabel || '执行中',
+            statusLabel: previousState.statusLabel || I18n.t('pageCopy.chatWidget.executing'),
             statusClass: previousState.statusClass || 'running',
-            summary: previousState.summary || '已发起调用，等待返回结果',
+            summary: previousState.summary || I18n.t('pageCopy.chatWidget.theCallHasBeenInitiatedWaitingFor'),
             executionTimeMs: previousState.executionTimeMs ?? null,
             metadata: previousState.metadata || {},
             displayResultStr: previousState.displayResultStr || '',
@@ -1211,9 +1119,9 @@ const ChatWidget = {
             toolId,
             toolName,
             toolCallId,
-            statusLabel: parsed.isError ? '失败' : '完成',
+            statusLabel: parsed.isError ? I18n.t('pageCopy.chatWidget.failed') : I18n.t('pageCopy.chatWidget.complete'),
             statusClass: parsed.isError ? 'error' : 'success',
-            summary: parsed.summary || (parsed.isError ? '执行失败' : '执行完成'),
+            summary: parsed.summary || (parsed.isError ? I18n.t('pageCopy.chatWidget.executionFailed') : I18n.t('pageCopy.chatWidget.executionCompleted')),
             executionTimeMs,
             metadata: {
                 ...(previousState.metadata || {}),
@@ -1259,7 +1167,7 @@ const ChatWidget = {
         this.currentRenderSegments = this._upsertToolRenderSegment(this.currentRenderSegments, toolName, toolCallId, {
             status: 'waiting_approval',
             args: args || {},
-            summary: summary || `${I18n.translateLegacyText('技能')} ${toolName} ${I18n.translateLegacyText('需要确认后再执行')}`,
+            summary: summary || `${I18n.t('pageCopy.chatWidget.skills')} ${toolName} ${I18n.t('pageCopy.chatWidget.needToConfirmBeforeExecuting')}`,
             metadata: this._getToolSegmentMetadata({}, metadata),
         });
         return this._renderStreamingAssistantSegments();
@@ -1375,10 +1283,10 @@ const ChatWidget = {
 
     _getVisualizationModeLabel(mode) {
         const labels = {
-            avg: '均值',
-            min: '最小值',
-            max: '最大值',
-            last: '末值',
+            avg: I18n.t('pageCopy.chatWidget.average'),
+            min: I18n.t('pageCopy.chatWidget.minimum'),
+            max: I18n.t('pageCopy.chatWidget.maximumValue'),
+            last: I18n.t('pageCopy.chatWidget.finalValue'),
         };
         return labels[mode] || mode;
     },
@@ -1513,52 +1421,28 @@ const ChatWidget = {
     _buildTimeSeriesSvg(points, palette, mode = 'avg') {
         const chartModel = this._buildTimeSeriesChartModel(points, mode);
         if (!chartModel) {
-            return `
-                <svg viewBox="0 0 360 188" width="100%" height="188" aria-hidden="true">
-                    <rect x="0" y="0" width="360" height="188" rx="12" fill="${palette.bg}"></rect>
-                    <text x="180" y="94" text-anchor="middle" fill="var(--text-muted)" font-size="12">暂无趋势数据</text>
-                </svg>
-            `;
+            return I18n.t('pageCopy.chatWidget.noTrendDataYet', { value0: palette.bg });
         }
 
         const { width, height, margin, chartBottom, chartRight, xScale, yScale, coordinates, linePath, areaPath, yTicks, xTicks, gradientId } = chartModel;
 
-        return `
-            <svg viewBox="0 0 ${width} ${height}" width="100%" height="188" aria-hidden="true">
-                <defs>
-                    <linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stop-color="${palette.stroke}" stop-opacity="0.22"></stop>
-                        <stop offset="100%" stop-color="${palette.stroke}" stop-opacity="0.03"></stop>
-                    </linearGradient>
-                </defs>
-                <rect x="0" y="0" width="${width}" height="${height}" rx="12" fill="${palette.bg}"></rect>
-                ${yTicks.map(tick => {
+        return I18n.t('pageCopy.chatWidget.visualizationAxes', { value0: width, value1: height, value2: gradientId, value3: palette.stroke, value4: palette.stroke, value5: width, value6: height, value7: palette.bg, value8: yTicks.map(tick => {
                     const y = yScale(tick);
                     return `
                         <line x1="${margin.left}" y1="${y.toFixed(2)}" x2="${chartRight}" y2="${y.toFixed(2)}" stroke="rgba(127,127,127,0.14)" stroke-width="1" stroke-dasharray="4 4"></line>
                         <text x="${margin.left - 8}" y="${(y + 4).toFixed(2)}" text-anchor="end" fill="var(--text-secondary)" font-size="11">${this._escapeHtml(this._formatVisualizationValue(tick))}</text>
                     `;
-                }).join('')}
-                ${xTicks.map(tick => {
+                }).join(''), value9: xTicks.map(tick => {
                     const x = xScale(tick);
                     return `
                         <line x1="${x.toFixed(2)}" y1="${margin.top}" x2="${x.toFixed(2)}" y2="${chartBottom}" stroke="rgba(127,127,127,0.08)" stroke-width="1"></line>
                         <text x="${x.toFixed(2)}" y="${(chartBottom + 18).toFixed(2)}" text-anchor="middle" fill="var(--text-secondary)" font-size="11">${this._escapeHtml(this._formatVisualizationTime(tick))}</text>
                     `;
-                }).join('')}
-                <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${chartBottom}" stroke="rgba(127,127,127,0.28)" stroke-width="1.2"></line>
-                <line x1="${margin.left}" y1="${chartBottom}" x2="${chartRight}" y2="${chartBottom}" stroke="rgba(127,127,127,0.28)" stroke-width="1.2"></line>
-                <path d="${areaPath}" fill="url(#${gradientId})" stroke="none"></path>
-                <path d="${linePath}" fill="none" stroke="${palette.stroke}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>
-                ${coordinates.map((point, index) => `
+                }).join(''), value10: margin.left, value11: margin.top, value12: margin.left, value13: chartBottom, value14: margin.left, value15: chartBottom, value16: chartRight, value17: chartBottom, value18: areaPath, value19: gradientId, value20: linePath, value21: palette.stroke, value22: coordinates.map((point, index) => `
                     <circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="${index === coordinates.length - 1 ? '4' : '2.4'}" fill="${palette.stroke}" fill-opacity="${index === coordinates.length - 1 ? '1' : '0.8'}" stroke="#fff" stroke-width="${index === coordinates.length - 1 ? '2' : '1'}">
                         <title>${this._formatVisualizationTime(point.time)}\n${this._formatVisualizationValue(point.value)}</title>
                     </circle>
-                `).join('')}
-                <text x="${margin.left}" y="${height - 6}" fill="var(--text-muted)" font-size="10">X 轴: 时间</text>
-                <text x="${chartRight}" y="${height - 6}" text-anchor="end" fill="var(--text-muted)" font-size="10">Y 轴: ${this._escapeHtml(this._getVisualizationModeLabel(mode))}</text>
-            </svg>
-        `;
+                `).join(''), value23: margin.left, value24: height - 6, value25: chartRight, value26: height - 6, value27: this._escapeHtml(this._getVisualizationModeLabel(mode)) });
     },
 
     _buildVisualizationMetricCard(metric, palette, visualizationId, panelKey) {
@@ -1568,27 +1452,17 @@ const ChatWidget = {
         const summary = metric?.summary || {};
         const mode = this._getVisualizationMetricMode(visualizationId, panelKey, metric?.name || '');
         const summaryItems = [
-            `最新 ${this._formatVisualizationValue(summary.last)}`,
-            `均值 ${this._formatVisualizationValue(summary.avg)}`,
-            `最小 ${this._formatVisualizationValue(summary.min)}`,
-            `最大 ${this._formatVisualizationValue(summary.max)}`,
+            I18n.t('pageCopy.chatWidget.latestValue', { value0: this._formatVisualizationValue(summary.last) }),
+            I18n.t('pageCopy.chatWidget.averageValue', { value0: this._formatVisualizationValue(summary.avg) }),
+            I18n.t('pageCopy.chatWidget.smallestValue', { value0: this._formatVisualizationValue(summary.min) }),
+            I18n.t('pageCopy.chatWidget.maximumValue2', { value0: this._formatVisualizationValue(summary.max) }),
         ];
         const modeButtons = ['avg', 'min', 'max', 'last'];
         const chartModel = this._buildTimeSeriesChartModel(points, mode);
         const verticalTop = chartModel ? `${(chartModel.margin.top / chartModel.height) * 100}%` : '7.45%';
         const verticalBottom = chartModel ? `${((chartModel.height - chartModel.chartBottom) / chartModel.height) * 100}%` : '17.02%';
 
-        return `
-            <div data-visualization-metric-card="${this._escapeHtml(`${visualizationId}:${panelKey}:${metric?.name || ''}`)}" style="border:1px solid ${palette.border};border-radius:10px;padding:10px;background:${palette.bg};display:flex;flex-direction:column;gap:8px;min-width:0;">
-                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
-                    <div style="min-width:0;">
-                        <div style="font-size:13px;font-weight:600;color:var(--text-primary);word-break:break-word;">${this._escapeHtml(metric?.label || metric?.name || 'metric')}</div>
-                        <div style="font-size:11px;color:var(--text-secondary);">${points.length} 个聚合点 · 当前显示 ${this._escapeHtml(this._getVisualizationModeLabel(mode))}</div>
-                    </div>
-                    <span style="font-size:11px;color:${palette.stroke};background:#fff;border:1px solid ${palette.border};border-radius:999px;padding:2px 8px;white-space:nowrap;">${this._escapeHtml(metric?.name || '')}</span>
-                </div>
-                <div style="display:flex;flex-wrap:wrap;gap:6px;">
-                    ${modeButtons.map(buttonMode => `
+        return I18n.t('pageCopy.chatWidget.visualizationRangeHeader', { value0: this._escapeHtml(`${visualizationId}:${panelKey}:${metric?.name || ''}`), value1: palette.border, value2: palette.bg, value3: this._escapeHtml(metric?.label || metric?.name || 'metric'), value4: points.length, value5: this._escapeHtml(this._getVisualizationModeLabel(mode)), value6: palette.stroke, value7: palette.border, value8: this._escapeHtml(metric?.name || ''), value9: modeButtons.map(buttonMode => `
                         <button
                             type="button"
                             onclick="ChatWidget.setVisualizationMetricMode('${this._escapeHtml(visualizationId)}', '${this._escapeHtml(panelKey)}', '${this._escapeHtml(metric?.name || '')}', '${buttonMode}')"
@@ -1602,41 +1476,18 @@ const ChatWidget = {
                                 cursor:pointer;
                             "
                         >${this._escapeHtml(this._getVisualizationModeLabel(buttonMode))}</button>
-                    `).join('')}
-                </div>
-                <div
-                    class="chat-timeseries-chart"
-                    data-visualization-id="${this._escapeHtml(visualizationId)}"
-                    data-panel-key="${this._escapeHtml(panelKey)}"
-                    data-metric-name="${this._escapeHtml(metric?.name || '')}"
-                    style="position:relative;"
-                    onmousemove="ChatWidget.handleVisualizationHover(event, '${this._escapeHtml(visualizationId)}', '${this._escapeHtml(panelKey)}', '${this._escapeHtml(metric?.name || '')}')"
-                    onmouseleave="ChatWidget.clearVisualizationHover(event)"
-                >
-                    <div class="chat-timeseries-crosshair" style="display:none;position:absolute;top:${verticalTop};bottom:${verticalBottom};width:1px;background:rgba(47,129,247,0.35);pointer-events:none;"></div>
-                    <div class="chat-timeseries-tooltip" style="display:none;position:absolute;top:10px;min-width:150px;max-width:220px;background:rgba(15,23,42,0.95);color:#fff;border-radius:10px;padding:8px 10px;font-size:11px;line-height:1.5;pointer-events:none;box-shadow:0 10px 28px rgba(15,23,42,0.22);z-index:3;"></div>
-                    ${this._buildTimeSeriesSvg(points, palette, mode)}
-                </div>
-                <div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--text-secondary);">
-                    <span>起点 ${this._escapeHtml(this._formatVisualizationTime(firstPoint?.time))}</span>
-                    <span>终点 ${this._escapeHtml(this._formatVisualizationTime(lastPoint?.time))}</span>
-                </div>
-                <div style="display:flex;flex-wrap:wrap;gap:6px;">
-                    ${summaryItems.map(item => `
+                    `).join(''), value10: this._escapeHtml(visualizationId), value11: this._escapeHtml(panelKey), value12: this._escapeHtml(metric?.name || ''), value13: this._escapeHtml(visualizationId), value14: this._escapeHtml(panelKey), value15: this._escapeHtml(metric?.name || ''), value16: verticalTop, value17: verticalBottom, value18: this._buildTimeSeriesSvg(points, palette, mode), value19: this._escapeHtml(this._formatVisualizationTime(firstPoint?.time)), value20: this._escapeHtml(this._formatVisualizationTime(lastPoint?.time)), value21: summaryItems.map(item => `
                         <span style="font-size:11px;color:var(--text-secondary);background:#fff;border:1px solid ${palette.border};border-radius:999px;padding:2px 8px;">
                             ${this._escapeHtml(item)}
                         </span>
-                    `).join('')}
-                </div>
-            </div>
-        `;
+                    `).join('') });
     },
 
     _buildVisualizationPanel(panel, panelIndex, visualizationId) {
         const metrics = Array.isArray(panel?.metrics) ? panel.metrics : [];
         if (metrics.length === 0) return '';
 
-        const panelTitle = panel?.title || '监控趋势';
+        const panelTitle = panel?.title || I18n.t('pageCopy.chatWidget.monitorTrends');
         const targetName = panel?.target_name || '';
         const panelKey = panel?.panel_key || `panel-${panelIndex}`;
         const hiddenMetricCount = Number(panel?.hidden_metric_count) || 0;
@@ -1648,7 +1499,7 @@ const ChatWidget = {
                         <div style="font-size:14px;font-weight:600;color:var(--text-primary);">${this._escapeHtml(panelTitle)}</div>
                         ${targetName ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">${this._escapeHtml(targetName)}</div>` : ''}
                     </div>
-                    ${hiddenMetricCount > 0 ? `<div style="font-size:12px;color:var(--text-secondary);">其余 ${hiddenMetricCount} 个指标请在技能结果中查看</div>` : ''}
+                    ${hiddenMetricCount > 0 ? I18n.t('pageCopy.chatWidget.otherValueMetricSkillsresultView', { value0: hiddenMetricCount }) : ''}
                 </div>
                 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;">
                     ${metrics.map((metric, metricIndex) => this._buildVisualizationMetricCard(metric, this._getVisualizationPalette(panelIndex + metricIndex), visualizationId, panelKey)).join('')}
@@ -1658,7 +1509,7 @@ const ChatWidget = {
     },
 
     _buildToolVisualizationCard(toolName, visualization, visualizationId) {
-        const title = visualization?.title || '技能可视化结果';
+        const title = visualization?.title || I18n.t('pageCopy.chatWidget.skillVisualizationResults');
         const datasourceName = visualization?.datasource_name || '';
         const bucketLabel = visualization?.aggregation?.bucket_label || '';
         const startTime = this._formatVisualizationTime(visualization?.time_range?.start_time);
@@ -1680,7 +1531,7 @@ const ChatWidget = {
                         </div>
                     </div>
                     <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;">
-                        ${bucketLabel ? `<span style="font-size:11px;color:var(--text-secondary);background:#fff;border:1px solid var(--border-color);border-radius:999px;padding:4px 10px;">${this._escapeHtml(bucketLabel)} 聚合</span>` : ''}
+                        ${bucketLabel ? I18n.t('pageCopy.chatWidget.aggregateBadge', { value0: this._escapeHtml(bucketLabel) }) : ''}
                         <span style="font-size:11px;color:var(--text-secondary);background:#fff;border:1px solid var(--border-color);border-radius:999px;padding:4px 10px;">${this._escapeHtml(startTime)} ~ ${this._escapeHtml(endTime)}</span>
                     </div>
                 </div>
@@ -1773,13 +1624,7 @@ const ChatWidget = {
         crosshair.style.left = `${(nearestPoint.x / chartModel.width) * 100}%`;
 
         tooltip.style.display = 'block';
-        tooltip.innerHTML = `
-            <div style="font-weight:600;margin-bottom:4px;">${this._escapeHtml(metricState.metric.label || metricState.metric.name || metricName)}</div>
-            <div style="color:rgba(255,255,255,0.78);margin-bottom:4px;">${this._escapeHtml(this._formatVisualizationTime(nearestPoint.time))}</div>
-            <div>${this._escapeHtml(this._getVisualizationModeLabel(mode))}: ${this._escapeHtml(this._formatVisualizationValue(this._getMetricPointValue(nearestPoint, mode)))}</div>
-            <div style="color:rgba(255,255,255,0.76);">最小 ${this._escapeHtml(this._formatVisualizationValue(nearestPoint.min))} · 最大 ${this._escapeHtml(this._formatVisualizationValue(nearestPoint.max))}</div>
-            <div style="color:rgba(255,255,255,0.76);">均值 ${this._escapeHtml(this._formatVisualizationValue(nearestPoint.avg))} · 末值 ${this._escapeHtml(this._formatVisualizationValue(nearestPoint.last))}</div>
-        `;
+        tooltip.innerHTML = I18n.t('pageCopy.chatWidget.metricSummary', { value0: this._escapeHtml(metricState.metric.label || metricState.metric.name || metricName), value1: this._escapeHtml(this._formatVisualizationTime(nearestPoint.time)), value2: this._escapeHtml(this._getVisualizationModeLabel(mode)), value3: this._escapeHtml(this._formatVisualizationValue(this._getMetricPointValue(nearestPoint, mode))), value4: this._escapeHtml(this._formatVisualizationValue(nearestPoint.min)), value5: this._escapeHtml(this._formatVisualizationValue(nearestPoint.max)), value6: this._escapeHtml(this._formatVisualizationValue(nearestPoint.avg)), value7: this._escapeHtml(this._formatVisualizationValue(nearestPoint.last)) });
 
         const tooltipWidth = Math.min(220, Math.max(150, rect.width * 0.48));
         tooltip.style.width = `${tooltipWidth}px`;
@@ -1816,7 +1661,7 @@ const ChatWidget = {
         step.innerHTML = `
             <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary);">
                 <span style="font-size:14px;line-height:1;color:var(--accent-blue);" aria-hidden="true">⚙</span>
-                <span style="font-weight:500;color:var(--text-primary);">${I18n.translateLegacyText('正在执行')} ${toolName}...</span>
+                <span style="font-weight:500;color:var(--text-primary);">${I18n.t('pageCopy.chatWidget.executing2')} ${toolName}...</span>
             </div>
         `;
         messages.appendChild(step);
@@ -1839,7 +1684,7 @@ const ChatWidget = {
                 <i data-lucide="${statusIcon}" style="width:14px;height:14px;color:${statusColor};"></i>
                 <span style="font-weight:500;color:var(--text-primary);">${statusText}${timeText}</span>
                 <span style="color:var(--text-muted);">·</span>
-                <span style="color:${statusColor};">${toolCallId ? '已完成' : '完成'}</span>
+                <span style="color:${statusColor};">${toolCallId ? I18n.t('pageCopy.chatWidget.completed') : I18n.t('pageCopy.chatWidget.complete')}</span>
             </div>
         `;
         DOM.createIcons();
@@ -1862,12 +1707,12 @@ const ChatWidget = {
         this._writeTextToClipboard(text)
             .then((success) => {
                 if (success) {
-                    Toast.success('已复制到剪贴板');
+                    Toast.success(I18n.t('pageCopy.chatWidget.copiedToClipboard'));
                 } else {
-                    Toast.error('复制失败');
+                    Toast.error(I18n.t('pageCopy.chatWidget.copyFailed'));
                 }
             })
-            .catch(() => Toast.error('复制失败'));
+            .catch(() => Toast.error(I18n.t('pageCopy.chatWidget.copyFailed')));
     },
 
     addError(message, options = {}) {
@@ -1957,7 +1802,7 @@ const ChatWidget = {
                     } else {
                         this._renderAssistantBubble(msgEl.querySelector('.chat-bubble'), msg.content);
                     }
-                    const copyBtn = DOM.el('button', { className: 'message-copy-btn', title: '复制', innerHTML: '<i data-lucide="copy"></i>' });
+                    const copyBtn = DOM.el('button', { className: 'message-copy-btn', title: I18n.t('pageCopy.chatWidget.copy'), innerHTML: '<i data-lucide="copy"></i>' });
                     msgEl.appendChild(copyBtn);
                     copyBtn.addEventListener('click', () => this._copyMessageContent(msgEl));
                     container.appendChild(msgEl);
@@ -2051,7 +1896,7 @@ const ChatWidget = {
             this._streamTimeoutTimer = setTimeout(() => {
                 if (this.isStreaming) {
                     console.warn('Stream timeout: no events received for', this._streamTimeoutMs / 1000, 'seconds');
-                    this.showError('AI 响应超时，长时间未收到数据。请重新发送消息或刷新页面。');
+                    this.showError(I18n.t('pageCopy.chatWidget.aiTheResponseTimedOutAndNo'));
                 }
             }, this._streamTimeoutMs);
         }
@@ -2180,7 +2025,7 @@ const ChatWidget = {
 
         const shouldShow = !this.autoScrollEnabled || this.hasUnreadWhileDetached;
         const label = button.querySelector('.chat-scroll-bottom-label');
-        const text = this.hasUnreadWhileDetached ? '有新内容，回到底部' : '回到底部';
+        const text = this.hasUnreadWhileDetached ? I18n.t('pageCopy.chatWidget.thereIsNewContentReturnToThe') : I18n.t('pageCopy.chatWidget.backToBottom');
 
         button.classList.toggle('visible', shouldShow);
         button.classList.toggle('has-unread', this.hasUnreadWhileDetached);
@@ -2211,48 +2056,48 @@ const ChatWidget = {
     _getThinkingMeta(phase, message) {
         const phaseMap = {
             intent_detection: {
-                title: '问题分析中',
-                subtitle: '识别意图和故障类型',
+                title: I18n.t('pageCopy.chatWidget.problemAnalysis'),
+                subtitle: I18n.t('pageCopy.chatWidget.identifyIntentAndFailureTypes'),
                 icon: 'search',
                 tone: 'violet',
-                badge: '分析',
+                badge: I18n.t('pageCopy.chatWidget.analysis'),
             },
             context_building: {
-                title: '上下文装配中',
-                subtitle: '汇总数据源、历史结论和环境信息',
+                title: I18n.t('pageCopy.chatWidget.contextualAssembly'),
+                subtitle: I18n.t('pageCopy.chatWidget.aggregateDatasourcesHistoricalConclusionsAndEnvironmentalInformation'),
                 icon: 'database',
                 tone: 'blue',
-                badge: '上下文',
+                badge: I18n.t('pageCopy.chatWidget.context'),
             },
             skill_selection: {
-                title: '诊断路径规划中',
-                subtitle: '选择合适的诊断技能和排查顺序',
+                title: I18n.t('pageCopy.chatWidget.diagnosticPathPlanning'),
+                subtitle: I18n.t('pageCopy.chatWidget.chooseAppropriateDiagnosticSkillsAndSequencing'),
                 icon: 'git-branch',
                 tone: 'cyan',
-                badge: '规划',
+                badge: I18n.t('pageCopy.chatWidget.planning'),
             },
             tool_execution: {
-                title: '证据收集中',
-                subtitle: '正在调用数据库或主机诊断工具',
+                title: I18n.t('pageCopy.chatWidget.evidenceIsBeingCollected'),
+                subtitle: I18n.t('pageCopy.chatWidget.callingDatabaseOrHostDiagnosticTool'),
                 icon: 'wrench',
                 tone: 'amber',
-                badge: '执行',
+                badge: I18n.t('pageCopy.chatWidget.execute'),
             },
             llm_thinking: {
-                title: '结论生成中',
-                subtitle: '交叉整理证据并形成诊断结论',
+                title: I18n.t('pageCopy.chatWidget.conclusionIsBeingGenerated'),
+                subtitle: I18n.t('pageCopy.chatWidget.crossCheckEvidenceAndFormulateDiagnosticConclusions'),
                 icon: 'sparkles',
                 tone: 'green',
-                badge: '总结',
+                badge: I18n.t('pageCopy.chatWidget.summary'),
             },
         };
 
         const meta = phaseMap[phase] || {
-            title: 'AI 思考中',
-            subtitle: '正在处理当前诊断步骤',
+            title: I18n.t('pageCopy.chatWidget.aiThinking'),
+            subtitle: I18n.t('pageCopy.chatWidget.processingCurrentDiagnosticStep'),
             icon: 'bot',
             tone: 'violet',
-            badge: '处理中',
+            badge: I18n.t('pageCopy.chatWidget.processing'),
         };
         return {
             ...meta,
@@ -2358,7 +2203,7 @@ const ChatWidget = {
         const text = (rawContent && rawContent.trim()) || bubble.innerText || bubble.textContent || '';
         this._writeTextToClipboard(text).then((success) => {
             if (!success) {
-                Toast.error('复制失败');
+                Toast.error(I18n.t('pageCopy.chatWidget.copyFailed'));
                 return;
             }
             const copyBtn = messageElement.querySelector('.message-copy-btn');
@@ -2373,10 +2218,10 @@ const ChatWidget = {
                     }, 2000);
                 }
             }
-            Toast.success('已复制到剪贴板');
+            Toast.success(I18n.t('pageCopy.chatWidget.copiedToClipboard'));
         }).catch(err => {
             console.error('Failed to copy:', err);
-            Toast.error('复制失败');
+            Toast.error(I18n.t('pageCopy.chatWidget.copyFailed'));
         });
     }
 };

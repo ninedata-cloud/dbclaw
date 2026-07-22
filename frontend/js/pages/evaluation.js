@@ -12,17 +12,9 @@ const EvaluationPage = {
     runDetailMetaDigestByRunId: {},
 
     render() {
-        Header.render('AI 评测', this._buildHeaderActions());
+        Header.render(I18n.t('pageCopy.evaluation.aiEvaluation'), this._buildHeaderActions());
         const content = DOM.$('#page-content');
-        content.innerHTML = `
-            <div class="eval-page">
-                <div class="eval-tabs">
-                    <button class="eval-tab ${this.activeTab === 'runs' ? 'active' : ''}" data-tab="runs">运行记录</button>
-                    <button class="eval-tab ${this.activeTab === 'cases' ? 'active' : ''}" data-tab="cases">Case 库</button>
-                </div>
-                <div id="eval-tab-content"></div>
-            </div>
-        `;
+        content.innerHTML = I18n.t('pageCopy.evaluation.runsCaseLibrary', { value0: this.activeTab === 'runs' ? 'active' : '', value1: this.activeTab === 'cases' ? 'active' : '' });
         content.querySelectorAll('.eval-tab').forEach(btn => {
             btn.onclick = () => {
                 this._stopPolling();
@@ -38,7 +30,7 @@ const EvaluationPage = {
     _buildHeaderActions() {
         const startBtn = DOM.el('button', {
             className: 'btn btn-primary',
-            innerHTML: '<i data-lucide="play"></i> 启动评测',
+            innerHTML: I18n.t('pageCopy.evaluation.startEvaluation'),
             onClick: () => this._showStartRunModal(),
         });
         return [startBtn];
@@ -492,37 +484,18 @@ const EvaluationPage = {
         this.runDetailDigestByRunId = {};
         this.runDetailMetaDigestByRunId = {};
         const host = DOM.$('#eval-tab-content');
-        host.innerHTML = '<div class="loading">正在加载评测记录...</div>';
+        host.innerHTML = I18n.t('pageCopy.evaluation.loadingReviewRecords');
         try {
             this.runs = await API.listEvalRuns();
         } catch (err) {
-            host.innerHTML = `<div class="eval-empty">加载失败：${Utils.escapeHtml(err.message)}</div>`;
+            host.innerHTML = I18n.t('pageCopy.evaluation.loadingFailedValue', { value0: Utils.escapeHtml(err.message) });
             return;
         }
         if (!this.runs.length) {
-            host.innerHTML = '<div class="eval-empty">还没有评测记录。点击右上角"启动评测"开始第一次评测。</div>';
+            host.innerHTML = I18n.t('pageCopy.evaluation.noEvaluationRunsYetSelectStartEvaluation');
             return;
         }
-        host.innerHTML = `
-            <div class="eval-table-card">
-                <table class="eval-table eval-run-table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>套件</th>
-                            <th>AI 模型</th>
-                            <th>状态</th>
-                            <th>进度</th>
-                            <th>总分</th>
-                            <th>开始时间</th>
-                            <th>耗时</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody id="eval-runs-tbody"></tbody>
-                </table>
-            </div>
-        `;
+        host.innerHTML = I18n.t('pageCopy.evaluation.idKitAiModelsStatusProgressTotal');
         const tbody = DOM.$('#eval-runs-tbody');
         for (const run of this.runs) {
             const tr = document.createElement('tr');
@@ -530,13 +503,13 @@ const EvaluationPage = {
             const score = run.total_score == null ? '-' : run.total_score.toFixed(1);
             const scoreClass = this._scoreClass(run.total_score);
             const elapsed = this._formatElapsed(run.started_at, run.finished_at);
-            const deletingTitle = this._isRunActive(run) ? '停止并删除评测记录' : '删除评测记录';
+            const deletingTitle = this._isRunActive(run) ? I18n.t('pageCopy.evaluation.stopAndDeleteReviewHistory') : I18n.t('pageCopy.evaluation.deleteReviewRecord');
             tr.innerHTML = `
                 <td><span class="eval-mono">#${run.id}</span></td>
                 <td><span class="eval-primary-text">${Utils.escapeHtml(run.suite_name || '-')}</span></td>
                 <td>${Utils.escapeHtml(run.ai_model_name || '-')}</td>
                 <td>${this._renderStatus(run.status)}</td>
-                <td>${run.completed_cases}/${run.total_cases} ${run.failed_cases ? `(失败 ${run.failed_cases})` : ''}</td>
+                <td>${run.completed_cases}/${run.total_cases} ${run.failed_cases ? I18n.t('pageCopy.evaluation.failedValue', { value0: run.failed_cases }) : ''}</td>
                 <td><span class="eval-score ${scoreClass}">${score}</span></td>
                 <td>${this._fmtTime(run.started_at)}</td>
                 <td>${elapsed}</td>
@@ -565,7 +538,7 @@ const EvaluationPage = {
         const hasDetailShell = Boolean(DOM.$('#eval-run-detail-root'));
 
         if (!silent) {
-            host.innerHTML = '<div class="loading">正在加载详情...</div>';
+            host.innerHTML = I18n.t('pageCopy.evaluation.loadingDetails');
         } else if (!hasDetailShell) {
             return;
         }
@@ -597,7 +570,7 @@ const EvaluationPage = {
             }
         } catch (err) {
             if (!silent || !hasDetailShell) {
-                host.innerHTML = `<div class="eval-empty">加载失败：${Utils.escapeHtml(err.message)}</div>`;
+                host.innerHTML = I18n.t('pageCopy.evaluation.loadingFailedValue', { value0: Utils.escapeHtml(err.message) });
             } else if (this.activeRunId === runId && this.activeTab === 'runs') {
                 this._stopPolling();
                 this.pollingTimer = setTimeout(() => this._showRunDetail(runId, { silent: true }), 6000);
@@ -622,55 +595,7 @@ const EvaluationPage = {
         this.runDetailDigestByRunId[runId] = digest;
 
         if (!silent || !hasDetailShell) {
-            host.innerHTML = `
-                <div id="eval-run-detail-root">
-                    <div class="eval-back" id="eval-back-btn"><i data-lucide="arrow-left"></i> 返回评测列表</div>
-                    <div class="eval-detail" style="margin-bottom:16px;">
-                        <div class="eval-summary-grid">
-                            <div class="eval-summary-item score">
-                                <div class="eval-summary-label">总分</div>
-                                <div class="eval-summary-score" id="eval-run-score">-<span> / 100</span></div>
-                            </div>
-                            <div class="eval-summary-item">
-                                <div class="eval-summary-label">套件</div>
-                                <div class="eval-summary-value" id="eval-run-suite">-</div>
-                            </div>
-                            <div class="eval-summary-item">
-                                <div class="eval-summary-label">AI 模型</div>
-                                <div class="eval-summary-value" id="eval-run-model">-</div>
-                            </div>
-                            <div class="eval-summary-item">
-                                <div class="eval-summary-label">状态</div>
-                                <div id="eval-run-status">-</div>
-                            </div>
-                            <div class="eval-summary-item">
-                                <div class="eval-summary-label">进度</div>
-                                <div class="eval-summary-value" id="eval-run-progress">-</div>
-                            </div>
-                        </div>
-                        <div style="display:flex; justify-content:flex-end; margin-bottom:14px;">
-                            <button class="btn btn-danger" id="eval-run-delete-btn"><i data-lucide="trash-2"></i> 删除记录</button>
-                        </div>
-                        <div class="eval-dim-section" id="eval-run-dim-section" style="display:none;"></div>
-                    </div>
-                    <div class="eval-table-card">
-                        <table class="eval-table eval-result-table">
-                            <thead>
-                                <tr>
-                                    <th>Case</th>
-                                    <th>类别</th>
-                                    <th>状态</th>
-                                    <th>得分</th>
-                                    <th>用时</th>
-                                    <th>Tokens</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody id="eval-results-tbody"></tbody>
-                        </table>
-                    </div>
-                </div>
-            `;
+            host.innerHTML = I18n.t('pageCopy.evaluation.returnToReviewListTotalScore100');
             DOM.$('#eval-back-btn').onclick = () => {
                 this._stopPolling();
                 this.activeRunId = null;
@@ -691,10 +616,10 @@ const EvaluationPage = {
         if (suiteEl) suiteEl.textContent = run.suite_name || '-';
         if (modelEl) modelEl.textContent = run.ai_model_name || '-';
         if (statusEl) statusEl.innerHTML = this._renderStatus(run.status);
-        if (progressEl) progressEl.textContent = `${run.completed_cases}/${run.total_cases}${run.failed_cases ? ` (失败 ${run.failed_cases})` : ''}`;
+        if (progressEl) progressEl.textContent = `${run.completed_cases}/${run.total_cases}${run.failed_cases ? I18n.t('pageCopy.evaluation.failedValue2', { value0: run.failed_cases }) : ''}`;
         if (deleteBtnEl) {
             deleteBtnEl.disabled = false;
-            deleteBtnEl.title = this._isRunActive(run) ? '停止并删除当前评测记录' : '删除当前评测记录';
+            deleteBtnEl.title = this._isRunActive(run) ? I18n.t('pageCopy.evaluation.stopAndDeleteTheCurrentReviewRecord') : I18n.t('pageCopy.evaluation.deleteCurrentReviewRecord');
             deleteBtnEl.onclick = () => this._deleteRun(run);
         }
 
@@ -730,15 +655,7 @@ const EvaluationPage = {
                 const score = r.score == null ? '-' : r.score.toFixed(1);
                 const scoreClass = this._scoreClass(r.score);
                 const latency = r.latency_ms == null ? '-' : `${(r.latency_ms / 1000).toFixed(1)}s`;
-                tr.innerHTML = `
-                    <td><span class="eval-primary-text">${Utils.escapeHtml(r.case_title || r.case_id)}</span><div class="eval-secondary-text">${Utils.escapeHtml(r.case_id)}</div></td>
-                    <td>${Utils.escapeHtml(r.case_category || '-')}</td>
-                    <td>${this._renderStatus(r.status)}</td>
-                    <td><span class="eval-score ${scoreClass}">${score}</span></td>
-                    <td>${latency}</td>
-                    <td>${r.total_tokens || '-'}</td>
-                    <td><button class="btn btn-sm eval-inline-action">详情</button></td>
-                `;
+                tr.innerHTML = I18n.t('pageCopy.evaluation.evaluationRow', { value0: Utils.escapeHtml(r.case_title || r.case_id), value1: Utils.escapeHtml(r.case_id), value2: Utils.escapeHtml(r.case_category || '-'), value3: this._renderStatus(r.status), value4: scoreClass, value5: score, value6: latency, value7: r.total_tokens || '-' });
                 tbody.appendChild(tr);
             }
         }
@@ -764,7 +681,7 @@ const EvaluationPage = {
         try {
             detail = await API.getEvalRunResult(runId, caseId);
         } catch (err) {
-            Toast.error(`加载详情失败: ${err.message}`);
+            Toast.error(err.message || I18n.t('common.requestFailed'));
             return;
         }
         const dims = (detail.dimension_scores || []).map(d => `
@@ -779,45 +696,20 @@ const EvaluationPage = {
         const tools = detail.tool_call_summary || {};
         const calls = (tools.called || []).map(c => {
             const args = JSON.stringify(c.args || {});
-            return `<li>${c.matched ? '命中' : '未命中'} <code>${Utils.escapeHtml(c.tool)}</code> <span class="eval-secondary-text">${Utils.escapeHtml(args.slice(0, 120))}</span></li>`;
+            return `<li>${c.matched ? I18n.t('pageCopy.evaluation.hitLabel') : I18n.t('pageCopy.evaluation.missLabel')} <code>${Utils.escapeHtml(c.tool)}</code> <span class="eval-secondary-text">${Utils.escapeHtml(args.slice(0, 120))}</span></li>`;
         }).join('');
 
         const body = document.createElement('div');
-        body.innerHTML = `
-            <h3 style="margin:0 0 8px 0;">${Utils.escapeHtml(detail.case_title || caseId)}</h3>
-            <div style="color:var(--text-secondary); font-size:12px; margin-bottom:14px;">${Utils.escapeHtml(detail.case_id)} · ${Utils.escapeHtml(detail.case_category || '')}</div>
-
-            <h4 style="margin:14px 0 6px;">评分明细</h4>
-            ${dims}
-
-            <h4 style="margin:14px 0 6px;">Judge 反馈</h4>
-            ${judge.root_cause_feedback ? `<div class="eval-feedback-card"><strong>根因 (${(judge.root_cause_score || 0).toFixed(1)})：</strong> ${Utils.escapeHtml(judge.root_cause_feedback)}</div>` : ''}
-            ${judge.action_feedback ? `<div class="eval-feedback-card"><strong>行动建议 (${(judge.action_score || 0).toFixed(1)})：</strong> ${Utils.escapeHtml(judge.action_feedback)}</div>` : ''}
-            ${judge.error ? `<div class="eval-feedback-card eval-feedback-danger"><strong>Judge 错误：</strong> ${Utils.escapeHtml(judge.error)}</div>` : ''}
-
-            <h4 style="margin:14px 0 6px;">工具调用</h4>
-            <div style="font-size:13px; color:var(--text-secondary);">
-                调用 ${(tools.called || []).length} 次工具，未命中 fixture ${tools.unmatched_count || 0} 次
-                ${tools.missing_required && tools.missing_required.length ? `<br>缺失必需工具：<code>${Utils.escapeHtml(tools.missing_required.join(', '))}</code>` : ''}
-                ${tools.forbidden_hits && tools.forbidden_hits.length ? `<br><span class="text-danger">触发禁用工具：<code>${Utils.escapeHtml(tools.forbidden_hits.join(', '))}</code></span>` : ''}
-            </div>
-            <ul style="font-size:12px; padding-left:20px; max-height:200px; overflow-y:auto;">${calls || '<li>无</li>'}</ul>
-
-            <h4 style="margin:14px 0 6px;">AI 结论</h4>
-            <div class="eval-conclusion-md">${Utils.escapeHtml(detail.conclusion_md || '(空)')}</div>
-
-            ${detail.session_id ? `<div style="margin-top:14px;"><button class="btn btn-secondary" id="eval-replay-btn"><i data-lucide="messages-square"></i> 查看完整对话回放</button></div>` : ''}
-            ${detail.error_message ? `<div class="eval-feedback-card eval-feedback-danger" style="margin-top:12px;"><strong>错误：</strong> ${Utils.escapeHtml(detail.error_message)}</div>` : ''}
-        `;
+        body.innerHTML = I18n.t('pageCopy.evaluation.evaluationDetails', { value0: Utils.escapeHtml(detail.case_title || caseId), value1: Utils.escapeHtml(detail.case_id), value2: Utils.escapeHtml(detail.case_category || ''), value3: dims, value4: judge.root_cause_feedback ? I18n.t('pageCopy.evaluation.rootCauseLabel', { value0: (judge.root_cause_score || 0).toFixed(1), value1: Utils.escapeHtml(judge.root_cause_feedback) }) : '', value5: judge.action_feedback ? I18n.t('pageCopy.evaluation.recommendedActionsLabel', { value0: (judge.action_score || 0).toFixed(1), value1: Utils.escapeHtml(judge.action_feedback) }) : '', value6: judge.error ? I18n.t('pageCopy.evaluation.judgeErrorValue', { value0: Utils.escapeHtml(judge.error) }) : '', value7: (tools.called || []).length, value8: tools.unmatched_count || 0, value9: tools.missing_required && tools.missing_required.length ? I18n.t('pageCopy.evaluation.requiredToolsValue', { value0: Utils.escapeHtml(tools.missing_required.join(', ')) }) : '', value10: tools.forbidden_hits && tools.forbidden_hits.length ? I18n.t('pageCopy.evaluation.triggerdisabledToolsValue', { value0: Utils.escapeHtml(tools.forbidden_hits.join(', ')) }) : '', value11: calls || I18n.t('pageCopy.evaluation.noneLabel'), value12: Utils.escapeHtml(detail.conclusion_md || I18n.t('pageCopy.evaluation.emptyLabel')), value13: detail.session_id ? I18n.t('pageCopy.evaluation.viewfullConversationReplay') : '', value14: detail.error_message ? I18n.t('pageCopy.evaluation.errorValue', { value0: Utils.escapeHtml(detail.error_message) }) : '' });
         const replayBtn = body.querySelector('#eval-replay-btn');
         if (replayBtn) {
             replayBtn.onclick = () => this._showReplayModal(runId, caseId);
         }
         Modal.show({
-            title: 'Case 详情',
+            title: I18n.t('pageCopy.evaluation.caseDetails'),
             content: body,
             size: 'large',
-            buttons: [{ text: '关闭', variant: 'secondary', onClick: () => Modal.hide() }],
+            buttons: [{ text: I18n.t('pageCopy.evaluation.close'), variant: 'secondary', onClick: () => Modal.hide() }],
         });
         DOM.createIcons();
     },
@@ -827,19 +719,19 @@ const EvaluationPage = {
         try {
             replay = await API.getEvalRunReplay(runId, caseId);
         } catch (err) {
-            Toast.error(`加载回放失败: ${err.message}`);
+            Toast.error(err.message || I18n.t('common.requestFailed'));
             return;
         }
 
         const roleName = (role) => ({
-            user: '用户',
+            user: I18n.t('pageCopy.evaluation.user'),
             assistant: 'AI',
-            tool_call: '工具调用',
-            tool_result: '工具结果',
-            system: '系统',
-            approval_request: '审批请求',
-            approval_response: '审批结果',
-        }[role] || role || '消息');
+            tool_call: I18n.t('pageCopy.evaluation.toolCall'),
+            tool_result: I18n.t('pageCopy.evaluation.toolResults'),
+            system: I18n.t('pageCopy.evaluation.system'),
+            approval_request: I18n.t('pageCopy.evaluation.approvalRequest'),
+            approval_response: I18n.t('pageCopy.evaluation.approvalResults'),
+        }[role] || role || I18n.t('pageCopy.evaluation.news'));
 
         const messages = (replay.messages || []).map((message) => `
             <div class="eval-replay-message">
@@ -860,14 +752,14 @@ const EvaluationPage = {
                 <span>Tokens ${replay.total_tokens || 0}</span>
             </div>
             <div class="eval-replay-list">
-                ${messages || '<div class="eval-empty">暂无可回放消息。</div>'}
+                ${messages || I18n.t('pageCopy.evaluation.noneYetNews')}
             </div>
         `;
         Modal.show({
-            title: '完整对话回放',
+            title: I18n.t('pageCopy.evaluation.fullConversationReplay'),
             content: body,
             size: 'xlarge',
-            buttons: [{ text: '关闭', variant: 'secondary', onClick: () => Modal.hide() }],
+            buttons: [{ text: I18n.t('pageCopy.evaluation.close'), variant: 'secondary', onClick: () => Modal.hide() }],
         });
     },
 
@@ -875,36 +767,18 @@ const EvaluationPage = {
 
     async _renderCasesTab() {
         const host = DOM.$('#eval-tab-content');
-        host.innerHTML = '<div class="loading">加载 case 库...</div>';
+        host.innerHTML = I18n.t('pageCopy.evaluation.loadCaseLibrary');
         try {
             this.cases = await API.listEvalCases();
         } catch (err) {
-            host.innerHTML = `<div class="eval-empty">加载失败：${Utils.escapeHtml(err.message)}</div>`;
+            host.innerHTML = I18n.t('pageCopy.evaluation.loadingFailedValue', { value0: Utils.escapeHtml(err.message) });
             return;
         }
         if (!this.cases.length) {
-            host.innerHTML = '<div class="eval-empty">未找到任何评测 case。</div>';
+            host.innerHTML = I18n.t('pageCopy.evaluation.noReviewCasesFound');
             return;
         }
-        host.innerHTML = `
-            <div class="eval-table-card">
-                <table class="eval-table eval-case-table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>名称</th>
-                            <th>类别</th>
-                            <th>DB 类型</th>
-                            <th>难度</th>
-                            <th>必需工具</th>
-                            <th>禁用工具</th>
-                            <th>预期轮数</th>
-                        </tr>
-                    </thead>
-                    <tbody id="eval-cases-tbody"></tbody>
-                </table>
-            </div>
-        `;
+        host.innerHTML = I18n.t('pageCopy.evaluation.idNameCategoryDbTypeDifficultyRequired');
         const tbody = DOM.$('#eval-cases-tbody');
         for (const c of this.cases) {
             const tr = document.createElement('tr');
@@ -936,26 +810,12 @@ const EvaluationPage = {
         }).join('<hr style="margin:10px 0; border:0; border-top:1px solid var(--border-color);">');
 
         const body = document.createElement('div');
-        body.innerHTML = `
-            <h3 style="margin:0 0 4px;">${Utils.escapeHtml(c.title)}</h3>
-            <div style="color:var(--text-secondary); font-size:12px; margin-bottom:14px;">${Utils.escapeHtml(c.id)}</div>
-            ${c.description ? `<p>${Utils.escapeHtml(c.description)}</p>` : ''}
-            <h4>用户提问</h4>
-            <div class="eval-conclusion-md">${Utils.escapeHtml(c.user_message)}</div>
-            <h4>预期根因</h4>
-            <ul>${(c.root_causes || []).map(x => `<li>${Utils.escapeHtml(x)}</li>`).join('')}</ul>
-            <h4>必需工具</h4>
-            ${this._renderToolChips(c.required_tools)}
-            <h4>禁用工具</h4>
-            ${this._renderToolChips(c.forbidden_tools, { forbidden: true })}
-            <h4>工具固件</h4>
-            ${fixturesHtml}
-        `;
+        body.innerHTML = I18n.t('pageCopy.evaluation.caseFixture', { value0: Utils.escapeHtml(c.title), value1: Utils.escapeHtml(c.id), value2: c.description ? `<p>${Utils.escapeHtml(c.description)}</p>` : '', value3: Utils.escapeHtml(c.user_message), value4: (c.root_causes || []).map(x => `<li>${Utils.escapeHtml(x)}</li>`).join(''), value5: this._renderToolChips(c.required_tools), value6: this._renderToolChips(c.forbidden_tools, { forbidden: true }), value7: fixturesHtml });
         Modal.show({
-            title: 'Case 详情',
+            title: I18n.t('pageCopy.evaluation.caseDetails'),
             content: body,
             size: 'large',
-            buttons: [{ text: '关闭', variant: 'secondary', onClick: () => Modal.hide() }],
+            buttons: [{ text: I18n.t('pageCopy.evaluation.close'), variant: 'secondary', onClick: () => Modal.hide() }],
         });
     },
 
@@ -968,7 +828,7 @@ const EvaluationPage = {
                 API.getAIModels(),
             ]);
         } catch (err) {
-            Toast.error(`加载失败：${err.message}`);
+            Toast.error(err.message || I18n.t('common.requestFailed'));
             return;
         }
         const suiteOptions = this.suites.map(s =>
@@ -979,30 +839,13 @@ const EvaluationPage = {
         ).join('');
 
         const form = document.createElement('div');
-        form.innerHTML = `
-            <div class="form-group">
-                <label>评测套件</label>
-                <select id="eval-form-suite" class="form-input">${suiteOptions}</select>
-            </div>
-            <div class="form-group">
-                <label>AI 诊断模型</label>
-                <select id="eval-form-model" class="form-input">${modelOptions}</select>
-            </div>
-            <div class="form-group">
-                <label>裁判模型 (可选，默认与诊断模型一致)</label>
-                <select id="eval-form-judge" class="form-input">
-                    <option value="">同诊断模型</option>
-                    ${modelOptions}
-                </select>
-            </div>
-            <div style="font-size:12px; color:var(--text-secondary);">评测启动后会异步执行，期间可在列表中看到实时进度。</div>
-        `;
+        form.innerHTML = I18n.t('pageCopy.evaluation.evaluationKitValueAiDiagnosticModelValue', { value0: suiteOptions, value1: modelOptions, value2: modelOptions });
         Modal.show({
-            title: '启动评测',
+            title: I18n.t('pageCopy.evaluation.startEvaluation2'),
             content: form,
             buttons: [
-                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
-                { text: '启动', variant: 'primary', onClick: () => this._submitRun() },
+                { text: I18n.t('pageCopy.evaluation.cancel'), variant: 'secondary', onClick: () => Modal.hide() },
+                { text: I18n.t('pageCopy.evaluation.start'), variant: 'primary', onClick: () => this._submitRun() },
             ],
         });
     },
@@ -1013,7 +856,7 @@ const EvaluationPage = {
         const judgeRaw = DOM.$('#eval-form-judge').value;
         const judgeId = judgeRaw ? parseInt(judgeRaw, 10) : null;
         if (!suiteId || !modelId) {
-            Toast.error('请选择套件和 AI 模型');
+            Toast.error(I18n.t('pageCopy.evaluation.suiteAndModelRequired'));
             return;
         }
         try {
@@ -1023,22 +866,22 @@ const EvaluationPage = {
                 judge_model_id: judgeId,
             });
             Modal.hide();
-            Toast.success(`评测 #${run.id} 已启动`);
+            Toast.success(I18n.t('pageCopy.evaluation.reviewValueStarted', { value0: run.id }));
             this.activeTab = 'runs';
             this.render();
             setTimeout(() => this._showRunDetail(run.id), 500);
         } catch (err) {
-            Toast.error(`启动失败：${err.message}`);
+            Toast.error(err.message || I18n.t('common.requestFailed'));
         }
     },
 
     async _deleteRun(run) {
         if (!run || !run.id) return;
-        const activeHint = this._isRunActive(run) ? '该评测仍在运行，删除会先停止后台任务。' : '';
-        if (!confirm(`确认删除评测记录 #${run.id} 吗？${activeHint}相关结果和隐藏回放也会一并删除，此操作不可撤销。`)) return;
+        const activeHint = this._isRunActive(run) ? I18n.t('pageCopy.evaluation.theReviewIsStillRunningDeletingIt') : '';
+        if (!confirm(I18n.t('pageCopy.evaluation.confirmDeletionOfReviewRecordValueValue', { value0: run.id, value1: activeHint }))) return;
         try {
             await API.deleteEvalRun(run.id);
-            Toast.success(`评测 #${run.id} 已删除`);
+            Toast.success(I18n.t('pageCopy.evaluation.reviewValueDeleted', { value0: run.id }));
             this._stopPolling();
             this.runDetailDigestByRunId[run.id] = undefined;
             this.runDetailMetaDigestByRunId[run.id] = undefined;
@@ -1050,7 +893,7 @@ const EvaluationPage = {
                 await this._renderRunsTab();
             }
         } catch (err) {
-            Toast.error(`删除失败：${err.message}`);
+            Toast.error(err.message || I18n.t('common.requestFailed'));
         }
     },
 

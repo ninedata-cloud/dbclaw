@@ -50,3 +50,19 @@ code: |
           "tables": result.get("data", []),
           "columns": result.get("columns", [])
       }
+
+i18n:
+  zh-CN:
+    name: Oracle 表统计信息
+    description: 执行“Oracle 表统计信息”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+    permission_descriptions:
+      execute_query: 允许执行受控数据库查询
+  en-US:
+    name: Oracle Table Statistics
+    description: Get Oracle table-level statistics including row counts, sizes, and storage information
+    parameter_descriptions:
+      datasource_id: The database connection ID
+    permission_descriptions:
+      execute_query: Execute governed database queries

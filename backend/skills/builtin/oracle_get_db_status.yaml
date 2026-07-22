@@ -85,3 +85,19 @@ code: |
           "database_info": db_result.get("data", []) if db_result.get("success") else [],
           "instance_info": instance_result.get("data", []) if instance_result.get("success") else []
       }
+
+i18n:
+  zh-CN:
+    name: Oracle 数据库状态
+    description: 执行“Oracle 数据库状态”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+    permission_descriptions:
+      execute_query: 允许执行受控数据库查询
+  en-US:
+    name: Oracle Database Status
+    description: Get current Oracle database status metrics including sessions, SGA usage, and key performance indicators
+    parameter_descriptions:
+      datasource_id: The database connection ID
+    permission_descriptions:
+      execute_query: Execute governed database queries

@@ -2,6 +2,20 @@
 const AUTH_STATE_KEY = 'dbclaw_has_session';
 
 const API = {
+    localeHeaders(headers = {}) {
+        return {
+            'X-DBClaw-Locale': window.I18n ? I18n.getLocale() : 'zh-CN',
+            ...headers,
+        };
+    },
+
+    fetch(url, options = {}) {
+        return fetch(url, {
+            credentials: 'same-origin',
+            ...options,
+            headers: this.localeHeaders(options.headers || {}),
+        });
+    },
     markSessionAvailable() {
         try {
             localStorage.setItem(AUTH_STATE_KEY, '1');
@@ -41,20 +55,20 @@ const API = {
             merged.body = JSON.stringify(merged.body);
         }
         try {
-            const response = await fetch(url, merged);
+            const response = await this.fetch(url, merged);
             if (!response.ok) {
                 if (response.status === 401 && url !== '/api/auth/login') {
                     Store.set('currentUser', null);
                     this.clearSessionMark();
                     window.location.hash = 'login';
-                    const authError = new Error('会话已过期，请重新登录');
+                    const authError = new Error(window.I18n ? I18n.t('auth.sessionExpired') : 'Session expired');
                     authError.status = response.status;
                     throw authError;
                 }
 
                 const err = await response.json().catch(() => ({ detail: response.statusText }));
 
-                let errorMessage = '请求失败';
+                let errorMessage = window.I18n ? I18n.t('common.requestFailed') : 'Request failed';
 
                 if (err.detail) {
                     if (typeof err.detail === 'string') {
@@ -95,10 +109,9 @@ const API = {
     getAppInfo() { return this.get('/api/app/info'); },
 
     async postFormData(url, formData) {
-        const response = await fetch(url, {
+        const response = await this.fetch(url, {
             method: 'POST',
             credentials: 'same-origin',
-            headers: { 'X-DBClaw-Locale': window.I18n ? I18n.getLocale() : 'zh-CN' },
             body: formData
         });
         if (!response.ok) {
@@ -106,12 +119,12 @@ const API = {
                 Store.set('currentUser', null);
                 this.clearSessionMark();
                 window.location.hash = 'login';
-                throw new Error('会话已过期，请重新登录');
+                throw new Error(window.I18n ? I18n.t('auth.sessionExpired') : 'Session expired');
             }
 
             const err = await response.json().catch(() => ({ detail: response.statusText }));
 
-            let errorMessage = '请求失败';
+            let errorMessage = window.I18n ? I18n.t('common.requestFailed') : 'Request failed';
 
             if (err.detail) {
                 if (typeof err.detail === 'string') {
@@ -136,7 +149,9 @@ const API = {
     login(username, password) { return this.post('/api/auth/login', { username, password }); },
     getMe() { return this.get('/api/auth/me'); },
     updateMe(data) { return this.put('/api/auth/me', data); },
-    updateLocale(locale) { return this.put('/api/auth/me/locale', { locale }); },
+    updateLocale(locale, timezone) {
+        return this.put('/api/auth/me/locale', timezone ? { locale, timezone } : { locale });
+    },
     logout() { return this.post('/api/auth/logout', {}); },
     logoutAll() { return this.post('/api/auth/logout-all', {}); },
     changePassword(old_password, new_password) { return this.post('/api/auth/change-password', { old_password, new_password }); },
@@ -276,27 +291,44 @@ const API = {
     generateReport(data) { return this.post('/api/reports/generate', data); },
     getReport(id) { return this.get(`/api/reports/${id}`); },
     getReportDownloadUrl(id, format) { return `/api/reports/${id}/download?format=${format}`; },
-    async downloadReport(id, format) {
-        const response = await fetch(`/api/reports/${id}/download?format=${format}`, {
+    async downloadFile(url, fallbackFilename) {
+        const response = await this.fetch(url, {
             method: 'GET',
             credentials: 'same-origin'
         });
 
         if (!response.ok) {
             const err = await response.json().catch(() => ({ detail: response.statusText }));
-            throw new Error(err.detail || '下载失败');
+            throw new Error(err.detail || I18n.t('pageCopy.api.downloadFailed'));
         }
 
-        // Get the blob and create download link
         const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
+        const objectUrl = window.URL.createObjectURL(blob);
+        const disposition = response.headers.get('content-disposition') || '';
+        const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+        const plainName = disposition.match(/filename="?([^";]+)"?/i)?.[1];
+        let filename = fallbackFilename;
+        try {
+            filename = encodedName ? decodeURIComponent(encodedName) : (plainName || fallbackFilename);
+        } catch (_) {
+            filename = fallbackFilename;
+        }
         const a = document.createElement('a');
-        a.href = url;
-        a.download = `report_${id}.${format}`;
+        a.href = objectUrl;
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
-        window.URL.revokeObjectURL(url);
+        window.URL.revokeObjectURL(objectUrl);
         document.body.removeChild(a);
+    },
+    downloadReport(id, format) {
+        return this.downloadFile(`/api/reports/${id}/download?format=${format}`, `report_${id}.${format}`);
+    },
+    downloadInspectionReport(id, format) {
+        return this.downloadFile(
+            `/api/inspections/reports/export/${id}/${format}`,
+            `inspection_report_${id}.${format === 'markdown' ? 'md' : format}`
+        );
     },
 
     // AI Model endpoints
@@ -351,12 +383,10 @@ const API = {
         return this.delete(`/api/docs/${docId}`);
     },
     exportDocument(docId) {
-        const a = document.createElement('a');
-        a.href = `/api/docs/${docId}/export`;
-        a.setAttribute('download', '');
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        return this.downloadFile(`/api/docs/${docId}/export`, `document_${docId}.md`);
+    },
+    exportSkill(skillId) {
+        return this.downloadFile(`/api/skills/${skillId}/export`, `${skillId}.yaml`);
     },
     async importDocument(categoryId, title, markdownContent) {
         return this.post('/api/docs', {

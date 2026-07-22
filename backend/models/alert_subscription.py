@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Text, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import synonym
 from sqlalchemy.sql import func
@@ -17,6 +17,8 @@ class AlertSubscription(SoftDeleteMixin, Base):
     integration_targets = Column(JSONB, nullable=False, default=list)
     is_enabled = Column("is_enabled", Boolean, nullable=False, default=True, index=True)
     aggregation_script = Column(Text, nullable=True)
+    locale = Column(String(35), nullable=True)
+    timezone = Column(String(64), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
     enabled = synonym("is_enabled")

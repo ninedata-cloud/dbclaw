@@ -13,6 +13,8 @@ class InspectionTrigger(Base):
     datasource_id = Column(Integer, nullable=False, index=True)
     trigger_type = Column(String(20), nullable=False)  # 'scheduled', 'manual', 'anomaly', 'connection_failure'
     trigger_reason = Column(String(500), nullable=True)  # e.g., "CPU 95% > 80% for 60s"
+    requested_locale = Column(String(35), nullable=False, default="zh-CN", server_default="zh-CN")
+    requested_timezone = Column(String(64), nullable=False, default="Asia/Shanghai", server_default="Asia/Shanghai")
     datasource_metric = Column(JSONB, nullable=True)  # metrics at trigger time
     triggered_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
     is_processed = Column("is_processed", Boolean, default=False, nullable=False)

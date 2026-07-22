@@ -226,3 +226,21 @@ code: |
           }
       
       return {"success": False, "error": f"Unknown query_type: {query_type}"}
+
+i18n:
+  zh-CN:
+    name: 查询系统元数据
+    description: 执行“查询系统元数据”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      query_type: query type。
+      sql: SQL 语句。
+      table: 表名。
+    permission_descriptions: {}
+  en-US:
+    name: Query System Metadata
+    description: Query system metadata with 5 modes - sql (safe SELECT queries), config (system configuration), statistics (counts), user (user list), health (service status)
+    parameter_descriptions:
+      query_type: Query type - sql, config, statistics, user, health
+      sql: SQL query (required when query_type=sql, SELECT only)
+      table: Optional table name for validation (used with sql mode)
+    permission_descriptions: {}

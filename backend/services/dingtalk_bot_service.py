@@ -17,6 +17,7 @@ from backend.services import config_service
 from backend.services.chat_orchestration_service import prepare_user_turn, process_stream_events, resolve_pending_approval
 from backend.services.feishu_service import format_reply_text
 from backend.utils.datetime_helper import now
+from backend.i18n.locale import resolve_background_preferences, translate
 
 logger = logging.getLogger(__name__)
 
@@ -108,37 +109,38 @@ def _approval_command(text: str) -> tuple[str, str] | None:
     return None
 
 
-def _tool_display_name(tool_name: str | None) -> str:
+def _tool_display_name(tool_name: str | None, locale: str) -> str:
     if not tool_name:
-        return "执行操作"
-    return TOOL_LABELS.get(tool_name, tool_name)
+        return translate(locale, "bot.approval.default_tool")
+    return TOOL_LABELS.get(tool_name, tool_name) if locale == "zh-CN" else tool_name
 
 
-def _build_approval_prompt(event_obj: dict[str, Any]) -> str:
+def _build_approval_prompt(event_obj: dict[str, Any], locale: str = "zh-CN") -> str:
     approval_id = str(event_obj.get("approval_id") or "")
-    summary = str(event_obj.get("summary") or "需要确认后才能继续执行该操作。").strip()
-    risk_level = RISK_LEVEL_LABELS.get(str(event_obj.get("risk_level") or "high"), "高")
-    risk_reason = str(event_obj.get("risk_reason") or "该操作存在潜在风险。").strip()
-    tool_name = _tool_display_name(str(event_obj.get("tool_name") or ""))
+    summary = str(event_obj.get("summary") or translate(locale, "bot.approval.default_summary")).strip()
+    risk_code = str(event_obj.get("risk_level") or "high")
+    risk_level = translate(locale, f"bot.risk.{risk_code}")
+    risk_reason = str(event_obj.get("risk_reason") or translate(locale, "bot.approval.default_risk_reason")).strip()
+    tool_name = _tool_display_name(str(event_obj.get("tool_name") or ""), locale)
     plan_markdown = format_reply_text(str(event_obj.get("plan_markdown") or "").strip())
 
     lines = [
-        f"需要确认：{tool_name}",
+        translate(locale, "bot.approval.required", {"tool": tool_name}),
         summary,
-        f"风险级别：{risk_level}",
-        f"风险说明：{risk_reason}",
-        f"审批ID：{approval_id}",
+        translate(locale, "bot.approval.risk_level", {"level": risk_level}),
+        translate(locale, "bot.approval.risk_reason", {"reason": risk_reason}),
+        translate(locale, "bot.approval.id", {"approval_id": approval_id}),
     ]
     if plan_markdown:
         lines.extend([
             "",
-            "执行计划：",
+            translate(locale, "bot.approval.plan"),
             plan_markdown,
         ])
     lines.extend([
         "",
-        f"继续执行请回复：批准 {approval_id}",
-        f"拒绝执行请回复：拒绝 {approval_id}",
+        translate(locale, "bot.approval.reply_approve", {"approval_id": approval_id}),
+        translate(locale, "bot.approval.reply_reject", {"approval_id": approval_id}),
     ])
     return "\n".join(line for line in lines if line is not None).strip()
 
@@ -278,7 +280,8 @@ class DingTalkBotService:
             await db.commit()
             return binding
 
-        session = DiagnosticSession(user_id=None, title=title)
+        locale, _timezone = await resolve_background_preferences(db)
+        session = DiagnosticSession(user_id=None, title=title, default_locale=locale)
         db.add(session)
         await db.commit()
         await db.refresh(session)
@@ -309,6 +312,11 @@ class DingTalkBotService:
             return False
 
         action, approval_id = command
+        locale, _timezone = await resolve_background_preferences(
+            db,
+            locale=getattr(binding, "locale", None),
+            timezone=getattr(binding, "timezone", None),
+        )
         chunks: list[str] = []
         errors: list[str] = []
         approval_prompts: list[str] = []
@@ -321,7 +329,7 @@ class DingTalkBotService:
             if event_type_local == "content":
                 chunks.append(event_obj.get("content", ""))
             elif event_type_local == "approval_request":
-                approval_prompts.append(_build_approval_prompt(event_obj))
+                approval_prompts.append(_build_approval_prompt(event_obj, locale))
             elif event_type_local == "error":
                 error_text = str(event_obj.get("content") or event_obj.get("message") or "").strip()
                 if error_text:
@@ -337,13 +345,15 @@ class DingTalkBotService:
                 user_id=None,
                 pending_approvals=PENDING_APPROVALS,
                 on_event=on_event,
+                locale=locale,
             )
-        except Exception as exc:
-            await send_reply(f"审批处理失败：{str(exc)}")
+        except Exception:
+            logger.exception("Failed to process DingTalk approval: session_id=%s approval_id=%s", binding.session_id, approval_id)
+            await send_reply(translate(locale, "bot.approval.failed"))
             return True
 
         if result["status"] == "rejected":
-            await send_reply("已拒绝执行该操作。")
+            await send_reply(translate(locale, "bot.approval.rejected"))
             return True
 
         if approval_prompts:
@@ -355,7 +365,7 @@ class DingTalkBotService:
             await send_reply(error_text)
             return True
 
-        await send_reply(_finalize_reply_text(chunks) or "已批准执行。")
+        await send_reply(_finalize_reply_text(chunks) or translate(locale, "bot.approval.approved"))
         return True
 
     @staticmethod
@@ -394,6 +404,11 @@ class DingTalkBotService:
             integration=integration,
             title=title,
         )
+        locale, _timezone = await resolve_background_preferences(
+            db,
+            locale=getattr(binding, "locale", None),
+            timezone=getattr(binding, "timezone", None),
+        )
 
         lock = _MESSAGE_LOCKS.setdefault(_message_lock_key(message), asyncio.Lock())
         async with lock:
@@ -421,6 +436,7 @@ class DingTalkBotService:
                 payload_datasource_id=None,
                 model_id=None,
                 history_window_hours=BOT_HISTORY_WINDOW_HOURS,
+                content_locale=locale,
             )
 
             chunks: list[str] = []
@@ -435,7 +451,7 @@ class DingTalkBotService:
                 if event_type_local == "content":
                     chunks.append(event_obj.get("content", ""))
                 elif event_type_local == "approval_request":
-                    approval_prompts.append(_build_approval_prompt(event_obj))
+                    approval_prompts.append(_build_approval_prompt(event_obj, locale))
                 elif event_type_local == "error":
                     error_text = str(event_obj.get("content") or event_obj.get("message") or "").strip()
                     if error_text:
@@ -454,6 +470,7 @@ class DingTalkBotService:
                 pending_approvals=PENDING_APPROVALS,
                 on_event=on_event,
                 history_window_hours=BOT_HISTORY_WINDOW_HOURS,
+                locale=locale,
             )
 
             await DingTalkBotService.mark_event_processed(
@@ -472,5 +489,5 @@ class DingTalkBotService:
                 await send_reply(error_text)
                 return {"ok": True, "session_id": binding.session_id, "error": True}
 
-            await send_reply(_finalize_reply_text(chunks) or "已收到消息。")
+            await send_reply(_finalize_reply_text(chunks) or translate(locale, "bot.message_received"))
             return {"ok": True, "session_id": binding.session_id}

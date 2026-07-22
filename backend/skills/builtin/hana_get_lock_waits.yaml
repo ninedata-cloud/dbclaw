@@ -53,3 +53,19 @@ code: |
           "lock_waits": lock_waits,
           "count": len(lock_waits)
       }
+
+i18n:
+  zh-CN:
+    name: SAP HANA 锁等待
+    description: 执行“SAP HANA 锁等待”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+    permission_descriptions:
+      execute_query: 允许执行受控数据库查询
+  en-US:
+    name: HANA Lock Waits
+    description: Get SAP HANA blocked transactions and lock wait information to diagnose blocking issues
+    parameter_descriptions:
+      datasource_id: The database connection ID
+    permission_descriptions:
+      execute_query: Execute governed database queries

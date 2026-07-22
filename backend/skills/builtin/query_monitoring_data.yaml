@@ -110,3 +110,23 @@ code: |
               "limit": limit
           }
       }
+
+i18n:
+  zh-CN:
+    name: 查询监控数据
+    description: 执行“查询监控数据”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+      metric_type: metric type。
+      minutes: 分钟数。
+      limit: 返回条数上限。
+    permission_descriptions: {}
+  en-US:
+    name: Query Monitoring Data
+    description: Query historical monitoring metrics with statistics calculation (avg, min, max)
+    parameter_descriptions:
+      datasource_id: Filter by datasource ID (if omitted, return all datasource)
+      metric_type: Filter by metric type (db_status, os_metrics, etc.)
+      minutes: Time range in minutes (default 60)
+      limit: Max records to return (default 100, max 1000)
+    permission_descriptions: {}

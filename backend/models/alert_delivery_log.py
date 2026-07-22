@@ -16,6 +16,8 @@ class AlertDeliveryLog(Base):
     recipient = Column(String(255), nullable=False)
     status = Column(String(20), nullable=False, default="pending", index=True)  # pending, sent, failed
     error_message = Column(Text, nullable=True)
+    rendered_locale = Column(String(35), nullable=True)
+    rendered_timezone = Column(String(64), nullable=True)
     sent_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())

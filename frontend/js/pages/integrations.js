@@ -89,7 +89,7 @@ class IntegrationsPage {
         const localeKey = metadata[integration?.integration_id]?.[key]?.[field];
         if (localeKey) return this._t(`schemaFields.${localeKey}`);
         const fallback = field === 'title' ? (prop.title || key) : (prop.description || '');
-        return I18n.translateLegacyText(fallback);
+        return fallback;
     }
 
     _localizedSchema(integration) {

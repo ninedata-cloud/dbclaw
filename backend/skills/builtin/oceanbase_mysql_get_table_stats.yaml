@@ -29,3 +29,19 @@ code: |
       if not result.get("success"):
           return {"success": False, "error": result.get("error", "Failed to get table stats")}
       return {"success": True, "tables": result.get("data", []), "columns": result.get("columns", [])}
+
+i18n:
+  zh-CN:
+    name: OceanBase MySQL 表统计信息
+    description: 执行“OceanBase MySQL 表统计信息”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+    permission_descriptions:
+      execute_query: 允许执行受控数据库查询
+  en-US:
+    name: OceanBase MySQL Table Stats
+    description: Get OceanBase MySQL table-level statistics including row counts and sizes
+    parameter_descriptions:
+      datasource_id: The OceanBase MySQL datasource ID
+    permission_descriptions:
+      execute_query: Execute governed database queries

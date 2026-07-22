@@ -149,3 +149,23 @@ code: |
           "sent_count": len(sent),
           "failed_count": len(failed)
       }
+
+i18n:
+  zh-CN:
+    name: 发送短信
+    description: 执行“发送短信”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      phone: 手机号。
+      message: 消息正文。
+      provider: provider。
+    permission_descriptions:
+      access_external_api: 允许访问外部 API
+  en-US:
+    name: Send SMS
+    description: Send an SMS message to specified phone numbers via configured SMS provider (webhook or Aliyun)
+    parameter_descriptions:
+      phone: Recipient phone number (E.164 format recommended, e.g. +8613800138000, or comma-separated for multiple)
+      message: SMS message content (keep under 70 characters for a single SMS)
+      provider: Override SMS provider (webhook or aliyun). Defaults to system-configured sms_provider.
+    permission_descriptions:
+      access_external_api: Access external APIs

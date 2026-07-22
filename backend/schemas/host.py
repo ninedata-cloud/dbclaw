@@ -48,3 +48,4 @@ class HostResponse(TimestampSerializerMixin, BaseModel):
 class SSHTestResult(BaseModel):
     success: bool
     message: str
+    error_code: Optional[str] = None

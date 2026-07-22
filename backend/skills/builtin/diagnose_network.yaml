@@ -137,3 +137,21 @@ code: |
           results["diagnosis"]["tcp_kernel_params"] = tcp_params.get("output", "")
 
       return results
+
+i18n:
+  zh-CN:
+    name: 诊断网络状态
+    description: 执行“诊断网络状态”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+      host_id: 主机 ID。
+    permission_descriptions:
+      execute_command: 允许执行受控主机命令
+  en-US:
+    name: Diagnose Network Status
+    description: Diagnose network status by checking interface traffic, TCP connection states, network errors/drops, bandwidth usage, and top network connections
+    parameter_descriptions:
+      datasource_id: The database connection ID (must have host configured)
+      host_id: The SSH host ID to execute commands on (alternative to datasource_id)
+    permission_descriptions:
+      execute_command: Execute governed host commands

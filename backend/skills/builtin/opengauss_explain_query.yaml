@@ -49,3 +49,21 @@ code: |
 
       plan = await connector.explain_query(query)
       return {"success": True, "data": plan}
+
+i18n:
+  zh-CN:
+    name: openGauss 执行计划分析
+    description: 执行“openGauss 执行计划分析”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+      query: 查询语句。
+    permission_descriptions:
+      read_datasource: 允许读取数据源和平台元数据
+  en-US:
+    name: opengauss_explain_query
+    description: Get query execution plan for openGauss
+    parameter_descriptions:
+      datasource_id: ID of the openGauss datasource
+      query: SQL query to explain
+    permission_descriptions:
+      read_datasource: Read datasource and platform metadata

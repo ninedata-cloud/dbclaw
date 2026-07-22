@@ -14,6 +14,7 @@ from backend.services.os_metrics_service import OSMetricsService
 from backend.utils.command_safety import STRICTLY_BLOCKED_COMMAND_PATTERNS, first_matching_command_pattern
 from backend.utils.db_connector import _is_read_only_query
 from backend.utils.encryption import decrypt_value
+from backend.i18n.locale import get_active_locale, translate
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +42,12 @@ async def execute_tool(tool_name: str, arguments: Dict[str, Any]) -> str:
     try:
         result = await _dispatch_tool(tool_name, arguments)
         return json.dumps(result, default=str, ensure_ascii=False)
-    except Exception as e:
-        logger.error(f"Tool execution error [{tool_name}]: {e}")
-        return json.dumps({"error": str(e)})
+    except Exception:
+        logger.exception("Tool execution error [%s]", tool_name)
+        return json.dumps({
+            "error": translate(get_active_locale(), "operation.failed"),
+            "error_code": "operation.failed",
+        })
 
 
 async def _dispatch_tool(tool_name: str, args: Dict[str, Any]) -> Any:
@@ -219,8 +223,13 @@ async def _tool_execute_os_command(args):
         if len(output) > 8000:
             output = output[:8000] + "\n... [output truncated]"
         return {"command": command, "output": output}
-    except Exception as e:
-        return {"command": command, "error": str(e)}
+    except Exception:
+        logger.exception("Read-only host diagnostic command failed")
+        return {
+            "command": command,
+            "error": translate(get_active_locale(), "operation.failed"),
+            "error_code": "operation.failed",
+        }
 
 
 async def _tool_get_metric_history(args):

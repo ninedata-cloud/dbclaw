@@ -35,10 +35,10 @@ const InspectionPage = {
         const minutes = Math.floor((seconds % 3600) / 60);
         const remainSeconds = seconds % 60;
 
-        if (days > 0) return `${days} 天 ${hours} 小时`;
-        if (hours > 0) return `${hours} 小时 ${minutes} 分`;
-        if (minutes > 0) return `${minutes} 分 ${remainSeconds} 秒`;
-        return `${remainSeconds} 秒`;
+        if (days > 0) return I18n.t('pageCopy.inspection.durationDaysHours', { value0: days, value1: hours });
+        if (hours > 0) return I18n.t('pageCopy.inspection.durationHoursMinutes', { value0: hours, value1: minutes });
+        if (minutes > 0) return I18n.t('pageCopy.inspection.durationMinutesSeconds', { value0: minutes, value1: remainSeconds });
+        return I18n.t('pageCopy.inspection.durationSeconds', { value0: remainSeconds });
     },
 
     async render() {
@@ -68,17 +68,7 @@ const InspectionPage = {
         // Build header with filters (like dashboard layout)
         const headerActions = this._buildHeaderActions();
 
-        content.innerHTML = `
-            <div class="inspection-page">
-                <section id="reportList">
-                    <div id="reports"></div>
-                    <div class="inspection-pagination">
-                        <div id="inspection-list-meta" class="inspection-list-meta">正在加载最新报告...</div>
-                        <div id="pagination" class="inspection-pagination-controls"></div>
-                    </div>
-                </section>
-            </div>
-        `;
+        content.innerHTML = I18n.t('pageCopy.inspection.loadingLatestReports');
         if (options.embedded) {
             const page = content.querySelector('.inspection-page');
             const embeddedToolbar = DOM.el('div', {
@@ -94,12 +84,12 @@ const InspectionPage = {
             });
             embeddedToolbar.appendChild(DOM.el('div', {
                 className: 'instance-embedded-title',
-                textContent: '巡检管理'
+                textContent: I18n.t('pageCopy.inspection.inspectionManagement')
             }));
             embeddedToolbar.appendChild(headerActions);
             content.insertBefore(embeddedToolbar, page);
         } else {
-            Header.render('数据库智能巡检', headerActions);
+            Header.render(I18n.t('pageCopy.inspection.intelligentDatabaseInspection'), headerActions);
         }
 
         await this.loadReports();
@@ -115,23 +105,7 @@ const InspectionPage = {
     _buildHeaderActions() {
         // Build filters container
         const filtersContainer = DOM.el('div', { className: 'dashboard-filters inspection-header-filters' });
-        filtersContainer.innerHTML = `
-            ${this._renderOptions?.fixedDatasourceId ? '' : '<div id="filterDatasource" class="inspection-filter-datasource"></div>'}
-            <select id="filterStatus" class="filter-select">
-                <option value="">所有状态</option>
-                <option value="completed">已完成</option>
-                <option value="generating">生成中</option>
-                <option value="failed">失败</option>
-            </select>
-            <select id="filterTriggerType" class="filter-select">
-                <option value="">所有类型</option>
-                <option value="manual">手动</option>
-                <option value="scheduled">定时</option>
-                <option value="anomaly">异常</option>
-            </select>
-            <input type="date" id="filterStartDate" class="filter-input inspection-date-input" data-date-picker placeholder="${I18n.t('placeholders.startDate')}">
-            <input type="date" id="filterEndDate" class="filter-input inspection-date-input" data-date-picker placeholder="${I18n.t('placeholders.endDate')}">
-        `;
+        filtersContainer.innerHTML = I18n.t('pageCopy.inspection.filterControls', { value0: this._renderOptions?.fixedDatasourceId ? '' : '<div id="filterDatasource" class="inspection-filter-datasource"></div>', value1: I18n.t('placeholders.startDate'), value2: I18n.t('placeholders.endDate') });
 
         // Bind events after render
         setTimeout(() => {
@@ -163,7 +137,7 @@ const InspectionPage = {
         this.datasourceSelector = new DatasourceSelector({
             container: DOM.$('#filterDatasource'),
             allowEmpty: true,
-            emptyText: '所有数据源',
+            emptyText: I18n.t('pageCopy.inspection.allDatasources'),
             minWidth: '280px',
             maxWidth: '320px',
             showStatus: true,
@@ -212,12 +186,7 @@ const InspectionPage = {
 
         // Show loading indicator only on initial load or filter change
         if (!this.pollInterval || container.innerHTML === '') {
-            container.innerHTML = `
-                <div class="inspection-state">
-                    <div class="spinner"></div>
-                    <p>正在加载巡检报告...</p>
-                </div>
-            `;
+            container.innerHTML = I18n.t('pageCopy.inspection.loadingInspectionReport');
         }
 
         try {
@@ -236,13 +205,7 @@ const InspectionPage = {
             }
 
             if (reports.length === 0) {
-                container.innerHTML = `
-                    <div class="inspection-state inspection-state-empty">
-                        <i data-lucide="file-search"></i>
-                        <h3>未找到报告</h3>
-                        <p>当前筛选条件下没有巡检记录，调整后再试一次。</p>
-                    </div>
-                `;
+                container.innerHTML = I18n.t('pageCopy.inspection.noReportsFoundNoInspectionRecordsMatch');
                 DOM.$('#pagination').innerHTML = '';
                 DOM.createIcons();
                 return;
@@ -250,90 +213,31 @@ const InspectionPage = {
 
             const renderTriggerBadge = (triggerType) => {
                 const map = {
-                    anomaly: { label: '异常触发', className: 'danger' },
-                    scheduled: { label: '定时触发', className: 'success' },
-                    manual: { label: '手动触发', className: 'info' },
-                    threshold: { label: '阈值触发', className: 'warning' }
+                    anomaly: { label: I18n.t('pageCopy.inspection.exceptionTrigger'), className: 'danger' },
+                    connection_failure: { label: I18n.t('pageCopy.inspection.connectionFailureTrigger'), className: 'danger' },
+                    baseline: { label: I18n.t('pageCopy.inspection.baselineTrigger'), className: 'warning' },
+                    scheduled: { label: I18n.t('pageCopy.inspection.timingTrigger'), className: 'success' },
+                    manual: { label: I18n.t('pageCopy.inspection.manualTrigger'), className: 'info' },
+                    threshold: { label: I18n.t('pageCopy.inspection.thresholdTrigger'), className: 'warning' }
                 };
                 const meta = map[triggerType] || { label: this.formatTriggerType(triggerType), className: 'muted' };
                 return `<span class="inspection-pill ${meta.className}">${this._escapeHtml(meta.label)}</span>`;
             };
 
-	            container.innerHTML = `
-	                <div class="data-table-container inspection-table-container">
-	                    <table class="data-table inspection-table ${showDatasourceColumn ? '' : 'inspection-table-instance'}">
-	                        <thead>
-	                            <tr>
-	                                <th class="inspection-col-id">编号</th>
-	                                ${showDatasourceColumn ? '<th class="inspection-col-source">数据源</th>' : ''}
-	                                <th class="inspection-col-trigger">触发类型</th>
-	                                <th class="inspection-col-status">报告状态</th>
-	                                <th class="inspection-col-title">标题</th>
-	                                <th class="inspection-col-time">创建时间</th>
-                                <th class="inspection-col-reason">触发原因</th>
-                                <th class="inspection-actions-col">操作</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${reports.map(r => {
+	            container.innerHTML = I18n.t('pageCopy.inspection.idValueTriggerTypeReportStatusTitle', { value0: showDatasourceColumn ? '' : 'inspection-table-instance', value1: showDatasourceColumn ? I18n.t('pageCopy.inspection.datasource') : '', value2: reports.map(r => {
                                 const statusMeta = InspectionPage.formatReportStatus(r.status);
-	                                return `
-	                                    <tr>
-	                                        <td class="inspection-col-id">
-	                                            <div class="inspection-id-text">#${InspectionPage._escapeHtml(r.report_id)}</div>
-	                                        </td>
-	                                        ${showDatasourceColumn ? `
+	                            const reportTitle = InspectionPage.formatReportTitle(r);
+	                            const triggerReason = InspectionPage.formatTriggerReason(r);
+	                                return I18n.t('pageCopy.inspection.reportRow', { value0: InspectionPage._escapeHtml(r.report_id), value1: showDatasourceColumn ? `
 	                                        <td class="inspection-col-source">
 	                                            <div class="inspection-cell-stack">
 	                                                <div class="inspection-primary-text inspection-nowrap-text" title="${InspectionPage._escapeAttr(r.datasource_name || 'N/A')}">${InspectionPage._escapeHtml(r.datasource_name || 'N/A')}</div>
 	                                            </div>
 	                                        </td>
-	                                        ` : ''}
-                                        <td class="inspection-col-trigger">${renderTriggerBadge(r.trigger_type)}</td>
-                                        <td class="inspection-col-status">
-                                            <div class="inspection-status-cell">
-                                                <span class="inspection-pill ${statusMeta.badge}">${InspectionPage._escapeHtml(statusMeta.text)}</span>
-                                                ${r.status !== 'completed' && r.error_message ? `
+	                                        ` : '', value2: renderTriggerBadge(r.trigger_type), value3: statusMeta.badge, value4: InspectionPage._escapeHtml(statusMeta.text), value5: r.status !== 'completed' && r.error_message ? `
                                                     <span class="error-icon" data-error="${InspectionPage._escapeAttr(r.error_message)}">⚠</span>
-                                                ` : ''}
-                                            </div>
-                                        </td>
-	                                        <td class="inspection-col-title">
-	                                            <div class="inspection-primary-text inspection-nowrap-text" title="${InspectionPage._escapeAttr(r.title)}">${InspectionPage._escapeHtml(r.title)}</div>
-	                                        </td>
-                                        <td class="inspection-col-time">
-                                            <div class="inspection-secondary-text inspection-time-text">${InspectionPage._escapeHtml(Format.datetime(r.created_at))}</div>
-                                        </td>
-                                        <td class="inspection-col-reason">
-                                            <div class="inspection-reason-text" title="${InspectionPage._escapeAttr(r.trigger_reason || '-')}">${InspectionPage._escapeHtml(r.trigger_reason || '-')}</div>
-                                        </td>
-                                        <td class="inspection-actions-col">
-                                            <div class="inspection-actions-cell">
-                                                <button
-                                                    onclick="InspectionPage.viewReport(${r.report_id})"
-                                                    class="inspection-action-btn inspection-action-btn-primary"
-                                                    title="查看报告"
-                                                    aria-label="查看报告"
-                                                >
-                                                    <i data-lucide="file-text"></i>
-                                                </button>
-                                                <button
-                                                    onclick="InspectionPage.confirmDelete(${r.report_id})"
-                                                    class="inspection-action-btn inspection-action-btn-danger"
-                                                    title="删除报告"
-                                                    aria-label="删除报告"
-                                                >
-                                                    <i data-lucide="trash-2"></i>
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                `;
-                            }).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            `;
+                                                ` : '', value6: InspectionPage._escapeAttr(reportTitle), value7: InspectionPage._escapeHtml(reportTitle), value8: InspectionPage._escapeHtml(Format.datetime(r.created_at)), value9: InspectionPage._escapeAttr(triggerReason), value10: InspectionPage._escapeHtml(triggerReason), value11: r.report_id, value12: r.report_id });
+                            }).join('') });
 
             // Setup error icon tooltips
             this.setupErrorTooltips();
@@ -355,13 +259,8 @@ const InspectionPage = {
             }
         } catch (error) {
             console.error('Failed to load reports:', error);
-            container.innerHTML = `
-                <div class="inspection-state inspection-state-error">
-                    <h3>加载失败</h3>
-                    <p>巡检报告获取失败，请刷新后重试。</p>
-                </div>
-            `;
-            Toast.show('加载报告失败', 'error');
+            container.innerHTML = I18n.t('pageCopy.inspection.loadFailedFailedToObtainTheInspection');
+            Toast.show(I18n.t('pageCopy.inspection.failedToLoadReport'), 'error');
         }
     },
 
@@ -378,7 +277,7 @@ const InspectionPage = {
         const buttons = [];
 
         // Previous button
-        buttons.push(`<button class="btn btn-sm btn-secondary inspection-pagination-btn" ${this.currentPage === 1 ? 'disabled' : ''} onclick="InspectionPage.goToPage(${this.currentPage - 1})">上一页</button>`);
+        buttons.push(I18n.t('pageCopy.inspection.previous', { value0: this.currentPage === 1 ? 'disabled' : '', value1: this.currentPage - 1 }));
 
         // Page numbers
         for (let i = 1; i <= totalPages; i++) {
@@ -390,7 +289,7 @@ const InspectionPage = {
         }
 
         // Next button
-        buttons.push(`<button class="btn btn-sm btn-secondary inspection-pagination-btn" ${this.currentPage === totalPages ? 'disabled' : ''} onclick="InspectionPage.goToPage(${this.currentPage + 1})">下一页</button>`);
+        buttons.push(I18n.t('pageCopy.inspection.next', { value0: this.currentPage === totalPages ? 'disabled' : '', value1: this.currentPage + 1 }));
 
         pagination.innerHTML = buttons.join('');
     },
@@ -402,25 +301,68 @@ const InspectionPage = {
 
     formatReportStatus(status) {
         const map = {
-            completed: { text: '已完成', badge: 'success' },
-            partial: { text: '部分结果', badge: 'warning' },
-            timed_out: { text: '已超时', badge: 'warning' },
-            awaiting_confirm: { text: '待确认', badge: 'warning' },
-            failed: { text: '失败', badge: 'danger' },
-            generating: { text: '生成中', badge: 'info' }
+            completed: { text: I18n.t('pageCopy.inspection.completed'), badge: 'success' },
+            partial: { text: I18n.t('pageCopy.inspection.partialResults'), badge: 'warning' },
+            timed_out: { text: I18n.t('pageCopy.inspection.timedOut'), badge: 'warning' },
+            awaiting_confirm: { text: I18n.t('pageCopy.inspection.toBeConfirmed'), badge: 'warning' },
+            failed: { text: I18n.t('pageCopy.inspection.failed'), badge: 'danger' },
+            generating: { text: I18n.t('pageCopy.inspection.generating'), badge: 'info' }
         };
-        return map[status] || { text: status || '未知', badge: 'warning' };
+        return map[status] || { text: status || I18n.t('pageCopy.inspection.unknown'), badge: 'warning' };
     },
 
     formatTriggerType(triggerType) {
         const map = {
-            anomaly: '异常触发',
-            scheduled: '定时触发',
-            threshold: '阈值触发',
-            manual: '手动触发',
-            connection_failure: '连接失败'
+            anomaly: I18n.t('pageCopy.inspection.exceptionTrigger'),
+            scheduled: I18n.t('pageCopy.inspection.timingTrigger'),
+            threshold: I18n.t('pageCopy.inspection.thresholdTrigger'),
+            baseline: I18n.t('pageCopy.inspection.baselineTrigger'),
+            manual: I18n.t('pageCopy.inspection.manualTrigger'),
+            connection_failure: I18n.t('pageCopy.inspection.connectionFailureTrigger')
         };
-        return map[triggerType] || triggerType || '未知类型';
+        return map[triggerType] || triggerType || I18n.t('pageCopy.inspection.unknownType');
+    },
+
+    formatReportTitle(report) {
+        const titleKeys = {
+            anomaly: 'pageCopy.inspection.anomalyInspectionTitle',
+            connection_failure: 'pageCopy.inspection.connectionFailureInspectionTitle',
+            baseline: 'pageCopy.inspection.baselineInspectionTitle',
+            scheduled: 'pageCopy.inspection.scheduledInspectionTitle',
+            manual: 'pageCopy.inspection.manualInspectionTitle',
+            threshold: 'pageCopy.inspection.thresholdInspectionTitle'
+        };
+        const titleKey = titleKeys[report?.trigger_type];
+        if (!titleKey || !report?.datasource_name) {
+            return report?.title || I18n.t('pageCopy.inspection.untitledReport');
+        }
+        return I18n.t('pageCopy.inspection.reportTitle', {
+            value0: I18n.t(titleKey),
+            value1: report.datasource_name
+        });
+    },
+
+    formatTriggerReason(report) {
+        const reason = String(report?.trigger_reason || '').trim();
+        if (!reason) return '-';
+
+        if (report?.trigger_type === 'manual'
+            && /^(?:manual inspection|inspection requested|\u4eba\u5de5(?:\u89e6\u53d1)?\u5de1\u68c0|\u624b\u52a8\u5de1\u68c0)$/i.test(reason)) {
+            return I18n.t('pageCopy.inspection.manualInspectionReason');
+        }
+        if (report?.trigger_type === 'scheduled'
+            && /^(?:scheduled inspection|\u5b9a\u65f6\u5de1\u68c0|\u8ba1\u5212\u5de1\u68c0)$/i.test(reason)) {
+            return I18n.t('pageCopy.inspection.scheduledInspectionReason');
+        }
+        if (report?.trigger_type === 'connection_failure') {
+            const match = reason.match(/^(?:database connection failed|数据库连接失败)\s*[:：]?\s*(.*)$/i);
+            if (match) {
+                return match[1]
+                    ? I18n.t('pageCopy.inspection.connectionFailureReasonDetail', { value0: match[1] })
+                    : I18n.t('pageCopy.inspection.connectionFailureReason');
+            }
+        }
+        return reason;
     },
 
     async viewReport(reportId) {
@@ -433,86 +375,24 @@ const InspectionPage = {
 
             const statusMeta = this.formatReportStatus(report.status);
             const triggerTypeLabel = this.formatTriggerType(report.trigger_type || 'manual');
-            const datasourceLabel = report.datasource_name || (report.datasource_id ? `数据源 #${report.datasource_id}` : '未关联数据源');
+            const datasourceLabel = report.datasource_name || (report.datasource_id ? I18n.t('pageCopy.inspection.datasourceValue', { value0: report.datasource_id }) : I18n.t('pageCopy.inspection.datasourceNotAssociated'));
+            const reportTitle = this.formatReportTitle(report);
+            const triggerReason = this.formatTriggerReason(report);
             const createdAtLabel = report.created_at ? Format.datetime(report.created_at) : '-';
             const completedAtLabel = report.completed_at ? Format.datetime(report.completed_at) : null;
             const completedAtDisplay = completedAtLabel
-                ? `${completedAtLabel}${report.completed_at_inferred ? '（补记）' : ''}`
-                : (report.status === 'generating' ? '生成中' : '未记录');
+                ? `${completedAtLabel}${report.completed_at_inferred ? I18n.t('pageCopy.inspection.supplementLabel') : ''}`
+                : (report.status === 'generating' ? I18n.t('pageCopy.inspection.generating') : I18n.t('pageCopy.inspection.notRecorded'));
             const durationLabel = this._formatDurationSeconds(report.duration_seconds);
             const reportIdLabel = report.id ? `#${report.id}` : '-';
 
-            const summaryHtml = report.summary ? `
-                <section class="inspection-report-section inspection-report-summary">
-                    <div class="inspection-report-section-title">诊断摘要</div>
-                    <div class="inspection-report-summary-text">${safe(report.summary)}</div>
-                </section>
-            ` : '';
+            const summaryHtml = report.summary ? I18n.t('pageCopy.inspection.diagnosisSummaryValue', { value0: safe(report.summary) }) : '';
 
-            const triggerDetailsHtml = report.trigger_reason ? `
-                <section class="inspection-report-section inspection-report-trigger">
-                    <div class="inspection-report-section-title">触发原因</div>
-                    <div class="inspection-report-trigger-text">${safe(report.trigger_reason)}</div>
-                </section>
-            ` : '';
+            const triggerDetailsHtml = report.trigger_reason ? I18n.t('pageCopy.inspection.triggerReasonValue', { value0: safe(triggerReason) }) : '';
 
-            const diagnosisPrompt = `基于巡检/诊断报告，给出【现象-证据-根因-建议动作-验证方式】的处置建议。\n\n数据源：${datasourceLabel}\n报告标题：${report.title}\n触发类型：${report.trigger_type || '-'}\n触发原因：${report.trigger_reason || '-'}\n诊断摘要：${report.summary || '-'}\n\n如果需要，请调用技能进一步确认（Top SQL/EXPLAIN/连接情况/OS 指标）。`;
+            const diagnosisPrompt = I18n.t('pageCopy.inspection.basedOnTheInspectionDiagnosisReportGive', { value0: datasourceLabel, value1: reportTitle, value2: triggerTypeLabel, value3: triggerReason, value4: report.summary || '-' });
 
-            content.innerHTML = `
-                <div class="inspection-report-shell">
-                    <div class="inspection-report-toolbar">
-                        <button onclick="InspectionPage.${this._renderOptions?.embedded ? 'renderWithOptions' : 'render'}(${this._renderOptions?.embedded ? 'InspectionPage._renderOptions' : ''})" class="btn btn-secondary inspection-report-back">← 返回报告列表</button>
-                        <div class="inspection-report-toolbar-actions">
-                            ${report.alert_id ? `<button onclick="InspectionPage.openLinkedAlert(${report.alert_id})" class="btn btn-secondary">查看关联告警</button>` : ''}
-                            <button id="report-open-diagnosis" class="btn btn-secondary">进入 AI 诊断</button>
-                            <button onclick="InspectionPage.exportMarkdown(${reportId})" class="btn btn-secondary">导出 Markdown</button>
-                            <button onclick="InspectionPage.exportPDF(${reportId})" class="btn btn-primary">导出 PDF</button>
-                        </div>
-                    </div>
-
-                    <div class="inspection-report-header">
-                        <div class="inspection-report-header-top">
-                            <div class="inspection-report-heading-meta">
-                                <div class="inspection-report-kicker">巡检报告</div>
-                                <div class="inspection-report-id-chip">${safe(reportIdLabel)}</div>
-                            </div>
-                            <div class="inspection-report-badges">
-                                <span class="badge badge-${statusMeta.badge}">${safe(statusMeta.text)}</span>
-                                <span class="badge badge-info">${safe(triggerTypeLabel)}</span>
-                            </div>
-                        </div>
-                        <h1 class="inspection-report-title">${safe(report.title)}</h1>
-                        <div class="inspection-report-facts">
-                            <div class="inspection-report-fact">
-                                <span class="inspection-report-fact-label">数据源</span>
-                                <span class="inspection-report-fact-value" title="${safeAttr(datasourceLabel)}">${safe(datasourceLabel)}</span>
-                            </div>
-                            <div class="inspection-report-fact">
-                                <span class="inspection-report-fact-label">创建时间</span>
-                                <span class="inspection-report-fact-value">${safe(createdAtLabel)}</span>
-                            </div>
-                            <div class="inspection-report-fact">
-                                <span class="inspection-report-fact-label">完成时间</span>
-                                <span class="inspection-report-fact-value">${safe(completedAtDisplay)}</span>
-                            </div>
-                            <div class="inspection-report-fact">
-                                <span class="inspection-report-fact-label">耗时</span>
-                                <span class="inspection-report-fact-value">${safe(durationLabel || '—')}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="inspection-report-overview">
-                        ${summaryHtml}
-                        ${triggerDetailsHtml}
-                    </div>
-
-                    <section class="inspection-report-section inspection-report-body">
-                        <div class="inspection-report-section-title">报告正文</div>
-                        <div id="reportContent"></div>
-                    </section>
-                </div>
-            `;
+            content.innerHTML = I18n.t('pageCopy.inspection.returnToReportListValueEnterAi', { value0: this._renderOptions?.embedded ? 'renderWithOptions' : 'render', value1: this._renderOptions?.embedded ? 'InspectionPage._renderOptions' : '', value2: report.alert_id ? I18n.t('pageCopy.inspection.viewAssociatedAlarms', { value0: report.alert_id }) : '', value3: reportId, value4: reportId, value5: safe(reportIdLabel), value6: statusMeta.badge, value7: safe(statusMeta.text), value8: safe(triggerTypeLabel), value9: safe(reportTitle), value10: safeAttr(datasourceLabel), value11: safe(datasourceLabel), value12: safe(createdAtLabel), value13: safe(completedAtDisplay), value14: safe(durationLabel || '—'), value15: summaryHtml, value16: triggerDetailsHtml });
             const diagnosisBtn = DOM.$('#report-open-diagnosis');
             if (diagnosisBtn) {
                 diagnosisBtn.addEventListener('click', () => {
@@ -522,11 +402,11 @@ const InspectionPage = {
             const reportContent = DOM.$('#reportContent');
             reportContent.className = 'report-content-markdown';
             const fallbackContent = report.error_message
-                ? `## 报告未生成成功\n\n状态：${this.formatReportStatus(report.status).text}\n\n原因：${report.error_message}`
-                : '暂无内容';
+                ? I18n.t('pageCopy.inspection.successStatusValueReasonValue', { value0: this.formatReportStatus(report.status).text, value1: report.error_message })
+                : I18n.t('pageCopy.inspection.noContent');
             reportContent.innerHTML = MarkdownRenderer.render(report.content_md || fallbackContent);
         } catch (error) {
-            Toast.show(I18n.translateLegacyText('加载失败') + ': ' + error.message, 'error');
+            Toast.show(I18n.t('pageCopy.inspection.loadFailed') + ': ' + error.message, 'error');
         }
     },
 
@@ -542,7 +422,7 @@ const InspectionPage = {
                 Router.navigate('alerts');
             }
         } catch (error) {
-            Toast.show(`打开关联告警失败: ${error.message}`, 'error');
+            Toast.show(I18n.t('pageCopy.inspection.alarmfailedValue', { value0: error.message }), 'error');
         }
     },
 
@@ -561,50 +441,20 @@ const InspectionPage = {
 
     async exportMarkdown(reportId) {
         try {
-            const response = await fetch(`/api/inspections/reports/export/${reportId}/markdown`);
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.detail || '导出失败');
-            }
-
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `inspection_report_${reportId}_${new Date().toISOString().slice(0,10)}.md`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-
-            Toast.show('Markdown 导出成功', 'success');
+            await API.downloadInspectionReport(reportId, 'markdown');
+            Toast.show(I18n.t('pageCopy.inspection.markdownExportSuccessful'), 'success');
         } catch (error) {
-            Toast.show(`导出失败: ${error.message}`, 'error');
+            Toast.show(I18n.t('pageCopy.inspection.exportFailedValue', { value0: error.message }), 'error');
         }
     },
 
     async exportPDF(reportId) {
         try {
-            Toast.show('正在生成 PDF...', 'info');
-            const response = await fetch(`/api/inspections/reports/export/${reportId}/pdf`);
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.detail || '导出失败');
-            }
-
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `inspection_report_${reportId}_${new Date().toISOString().slice(0,10)}.pdf`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-
-            Toast.show('PDF 导出成功', 'success');
+            Toast.show(I18n.t('pageCopy.inspection.generatingPdf'), 'info');
+            await API.downloadInspectionReport(reportId, 'pdf');
+            Toast.show(I18n.t('pageCopy.inspection.pdfExportSuccessful'), 'success');
         } catch (error) {
-            Toast.show(`导出失败: ${error.message}`, 'error');
+            Toast.show(I18n.t('pageCopy.inspection.exportFailedValue', { value0: error.message }), 'error');
         }
     },
 
@@ -698,7 +548,7 @@ const InspectionPage = {
     },
 
     confirmDelete(reportId) {
-        if (confirm('确定要删除这个报告吗？此操作无法撤销。')) {
+        if (confirm(I18n.t('pageCopy.inspection.areYouSureYouWantToDelete'))) {
             this.deleteReport(reportId);
         }
     },
@@ -706,10 +556,10 @@ const InspectionPage = {
     async deleteReport(reportId) {
         try {
             await API.delete(`/api/inspections/reports/${reportId}`);
-            Toast.show('报告已删除', 'success');
+            Toast.show(I18n.t('pageCopy.inspection.reportDeleted'), 'success');
             await this.loadReports();
         } catch (error) {
-            Toast.show(`删除失败: ${error.message}`, 'error');
+            Toast.show(I18n.t('pageCopy.inspection.deleteFailedValue', { value0: error.message }), 'error');
         }
     },
 

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, desc, case
 
 from backend.utils.datetime_helper import now
+from backend.i18n.locale import DEFAULT_LOCALE, get_active_locale, normalize_locale, translate
 
 from backend.models.alert_message import AlertMessage
 from backend.models.alert_subscription import AlertSubscription
@@ -48,6 +49,8 @@ PROCESS_MARKERS = [
     "planning",
 ]
 CONNECTION_FAILURE_PREFIXES = [
+    "database connection failed:",
+    "database connection failed",
     "connection failed:",
     "connection failed",
     "数据库连接失败：",
@@ -62,6 +65,12 @@ AI_POLICY_FALLBACK_TITLES = {
     "AI 判警",
 }
 METRIC_DISPLAY_LABELS = {
+    "cpu_usage": "CPU 使用率",
+    "memory_usage": "内存使用率",
+    "disk_usage": "磁盘使用率",
+    "connection_status": "连接状态",
+    "qps": "QPS",
+    "tps": "TPS",
     "connections_active": "活跃连接数",
     "active_connections": "活跃连接数",
     "connection_count": "活跃连接数",
@@ -69,6 +78,21 @@ METRIC_DISPLAY_LABELS = {
     "connections_total": "总连接数",
     "total_connections": "总连接数",
     "threads_connected": "总连接数",
+}
+METRIC_DISPLAY_LABELS_EN = {
+    "cpu_usage": "CPU usage",
+    "memory_usage": "Memory usage",
+    "disk_usage": "Disk usage",
+    "connection_status": "Connection status",
+    "qps": "QPS",
+    "tps": "TPS",
+    "connections_active": "Active connections",
+    "active_connections": "Active connections",
+    "connection_count": "Active connections",
+    "threads_running": "Active connections",
+    "connections_total": "Total connections",
+    "total_connections": "Total connections",
+    "threads_connected": "Total connections",
 }
 DEFAULT_EVENT_AI_CONFIG = {
     "enabled": True,
@@ -252,11 +276,12 @@ def _compact_summary_text(text: Optional[str], *, max_chars: int = 120) -> Optio
     return cleaned
 
 
-def _display_metric_name(metric_name: Optional[str]) -> Optional[str]:
+def _display_metric_name(metric_name: Optional[str], locale: str = DEFAULT_LOCALE) -> Optional[str]:
     normalized = (metric_name or "").strip()
     if not normalized:
         return None
-    return METRIC_DISPLAY_LABELS.get(normalized.lower(), normalized)
+    labels = METRIC_DISPLAY_LABELS_EN if normalize_locale(locale) == "en-US" else METRIC_DISPLAY_LABELS
+    return labels.get(normalized.lower(), normalized)
 
 
 def _build_metric_semantic_hint(metric_name: Optional[str]) -> Optional[str]:
@@ -270,6 +295,12 @@ def _build_metric_semantic_hint(metric_name: Optional[str]) -> Optional[str]:
 
 def is_connection_status_alert(alert_type: Optional[str], metric_name: Optional[str]) -> bool:
     return (alert_type or "") == "system_error" and (metric_name or "") == "connection_status"
+
+
+def is_structured_system_alert(alert_type: Optional[str], metric_name: Optional[str]) -> bool:
+    return (alert_type or "") in {"threshold_violation", "baseline_deviation"} or is_connection_status_alert(
+        alert_type, metric_name
+    )
 
 
 def extract_connection_failure_detail(trigger_reason: Optional[str]) -> Optional[str]:
@@ -324,15 +355,28 @@ def build_ai_policy_display_metric_name(
     *,
     trigger_reason: Optional[str] = None,
     fault_domain: Optional[str] = None,
+    locale: str = DEFAULT_LOCALE,
 ) -> str:
     if not _is_generic_ai_policy_metric_name(metric_name):
         return str(metric_name).strip()
 
+    en = normalize_locale(locale) == "en-US"
+    semantic_labels = {
+        "connection": "Connection anomaly" if en else "连接异常",
+        "replication": "Replication anomaly" if en else "复制异常",
+        "combined": "Combined performance anomaly" if en else "综合性能异常",
+        "cpu": "CPU anomaly" if en else "CPU 异常",
+        "memory": "Memory anomaly" if en else "内存异常",
+        "storage": "Storage anomaly" if en else "存储异常",
+        "throughput": "Throughput anomaly" if en else "吞吐异常",
+        "general": "AI-detected anomaly" if en else "智能判定异常",
+    }
+
     reason = (trigger_reason or "").lower()
     if any(token in reason for token in ("连接失败", "connection failed", "login failed", "socket", "无法连接", "连通失败")):
-        return "连接异常"
+        return semantic_labels["connection"]
     if any(token in reason for token in ("复制", "replication", "lag", "延迟")):
-        return "复制异常"
+        return semantic_labels["replication"]
 
     perf_hits: set[str] = set()
     if any(token in reason for token in ("cpu", "处理器")):
@@ -347,26 +391,26 @@ def build_ai_policy_display_metric_name(
         perf_hits.add("throughput")
 
     if len(perf_hits) >= 2:
-        return "综合性能异常"
+        return semantic_labels["combined"]
     if "cpu" in perf_hits:
-        return "CPU 异常"
+        return semantic_labels["cpu"]
     if "memory" in perf_hits:
-        return "内存异常"
+        return semantic_labels["memory"]
     if "storage" in perf_hits:
-        return "存储异常"
+        return semantic_labels["storage"]
     if "connection" in perf_hits:
-        return "连接异常"
+        return semantic_labels["connection"]
     if "throughput" in perf_hits:
-        return "吞吐异常"
+        return semantic_labels["throughput"]
 
     domain_labels = {
-        "availability": "可用性异常",
-        "performance": "性能异常",
-        "storage": "存储异常",
-        "replication": "复制异常",
-        "general": "智能判定异常",
+        "availability": "Availability anomaly" if en else "可用性异常",
+        "performance": "Performance anomaly" if en else "性能异常",
+        "storage": semantic_labels["storage"],
+        "replication": semantic_labels["replication"],
+        "general": semantic_labels["general"],
     }
-    return domain_labels.get((fault_domain or "").lower(), "智能判定异常")
+    return domain_labels.get((fault_domain or "").lower(), semantic_labels["general"])
 
 
 def build_alert_display_title(
@@ -376,6 +420,7 @@ def build_alert_display_title(
     metric_name: Optional[str],
     trigger_reason: Optional[str],
     fault_domain: Optional[str] = None,
+    locale: str = DEFAULT_LOCALE,
 ) -> str:
     if (alert_type or "") != "ai_policy_violation":
         return title or "-"
@@ -391,8 +436,9 @@ def build_alert_display_title(
         metric_name,
         trigger_reason=trigger_reason,
         fault_domain=fault_domain,
+        locale=locale,
     )
-    return f"{metric_label}告警"
+    return f"{metric_label} alert" if normalize_locale(locale) == "en-US" else f"{metric_label}告警"
 
 
 def build_alert_display_metric_name(
@@ -401,6 +447,7 @@ def build_alert_display_metric_name(
     metric_name: Optional[str],
     trigger_reason: Optional[str],
     fault_domain: Optional[str] = None,
+    locale: str = DEFAULT_LOCALE,
 ) -> Optional[str]:
     if (alert_type or "") != "ai_policy_violation":
         return metric_name
@@ -408,6 +455,7 @@ def build_alert_display_metric_name(
         metric_name,
         trigger_reason=trigger_reason,
         fault_domain=fault_domain,
+        locale=locale,
     )
 
 
@@ -418,41 +466,63 @@ def build_alert_title_and_content(
     metric_value: Optional[float],
     threshold_value: Optional[float],
     trigger_reason: Optional[str],
+    locale: str = DEFAULT_LOCALE,
 ) -> tuple[str, str]:
-    metric_display_name = _display_metric_name(metric_name) or metric_name
+    response_locale = normalize_locale(locale) or DEFAULT_LOCALE
+    metric_display_name = _display_metric_name(metric_name, response_locale) or metric_name
 
     if is_connection_status_alert(alert_type, metric_name):
         detail = extract_connection_failure_detail(trigger_reason)
-        title = "数据库连接失败"
-        content_parts = ["状态：数据库连接失败"]
+        title = translate(response_locale, "alert.connection_failed.title")
+        content_parts = [
+            f"{translate(response_locale, 'alert.field.status')}: "
+            f"{translate(response_locale, 'alert.connection_failed.status')}"
+        ]
         if detail:
-            content_parts.append(f"错误详情：{detail}")
+            content_parts.append(f"{translate(response_locale, 'alert.field.error_detail')}: {detail}")
         return title, "\n".join(content_parts)
 
     if alert_type == "threshold_violation" and metric_display_name:
-        title = f"{metric_display_name} 阈值告警"
+        title = translate(response_locale, "alert.threshold.title", {"metric": metric_display_name})
     elif alert_type == "baseline_deviation" and metric_display_name:
-        title = f"{metric_display_name} 基线偏移告警"
+        title = translate(response_locale, "alert.baseline.title", {"metric": metric_display_name})
     elif alert_type == "ai_policy_violation":
         title = build_alert_display_title(
             alert_type=alert_type,
             title=None,
             metric_name=metric_name,
             trigger_reason=trigger_reason,
+            locale=response_locale,
         )
     else:
         title = f"{alert_type.replace('_', ' ').title()}"
 
     content_parts = []
     if metric_display_name and metric_value is not None:
-        content_parts.append(f"指标：{metric_display_name} = {metric_value:.2f}")
+        content_parts.append(f"{translate(response_locale, 'alert.field.metric')}: {metric_display_name} = {metric_value:.2f}")
     if threshold_value is not None:
-        content_parts.append(f"阈值：{threshold_value:.2f}")
+        content_parts.append(f"{translate(response_locale, 'alert.field.threshold')}: {threshold_value:.2f}")
     if trigger_reason:
-        content_parts.append(f"原因：{trigger_reason}")
+        content_parts.append(f"{translate(response_locale, 'alert.field.reason')}: {trigger_reason}")
 
-    content = "\n".join(content_parts) if content_parts else "告警已触发"
+    content = "\n".join(content_parts) if content_parts else translate(response_locale, "alert.triggered")
     return title, content
+
+
+def render_alert_title_and_content(alert, locale: str | None = None) -> tuple[str, str]:
+    """Render structured system alerts; preserve legacy/free-form alert text."""
+    if not getattr(alert, "message_code", None) and not is_structured_system_alert(
+        getattr(alert, "alert_type", None), getattr(alert, "metric_name", None)
+    ):
+        return getattr(alert, "title", ""), getattr(alert, "content", "")
+    return build_alert_title_and_content(
+        alert_type=alert.alert_type,
+        metric_name=alert.metric_name,
+        metric_value=float(alert.metric_value) if getattr(alert, "metric_value", None) is not None else None,
+        threshold_value=float(alert.threshold_value) if getattr(alert, "threshold_value", None) is not None else None,
+        trigger_reason=getattr(alert, "trigger_reason", None),
+        locale=locale or get_active_locale(),
+    )
 
 
 def normalize_alert_diagnosis_fields(
@@ -753,6 +823,18 @@ class AlertService:
             severity=severity,
             title=title,
             content=content,
+            message_code=(
+                "alert.connection_failed"
+                if is_connection_status_alert(alert_type, metric_name)
+                else f"alert.{alert_type}"
+            ),
+            message_params={
+                "metric_name": metric_name,
+                "metric_value": metric_value,
+                "threshold_value": threshold_value,
+                "trigger_reason": trigger_reason,
+            },
+            content_locale=DEFAULT_LOCALE,
             metric_name=metric_name,
             metric_value=metric_value,
             threshold_value=threshold_value,
@@ -961,7 +1043,9 @@ class AlertService:
             time_ranges=time_ranges_dict,
             integration_targets=[target.model_dump() for target in subscription_data.integration_targets],
             is_enabled=subscription_data.enabled,
-            aggregation_script=subscription_data.aggregation_script
+            aggregation_script=subscription_data.aggregation_script,
+            locale=subscription_data.locale,
+            timezone=subscription_data.timezone,
         )
 
         db.add(subscription)
@@ -1172,7 +1256,11 @@ class AlertService:
         return delivery_result.scalars().first() is not None
 
     @staticmethod
-    async def trigger_auto_diagnosis(db: AsyncSession, alert_event_id: int) -> Optional[str]:
+    async def trigger_auto_diagnosis(
+        db: AsyncSession,
+        alert_event_id: int,
+        locale: str = DEFAULT_LOCALE,
+    ) -> Optional[str]:
         """
         Trigger AI auto-diagnosis for an alert event and return the diagnosis summary.
         Creates a hidden diagnostic session, runs diagnosis skills, and saves the summary.
@@ -1241,6 +1329,7 @@ class AlertService:
         event.diagnosis_started_at = now()
         event.diagnosis_completed_at = None
         event.diagnosis_source_event_id = None
+        event.diagnosis_locale = normalize_locale(locale) or DEFAULT_LOCALE
         mark_event_diagnosis_requested(event)
         await db.commit()
 
@@ -1257,6 +1346,7 @@ class AlertService:
             user_id=None,  # System session
             title=f"自动诊断: {event.title[:40]}",
             is_hidden=True,  # Hidden from user session list
+            default_locale=event.diagnosis_locale,
         )
         db.add(session)
         await db.commit()
@@ -1266,12 +1356,28 @@ class AlertService:
 
         # Run AI diagnosis asynchronously (non-blocking)
         # The diagnosis will update the alert_event.ai_diagnosis_summary field
-        asyncio.create_task(_run_auto_diagnosis(session.id, alert_event_id, ds.id, ds.db_type, draft))
+        asyncio.create_task(
+            _run_auto_diagnosis(
+                session.id,
+                alert_event_id,
+                ds.id,
+                ds.db_type,
+                draft,
+                event.diagnosis_locale,
+            )
+        )
 
         return f"正在诊断中（会话 {session.id}）..."
 
 
-async def _run_auto_diagnosis(session_id: int, alert_event_id: int, datasource_id: int, db_type: str, draft: str):
+async def _run_auto_diagnosis(
+    session_id: int,
+    alert_event_id: int,
+    datasource_id: int,
+    db_type: str,
+    draft: str,
+    locale: str = DEFAULT_LOCALE,
+):
     """
     Run auto-diagnosis for a given session (background, non-blocking).
     Reuses _run_diagnosis_coro and saves extracted structured results.
@@ -1280,7 +1386,9 @@ async def _run_auto_diagnosis(session_id: int, alert_event_id: int, datasource_i
     from backend.database import async_session as db_session_factory
 
     try:
-        diagnosis_text = await _run_diagnosis_coro(session_id, alert_event_id, datasource_id, db_type, draft)
+        diagnosis_text = await _run_diagnosis_coro(
+            session_id, alert_event_id, datasource_id, db_type, draft, locale
+        )
 
         if diagnosis_text:
             async with db_session_factory() as db:
@@ -1445,7 +1553,8 @@ async def _find_in_progress_diagnosis(db: AsyncSession, current_event) -> Option
 async def run_sync_diagnosis(
     db: AsyncSession,
     alert_event_id: int,
-    timeout_seconds: int = 600
+    timeout_seconds: int = 600,
+    locale: str = DEFAULT_LOCALE,
 ) -> Dict[str, Any]:
     """
     Perform synchronous AI diagnosis for an alert event with timeout control.
@@ -1537,6 +1646,7 @@ async def run_sync_diagnosis(
     event.diagnosis_started_at = now()
     event.diagnosis_completed_at = None
     event.diagnosis_source_event_id = None
+    event.diagnosis_locale = normalize_locale(locale) or DEFAULT_LOCALE
     mark_event_diagnosis_requested(event)
     await db.commit()
 
@@ -1552,6 +1662,7 @@ async def run_sync_diagnosis(
         user_id=None,
         title=f"告警诊断: {event.title[:40]}",
         is_hidden=True,
+        default_locale=event.diagnosis_locale,
     )
     db.add(session)
     await db.commit()
@@ -1562,7 +1673,14 @@ async def run_sync_diagnosis(
     try:
         # Run diagnosis with timeout
         diagnosis_text = await asyncio.wait_for(
-            _run_diagnosis_coro(session.id, alert_event_id, ds.id, ds.db_type, draft),
+            _run_diagnosis_coro(
+                session.id,
+                alert_event_id,
+                ds.id,
+                ds.db_type,
+                draft,
+                event.diagnosis_locale,
+            ),
             timeout=timeout_seconds,
         )
 
@@ -1593,17 +1711,17 @@ async def run_sync_diagnosis(
         return {
             "root_cause": None,
             "recommended_actions": None,
-            "summary": "诊断超时，正在后台继续分析...",
+            "summary": translate(locale, "alert.diagnosis.timeout_background"),
             "status": "pending",
         }
-    except Exception as e:
-        logger.error(f"Sync diagnosis failed for alert event {alert_event_id}: {e}", exc_info=True)
+    except Exception:
+        logger.exception("Sync diagnosis failed for alert event %s", alert_event_id)
         event.diagnosis_status = "failed"
         await db.commit()
         return {
             "root_cause": None,
             "recommended_actions": None,
-            "summary": f"诊断失败: {str(e)[:200]}",
+            "summary": translate(locale, "alert.diagnosis.failed"),
             "status": "failed",
         }
 
@@ -1614,6 +1732,7 @@ async def _run_diagnosis_coro(
     datasource_id: int,
     db_type: str,
     draft: str,
+    locale: str = DEFAULT_LOCALE,
 ) -> str:
     """
     Core async coroutine to run AI diagnosis and return the full text.
@@ -1629,7 +1748,13 @@ async def _run_diagnosis_coro(
 
     async with db_session_factory() as db:
         # Save user message first
-        await prepare_user_turn(db, session_id=session_id, user_id=None, user_message=draft)
+        await prepare_user_turn(
+            db,
+            session_id=session_id,
+            user_id=None,
+            user_message=draft,
+            content_locale=normalize_locale(locale) or DEFAULT_LOCALE,
+        )
 
         # Build messages for AI
         result = await db.execute(
@@ -1678,6 +1803,7 @@ async def _run_diagnosis_coro(
             user_id=None,
             session_id=session_id,
             skill_authorizations=None,
+            locale=normalize_locale(locale) or DEFAULT_LOCALE,
         ):
             event_type = event.get("type")
             if event_type == "content":

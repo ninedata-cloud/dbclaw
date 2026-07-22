@@ -62,5 +62,5 @@ async def execute_host_command(db: AsyncSession, host_id: int, command: str, all
             "output": output,
         }
 
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+    except Exception:
+        return {"success": False, "error": "host_command_failed", "error_code": "operation.failed"}

@@ -1,8 +1,11 @@
 import asyncio
+import logging
 import re
 from typing import Any, Dict, List, Optional
 from backend.services.db_connector import DBConnector
 from backend.services.query_execution_state import QueryCancelledError
+
+logger = logging.getLogger(__name__)
 
 
 class HANAConnector(DBConnector):
@@ -555,8 +558,9 @@ class HANAConnector(DBConnector):
                 f"ALTER SYSTEM DISCONNECT SESSION '{session_id}'"
             )
             return {"success": True, "message": f"Session {session_id} terminated"}
-        except Exception as e:
-            return {"success": False, "message": str(e)}
+        except Exception:
+            logger.exception("Failed to terminate HANA session %s", session_id)
+            return {"success": False, "message": "operation_failed", "error_code": "operation.failed"}
         finally:
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, conn.close)

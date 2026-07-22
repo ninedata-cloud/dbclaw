@@ -143,7 +143,7 @@ async def collect_metrics_for_connection(datasource_id: int):
 
                 except Exception as e:
                     logger.warning(f"Failed to collect metrics for datasource {datasource_id}: {e}")
-                    status = {"error": str(e), "connection_failed": True}
+                    status = {"error": "metric_collection_failed", "error_code": "operation.failed", "connection_failed": True}
                     connection_failed = True
                     datasource.connection_status = "failed"
                     datasource.connection_error = str(e)
@@ -817,6 +817,7 @@ async def _check_ai_alerts_and_trigger(db, datasource, config, metrics: Dict[str
             _resolve_current_alert_severity,
         )
         from backend.services.monitoring_scheduler_service import get_monitoring_collection_interval_seconds
+        from backend.i18n.locale import resolve_background_preferences
 
         binding = await resolve_configured_alert_ai_policy_binding(db, config)
         if not binding:
@@ -894,6 +895,7 @@ async def _check_ai_alerts_and_trigger(db, datasource, config, metrics: Dict[str
             snapshots_desc=snapshots_desc,
             sampling_interval_seconds=sampling_interval_seconds,
         )
+        evaluation_locale, _ = await resolve_background_preferences(db)
         judge_result, evaluation_log = await evaluate_alert_ai_policy(
             db,
             datasource,
@@ -901,6 +903,7 @@ async def _check_ai_alerts_and_trigger(db, datasource, config, metrics: Dict[str
             feature_summary,
             runtime_state,
             mode=mode,
+            locale=evaluation_locale,
         )
         if mode == "formal":
             runtime_state.ai_evaluations = int(runtime_state.ai_evaluations or 0) + 1

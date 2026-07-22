@@ -33,6 +33,8 @@ class Report(SoftDeleteMixin, Base):
     ai_model_id = Column(Integer, nullable=True)  # Which AI model was used
     kb_ids = Column(JSONB, nullable=True)  # Knowledge bases used during analysis
     generation_method = Column(String(20), default="rule-based")  # "ai" or "rule-based"
+    generation_locale = Column(String(35), nullable=False, default="zh-CN", server_default="zh-CN")
+    generation_timezone = Column(String(64), nullable=False, default="Asia/Shanghai", server_default="Asia/Shanghai")
     error_message = Column(Text, nullable=True)  # Error details if generation failed
 
     # Inspection trigger columns

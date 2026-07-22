@@ -66,3 +66,21 @@ code: |
               await connector.close()
 
           break
+
+i18n:
+  zh-CN:
+    name: Oracle 执行计划分析
+    description: 执行“Oracle 执行计划分析”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+      sql: SQL 语句。
+    permission_descriptions:
+      execute_query: 允许执行受控数据库查询
+  en-US:
+    name: Oracle Explain Query
+    description: Get Oracle execution plan for a SQL query
+    parameter_descriptions:
+      datasource_id: The database connection ID
+      sql: The SQL query to explain
+    permission_descriptions:
+      execute_query: Execute governed database queries

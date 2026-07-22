@@ -12,6 +12,7 @@ from backend.services.config_service import get_config
 from backend.services.metric_collector import subscribe, unsubscribe
 from backend.services.session_service import SessionService
 from backend.utils.datetime_helper import to_utc_isoformat
+from backend.i18n.locale import DEFAULT_LOCALE, normalize_locale, parse_accept_language, translate
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -52,14 +53,20 @@ async def _authenticate_websocket(websocket: WebSocket) -> User | None:
 
 @router.websocket("/ws/monitor/{conn_id}")
 async def monitor_websocket(websocket: WebSocket, conn_id: int):
+    locale = (
+        normalize_locale(websocket.query_params.get("lang"))
+        or parse_accept_language(websocket.headers.get("accept-language"))
+        or DEFAULT_LOCALE
+    )
     if not await _validate_websocket_origin(websocket):
-        await websocket.close(code=1008, reason="Invalid origin")
+        await websocket.close(code=1008, reason=translate(locale, "request.invalid_origin"))
         return
 
     user = await _authenticate_websocket(websocket)
     if not user:
-        await websocket.close(code=1008, reason="Invalid or expired session")
+        await websocket.close(code=1008, reason=translate(locale, "auth.session_expired"))
         return
+    locale = normalize_locale(user.locale) or locale
 
     await websocket.accept()
     queue = subscribe(conn_id)
@@ -99,7 +106,7 @@ async def monitor_websocket(websocket: WebSocket, conn_id: int):
             except asyncio.TimeoutError:
                 user = await _authenticate_websocket(websocket)
                 if not user:
-                    await websocket.close(code=1008, reason="Session expired")
+                    await websocket.close(code=1008, reason=translate(locale, "auth.session_expired"))
                     break
                 await websocket.send_json({"type": "heartbeat"})
             except Exception as e:

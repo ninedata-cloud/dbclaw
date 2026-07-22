@@ -51,3 +51,19 @@ code: |
           return {"success": True, "data": result}
       except Exception as e:
           return {"success": False, "error": f"Audit logs not available: {str(e)}"}
+
+i18n:
+  zh-CN:
+    name: openGauss 审计日志
+    description: 执行“openGauss 审计日志”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+    permission_descriptions:
+      read_datasource: 允许读取数据源和平台元数据
+  en-US:
+    name: opengauss_get_audit_logs
+    description: Get security audit logs from openGauss (if available)
+    parameter_descriptions:
+      datasource_id: ID of the openGauss datasource
+    permission_descriptions:
+      read_datasource: Read datasource and platform metadata

@@ -1,5 +1,5 @@
 """API endpoints for database intelligent inspection"""
-from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from fastapi import APIRouter, Depends, Query, Body
 from fastapi.responses import Response, HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, desc
@@ -8,9 +8,10 @@ from pydantic import BaseModel, Field, model_validator
 import logging
 
 from backend.database import get_db
+from backend.i18n.errors import ApiError
 from backend.dependencies import get_current_user
 from backend.utils.security import escape_html
-from backend.utils.datetime_helper import now, to_utc_isoformat
+from backend.utils.datetime_helper import format_in_timezone, now, to_utc_isoformat
 from backend.models.inspection_config import InspectionConfig
 from backend.models.alert_template import AlertTemplate
 from backend.models.inspection_trigger import InspectionTrigger
@@ -19,6 +20,7 @@ from backend.models.datasource import Datasource
 from backend.models.soft_delete import alive_filter, get_alive_by_id
 from backend.services.inspection_service import InspectionService
 from backend.services.public_share_service import PublicShareService
+from backend.i18n.locale import get_active_locale, message_payload, translate
 from backend.services.baseline_service import (
     DEFAULT_BASELINE_CONFIG,
     list_baseline_profiles_for_datasource,
@@ -182,6 +184,7 @@ class ExpressionValidationRequest(BaseModel):
 class ExpressionValidationResponse(BaseModel):
     valid: bool
     error: Optional[str] = None
+    error_code: Optional[str] = None
 
 
 class BaselineProfileResponse(BaseModel):
@@ -262,9 +265,9 @@ async def _get_bound_alert_template_or_raise(db: AsyncSession, template_id: Opti
     result = await db.execute(select(AlertTemplate).where(AlertTemplate.id == template_id))
     template = result.scalar_one_or_none()
     if not template:
-        raise HTTPException(status_code=404, detail="告警模板不存在")
+        raise ApiError(404, "resource.not_found")
     if not template.enabled:
-        raise HTTPException(status_code=400, detail="告警模板已停用，请选择其他模板")
+        raise ApiError(400, "operation.not_allowed")
     return template
 
 
@@ -275,11 +278,19 @@ async def validate_threshold_expression(request: ExpressionValidationRequest):
         # Try to compile the expression
         compile(request.expression, '<string>', 'eval')
         return ExpressionValidationResponse(valid=True, error=None)
-    except SyntaxError as e:
-        return ExpressionValidationResponse(valid=False, error=str(e))
-    except Exception as e:
-        logger.error(f"Failed to validate expression '{request.expression}': {e}", exc_info=True)
-        return ExpressionValidationResponse(valid=False, error=f"Validation error: {str(e)}")
+    except SyntaxError:
+        return ExpressionValidationResponse(
+            valid=False,
+            error=translate(get_active_locale(), "request.validation.invalid"),
+            error_code="request.validation.invalid",
+        )
+    except Exception:
+        logger.exception("Failed to validate alert expression")
+        return ExpressionValidationResponse(
+            valid=False,
+            error=translate(get_active_locale(), "operation.failed"),
+            error_code="operation.failed",
+        )
 
 
 @router.get("/templates", response_model=List[AlertTemplateResponse])
@@ -315,7 +326,7 @@ async def update_alert_template(template_id: int, data: AlertTemplateSchema, db:
     result = await db.execute(select(AlertTemplate).where(AlertTemplate.id == template_id))
     template = result.scalar_one_or_none()
     if not template:
-        raise HTTPException(status_code=404, detail="Template not found")
+        raise ApiError(404, "resource.not_found")
 
     if data.is_default:
         all_result = await db.execute(select(AlertTemplate))
@@ -337,7 +348,7 @@ async def toggle_alert_template(template_id: int, enabled: bool = Body(..., embe
     result = await db.execute(select(AlertTemplate).where(AlertTemplate.id == template_id))
     template = result.scalar_one_or_none()
     if not template:
-        raise HTTPException(status_code=404, detail="Template not found")
+        raise ApiError(404, "resource.not_found")
     template.enabled = bool(enabled)
     await db.commit()
     await db.refresh(template)
@@ -455,7 +466,7 @@ async def update_config(
     )
     config = result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Configuration not found")
+        raise ApiError(404, "resource.not_found")
 
     from datetime import timedelta
     from backend.utils.datetime_helper import now as get_now
@@ -507,7 +518,7 @@ async def rebuild_baseline(datasource_id: int, db: AsyncSession = Depends(get_db
     )
     config = config_result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Configuration not found")
+        raise ApiError(404, "resource.not_found")
 
     effective = await resolve_effective_inspection_config(db, config)
     baseline_config = normalize_baseline_config(getattr(effective, "baseline_config", None))
@@ -518,7 +529,7 @@ async def rebuild_baseline(datasource_id: int, db: AsyncSession = Depends(get_db
     )
     profiles = await list_baseline_profiles_for_datasource(db, datasource_id)
     return {
-        "message": "baseline rebuilt",
+        **message_payload("baseline.rebuilt"),
         "result": result,
         "profile_count": len(profiles),
     }
@@ -535,17 +546,18 @@ async def trigger_manual_inspection(
     inspection_service = metric_collector._inspection_service
 
     if not inspection_service:
-        raise HTTPException(status_code=503, detail="Inspection service not available")
+        raise ApiError(503, "operation.failed")
 
     trigger_id = await inspection_service.trigger_inspection(
         db,
         datasource_id,
         "manual",
-        "Manual inspection" if current_user.locale == "en-US" else "人工触发巡检",
-        locale=current_user.locale,
+        "Manual inspection" if getattr(current_user, "locale", "zh-CN") == "en-US" else "人工触发巡检",
+        locale=getattr(current_user, "locale", None),
+        timezone=getattr(current_user, "timezone", None),
     )
     if trigger_id is None:
-        raise HTTPException(status_code=404, detail="数据源不存在")
+        raise ApiError(404, "datasource.not_found")
     return TriggerResponse(trigger_id=trigger_id, report_id=None)
 
 
@@ -653,7 +665,7 @@ async def get_report_detail(report_id: int, db: AsyncSession = Depends(get_db)):
     """Get full report details"""
     report = await get_alive_by_id(db, Report, report_id)
     if not report:
-        raise HTTPException(status_code=404, detail="报告不存在")
+        raise ApiError(404, "report.not_found")
 
     return await _build_report_detail_payload(db, report)
 
@@ -679,6 +691,32 @@ async def public_report_page(
     """Render public report detail page with datasource config and AI diagnosis"""
     PublicShareService.verify_report_share_token(token, report_id)
     report = await PublicShareService.get_report_or_404(db, report_id)
+    locale = report.generation_locale or "zh-CN"
+    en = locale == "en-US"
+    timezone = report.generation_timezone or "Asia/Shanghai"
+    status_labels = ({
+        "pending": "Pending", "running": "Running", "completed": "Completed", "partial": "Partial",
+        "timed_out": "Timed out", "awaiting_confirm": "Awaiting confirmation", "failed": "Failed",
+    } if en else {
+        "pending": "等待中", "running": "生成中", "completed": "已完成", "partial": "部分完成",
+        "timed_out": "已超时", "awaiting_confirm": "等待确认", "failed": "失败",
+    })
+    trigger_labels = ({
+        "manual": "Manual", "scheduled": "Scheduled", "alert": "Alert", "connection_failure": "Connection failure",
+    } if en else {
+        "manual": "手动", "scheduled": "定时", "alert": "告警", "connection_failure": "连接故障",
+    })
+    labels = ({
+        "trigger_reason": "Trigger reason", "datasource": "Datasource configuration", "name": "Name",
+        "type": "Type", "host": "Host", "database": "Database", "tags": "Tags", "remark": "Remark",
+        "ai_conclusion": "AI diagnostic conclusion", "summary": "Summary", "root_cause": "Root cause",
+        "actions": "Recommended actions",
+    } if en else {
+        "trigger_reason": "触发原因", "datasource": "数据源配置", "name": "名称", "type": "类型",
+        "host": "主机", "database": "数据库", "tags": "标签", "remark": "备注",
+        "ai_conclusion": "AI 诊断结论", "summary": "诊断摘要", "root_cause": "根因分析",
+        "actions": "建议措施",
+    })
     await _ensure_report_completed_at(db, report)
 
     # Fetch datasource info
@@ -720,12 +758,13 @@ async def public_report_page(
     if alert_event:
         sev = alert_event.severity or ''
         sev_color = {'critical': '#dc2626', 'high': '#ea580c', 'medium': '#ca8a04', 'low': '#16a34a'}.get(sev.lower(), '#6b7280')
-        severity_badge = '<span style="background:' + sev_color + ';color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;">' + escape_html(sev.upper()) + '</span>'
+        severity_label = ({"critical": "Critical", "high": "High", "medium": "Medium", "low": "Low"} if en else {"critical": "严重", "high": "高", "medium": "中", "low": "低"}).get(sev.lower(), sev)
+        severity_badge = '<span style="background:' + sev_color + ';color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;">' + escape_html(severity_label) + '</span>'
 
-    report_html = report.content_html or f"<pre>{report.content_md or '暂无内容'}</pre>"
-    return f"""
+    report_html = report.content_html or f"<pre>{report.content_md or ('No content' if en else '暂无内容')}</pre>"
+    page_html = f"""
     <!DOCTYPE html>
-    <html lang=\"zh-CN\">
+    <html lang=\"{locale}\">
     <head>
         <meta charset=\"UTF-8\">
         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
@@ -756,35 +795,35 @@ async def public_report_page(
         <div class=\"card\">
             <h1>{escape_html(report.title)}</h1>
             <div class=\"meta\">
-                <span>状态：{escape_html(report.status)}</span>
-                <span>触发类型：{escape_html(report.trigger_type or '-')}</span>
-                <span>创建时间：{report.created_at}</span>
+                <span>{'Status' if en else '状态'}: {escape_html(status_labels.get(report.status, report.status))}</span>
+                <span>{'Trigger type' if en else '触发类型'}: {escape_html(trigger_labels.get(report.trigger_type, report.trigger_type or '-'))}</span>
+                <span>{'Created' if en else '创建时间'}: {format_in_timezone(report.created_at, timezone)}</span>
                 {severity_badge}
             </div>
-            {f'<div class="trigger">触发原因：{escape_html(report.trigger_reason)}</div>' if report.trigger_reason else ''}
+            {f'<div class="trigger">{labels["trigger_reason"]}: {escape_html(report.trigger_reason)}</div>' if report.trigger_reason else ''}
 
             <!-- 数据源配置信息 -->
             <div class="ds-card">
                 <div class="ds-title">
-                    <span>&#128202;</span> 数据源配置
+                    <span>&#128202;</span> {labels["datasource"]}
                 </div>
                 <div class="ds-grid">
-                    <div class="ds-field"><div class="ds-label">名称</div><div class="ds-value">{ds_name}</div></div>
-                    <div class="ds-field"><div class="ds-label">类型</div><div class="ds-value">{ds_type.upper()}</div></div>
-                    <div class="ds-field"><div class="ds-label">主机</div><div class="ds-value">{ds_host_esc}:{ds_port}</div></div>
-                    <div class="ds-field"><div class="ds-label">数据库</div><div class="ds-value">{ds_db_esc or "-"}</div></div>
-                    <div class="ds-field"><div class="ds-label">标签</div><div class="ds-value">{ds_tags_esc}</div></div>
+                    <div class="ds-field"><div class="ds-label">{labels["name"]}</div><div class="ds-value">{ds_name}</div></div>
+                    <div class="ds-field"><div class="ds-label">{labels["type"]}</div><div class="ds-value">{ds_type.upper()}</div></div>
+                    <div class="ds-field"><div class="ds-label">{labels["host"]}</div><div class="ds-value">{ds_host_esc}:{ds_port}</div></div>
+                    <div class="ds-field"><div class="ds-label">{labels["database"]}</div><div class="ds-value">{ds_db_esc or "-"}</div></div>
+                    <div class="ds-field"><div class="ds-label">{labels["tags"]}</div><div class="ds-value">{ds_tags_esc}</div></div>
                 </div>
-                {f'<div class="ds-remark"><div class="ds-remark-label">备注</div>{ds_remark_esc}</div>' if ds_remark else ''}
+                {f'<div class="ds-remark"><div class="ds-remark-label">{labels["remark"]}</div>{ds_remark_esc}</div>' if ds_remark else ''}
             </div>
 
             <!-- AI 诊断信息 -->
             {"".join([
                 '<div class="ai-card">'
-                + '<div class="ai-title"><span>&#129514;</span> AI 诊断结论</div>'
-                + ('<div class="ai-section"><div class="ai-label">诊断摘要</div><div class="ai-value">' + escape_html(ai_summary) + '</div></div>' if ai_summary else '')
-                + ('<div class="ai-section"><div class="ai-label">根因分析</div><div class="ai-value root-cause">' + escape_html(ai_root_cause) + '</div></div>' if ai_root_cause else '')
-                + ('<div class="ai-section"><div class="ai-label">建议措施</div><div class="ai-value actions">' + escape_html(ai_actions) + '</div></div>' if ai_actions else '')
+                + '<div class="ai-title"><span>&#129514;</span> ' + labels["ai_conclusion"] + '</div>'
+                + ('<div class="ai-section"><div class="ai-label">' + labels["summary"] + '</div><div class="ai-value">' + escape_html(ai_summary) + '</div></div>' if ai_summary else '')
+                + ('<div class="ai-section"><div class="ai-label">' + labels["root_cause"] + '</div><div class="ai-value root-cause">' + escape_html(ai_root_cause) + '</div></div>' if ai_root_cause else '')
+                + ('<div class="ai-section"><div class="ai-label">' + labels["actions"] + '</div><div class="ai-value actions">' + escape_html(ai_actions) + '</div></div>' if ai_actions else '')
                 + '</div>'
             ]) if (ai_summary or ai_root_cause or ai_actions) else ''}
 
@@ -794,6 +833,7 @@ async def public_report_page(
     </body>
     </html>
     """
+    return HTMLResponse(content=page_html, headers={"Content-Language": locale})
 
 
 
@@ -803,10 +843,10 @@ async def export_report_markdown(report_id: int, db: AsyncSession = Depends(get_
     """Export report as Markdown file"""
     report = await get_alive_by_id(db, Report, report_id)
     if not report:
-        raise HTTPException(status_code=404, detail="报告不存在")
+        raise ApiError(404, "report.not_found")
 
     if not report.content_md:
-        raise HTTPException(status_code=400, detail="Report content not available")
+        raise ApiError(400, "operation.not_allowed")
 
     # Generate filename
     from datetime import datetime
@@ -817,7 +857,8 @@ async def export_report_markdown(report_id: int, db: AsyncSession = Depends(get_
         content=report.content_md,
         media_type="text/markdown",
         headers={
-            "Content-Disposition": f"attachment; filename={filename}"
+            "Content-Disposition": f"attachment; filename={filename}",
+            "Content-Language": report.generation_locale or "zh-CN",
         }
     )
 
@@ -827,10 +868,10 @@ async def export_report_pdf(report_id: int, db: AsyncSession = Depends(get_db)):
     """Export report as PDF file"""
     report = await get_alive_by_id(db, Report, report_id)
     if not report:
-        raise HTTPException(status_code=404, detail="报告不存在")
+        raise ApiError(404, "report.not_found")
 
     if not report.content_md:
-        raise HTTPException(status_code=400, detail="Report content not available")
+        raise ApiError(400, "operation.not_allowed")
 
     try:
         from backend.utils.pdf_generator import markdown_to_pdf
@@ -847,18 +888,16 @@ async def export_report_pdf(report_id: int, db: AsyncSession = Depends(get_db)):
             content=pdf_bytes,
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f"attachment; filename={filename}"
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Content-Language": report.generation_locale or "zh-CN",
             }
         )
     except ImportError as e:
         logger.error(f"PDF export dependency missing: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail="PDF export not available. Please install: pip install reportlab"
-        )
+        raise ApiError(500, "operation.failed")
     except Exception as e:
         logger.error(f"PDF generation failed for report {report_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="PDF generation failed")
+        raise ApiError(500, "operation.failed")
 
 
 @router.delete("/reports/{report_id}")
@@ -866,7 +905,7 @@ async def delete_report(report_id: int, db: AsyncSession = Depends(get_db)):
     """Delete an inspection report and clean up related triggers"""
     report = await get_alive_by_id(db, Report, report_id)
     if not report:
-        raise HTTPException(status_code=404, detail="报告不存在")
+        raise ApiError(404, "report.not_found")
 
     # Clean up related inspection triggers (set report_id to NULL)
     from sqlalchemy import update
@@ -879,7 +918,7 @@ async def delete_report(report_id: int, db: AsyncSession = Depends(get_db)):
     report.soft_delete(None)
     await db.commit()
 
-    return {"message": "报告已删除", "report_id": report_id}
+    return message_payload("report.deleted", report_id=report_id)
 
 
 class BatchDeleteRequest(BaseModel):
@@ -893,7 +932,7 @@ async def batch_delete_report(
 ):
     """Batch delete inspection report"""
     if not request.report_ids:
-        raise HTTPException(status_code=400, detail="报告ID列表不能为空")
+        raise ApiError(400, "request.validation.invalid")
 
     # Verify all report exist
     result = await db.execute(
@@ -904,10 +943,7 @@ async def batch_delete_report(
     missing_ids = set(request.report_ids) - found_ids
 
     if missing_ids:
-        raise HTTPException(
-            status_code=404,
-            detail=f"以下报告不存在: {', '.join(map(str, missing_ids))}"
-        )
+        raise ApiError(404, "report.not_found", {"report_ids": missing_ids})
 
     # Clean up related inspection triggers
     from sqlalchemy import update
@@ -923,7 +959,7 @@ async def batch_delete_report(
     await db.commit()
 
     return {
-        "message": f"成功删除 {len(request.report_ids)} 个报告",
+        **message_payload("report.batch_deleted", {"count": len(request.report_ids)}),
         "deleted_count": len(request.report_ids),
         "report_ids": request.report_ids
     }

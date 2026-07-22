@@ -14,6 +14,7 @@ from backend.services.alert_service import (
     is_connection_status_alert,
     normalize_alert_diagnosis_fields,
     normalize_event_ai_config,
+    render_alert_title_and_content,
     should_refresh_event_diagnosis,
 )
 from backend.utils.datetime_helper import now
@@ -99,6 +100,7 @@ def test_connection_status_helpers_extract_detail():
     assert is_connection_status_alert("system_error", "connection_status") is True
     assert extract_connection_failure_detail("connection failed: timeout") == "timeout"
     assert extract_connection_failure_detail("数据库连接失败：认证失败") == "认证失败"
+    assert extract_connection_failure_detail("Database connection failed: timeout") == "timeout"
 
 
 @pytest.mark.unit
@@ -112,6 +114,26 @@ def test_build_alert_title_and_content_for_connection_error():
     )
     assert title == "数据库连接失败"
     assert "too many connections" in content
+
+
+@pytest.mark.unit
+def test_render_legacy_structured_alert_in_requested_locale():
+    alert = SimpleNamespace(
+        alert_type="threshold_violation",
+        metric_name="disk_usage",
+        metric_value=92,
+        threshold_value=85,
+        trigger_reason="disk_usage=92 > 85",
+        title="disk_usage 阈值告警",
+        content="历史内容",
+        message_code=None,
+    )
+
+    title, content = render_alert_title_and_content(alert, "en-US")
+
+    assert title == "Disk usage threshold alert"
+    assert "Metric: Disk usage = 92.00" in content
+    assert "Threshold: 85.00" in content
 
 
 @pytest.mark.unit
@@ -134,6 +156,28 @@ def test_ai_policy_display_metric_name_uses_domain_fallback():
         fault_domain="replication",
     )
     assert metric_name == "复制异常"
+
+    english_metric_name = build_alert_display_metric_name(
+        alert_type="ai_policy_violation",
+        metric_name=None,
+        trigger_reason="",
+        fault_domain="replication",
+        locale="en-US",
+    )
+    assert english_metric_name == "Replication anomaly"
+
+
+@pytest.mark.unit
+def test_ai_policy_fallback_title_uses_requested_locale():
+    title = build_alert_display_title(
+        alert_type="ai_policy_violation",
+        title="AI 判警",
+        metric_name="ai 判警",
+        trigger_reason="",
+        fault_domain="availability",
+        locale="en-US",
+    )
+    assert title == "Availability anomaly alert"
 
 
 @pytest.mark.unit

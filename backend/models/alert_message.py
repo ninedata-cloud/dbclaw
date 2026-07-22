@@ -1,4 +1,5 @@
 from sqlalchemy import BigInteger, Column, Integer, String, Numeric, Text, DateTime, Index
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from backend.database import Base
 
@@ -20,6 +21,9 @@ class AlertMessage(Base):
     severity = Column(String(20), nullable=False, index=True)  # critical, high, medium, low
     title = Column(String(255), nullable=False)
     content = Column(Text, nullable=False)
+    message_code = Column(String(120), nullable=True, index=True)
+    message_params = Column(JSONB, nullable=False, default=dict, server_default='{}')
+    content_locale = Column(String(35), nullable=False, default="zh-CN", server_default="zh-CN")
     metric_name = Column(String(100), nullable=True)
     metric_value = Column(Numeric(22, 4), nullable=True)
     threshold_value = Column(Numeric(22, 4), nullable=True)

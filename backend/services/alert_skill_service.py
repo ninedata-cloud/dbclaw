@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Any
 
-from fastapi import HTTPException
 from pydantic import ValidationError
+from backend.i18n.errors import ApiError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -631,7 +631,7 @@ async def execute_manage_alert_settings(
         if target == "silence":
             return await _handle_silence_target(db, action, params)
         raise ValueError(f"unsupported target: {target}")
-    except (ValidationError, HTTPException) as exc:
+    except (ValidationError, ApiError) as exc:
         message = getattr(exc, "detail", None) or str(exc)
         return _error_payload(target, action, str(message))
     except (PermissionError, ValueError) as exc:

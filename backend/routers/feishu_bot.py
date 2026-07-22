@@ -1,10 +1,11 @@
 import json
 import logging
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
+from backend.i18n.errors import ApiError
 from backend.schemas.feishu import FeishuChallengeRequest, FeishuMessageEventBody
 from backend.services.feishu_bot_service import FeishuBotService, _extract_feishu_bot_config
 from backend.services.feishu_service import feishu_service
@@ -39,7 +40,7 @@ async def handle_feishu_events(
         x_lark_signature,
         signing_secret,
     ):
-        raise HTTPException(status_code=401, detail="飞书签名校验失败")
+        raise ApiError(401, "auth.invalid_credentials")
 
     event_body = FeishuMessageEventBody.model_validate(payload)
     header = event_body.header or {}

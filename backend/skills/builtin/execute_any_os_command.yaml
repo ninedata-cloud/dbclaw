@@ -62,3 +62,73 @@ code: |
       result = await context.execute_command_on_host(command, host_id, allow_write=True)
 
       return result
+
+i18n:
+  zh-CN:
+    name: 执行任意操作系统命令
+    description: 执行“执行任意操作系统命令”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      host_id: 主机 ID。
+      command: 命令。
+    permission_descriptions:
+      execute_any_os_command: 高风险：允许执行任意操作系统命令
+      admin: 需要管理员权限
+  en-US:
+    name: Execute Any OS Command
+    description: 'Execute ANY shell command on a server via SSH host connection, including write operations and system modifications.
+
+
+      ⚠️ DANGER: This skill has NO restrictions and can execute destructive operations:
+
+      - Delete files and directories (rm, rmdir)
+
+      - Modify file permissions (chmod, chown)
+
+      - Kill processes (kill, pkill, killall)
+
+      - Restart services (systemctl restart, service restart)
+
+      - Modify system configuration
+
+      - Install/remove packages
+
+      - Shutdown/reboot system
+
+      - Modify network settings
+
+      - Create/delete user
+
+
+      USE CASES:
+
+      - Database maintenance: restart database services, clear logs, backup operations
+
+      - System administration: install monitoring tools, configure services
+
+      - Emergency operations: kill runaway processes, free up disk space
+
+      - Configuration changes: modify database config files, update system settings
+
+
+      SAFETY GUIDELINES:
+
+      - Always verify the command before execution
+
+      - Prefer ''execute_os_command'' for read-only diagnostics
+
+      - Use this skill only when write operations are explicitly required
+
+      - Be cautious with destructive operations (rm, kill, shutdown)
+
+      - Consider the impact on production systems
+
+
+      Requires ''execute_any_os_command'' or ''admin'' permission.
+
+      '
+    parameter_descriptions:
+      host_id: The SSH host ID to execute the command on
+      command: The shell command to execute (any valid shell command)
+    permission_descriptions:
+      execute_any_os_command: 'High risk: execute unrestricted operating-system commands'
+      admin: Administrator privileges required

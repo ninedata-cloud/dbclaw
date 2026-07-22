@@ -277,6 +277,19 @@ const Sidebar = {
                 <input type="text" id="profile-phone" class="form-input" placeholder="${I18n.t('profile.phonePlaceholder')}" value="${Utils.escapeHtml(currentUser.phone || '')}">
                 <div class="sidebar-profile-hint">${I18n.t('profile.maskedPhoneHint', { phone: Utils.escapeHtml(this._maskPhone(currentUser.phone)) })}</div>
             </div>
+            <div class="form-group">
+                <label>${I18n.t('profile.timezone')}</label>
+                <input type="text" id="profile-timezone" class="form-input" list="profile-timezones"
+                    placeholder="${I18n.t('profile.timezonePlaceholder')}"
+                    value="${Utils.escapeHtml(currentUser.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai')}">
+                <datalist id="profile-timezones">
+                    <option value="Asia/Shanghai"></option>
+                    <option value="UTC"></option>
+                    <option value="Europe/London"></option>
+                    <option value="America/New_York"></option>
+                    <option value="America/Los_Angeles"></option>
+                </datalist>
+            </div>
         `;
 
         Modal.show({
@@ -320,12 +333,14 @@ const Sidebar = {
         const display_name = DOM.$('#profile-display-name').value.trim();
         const email = DOM.$('#profile-email').value.trim();
         const phone = DOM.$('#profile-phone').value.trim();
+        const timezone = DOM.$('#profile-timezone').value.trim();
 
         try {
             const currentUser = await API.updateMe({
                 display_name: display_name || null,
                 email: email || null,
                 phone: phone || null,
+                timezone,
             });
             Store.set('currentUser', currentUser);
             Modal.hide();

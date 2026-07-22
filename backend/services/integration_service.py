@@ -19,6 +19,7 @@ from backend.schemas.integration import IntegrationCreate, IntegrationUpdate
 from backend.services.integration_executor import IntegrationExecutor
 from backend.utils.encryption import encrypt_value
 from backend.utils.datetime_helper import now
+from backend.i18n.locale import get_active_locale, translate
 
 logger = logging.getLogger(__name__)
 
@@ -214,8 +215,14 @@ class IntegrationService:
             try:
                 metrics = await executor.execute_metric_collection(integration.code, test_params, datasource)
                 return {"success": True, "message": f"采集到 {len(metrics)} 条指标", "data": {"metrics": metrics[:10]}}
-            except Exception as e:
-                return {"success": False, "message": f"测试失败: {str(e)}"}
+            except Exception:
+                logger.exception("Inbound integration test failed: integration_id=%s", integration_id)
+                return {
+                    "success": False,
+                    "message": translate(get_active_locale(), "operation.failed"),
+                    "message_code": "operation.failed",
+                    "params": {},
+                }
 
         if integration.integration_type == "bot":
             if integration.integration_id == "builtin_feishu_bot":
@@ -236,8 +243,9 @@ class IntegrationService:
                         "message": "飞书机器人配置可用，tenant_access_token 获取成功，可用于长连接模式",
                         "data": {"app_id": app_id, "signing_secret_configured": bool(signing_secret)},
                     }
-                except Exception as e:
-                    return {"success": False, "message": f"飞书机器人测试失败: {str(e)}"}
+                except Exception:
+                    logger.exception("Feishu bot integration test failed: integration_id=%s", integration_id)
+                    return {"success": False, "message": translate(get_active_locale(), "operation.failed"), "message_code": "operation.failed", "params": {}}
 
             if integration.integration_id == "builtin_dingtalk_bot":
                 try:
@@ -261,8 +269,9 @@ class IntegrationService:
                         "message": "钉钉机器人配置可用，access_token 获取成功，可用于 Stream 模式" if access_token else "钉钉机器人 access_token 获取失败",
                         "data": {"client_id": client_id, "has_access_token": bool(access_token)},
                     }
-                except Exception as e:
-                    return {"success": False, "message": f"钉钉机器人测试失败: {str(e)}"}
+                except Exception:
+                    logger.exception("DingTalk bot integration test failed: integration_id=%s", integration_id)
+                    return {"success": False, "message": translate(get_active_locale(), "operation.failed"), "message_code": "operation.failed", "params": {}}
 
             if integration.integration_id == "builtin_weixin_bot":
                 baseurl = str(test_params.get("baseurl") or "").strip()
@@ -278,8 +287,9 @@ class IntegrationService:
                         "message": "微信机器人登录接口可用" if qrcode else "微信机器人登录接口返回异常，未拿到 qrcode",
                         "data": {"has_qrcode": bool(qrcode), "raw": resp},
                     }
-                except Exception as e:
-                    return {"success": False, "message": f"微信机器人测试失败: {str(e)}"}
+                except Exception:
+                    logger.exception("Weixin bot integration test failed: integration_id=%s", integration_id)
+                    return {"success": False, "message": translate(get_active_locale(), "operation.failed"), "message_code": "operation.failed", "params": {}}
 
             return {"success": True, "message": "机器人 Integration 配置格式有效"}
 

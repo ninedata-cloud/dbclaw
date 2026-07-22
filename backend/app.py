@@ -29,9 +29,11 @@ from backend.services.monitoring_scheduler_service import (
 )
 from backend.i18n.errors import ApiError, DomainError
 from backend.i18n.locale import (
+    DEFAULT_LOCALE,
+    DEFAULT_TIMEZONE,
     get_request_locale,
-    legacy_error_code,
     resolve_request_locale,
+    set_system_defaults,
     translate,
 )
 
@@ -278,6 +280,11 @@ async def lifespan(app: FastAPI):
                     description=description,
                     category=category,
                 )
+
+        set_system_defaults(
+            await _config_service.get_config(_db, "i18n.default_locale", DEFAULT_LOCALE),
+            await _config_service.get_config(_db, "i18n.default_timezone", DEFAULT_TIMEZONE),
+        )
     logger.info("Default system configs seeded")
 
     # Start SSH connection pool
@@ -380,12 +387,17 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def locale_middleware(request: Request, call_next):
+        from backend.i18n.locale import reset_active_locale, set_active_locale
         locale, source = resolve_request_locale(request)
         request.state.locale = locale
         request.state.locale_source = source
-        response = await call_next(request)
-        response.headers["Content-Language"] = get_request_locale(request)
-        return response
+        token = set_active_locale(locale)
+        try:
+            response = await call_next(request)
+            response.headers.setdefault("Content-Language", get_request_locale(request))
+            return response
+        finally:
+            reset_active_locale(token)
 
     @app.exception_handler(ApiError)
     async def api_error_handler(request: Request, exc: ApiError):
@@ -419,16 +431,18 @@ def create_app() -> FastAPI:
         localized_errors = []
         for error in exc.errors():
             item = dict(error)
-            if locale == "zh-CN":
-                error_type = item.get("type", "")
-                if error_type == "missing":
-                    item["msg"] = "字段为必填项"
-                elif error_type.startswith("string_too_short"):
-                    item["msg"] = "字符串长度不足"
-                elif error_type == "literal_error":
-                    item["msg"] = "输入值不在允许范围内"
-                else:
-                    item["msg"] = "输入值无效"
+            error_type = item.get("type", "")
+            if error_type == "missing":
+                item_code = "request.validation.missing"
+            elif error_type.startswith("string_too_short"):
+                item_code = "request.validation.string_too_short"
+            elif error_type == "literal_error":
+                item_code = "request.validation.literal"
+            else:
+                item_code = "request.validation.invalid"
+            item["msg"] = translate(locale, item_code)
+            item["error_code"] = item_code
+            item["params"] = item.get("ctx") or {}
             localized_errors.append(item)
         return JSONResponse(
             status_code=422,
@@ -442,26 +456,26 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error_handler(request: Request, exc: StarletteHTTPException):
+        import uuid
+
         locale = get_request_locale(request)
-        detail = exc.detail
         error_code = "request.failed"
         params = {}
-        if isinstance(detail, str):
-            mapped_code = legacy_error_code(detail)
-            if mapped_code:
-                error_code = mapped_code
-                detail = translate(locale, mapped_code)
-            elif locale == "en-US" and re.search(r"[\u3400-\u9fff]", detail):
-                # Do not leak untranslated internal text into the English UI.
-                detail = translate(locale, error_code)
-            elif locale == "zh-CN" and detail.isascii():
-                detail = translate(locale, error_code)
+        debug_id = uuid.uuid4().hex
+        logger.warning(
+            "Unmapped HTTP error [%s] %s %s: %r",
+            debug_id,
+            request.method,
+            request.url.path,
+            exc.detail,
+        )
         return JSONResponse(
             status_code=exc.status_code,
             content=jsonable_encoder({
-                "detail": detail,
+                "detail": translate(locale, error_code),
                 "error_code": error_code,
                 "params": params,
+                "debug_id": debug_id,
             }),
             headers={**(exc.headers or {}), "Content-Language": locale},
         )
@@ -469,9 +483,13 @@ def create_app() -> FastAPI:
     @app.exception_handler(Exception)
     async def global_exception_handler(request, exc):
         import traceback
+        import uuid
+
+        debug_id = uuid.uuid4().hex
 
         logger.error(
-            "Unhandled exception in %s %s [%s]: %s\n%s",
+            "Unhandled exception [%s] in %s %s [%s]: %s\n%s",
+            debug_id,
             request.method,
             request.url.path,
             type(exc).__name__,
@@ -486,6 +504,7 @@ def create_app() -> FastAPI:
                 "detail": translate(locale, "request.internal_error"),
                 "error_code": "request.internal_error",
                 "params": {},
+                "debug_id": debug_id,
             },
             headers={"Content-Language": locale},
         )

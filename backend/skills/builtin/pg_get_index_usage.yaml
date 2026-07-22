@@ -48,3 +48,19 @@ code: |
           "indexes": result.get("data", []),
           "columns": result.get("columns", [])
       }
+
+i18n:
+  zh-CN:
+    name: PostgreSQL 索引使用情况
+    description: 执行“PostgreSQL 索引使用情况”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+    permission_descriptions:
+      execute_query: 允许执行受控数据库查询
+  en-US:
+    name: PostgreSQL Index Usage
+    description: Analyze index usage patterns to identify unused or inefficient indexes
+    parameter_descriptions:
+      datasource_id: The database connection ID
+    permission_descriptions:
+      execute_query: Execute governed database queries

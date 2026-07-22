@@ -45,3 +45,19 @@ code: |
 
       slow_queries = await connector.get_slow_queries()
       return {"success": True, "data": slow_queries}
+
+i18n:
+  zh-CN:
+    name: openGauss 慢查询
+    description: 执行“openGauss 慢查询”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+    permission_descriptions:
+      read_datasource: 允许读取数据源和平台元数据
+  en-US:
+    name: opengauss_get_slow_queries
+    description: Get recent slow queries from openGauss pg_stat_statements or active queries
+    parameter_descriptions:
+      datasource_id: ID of the openGauss datasource
+    permission_descriptions:
+      read_datasource: Read datasource and platform metadata

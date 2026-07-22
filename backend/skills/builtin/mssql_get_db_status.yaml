@@ -56,3 +56,19 @@ code: |
           "data": result.get("data", []),
           "columns": result.get("columns", [])
       }
+
+i18n:
+  zh-CN:
+    name: SQL Server 数据库状态
+    description: 执行“SQL Server 数据库状态”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+    permission_descriptions:
+      execute_query: 允许执行受控数据库查询
+  en-US:
+    name: SQL Server Database Status
+    description: Get current SQL Server database status including performance metrics and resource usage
+    parameter_descriptions:
+      datasource_id: The database connection ID
+    permission_descriptions:
+      execute_query: Execute governed database queries

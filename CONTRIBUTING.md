@@ -107,6 +107,15 @@ python run.py
 - 避免引入不必要的依赖
 - 保持向后兼容（除非是破坏性变更）
 
+#### 多语言准入规范
+
+- 前端用户可见文案必须使用语义化 `I18n.t/plural` key；用户输入、SQL、日志和第三方原始返回值不得传入翻译函数。
+- 后端错误必须使用稳定 `error_code + params`，成功提示使用 `message_code + params`；禁止把 `str(exception)` 返回给客户端。
+- 告警和通知优先存储业务 message code 与结构化参数；报告、AI 回复等必须保存自然语言正文时，同时记录生成 locale 和 IANA 时区。
+- 新增通知模板、公开页面或导出格式时，必须同步设置 `Content-Language` 或 `<html lang>`，并增加中英文测试。
+- 内置文档的不同语言版本使用相同 `translation_group_id`；内置 Skill 的 YAML 通过 `i18n` 提供名称、描述、参数和权限说明，Skill ID、参数名和代码保持不变。
+- 提交前运行 `npm run lint:i18n:strict`、`npm run test:i18n`、`npm run test:e2e` 和 `python -m pytest`；多语言门禁不接受兼容基线，必须保持零违规。
+
 #### 提交流程
 
 1. **创建功能分支**
@@ -201,6 +210,10 @@ python -m pytest --cov=backend tests/
 python -m pytest -m unit
 python -m pytest -m service
 python -m pytest -m api
+
+# 多语言静态门禁和前端字典测试
+npm run lint:i18n
+npm run test:i18n
 ```
 
 ### 编写测试

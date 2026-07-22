@@ -6,11 +6,12 @@ from ipaddress import IPv4Address, IPv4Interface, IPv4Network, IPv6Address, IPv6
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
+from backend.i18n.errors import ApiError
 from backend.dependencies import get_current_user
 from backend.models.alert_event import AlertEvent
 from backend.models.alert_message import AlertMessage
@@ -162,7 +163,7 @@ def _normalize_session(raw: Dict[str, Any], *, can_terminate: bool) -> InstanceS
 async def _get_datasource_and_connector(datasource_id: int, db: AsyncSession) -> tuple[Datasource, Any]:
     datasource = await get_alive_by_id(db, Datasource, datasource_id)
     if not datasource:
-        raise HTTPException(status_code=404, detail="数据源不存在")
+        raise ApiError(404, "datasource.not_found")
 
     password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
     connector = get_connector(
@@ -502,7 +503,7 @@ def _extract_max_session_count(snapshot: Optional[DatasourceMetric]) -> Optional
 async def get_instance_summary(datasource_id: int, db: AsyncSession = Depends(get_db)):
     datasource = await get_alive_by_id(db, Datasource, datasource_id)
     if not datasource:
-        raise HTTPException(status_code=404, detail="数据源不存在")
+        raise ApiError(404, "datasource.not_found")
 
     from backend.routers.metrics import _get_db_status_snapshots, get_datasource_health
 
@@ -574,7 +575,7 @@ async def get_instance_variables(datasource_id: int, db: AsyncSession = Depends(
     try:
         variables = await connector.get_variables()
         if not isinstance(variables, dict):
-            raise HTTPException(status_code=400, detail="实例参数返回格式不正确")
+            raise ApiError(400, "operation.not_allowed")
 
         items = [
             InstanceVariableItem(
@@ -586,11 +587,11 @@ async def get_instance_variables(datasource_id: int, db: AsyncSession = Depends(
             for key, value in sorted(variables.items(), key=lambda item: str(item[0]).lower())
         ]
         return items
-    except HTTPException:
+    except ApiError:
         raise
     except Exception as exc:
         logger.error("Failed to load variables for datasource_id=%s db_type=%s: %s", datasource_id, datasource.db_type, exc, exc_info=True)
-        raise HTTPException(status_code=400, detail=f"加载实例配置失败: {exc}")
+        raise ApiError(400, "operation.failed") from exc
     finally:
         await connector.close()
 
@@ -601,15 +602,15 @@ async def get_instance_sessions(datasource_id: int, db: AsyncSession = Depends(g
     try:
         raw_sessions = await connector.get_process_list()
         if not isinstance(raw_sessions, list):
-            raise HTTPException(status_code=400, detail="实例会话返回格式不正确")
+            raise ApiError(400, "operation.not_allowed")
 
         can_terminate = _supports_terminate(connector)
         return [_normalize_session(session or {}, can_terminate=can_terminate) for session in raw_sessions if isinstance(session, dict)]
-    except HTTPException:
+    except ApiError:
         raise
     except Exception as exc:
         logger.error("Failed to load sessions for datasource_id=%s db_type=%s: %s", datasource_id, datasource.db_type, exc, exc_info=True)
-        raise HTTPException(status_code=400, detail=f"加载实例会话失败: {exc}")
+        raise ApiError(400, "operation.failed") from exc
     finally:
         await connector.close()
 
@@ -620,7 +621,7 @@ async def get_instance_traffic(datasource_id: int, db: AsyncSession = Depends(ge
     try:
         raw_sessions = await connector.get_process_list()
         if not isinstance(raw_sessions, list):
-            raise HTTPException(status_code=400, detail="实例会话返回格式不正确")
+            raise ApiError(400, "operation.not_allowed")
 
         can_terminate = _supports_terminate(connector)
         sessions = [
@@ -628,7 +629,7 @@ async def get_instance_traffic(datasource_id: int, db: AsyncSession = Depends(ge
             for session in raw_sessions
             if isinstance(session, dict)
         ]
-    except HTTPException:
+    except ApiError:
         raise
     except Exception as exc:
         logger.error(
@@ -638,7 +639,7 @@ async def get_instance_traffic(datasource_id: int, db: AsyncSession = Depends(ge
             exc,
             exc_info=True,
         )
-        raise HTTPException(status_code=400, detail=f"加载实例流量失败: {exc}")
+        raise ApiError(400, "operation.failed") from exc
     finally:
         await connector.close()
 
@@ -687,7 +688,7 @@ async def terminate_instance_session(
 
     if not supports_terminate:
         await connector.close()
-        raise HTTPException(status_code=400, detail="当前类型暂不支持终止会话")
+        raise ApiError(400, "operation.not_allowed")
 
     try:
         result = await connector.terminate_session(int(session_id))
@@ -707,7 +708,7 @@ async def terminate_instance_session(
             db_type=datasource.db_type,
             result=_json_safe(result),
         )
-    except HTTPException:
+    except ApiError:
         raise
     except Exception as exc:
         logger.warning(
@@ -719,6 +720,6 @@ async def terminate_instance_session(
             exc,
             exc_info=True,
         )
-        raise HTTPException(status_code=400, detail=f"终止会话失败: {exc}")
+        raise ApiError(400, "operation.failed") from exc
     finally:
         await connector.close()

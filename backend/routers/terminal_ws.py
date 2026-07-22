@@ -10,6 +10,7 @@ from backend.models.host import Host
 from backend.models.soft_delete import alive_filter, get_alive_by_id
 from backend.services.session_service import SessionService
 from backend.services.ssh_connection_pool import get_ssh_pool
+from backend.i18n.locale import DEFAULT_LOCALE, normalize_locale, parse_accept_language, translate
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -35,21 +36,27 @@ async def _authenticate_websocket(websocket: WebSocket) -> User | None:
 async def terminal_websocket(websocket: WebSocket, host_id: int):
     """主机 Terminal WebSocket 连接"""
     # 1. 认证
+    locale = (
+        normalize_locale(websocket.query_params.get("lang"))
+        or parse_accept_language(websocket.headers.get("accept-language"))
+        or DEFAULT_LOCALE
+    )
     user = await _authenticate_websocket(websocket)
     if not user:
-        await websocket.close(code=1008, reason="Invalid or expired session")
+        await websocket.close(code=1008, reason=translate(locale, "auth.session_expired"))
         return
+    locale = normalize_locale(user.locale) or locale
 
     # 2. 权限检查（仅管理员可访问 Terminal）
     if not user.is_admin:
-        await websocket.close(code=1008, reason="Insufficient permissions")
+        await websocket.close(code=1008, reason=translate(locale, "auth.admin_required"))
         return
 
     # 3. 验证主机存在
     async with async_session() as db:
         host = await get_alive_by_id(db, Host, host_id)
         if not host:
-            await websocket.close(code=1008, reason="Host not found")
+            await websocket.close(code=1008, reason=translate(locale, "host.not_found"))
             return
 
     await websocket.accept()
@@ -117,7 +124,11 @@ async def terminal_websocket(websocket: WebSocket, host_id: int):
     except Exception as e:
         logger.error(f"Terminal WebSocket error for host {host_id}: {e}")
         try:
-            await websocket.send_json({'type': 'error', 'message': str(e)})
+            await websocket.send_json({
+                'type': 'error',
+                'error_code': 'terminal.connection_error',
+                'message': translate(locale, 'terminal.connection_error'),
+            })
         except Exception:
             pass
     finally:

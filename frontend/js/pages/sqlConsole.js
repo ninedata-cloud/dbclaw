@@ -162,7 +162,7 @@ const SqlConsolePage = {
 
         content.innerHTML = '';
         if (!options.embedded) {
-            Header.render('SQL 窗口', headerActions);
+            Header.render(I18n.t('pageCopy.sqlConsole.sqlWindow'), headerActions);
         }
         const container = DOM.el('div', { className: 'sql-console-container' });
         const toolbar = DOM.el('div', { className: 'sql-console-toolbar' });
@@ -170,29 +170,29 @@ const SqlConsolePage = {
         const executeBtn = DOM.el('button', {
             className: 'btn btn-primary',
             id: 'execute-btn',
-            innerHTML: '<i data-lucide="play"></i> 执行 (Ctrl+Enter)',
+            innerHTML: I18n.t('pageCopy.sqlConsole.executeCtrlEnter'),
             onClick: () => this._executeQuery()
         });
         const cancelBtn = DOM.el('button', {
             className: 'btn btn-danger',
             id: 'cancel-btn',
-            innerHTML: '<i data-lucide="x-circle"></i> 取消',
+            innerHTML: I18n.t('pageCopy.sqlConsole.cancel'),
             style: { display: 'none' },
             onClick: () => this._cancelQuery()
         });
         const explainBtn = DOM.el('button', {
             className: 'btn btn-secondary',
-            innerHTML: '<i data-lucide="search"></i> 执行计划',
+            innerHTML: I18n.t('pageCopy.sqlConsole.executionPlan'),
             onClick: () => this._explainQuery()
         });
         const diagnoseBtn = DOM.el('button', {
             className: 'btn btn-secondary',
-            innerHTML: '<i data-lucide="sparkles"></i> 诊断优化',
+            innerHTML: I18n.t('pageCopy.sqlConsole.diagnosticOptimization'),
             onClick: () => this._diagnoseSql()
         });
         const historyBtn = DOM.el('button', {
             className: 'btn btn-secondary',
-            innerHTML: '<i data-lucide="history"></i> 历史记录',
+            innerHTML: I18n.t('pageCopy.sqlConsole.history'),
             onClick: () => this._showHistory()
         });
         toolbarActions.appendChild(executeBtn);
@@ -203,20 +203,7 @@ const SqlConsolePage = {
         toolbar.appendChild(toolbarActions);
 
         const contextToolbar = DOM.el('div', { className: 'sql-console-toolbar-context', id: 'sql-console-context-toolbar' });
-        contextToolbar.innerHTML = `
-            <div class="sql-console-context-group" id="sql-console-database-group">
-                <label for="sql-console-database-select">数据库</label>
-                <select id="sql-console-database-select" class="form-select">
-                    <option value="">加载中...</option>
-                </select>
-            </div>
-            <div class="sql-console-context-group" id="sql-console-schema-group" style="display:none;">
-                <label for="sql-console-schema-select">Schema</label>
-                <select id="sql-console-schema-select" class="form-select">
-                    <option value="">默认</option>
-                </select>
-            </div>
-        `;
+        contextToolbar.innerHTML = I18n.t('pageCopy.sqlConsole.databaseLoadingSchemaDefault');
         toolbar.appendChild(contextToolbar);
         container.appendChild(toolbar);
 
@@ -241,17 +228,11 @@ const SqlConsolePage = {
         }, 500);
 
         const results = DOM.el('div', { className: 'sql-console-results', id: 'sql-console-results' });
-        results.innerHTML = `
-            <div class="empty-state" style="padding:40px">
-                <i data-lucide="table"></i>
-                <h3>暂无结果</h3>
-                <p>执行查询后结果将显示在这里</p>
-            </div>
-        `;
+        results.innerHTML = I18n.t('pageCopy.sqlConsole.noResultYetAfterExecutingTheQuery');
         container.appendChild(resizer);
         container.appendChild(results);
         const statusBar = DOM.el('div', { className: 'sql-console-status-bar', id: 'sql-console-status' });
-        statusBar.innerHTML = '<div class="status-info"><span class="text-muted">就绪</span></div>';
+        statusBar.innerHTML = I18n.t('pageCopy.sqlConsole.ready');
         container.appendChild(statusBar);
         
         content.appendChild(container);
@@ -378,7 +359,7 @@ const SqlConsolePage = {
         }
 
         if (databaseSelect) {
-            this._buildSelectOptions(databaseSelect, this.databaseOptions, this.currentDatabase, '默认数据库');
+            this._buildSelectOptions(databaseSelect, this.databaseOptions, this.currentDatabase, I18n.t('pageCopy.sqlConsole.defaultDatabase'));
             databaseSelect.onchange = async (event) => {
                 this.currentDatabase = this._normalizeContextValue(event.target.value);
                 this.currentSchema = null;
@@ -397,7 +378,7 @@ const SqlConsolePage = {
         }
 
         if (schemaSelect && this.supportsSchema) {
-            this._buildSelectOptions(schemaSelect, this.schemaOptions, this.currentSchema, '默认 Schema');
+            this._buildSelectOptions(schemaSelect, this.schemaOptions, this.currentSchema, I18n.t('pageCopy.sqlConsole.defaultSchema'));
             schemaSelect.onchange = async (event) => {
                 this.currentSchema = this._normalizeContextValue(event.target.value);
                 const datasourceId = this._getSelectedDatasourceId();
@@ -469,7 +450,7 @@ const SqlConsolePage = {
                 { keepalive: true }
             ).catch((error) => {
                 console.warn('[SqlConsole] Failed to cancel query on server:', error);
-                Toast.warning(error.message || '取消请求发送失败，后端 SQL 可能仍在执行');
+                Toast.warning(error.message || I18n.t('pageCopy.sqlConsole.cancelRequestFailedToSendBackendSql'));
             });
         }
 
@@ -487,7 +468,7 @@ const SqlConsolePage = {
             const cancelBtn = DOM.$('#cancel-btn');
 
             if (status) {
-                status.innerHTML = '<div class="status-info"><span style="color:var(--accent-orange)">已取消</span></div>';
+                status.innerHTML = I18n.t('pageCopy.sqlConsole.canceled');
             }
             if (executeBtn) {
                 executeBtn.disabled = false;
@@ -547,13 +528,13 @@ const SqlConsolePage = {
         const sql = (selectedSql || QueryEditor.getValue()).trim();
 
         if (!sql) {
-            Toast.warning('请输入 SQL 语句');
+            Toast.warning(I18n.t('pageCopy.sqlConsole.enterASqlStatement'));
             return;
         }
 
         const connId = this._getSelectedDatasourceId();
         if (!connId) {
-            Toast.warning('请先选择数据源');
+            Toast.warning(I18n.t('pageCopy.sqlConsole.pleaseSelectDatasourceFirst'));
             return;
         }
         this._saveSqlDraft();
@@ -565,7 +546,7 @@ const SqlConsolePage = {
 
         if (!results || !status || !executeBtn || !cancelBtn) return;
 
-        status.innerHTML = '<div class="status-info"><span><div class="spinner" style="display:inline-block;width:14px;height:14px;margin-right:8px"></div>执行中...</span></div>';
+        status.innerHTML = I18n.t('pageCopy.sqlConsole.executing');
         results.innerHTML = '';
         executeBtn.disabled = true;
         cancelBtn.style.display = 'inline-flex';
@@ -590,7 +571,7 @@ const SqlConsolePage = {
                         freshResults.appendChild(DataTable.create(result.columns, result.rows));
                     } catch (err) {
                         console.error('[SqlConsole] DataTable.create failed:', err);
-                        freshResults.innerHTML = `<div style="padding:20px;color:var(--accent-red)">表格渲染失败</div>`;
+                        freshResults.innerHTML = I18n.t('pageCopy.sqlConsole.couldNotRenderTable');
                     }
                 }
             } else if (result.message) {
@@ -599,7 +580,7 @@ const SqlConsolePage = {
             }
 
             if (status.parentNode) {
-                const statusText = `${result.row_count} 行 | ${result.execution_time_ms}ms${result.truncated ? ' | 已截断至10000行' : ''}`;
+                const statusText = I18n.t('pageCopy.sqlConsole.resultSummary', { value0: result.row_count, value1: result.execution_time_ms, value2: result.truncated ? I18n.t('pageCopy.sqlConsole.rowLimitNotice') : '' });
                 status.innerHTML = `<div class="status-info"><span style="color:var(--accent-green)">${statusText}</span></div>`;
             }
         } catch (err) {
@@ -609,7 +590,7 @@ const SqlConsolePage = {
             if (err.message === '查询已取消') {
                 const canceledStatus = DOM.$('#sql-console-status');
                 if (canceledStatus) {
-                    canceledStatus.innerHTML = '<div class="status-info"><span style="color:var(--accent-orange)">已取消</span></div>';
+                    canceledStatus.innerHTML = I18n.t('pageCopy.sqlConsole.canceled');
                 }
                 return;
             }
@@ -619,7 +600,7 @@ const SqlConsolePage = {
             }
             const errStatus = DOM.$('#sql-console-status');
             if (errStatus) {
-                errStatus.innerHTML = '<div class="status-info"><span style="color:var(--accent-red)">错误</span></div>';
+                errStatus.innerHTML = I18n.t('pageCopy.sqlConsole.error');
             }
         } finally {
             if (this.currentQueryRequestId === requestId) {
@@ -637,13 +618,13 @@ const SqlConsolePage = {
         const sql = (selectedSql || QueryEditor.getValue()).trim();
 
         if (!sql) {
-            Toast.warning('请输入 SQL 语句');
+            Toast.warning(I18n.t('pageCopy.sqlConsole.enterASqlStatement'));
             return;
         }
 
         const connId = this._getSelectedDatasourceId();
         if (!connId) {
-            Toast.warning('请先选择数据源');
+            Toast.warning(I18n.t('pageCopy.sqlConsole.pleaseSelectDatasourceFirst'));
             return;
         }
 
@@ -662,7 +643,7 @@ const SqlConsolePage = {
                     freshResults.appendChild(DataTable.create(result.columns, result.rows));
                 } catch (err) {
                     console.error('[SqlConsole] DataTable.create failed:', err);
-                    freshResults.innerHTML = `<div style="padding:20px;color:var(--accent-red)">表格渲染失败</div>`;
+                    freshResults.innerHTML = I18n.t('pageCopy.sqlConsole.couldNotRenderTable');
                 }
             } else if (result.plan) {
                 const pre = DOM.el('div', { className: 'explain-panel', textContent: JSON.stringify(result.plan, null, 2) });
@@ -726,67 +707,64 @@ const SqlConsolePage = {
             const container = DOM.el('div');
 
             if (filteredHistory.length === 0) {
-                container.innerHTML = '<p class="text-muted text-center">暂无查询历史</p>';
+                container.innerHTML = I18n.t('pageCopy.sqlConsole.noQueryHistoryYet');
             } else {
                 for (const item of filteredHistory.slice(0, 20)) {
                     const row = DOM.el('div', {
                         style: { padding: '10px 0', borderBottom: '1px solid var(--border-color)', cursor: 'pointer' },
                         onClick: () => { QueryEditor.setValue(item.sql); Modal.hide(); }
                     });
-                    row.innerHTML = `
-                        <div class="font-mono text-sm" style="color:var(--text-primary);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.sql}</div>
-                        <div class="text-muted text-sm">${item.row_count} 行 | ${item.execution_time_ms}ms | ${item.executed_at || ''}</div>
-                    `;
+                    row.innerHTML = I18n.t('pageCopy.sqlConsole.historyItemSummary', { value0: item.sql, value1: item.row_count, value2: item.execution_time_ms, value3: item.executed_at || '' });
                     container.appendChild(row);
                 }
             }
 
             Modal.show({
-                title: '查询历史',
+                title: I18n.t('pageCopy.sqlConsole.queryHistory'),
                 content: container,
-                footer: DOM.el('button', { className: 'btn btn-secondary', textContent: '关闭', onClick: () => Modal.hide() }),
+                footer: DOM.el('button', { className: 'btn btn-secondary', textContent: I18n.t('pageCopy.sqlConsole.close'), onClick: () => Modal.hide() }),
                 width: '640px'
             });
         } catch (err) {
-            Toast.error('加载历史记录失败');
+            Toast.error(I18n.t('common.requestFailed'));
         }
     },
 
     _buildSqlDiagnosisPrompt(sql, datasource) {
-        const dbTypeLabel = this._getDbTypeLabel(datasource?.db_type) || datasource?.db_type || '未知';
+        const dbTypeLabel = this._getDbTypeLabel(datasource?.db_type) || datasource?.db_type || I18n.t('pageCopy.sqlConsole.unknown');
         const hostText = datasource?.host ? `${datasource.host}:${datasource.port || '-'}` : '-';
         const versionText = datasource?.db_version ? this._simplifyVersion(datasource.db_version, datasource.db_type).short : '-';
         const databaseText = this.currentDatabase || datasource?.database || '-';
         const schemaText = this.currentSchema || '-';
 
         return [
-            '请你作为资深数据库性能优化专家，针对下面这条 SQL 语句进行诊断和优化分析，并支持后续多轮追问。',
+            I18n.t('pageCopy.sqlConsole.asASeniorDatabasePerformanceOptimizationExpert'),
             '',
-            '【分析目标】',
-            '1. 分析 SQL 语句的性能瓶颈和潜在问题',
-            '2. 评估索引使用情况和优化建议',
-            '3. 提供改写建议和最佳实践',
-            '4. 给出具体的优化方案和预期效果',
+            I18n.t('pageCopy.sqlConsole.analysisTarget'),
+            I18n.t('pageCopy.sqlConsole.performanceBottleneckRequirement'),
+            I18n.t('pageCopy.sqlConsole.indexUsageRequirement'),
+            I18n.t('pageCopy.sqlConsole.rewritePracticeRequirement'),
+            I18n.t('pageCopy.sqlConsole.optimizationOutcomeRequirement'),
             '',
-            '【数据库信息】',
-            `- 实例名称：${datasource?.name || '-'}`,
-            `- 数据库类型：${dbTypeLabel}`,
-            `- 主机：${hostText}`,
-            `- 数据库：${databaseText}`,
+            I18n.t('pageCopy.sqlConsole.databaseInformation'),
+            I18n.t('pageCopy.sqlConsole.instanceNameValue', { value0: datasource?.name || '-' }),
+            I18n.t('pageCopy.sqlConsole.databaseTypeValue', { value0: dbTypeLabel }),
+            I18n.t('pageCopy.sqlConsole.hostValue', { value0: hostText }),
+            I18n.t('pageCopy.sqlConsole.databaseValue', { value0: databaseText }),
             this.supportsSchema && schemaText !== '-' ? `- Schema：${schemaText}` : null,
-            versionText !== '-' ? `- 版本：${versionText}` : null,
+            versionText !== '-' ? I18n.t('pageCopy.sqlConsole.versionValue', { value0: versionText }) : null,
             '',
-            '【待优化 SQL】',
+            I18n.t('pageCopy.sqlConsole.sqlToBeOptimized'),
             '```sql',
             sql,
             '```',
             '',
-            '请从以下几个方面进行分析：',
-            '1. SQL 语句结构分析（JOIN、子查询、聚合等）',
-            '2. 可能的性能问题点',
-            '3. 索引优化建议',
-            '4. SQL 改写建议',
-            '5. 其他优化建议',
+            I18n.t('pageCopy.sqlConsole.pleaseAnalyzeFromTheFollowingAspects'),
+            I18n.t('pageCopy.sqlConsole.structureAnalysisRequirement'),
+            I18n.t('pageCopy.sqlConsole.performanceIssueRequirement'),
+            I18n.t('pageCopy.sqlConsole.indexOptimizationRequirement'),
+            I18n.t('pageCopy.sqlConsole.sqlRewriteRequirement'),
+            I18n.t('pageCopy.sqlConsole.otherOptimizationRequirement'),
         ].filter(line => line !== null).join('\n');
     },
 
@@ -803,8 +781,8 @@ const SqlConsolePage = {
             'tidb': 'TiDB',
             'oceanbase': 'OceanBase',
             'oceanbase-mysql': 'OceanBase MySQL',
-            'dameng': '达梦',
-            'kingbase': '人大金仓',
+            'dameng': I18n.t('pageCopy.sqlConsole.dameng'),
+            'kingbase': I18n.t('pageCopy.sqlConsole.renminUniversityOfFinanceAndEconomics'),
             'gbase': 'GBase',
             'hana': 'SAP HANA'
         };
@@ -816,13 +794,13 @@ const SqlConsolePage = {
         const sql = (selectedSql || QueryEditor.getValue()).trim();
 
         if (!sql) {
-            Toast.warning('请输入或选择要诊断的 SQL 语句');
+            Toast.warning(I18n.t('pageCopy.sqlConsole.pleaseEnterOrSelectTheSqlStatement'));
             return;
         }
 
         const datasource = this._getSelectedDatasource();
         if (!datasource) {
-            Toast.warning('请先选择数据源');
+            Toast.warning(I18n.t('pageCopy.sqlConsole.pleaseSelectDatasourceFirst'));
             return;
         }
 
@@ -830,7 +808,7 @@ const SqlConsolePage = {
         const content = DOM.el('div', { className: 'instance-session-ai-shell' });
         content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
-        const title = `SQL 诊断优化 · ${datasource.name || '实例'}`;
+        const title = I18n.t('pageCopy.sqlConsole.sqlDiagnosticOptimizationValue', { value0: datasource.name || I18n.t('pageCopy.sqlConsole.instance') });
 
         Modal.show({
             title,
@@ -862,24 +840,18 @@ const SqlConsolePage = {
                 autoSendInitialAsk: true,
                 hideInitialAskMessage: true,
                 initialAsk: this._buildSqlDiagnosisPrompt(sql, datasource),
-                initialSessionTitle: `SQL 诊断优化 ${datasource.name || datasource.id || ''}`.trim(),
+                initialSessionTitle: I18n.t('pageCopy.sqlConsole.sqlDiagnosticOptimizationValue2', { value0: datasource.name || datasource.id || '' }).trim(),
                 hideToolSafetyButton: true,
                 hideClearSessionButton: true,
             });
         } catch (error) {
-            content.innerHTML = `
-                <div class="empty-state" style="padding:40px;">
-                    <i data-lucide="alert-circle"></i>
-                    <h3>SQL 诊断优化打开失败</h3>
-                    <p>${error.message || '未知错误'}</p>
-                </div>
-            `;
+            content.innerHTML = I18n.t('pageCopy.sqlConsole.sqlDiagnosticOptimizationFailedToOpenValue', { value0: error.message || I18n.t('pageCopy.sqlConsole.unknownError') });
             DOM.createIcons();
         }
     },
 
     _simplifyVersion(fullVersion, dbType) {
-        if (!fullVersion) return { short: '未知版本', full: '', details: '' };
+        if (!fullVersion) return { short: I18n.t('pageCopy.sqlConsole.unknownVersion'), full: '', details: '' };
 
         const patterns = {
             'postgresql': /PostgreSQL\s+([\d.]+)/i,

@@ -6,12 +6,13 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy import delete, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import async_session, get_db
+from backend.i18n.errors import ApiError
 from backend.dependencies import get_current_user
 from backend.evaluation.builtin_suite import ensure_builtin_suite
 from backend.evaluation.case_loader import EvalCase, get_case, load_all_cases
@@ -21,6 +22,7 @@ from backend.models.diagnostic_session import ChatMessage, DiagnosticSession
 from backend.models.evaluation import EvalCaseResult, EvalRun, EvalSuite
 from backend.models.soft_delete import alive_select
 from backend.models.user import User
+from backend.i18n.locale import message_payload
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/eval", tags=["evaluation"])
@@ -252,7 +254,7 @@ async def _resolve_active_model(db: AsyncSession, model_id: Optional[int], label
     )
     model = result.scalar_one_or_none()
     if not model:
-        raise HTTPException(status_code=404, detail=f"{label} not found or inactive")
+        raise ApiError(404, "resource.not_found", {"resource": label})
     return model
 
 
@@ -291,7 +293,7 @@ async def list_cases(
 async def get_case_detail(case_id: str, user: User = Depends(get_current_user)):
     case = get_case(case_id)
     if not case:
-        raise HTTPException(status_code=404, detail="case not found")
+        raise ApiError(404, "resource.not_found")
     return _case_detail(case)
 
 
@@ -316,7 +318,7 @@ async def get_suite(
     result = await db.execute(select(EvalSuite).filter(EvalSuite.id == suite_id))
     suite = result.scalar_one_or_none()
     if not suite:
-        raise HTTPException(status_code=404, detail="suite not found")
+        raise ApiError(404, "resource.not_found")
     return _suite_dto(suite)
 
 
@@ -335,7 +337,7 @@ async def create_run(
         result = await db.execute(select(EvalSuite).filter(EvalSuite.id == payload.suite_id))
         suite = result.scalar_one_or_none()
         if not suite:
-            raise HTTPException(status_code=404, detail="suite not found")
+            raise ApiError(404, "resource.not_found")
         case_ids = list(suite.case_ids or [])
     elif payload.case_ids:
         case_ids = list(payload.case_ids)
@@ -348,13 +350,13 @@ async def create_run(
         case_ids = list(suite.case_ids or []) if suite else []
 
     if not case_ids:
-        raise HTTPException(status_code=400, detail="no cases to run")
+        raise ApiError(400, "request.validation.invalid")
 
     # validate every case_id resolves
     all_cases = load_all_cases()
     missing = [cid for cid in case_ids if cid not in all_cases]
     if missing:
-        raise HTTPException(status_code=400, detail=f"unknown cases: {missing}")
+        raise ApiError(400, "request.validation.invalid", {"cases": missing})
 
     judge_model_id = payload.judge_model_id or payload.ai_model_id
     ai_model = await _resolve_active_model(db, payload.ai_model_id, "ai_model")
@@ -431,7 +433,7 @@ async def get_run(
     result = await db.execute(select(EvalRun).filter(EvalRun.id == run_id))
     run = result.scalar_one_or_none()
     if not run:
-        raise HTTPException(status_code=404, detail="run not found")
+        raise ApiError(404, "resource.not_found")
     return _run_dto(run)
 
 
@@ -443,7 +445,7 @@ async def _delete_run_impl(
     result = await db.execute(select(EvalRun).filter(EvalRun.id == run_id))
     run = result.scalar_one_or_none()
     if not run:
-        raise HTTPException(status_code=404, detail="run not found")
+        raise ApiError(404, "resource.not_found")
 
     if run.status in {"pending", "running"}:
         await _cancel_run_task(run_id)
@@ -480,7 +482,7 @@ async def _delete_run_impl(
     await db.execute(delete(EvalCaseResult).where(EvalCaseResult.run_id == run_id))
     await db.execute(delete(EvalRun).where(EvalRun.id == run_id))
     await db.commit()
-    return {"message": "评测记录已删除", "run_id": run_id}
+    return message_payload("evaluation.deleted", run_id=run_id)
 
 
 @router.delete("/runs/{run_id}")
@@ -530,7 +532,7 @@ async def get_run_result_detail(
     )
     row = result.scalar_one_or_none()
     if not row:
-        raise HTTPException(status_code=404, detail="result not found")
+        raise ApiError(404, "resource.not_found")
     return _result_detail(row)
 
 
@@ -549,9 +551,9 @@ async def get_run_result_replay(
     )
     row = result.scalar_one_or_none()
     if not row:
-        raise HTTPException(status_code=404, detail="result not found")
+        raise ApiError(404, "resource.not_found")
     if not row.session_id:
-        raise HTTPException(status_code=404, detail="replay session not found")
+        raise ApiError(404, "resource.not_found")
 
     session_result = await db.execute(
         select(DiagnosticSession).filter(
@@ -561,7 +563,7 @@ async def get_run_result_replay(
     )
     session = session_result.scalar_one_or_none()
     if not session:
-        raise HTTPException(status_code=404, detail="replay session not found")
+        raise ApiError(404, "resource.not_found")
 
     messages_result = await db.execute(
         select(ChatMessage)

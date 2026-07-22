@@ -26,6 +26,7 @@ class ChatSessionResponse(TimestampSerializerMixin, BaseModel):
     host_id: Optional[int] = None
     ai_model_id: Optional[int] = None
     title: str
+    default_locale: str = "zh-CN"
     kb_ids: Optional[List[int]] = None
     knowledge_snapshot: Optional[Any] = None
     disabled_tools: Optional[List[str]] = None
@@ -45,6 +46,7 @@ class ChatMessageResponse(TimestampSerializerMixin, BaseModel):
     session_id: int
     role: str
     content: str
+    content_locale: str = "und"
     run_id: Optional[str] = None
     render_segments: Optional[Any] = None
     status: Optional[str] = None

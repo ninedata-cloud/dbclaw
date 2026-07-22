@@ -38,3 +38,15 @@ code: |
           "host": host_list,
           "total": len(host_list)
       }
+
+i18n:
+  zh-CN:
+    name: 列出主机
+    description: 执行“列出主机”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions: {}
+    permission_descriptions: {}
+  en-US:
+    name: List Hosts
+    description: List all configured SSH host
+    parameter_descriptions: {}
+    permission_descriptions: {}

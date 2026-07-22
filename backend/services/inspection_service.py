@@ -14,6 +14,7 @@ from backend.models.datasource_metric import DatasourceMetric
 from backend.models.report import Report
 from backend.models.soft_delete import alive_filter, alive_select, get_alive_by_id
 from backend.utils.datetime_helper import now as get_now
+from backend.i18n.locale import resolve_background_preferences
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +117,8 @@ class InspectionService:
                                 trigger_type: str, reason: str = None,
                                 datasource_metric: Dict[str, Any] = None,
                                 alert_id: Optional[int] = None,
-                                locale: Optional[str] = None) -> Optional[int]:
+                                locale: Optional[str] = None,
+                                timezone: Optional[str] = None) -> Optional[int]:
         """Manually or programmatically trigger an inspection"""
         datasource = await get_alive_by_id(db, Datasource, datasource_id)
         if not datasource:
@@ -142,12 +144,19 @@ class InspectionService:
             )
             return recent_trigger.id
 
+        requested_locale, requested_timezone = await resolve_background_preferences(
+            db,
+            locale=locale,
+            timezone=timezone,
+        )
         trigger = InspectionTrigger(
             datasource_id=datasource_id,
             trigger_type=trigger_type,
             trigger_reason=reason,
             datasource_metric=datasource_metric,
             alert_id=alert_id,
+            requested_locale=requested_locale,
+            requested_timezone=requested_timezone,
             is_processed=False
         )
         db.add(trigger)
@@ -156,7 +165,13 @@ class InspectionService:
 
         logger.info(f"Created {trigger_type} trigger {trigger.id} for datasource {datasource_id}")
 
-        self._create_tracked_task(self._generate_report_async(trigger.id, locale=locale))
+        self._create_tracked_task(
+            self._generate_report_async(
+                trigger.id,
+                locale=requested_locale,
+                timezone=requested_timezone,
+            )
+        )
 
         return trigger.id
 
@@ -227,15 +242,26 @@ class InspectionService:
 
             await asyncio.sleep(60)
 
-    async def _generate_report_async(self, trigger_id: int, locale: Optional[str] = None):
+    async def _generate_report_async(
+        self,
+        trigger_id: int,
+        locale: Optional[str] = None,
+        timezone: Optional[str] = None,
+    ):
         """Generate report in background task"""
         try:
             async with self.db_session_factory() as db:
-                await self._generate_report(db, trigger_id, locale=locale)
+                await self._generate_report(db, trigger_id, locale=locale, timezone=timezone)
         except Exception as e:
             logger.error(f"Error generating report for trigger {trigger_id}: {e}", exc_info=True)
 
-    async def _generate_report(self, db: AsyncSession, trigger_id: int, locale: Optional[str] = None):
+    async def _generate_report(
+        self,
+        db: AsyncSession,
+        trigger_id: int,
+        locale: Optional[str] = None,
+        timezone: Optional[str] = None,
+    ):
         """Generate comprehensive inspection report"""
         from backend.services.report_generator import ReportGenerator
 
@@ -257,7 +283,11 @@ class InspectionService:
             return
 
         generator = ReportGenerator(db)
-        report_id = await generator.generate_inspection_report(trigger_id, locale=locale)
+        report_id = await generator.generate_inspection_report(
+            trigger_id,
+            locale=locale or trigger.requested_locale,
+            timezone=timezone or trigger.requested_timezone,
+        )
 
         trigger.is_processed = True
         trigger.report_id = report_id

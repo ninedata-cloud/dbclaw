@@ -37,3 +37,21 @@ code: |
           "metrics": metrics,
           "count": len(metrics)
       }
+
+i18n:
+  zh-CN:
+    name: 查询指标历史
+    description: 执行“查询指标历史”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+      metric_type: metric type。
+      limit: 返回条数上限。
+    permission_descriptions: {}
+  en-US:
+    name: Metric History
+    description: Get historical metric data for trend analysis
+    parameter_descriptions:
+      datasource_id: The database connection ID
+      metric_type: Type of metric (db_status, os_metrics)
+      limit: Number of recent snapshots to retrieve
+    permission_descriptions: {}

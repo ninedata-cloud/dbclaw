@@ -15,6 +15,7 @@ from backend.models.soft_delete import alive_filter, alive_select
 from backend.services.chat_orchestration_service import prepare_user_turn, process_stream_events, resolve_pending_approval
 from backend.services.feishu_service import feishu_service, format_reply_text
 from backend.utils.datetime_helper import now
+from backend.i18n.locale import resolve_background_preferences, translate
 
 logger = logging.getLogger(__name__)
 
@@ -82,39 +83,45 @@ def _extract_feishu_bot_config(integration: Integration | None) -> dict[str, str
     return config
 
 
-def _tool_display_name(tool_name: str | None) -> str:
+def _tool_display_name(tool_name: str | None, locale: str) -> str:
     if not tool_name:
-        return "执行操作"
-    return TOOL_LABELS.get(tool_name, tool_name)
+        return translate(locale, "bot.approval.default_tool")
+    return TOOL_LABELS.get(tool_name, tool_name) if locale == "zh-CN" else tool_name
 
 
-def _normalize_card_markdown(text: str) -> str:
+def _normalize_card_markdown(text: str, locale: str = "zh-CN") -> str:
     content = (text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
     if not content:
         return ""
 
-    content = re.sub(r"```(\w+)?\n([\s\S]*?)\n```", _replace_card_code_block, content)
+    content = re.sub(
+        r"```(\w+)?\n([\s\S]*?)\n```",
+        lambda match: _replace_card_code_block(match, locale),
+        content,
+    )
     content = re.sub(r"\n{3,}", "\n\n", content)
     return content
 
 
-def _replace_card_code_block(match: re.Match[str]) -> str:
+def _replace_card_code_block(match: re.Match[str], locale: str = "zh-CN") -> str:
     language = (match.group(1) or "").strip()
     code = (match.group(2) or "").rstrip("\n")
-    title = f"**代码块{f'（{language}）' if language else ''}**"
+    label = "代码块" if locale == "zh-CN" else "Code block"
+    title = f"**{label}{f'（{language}）' if language and locale == 'zh-CN' else f' ({language})' if language else ''}**"
     code_lines = code.splitlines() or [""]
     rendered = "\n".join(f"    {line}" if line else "    " for line in code_lines)
     return f"{title}\n{rendered}"
 
 
-def _build_approval_card(event_obj: dict[str, Any], session_id: int) -> dict[str, Any]:
+def _build_approval_card(event_obj: dict[str, Any], session_id: int, locale: str = "zh-CN") -> dict[str, Any]:
     approval_id = str(event_obj.get("approval_id") or "")
     tool_name = str(event_obj.get("tool_name") or "")
-    summary = str(event_obj.get("summary") or "请确认是否执行该高风险操作。")
-    plan_markdown = _normalize_card_markdown(str(event_obj.get("plan_markdown") or ""))
-    risk_level = RISK_LEVEL_LABELS.get(str(event_obj.get("risk_level") or "high"), "高")
-    risk_reason = str(event_obj.get("risk_reason") or "此操作可能影响当前环境。")
-    tool_label = _tool_display_name(tool_name)
+    summary = str(event_obj.get("summary") or translate(locale, "bot.approval.default_summary"))
+    plan_markdown = _normalize_card_markdown(str(event_obj.get("plan_markdown") or ""), locale)
+    risk_code = str(event_obj.get("risk_level") or "high")
+    risk_level = translate(locale, f"bot.risk.{risk_code}")
+    risk_reason = str(event_obj.get("risk_reason") or translate(locale, "bot.approval.default_risk_reason"))
+    tool_label = _tool_display_name(tool_name, locale)
 
     elements: list[dict[str, Any]] = [
         {
@@ -123,8 +130,8 @@ def _build_approval_card(event_obj: dict[str, Any], session_id: int) -> dict[str
                 "tag": "lark_md",
                 "content": "\n".join([
                     summary,
-                    f"**风险级别**：{risk_level}",
-                    f"**风险说明**：{risk_reason}",
+                    f"**{translate(locale, 'bot.approval.risk_level', {'level': risk_level})}**",
+                    f"**{translate(locale, 'bot.approval.risk_reason', {'reason': risk_reason})}**",
                 ]),
             },
         }
@@ -136,7 +143,7 @@ def _build_approval_card(event_obj: dict[str, Any], session_id: int) -> dict[str
                 "tag": "div",
                 "text": {
                     "tag": "lark_md",
-                    "content": "**执行计划**",
+                    "content": f"**{translate(locale, 'bot.approval.plan')}**",
                 },
             },
             {
@@ -154,7 +161,7 @@ def _build_approval_card(event_obj: dict[str, Any], session_id: int) -> dict[str
             "actions": [
                 {
                     "tag": "button",
-                    "text": {"tag": "plain_text", "content": "批准执行"},
+                    "text": {"tag": "plain_text", "content": translate(locale, "bot.approval.approve")},
                     "type": "primary",
                     "value": {
                         "session_id": str(session_id),
@@ -164,7 +171,7 @@ def _build_approval_card(event_obj: dict[str, Any], session_id: int) -> dict[str
                 },
                 {
                     "tag": "button",
-                    "text": {"tag": "plain_text", "content": "拒绝执行"},
+                    "text": {"tag": "plain_text", "content": translate(locale, "bot.approval.reject")},
                     "type": "default",
                     "value": {
                         "session_id": str(session_id),
@@ -180,7 +187,7 @@ def _build_approval_card(event_obj: dict[str, Any], session_id: int) -> dict[str
         "config": {"wide_screen_mode": True},
         "header": {
             "template": "orange",
-            "title": {"tag": "plain_text", "content": f"需要确认：{tool_label}"},
+            "title": {"tag": "plain_text", "content": translate(locale, "bot.approval.required", {"tool": tool_label})},
         },
         "elements": elements,
     }
@@ -239,6 +246,7 @@ def _build_reply_event_handler(
     message_id: str | None,
     open_id: str | None,
     chat_id: str | None,
+    locale: str = "zh-CN",
 ) -> tuple[dict[str, Any], Any]:
     state = _create_reply_state()
 
@@ -254,20 +262,20 @@ def _build_reply_event_handler(
             state["approval_sent"] = True
             try:
                 await feishu_service.send_interactive_card(
-                    _build_approval_card(event_obj, session_id),
+                    _build_approval_card(event_obj, session_id, locale),
                     message_id=message_id,
                     open_id=open_id,
                     chat_id=chat_id,
                     app_id=app_id,
                     app_secret=app_secret,
                 )
-            except Exception as exc:
+            except Exception:
                 logger.exception(
                     "Failed to send Feishu approval card: session_id=%s approval_id=%s",
                     session_id,
                     event_obj.get("approval_id"),
                 )
-                state["errors"].append(f"需要确认的操作未能发送审批卡片：{str(exc)}")
+                state["errors"].append(translate(locale, "bot.approval.card_failed"))
             return
         if event_type_local == "tool_call":
             logger.info("Running tool after Feishu approval: session_id=%s tool=%s args=%s", session_id, event_obj.get("tool_name"), event_obj.get("tool_args"))
@@ -290,6 +298,7 @@ def _build_followup_event_handler(
     message_id: str | None,
     open_id: str | None,
     chat_id: str | None,
+    locale: str = "zh-CN",
 ) -> tuple[dict[str, Any], Any]:
     return _build_reply_event_handler(
         session_id=session_id,
@@ -298,6 +307,7 @@ def _build_followup_event_handler(
         message_id=message_id,
         open_id=open_id,
         chat_id=chat_id,
+        locale=locale,
     )
 
 
@@ -422,9 +432,11 @@ class FeishuBotService:
             await db.commit()
             return binding
 
+        locale, _timezone = await resolve_background_preferences(db)
         session = DiagnosticSession(
             user_id=None,
             title="飞书会话",
+            default_locale=locale,
         )
         db.add(session)
         await db.commit()
@@ -474,6 +486,11 @@ class FeishuBotService:
             user_open_id=sender_open_id,
             integration=integration,
         )
+        locale, _timezone = await resolve_background_preferences(
+            db,
+            locale=getattr(binding, "locale", None),
+            timezone=getattr(binding, "timezone", None),
+        )
 
         config = _extract_feishu_bot_config(integration)
         app_id = (config.get("app_id") or "").strip()
@@ -482,7 +499,7 @@ class FeishuBotService:
         if app_id and app_secret:
             try:
                 await _reply_normal_message(
-                    text="收到，正在分析你的需求。",
+                    text=translate(locale, "bot.acknowledgement"),
                     message_id=message_id,
                     open_id=sender_open_id,
                     chat_id=chat_id,
@@ -503,6 +520,7 @@ class FeishuBotService:
             payload_datasource_id=None,
             model_id=None,
             history_window_hours=BOT_HISTORY_WINDOW_HOURS,
+            content_locale=locale,
         )
 
         reply_state, on_event = _build_reply_event_handler(
@@ -512,6 +530,7 @@ class FeishuBotService:
             message_id=message_id,
             open_id=sender_open_id,
             chat_id=chat_id,
+            locale=locale,
         )
 
         await process_stream_events(
@@ -527,6 +546,7 @@ class FeishuBotService:
             pending_approvals=PENDING_APPROVALS,
             on_event=on_event,
             history_window_hours=BOT_HISTORY_WINDOW_HOURS,
+            locale=locale,
         )
 
         await FeishuBotService.mark_event_processed(db, event_id=event_id, message_id=message_id, event_type=event_type)
@@ -553,7 +573,7 @@ class FeishuBotService:
             )
         elif app_id and app_secret and reply_state["approval_sent"]:
             await _reply_normal_message(
-                text="请在上面的卡片中确认是否执行该操作。",
+                text=translate(locale, "bot.approval.card_hint"),
                 message_id=message_id,
                 open_id=sender_open_id,
                 chat_id=chat_id,
@@ -562,7 +582,7 @@ class FeishuBotService:
             )
         elif app_id and app_secret:
             await _reply_normal_message(
-                text="本次请求已处理，但没有生成可返回内容。请查看后端日志确认执行情况。",
+                text=translate(locale, "bot.no_content"),
                 message_id=message_id,
                 open_id=sender_open_id,
                 chat_id=chat_id,
@@ -574,6 +594,7 @@ class FeishuBotService:
 
     @staticmethod
     async def handle_action_event(db: AsyncSession, payload: dict[str, Any]) -> dict[str, Any]:
+        locale, _timezone = await resolve_background_preferences(db)
         header = payload.get("header") or {}
         event_type = header.get("event_type")
         event = payload.get("event") or {}
@@ -597,12 +618,12 @@ class FeishuBotService:
                 action.get("tag"),
                 sorted(value.keys()),
             )
-            return _toast_response("操作已接收。", "success")
+            return _toast_response(translate(locale, "bot.approval.received"), "success")
 
         approval_key = f"{session_id}:{approval_id}"
         if approval_key in PROCESSING_APPROVALS:
             logger.info("Ignoring duplicate Feishu approval callback: session_id=%s approval_id=%s event_type=%s", session_id, approval_id, event_type)
-            return _toast_response("审批处理中，请勿重复点击。", "success")
+            return _toast_response(translate(locale, "bot.approval.processing"), "success")
 
         integration = await FeishuBotService.get_bot_integration(db)
         config = _extract_feishu_bot_config(integration)
@@ -616,6 +637,12 @@ class FeishuBotService:
             )
         )
         binding = binding_result.scalar_one_or_none()
+        if binding:
+            locale, _timezone = await resolve_background_preferences(
+                db,
+                locale=getattr(binding, "locale", None),
+                timezone=getattr(binding, "timezone", None),
+            )
 
         followup_state = None
         followup_on_event = None
@@ -627,6 +654,7 @@ class FeishuBotService:
                 message_id=open_message_id,
                 open_id=sender_open_id,
                 chat_id=binding.external_chat_id,
+                locale=locale,
             )
 
         PROCESSING_APPROVALS.add(approval_key)
@@ -640,17 +668,18 @@ class FeishuBotService:
                 user_id=None,
                 pending_approvals=PENDING_APPROVALS,
                 on_event=followup_on_event,
+                locale=locale,
             )
-        except Exception as exc:
+        except Exception:
             logger.exception("Failed to resume execution after Feishu approval: session_id=%s approval_id=%s", session_id, approval_id)
-            return _toast_response(f"审批执行失败：{str(exc)}", "error")
+            return _toast_response(translate(locale, "bot.approval.failed"), "error")
         finally:
             PROCESSING_APPROVALS.discard(approval_key)
 
         if binding and app_id and app_secret:
             if decision == "rejected":
                 await _reply_normal_message(
-                    text="已拒绝执行该操作。",
+                    text=translate(locale, "bot.approval.rejected"),
                     message_id=open_message_id,
                     open_id=sender_open_id,
                     chat_id=binding.external_chat_id,
@@ -669,7 +698,7 @@ class FeishuBotService:
                         app_id=app_id,
                         app_secret=app_secret,
                     )
-                    return _toast_response("已批准执行，结果已返回。", "success")
+                    return _toast_response(translate(locale, "bot.approval.result_returned"), "success")
 
                 error_text = _summarize_reply_errors((followup_state or {}).get("errors", []))
                 if error_text:
@@ -681,18 +710,18 @@ class FeishuBotService:
                         app_id=app_id,
                         app_secret=app_secret,
                     )
-                    return _toast_response("已批准执行，但处理过程中出现错误。", "warning")
+                    return _toast_response(translate(locale, "bot.approval.completed_with_error"), "warning")
 
                 if (followup_state or {}).get("approval_sent"):
                     await _reply_normal_message(
-                        text="后续还有高风险操作，请继续在新卡片中确认。",
+                        text=translate(locale, "bot.approval.more_required"),
                         message_id=open_message_id,
                         open_id=sender_open_id,
                         chat_id=binding.external_chat_id,
                         app_id=app_id,
                         app_secret=app_secret,
                     )
-                    return _toast_response("已批准执行，请继续确认后续操作。", "success")
+                    return _toast_response(translate(locale, "bot.approval.confirm_more"), "success")
 
                 latest_approval = await _get_latest_approval_request(db, int(session_id), str(approval_id))
                 follow_up_result = await db.execute(
@@ -713,19 +742,21 @@ class FeishuBotService:
                         app_id=app_id,
                         app_secret=app_secret,
                     )
-                    return _toast_response("已批准执行，结果已返回。", "success")
+                    return _toast_response(translate(locale, "bot.approval.result_returned"), "success")
 
                 await _reply_normal_message(
-                    text="已批准执行，但当前没有生成新的回复内容。请查看后端日志确认工具是否执行。",
+                    text=translate(locale, "bot.approval.no_result"),
                     message_id=open_message_id,
                     open_id=sender_open_id,
                     chat_id=binding.external_chat_id,
                     app_id=app_id,
                     app_secret=app_secret,
                 )
-                return _toast_response("已批准执行，但未生成可返回内容。", "warning")
+                return _toast_response(translate(locale, "bot.approval.no_return_content"), "warning")
 
         return _toast_response(
-            "已批准执行，继续处理中。" if result["status"] == "approved" else "已拒绝执行该操作。",
+            translate(locale, "bot.approval.continuing")
+            if result["status"] == "approved"
+            else translate(locale, "bot.approval.rejected"),
             "success",
         )

@@ -182,7 +182,7 @@ DBClaw writes data source and host monitoring snapshots to tables such as `datas
 
 ## Console Languages
 
-The web console supports Simplified Chinese (`zh-CN`) and English (`en-US`). A first-time visit defaults to Simplified Chinese. Before login, the selection is stored in the browser's `localStorage`; after login, it is saved to the account through `PUT /api/auth/me/locale` and applies to subsequent sessions and other devices. Switching languages preserves the current URL and login state. If an editor or form contains unsaved changes, the console asks for confirmation first.
+The web console supports Simplified Chinese (`zh-CN`) and English (`en-US`) through a registry that can accept additional BCP 47 locales. Locale and IANA time-zone preferences are stored on the account through `PUT /api/auth/me/locale`. Before login, the locale selection is stored in the browser's `localStorage`. Switching languages preserves the current URL and login state; if an editor or form contains unsaved changes, the console asks for confirmation first.
 
 Console API requests include `X-DBClaw-Locale`. The server selects the response language in the following order: request header, account preference, `Accept-Language`, then Simplified Chinese. It also returns `Content-Language`. Error responses retain the backward-compatible `detail` field while providing a stable error code and interpolation parameters:
 
@@ -194,7 +194,7 @@ Console API requests include `X-DBClaw-Locale`. The server selects the response 
 }
 ```
 
-AI chat passes the account language to the model as the target output language. Manually triggered inspection reports use the current account language as well, while scheduled and alert-triggered reports default to Simplified Chinese. AI alert decisions follow the language of the natural-language alert rule. SQL, commands, identifiers, user input, vendor-specific technical details, and quoted source text are not forcibly translated. Notifications, public shares, and exports retain the language in which they were generated.
+AI chat passes the resolved language to the model as the target output language. Inspection jobs snapshot locale and time zone when they are created; reports preserve those generation settings. Alert messages store a stable message code and structured parameters where possible, and notifications render per recipient or subscription override. Built-in documents are seeded as independent Chinese and English editions linked by `translation_group_id`; built-in skill YAML files carry bilingual names, descriptions, parameter help, and permission help. SQL, commands, identifiers, user input, vendor-specific technical details, and quoted source text are never automatically translated. Historical natural-language content is preserved and labelled with its known language or `und`.
 
 ## Health Check
 
@@ -221,12 +221,13 @@ python -m pytest -m service
 python -m pytest -m api
 python -m pytest --cov=backend --cov-report=term-missing
 npm install
+npm run lint:i18n
 npm run test:i18n
 npx playwright install chromium
 npm run test:e2e
 ```
 
-`test:i18n` validates the Chinese and English dictionary keys, interpolation placeholders, and English translations. The Playwright tests cover first visits, account preferences, protection for unsaved changes, and bilingual rendering across key console routes. Node.js and Playwright are not required in production.
+`lint:i18n` uses JavaScript and Python AST checks to reject hard-coded UI copy, raw HTTP error details, and exception strings sent to clients. It also validates all built-in document translation groups and skill metadata; the required result is zero violations, with no compatibility baseline. `test:i18n` validates Chinese/English key and interpolation parity. Playwright covers first visits, account preferences, unsaved-change protection, and bilingual rendering across key console routes. Node.js and Playwright are not required in production.
 
 To add database diagnostic capabilities, you will usually create a skill YAML file under `backend/skills/builtin/` and declare the skill's parameters, permissions, and asynchronous execution logic. See `AGENTS.md` and `CLAUDE.md` for additional project conventions.
 

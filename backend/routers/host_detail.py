@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from typing import List
@@ -22,6 +22,8 @@ from backend.services.ssh_connection_pool import get_ssh_pool
 from backend.utils.datetime_helper import to_utc_isoformat, now
 from backend.services.host_process_service import HostProcessService
 from backend.services.host_network_service import HostNetworkService
+from backend.i18n.locale import message_payload
+from backend.i18n.errors import ApiError
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +39,7 @@ async def get_host_summary(host_id: int, db: AsyncSession = Depends(get_db)):
     """获取主机概览信息"""
     host = await get_alive_by_id(db, Host, host_id)
     if not host:
-        raise HTTPException(status_code=404, detail="主机不存在")
+        raise ApiError(404, "host.not_found")
 
     # 获取最新指标
     metric_result = await db.execute(
@@ -128,7 +130,7 @@ async def get_host_metric(
     """获取主机历史指标（用于图表）"""
     host = await get_alive_by_id(db, Host, host_id)
     if not host:
-        raise HTTPException(status_code=404, detail="主机不存在")
+        raise ApiError(404, "host.not_found")
 
     # 查询指定时间范围内的指标
     start_time = now() - timedelta(minutes=minutes)
@@ -160,7 +162,7 @@ async def get_host_processes(host_id: int, db: AsyncSession = Depends(get_db)):
     """获取主机实时进程列表"""
     host = await get_alive_by_id(db, Host, host_id)
     if not host:
-        raise HTTPException(status_code=404, detail="主机不存在")
+        raise ApiError(404, "host.not_found")
 
     try:
         ssh_pool = get_ssh_pool()
@@ -169,7 +171,7 @@ async def get_host_processes(host_id: int, db: AsyncSession = Depends(get_db)):
             return [HostProcessItem(**p) for p in processes]
     except Exception as e:
         logger.error(f"Failed to get processes for host {host_id}: {e}")
-        raise HTTPException(status_code=500, detail="获取进程列表失败")
+        raise ApiError(500, "operation.failed")
 
 
 @router.post("/{host_id}/processes/{pid}/kill")
@@ -182,21 +184,21 @@ async def kill_host_process(
     """终止主机进程（需管理员权限）"""
     host = await get_alive_by_id(db, Host, host_id)
     if not host:
-        raise HTTPException(status_code=404, detail="主机不存在")
+        raise ApiError(404, "host.not_found")
 
     try:
         ssh_pool = get_ssh_pool()
         async with ssh_pool.get_connection(db, host_id) as ssh_client:
             success = await HostProcessService.kill_process(ssh_client, pid)
             if success:
-                return {"success": True, "message": f"进程 {pid} 已终止"}
+                return message_payload("process.terminated", {"pid": pid}, success=True)
             else:
-                raise HTTPException(status_code=500, detail="终止进程失败")
-    except HTTPException:
+                raise ApiError(500, "operation.failed")
+    except ApiError:
         raise
     except Exception as e:
         logger.error(f"Failed to kill process {pid} on host {host_id}: {e}")
-        raise HTTPException(status_code=500, detail="终止进程失败")
+        raise ApiError(500, "operation.failed")
 
 
 @router.get("/{host_id}/connections", response_model=List[HostConnectionItem])
@@ -204,7 +206,7 @@ async def get_host_connections(host_id: int, db: AsyncSession = Depends(get_db))
     """获取主机网络连接列表"""
     host = await get_alive_by_id(db, Host, host_id)
     if not host:
-        raise HTTPException(status_code=404, detail="主机不存在")
+        raise ApiError(404, "host.not_found")
 
     try:
         ssh_pool = get_ssh_pool()
@@ -213,7 +215,7 @@ async def get_host_connections(host_id: int, db: AsyncSession = Depends(get_db))
             return [HostConnectionItem(**c) for c in connections]
     except Exception as e:
         logger.error(f"Failed to get connections for host {host_id}: {e}")
-        raise HTTPException(status_code=500, detail="获取网络连接失败")
+        raise ApiError(500, "operation.failed")
 
 
 @router.get("/{host_id}/network-topology", response_model=HostNetworkTopologyResponse)
@@ -221,7 +223,7 @@ async def get_host_network_topology(host_id: int, db: AsyncSession = Depends(get
     """获取主机网络拓扑数据（聚合）"""
     host = await get_alive_by_id(db, Host, host_id)
     if not host:
-        raise HTTPException(status_code=404, detail="主机不存在")
+        raise ApiError(404, "host.not_found")
 
     try:
         ssh_pool = get_ssh_pool()
@@ -253,7 +255,7 @@ async def get_host_network_topology(host_id: int, db: AsyncSession = Depends(get
             )
     except Exception as e:
         logger.error(f"Failed to get network topology for host {host_id}: {e}")
-        raise HTTPException(status_code=500, detail="获取网络拓扑失败")
+        raise ApiError(500, "operation.failed")
 
 
 @router.get("/{host_id}/config", response_model=HostConfigResponse)
@@ -270,7 +272,7 @@ async def get_host_config(
     """
     host = await get_alive_by_id(db, Host, host_id)
     if not host:
-        raise HTTPException(status_code=404, detail="主机不存在")
+        raise ApiError(404, "host.not_found")
 
     # 如果有缓存且未过期（30天内），直接返回
     # 仅在用户显式 force_refresh 时才强制重新采集，避免每次进入页面都走 SSH。
@@ -479,7 +481,7 @@ async def get_host_config(
 
     except Exception as e:
         logger.error(f"Failed to get host config for {host_id}: {e}")
-        raise HTTPException(status_code=500, detail="获取主机配置失败")
+        raise ApiError(500, "operation.failed")
 
 
 @router.post("/{host_id}/config/refresh", response_model=HostConfigResponse)

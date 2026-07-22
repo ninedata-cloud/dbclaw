@@ -155,3 +155,25 @@ code: |
               "error": "Unexpected error occurred",
               "details": str(e)
           }
+
+i18n:
+  zh-CN:
+    name: 博查 AI 联网搜索
+    description: 执行“博查 AI 联网搜索”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      query: 查询语句。
+      count: 数量。
+      summary: 摘要。
+      freshness: freshness。
+    permission_descriptions:
+      access_external_api: 允许访问外部 API
+  en-US:
+    name: Web Search (Bocha AI)
+    description: Search the web using Bocha AI search API to get real-time information
+    parameter_descriptions:
+      query: Search query string
+      count: Number of search results to return (default 5, max 20)
+      summary: Whether to include AI-generated summary for each result
+      freshness: Time range for search results (noLimit, day, week, month)
+    permission_descriptions:
+      access_external_api: Access external APIs

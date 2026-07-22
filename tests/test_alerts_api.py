@@ -109,7 +109,7 @@ def test_subscription_list_blocks_cross_user_for_non_admin(client_factory, db_ov
     response = client.get("/api/alerts/subscriptions/list", params={"user_id": 9})
 
     assert response.status_code == 403
-    assert "不能访问其他用户的订阅" in response.text
+    assert response.json()["detail"] == "operation.not_allowed"
 
 
 @pytest.mark.api

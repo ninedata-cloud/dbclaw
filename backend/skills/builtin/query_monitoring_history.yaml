@@ -75,3 +75,35 @@ code: |
           max_points=params.get("max_points", 96),
           max_metrics=params.get("max_metrics", 12),
       )
+
+i18n:
+  zh-CN:
+    name: 查询监控历史
+    description: 执行“查询监控历史”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+      start_time: 开始时间。
+      end_time: 结束时间。
+      scope: scope。
+      metric_type: metric type。
+      metric_names: metric names。
+      aggregate: aggregate。
+      max_points: max points。
+      max_metrics: max metrics。
+    permission_descriptions:
+      read_datasource: 允许读取数据源和平台元数据
+  en-US:
+    name: Query Monitoring History
+    description: Query aggregated datasource and host monitoring history by datasource and time range
+    parameter_descriptions:
+      datasource_id: 数据源 ID，主机历史会自动通过该数据源关联的 host_id 查询
+      start_time: 开始时间，支持 ISO 8601 或 YYYY-MM-DD HH:MM[:SS]，默认最近 24 小时
+      end_time: 结束时间，支持 ISO 8601 或 YYYY-MM-DD HH:MM[:SS]，默认当前时间
+      scope: 查询范围：仅数据源、仅主机或同时查询
+      metric_type: 数据源监控类型，默认 db_status
+      metric_names: 指定要返回的指标名列表；为空时自动选择常用指标并聚合
+      aggregate: 聚合粒度；auto 会根据时间范围自动降采样
+      max_points: 每条指标时间序列最多返回的聚合点数量上限
+      max_metrics: 自动选择指标时最多返回多少个指标
+    permission_descriptions:
+      read_datasource: Read datasource and platform metadata

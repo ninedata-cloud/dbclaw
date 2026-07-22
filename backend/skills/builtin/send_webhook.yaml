@@ -153,3 +153,29 @@ code: |
           return {"success": False, "error": "Webhook request timed out after 20 seconds"}
       except Exception as e:
           return {"success": False, "error": f"Unexpected error: {str(e)}"}
+
+i18n:
+  zh-CN:
+    name: 发送 Webhook 通知
+    description: 执行“发送 Webhook 通知”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      url: URL。
+      title: 标题。
+      content: 正文。
+      severity: severity。
+      secret: secret。
+      payload: 请求负载。
+    permission_descriptions:
+      access_external_api: 允许访问外部 API
+  en-US:
+    name: Send Webhook Notification
+    description: Send a notification to a webhook URL. Supports generic webhooks, Feishu (Lark), and DingTalk bots with optional HMAC signing.
+    parameter_descriptions:
+      url: Webhook URL (https://). Auto-detects Feishu and DingTalk URLs and sends structured card/markdown messages.
+      title: Notification title
+      content: Notification body / message content
+      severity: Severity level, affects card color for Feishu
+      secret: DingTalk HMAC signing secret (only used for DingTalk webhooks)
+      payload: Custom JSON payload to send (overrides auto-generated payload for generic webhooks)
+    permission_descriptions:
+      access_external_api: Access external APIs

@@ -199,6 +199,37 @@ def test_build_notification_payload_formats_timestamp_without_iso_timezone():
 
 
 @pytest.mark.unit
+def test_build_notification_payload_supports_english_and_iana_timezone():
+    task = SimpleNamespace(id=7, name="Nightly probe")
+    finished_at = datetime(2026, 5, 6, 11, 46, 29, tzinfo=timezone.utc)
+    run = SimpleNamespace(
+        id=33,
+        status="failed",
+        trigger_source="scheduler",
+        started_at=finished_at,
+        finished_at=finished_at,
+        duration_ms=12,
+        error_message="Connection refused",
+        result=None,
+        stdout="",
+        stderr="",
+    )
+
+    payload = ScheduledTaskService._build_notification_payload(
+        task,
+        run,
+        locale="en-US",
+        timezone="America/New_York",
+    )
+
+    assert payload["locale"] == "en-US"
+    assert payload["timezone"] == "America/New_York"
+    assert payload["title"] == "Scheduled task Failed: Nightly probe"
+    assert "Finished at: 2026-05-06 07:46:29" in payload["content"]
+    assert "结束时间" not in payload["content"]
+
+
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_sync_task_schedule_adds_scheduler_job(mocker):
     task = _task("", id=9)

@@ -9,11 +9,12 @@ import logging
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
+from backend.i18n.errors import ApiError
 from backend.dependencies import get_current_user
 from backend.models.integration import Integration
 from backend.models.integration_bot_binding import IntegrationBotBinding
@@ -51,7 +52,7 @@ async def _get_or_create_binding(db: AsyncSession) -> IntegrationBotBinding:
     )
     integration = result.scalar_one_or_none()
     if not integration:
-        raise HTTPException(status_code=404, detail="微信 Bot Integration 不存在或未启用")
+        raise ApiError(404, "integration.not_found")
 
     binding_result = await db.execute(
         select(IntegrationBotBinding).where(IntegrationBotBinding.code == "weixin_bot")
@@ -113,7 +114,7 @@ async def create_weixin_login_qrcode(
 ):
     """获取登录二维码。"""
     if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="需要管理员权限")
+        raise ApiError(403, "auth.admin_required")
 
     binding = await _get_or_create_binding(db)
     params = binding.params or {}
@@ -127,7 +128,7 @@ async def create_weixin_login_qrcode(
         params["last_error"] = f"{type(exc).__name__}: {str(exc)}"
         binding.params = params
         await db.commit()
-        raise HTTPException(status_code=502, detail=f"获取二维码失败: {exc}")
+        raise ApiError(502, "operation.failed") from exc
 
     # 优先取 qrcode_img_content（base64 图片）
     qrcode = str(resp.get("qrcode") or resp.get("data", {}).get("qrcode") or "")
@@ -135,7 +136,7 @@ async def create_weixin_login_qrcode(
     expires_in = resp.get("expires_in") or resp.get("data", {}).get("expires_in")
 
     if not qrcode:
-        raise HTTPException(status_code=502, detail="上游未返回 qrcode")
+        raise ApiError(502, "operation.failed")
 
     # 如果返回的是外部 URL（微信 liteapp 域名），由后端生成 QR 码图片规避 CORS
     # 必须用完整 URL 而非仅 qrcode 字符串，否则微信扫码无法识别为登录二维码
@@ -179,7 +180,7 @@ async def poll_weixin_login_status(
 ):
     """轮询扫码状态。扫码成功后返回 bot_token 和 api_baseurl。"""
     if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="需要管理员权限")
+        raise ApiError(403, "auth.admin_required")
 
     binding = await _get_or_create_binding(db)
     params = binding.params or {}
@@ -203,7 +204,7 @@ async def poll_weixin_login_status(
         params["last_error"] = err_msg
         binding.params = params
         await db.commit()
-        raise HTTPException(status_code=502, detail=f"查询扫码状态失败: {err_msg}")
+        raise ApiError(502, "operation.failed")
 
     status = str(resp.get("status") or resp.get("data", {}).get("status") or "")
     bot_token = resp.get("bot_token") or resp.get("data", {}).get("bot_token")

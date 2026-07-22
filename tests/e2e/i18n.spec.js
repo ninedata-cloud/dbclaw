@@ -145,6 +145,59 @@ test('empty-state console pages render without Chinese UI text in English mode',
     }
 });
 
+test('Inspection localizes historical report metadata and all trigger filters', async ({ page }) => {
+    await page.route('**/api/**', async route => {
+        const url = new URL(route.request().url());
+        if (url.pathname === '/api/auth/login') {
+            return route.fulfill({ json: { user: {
+                id: 1, username: 'admin', display_name: 'Admin', email: null, phone: null,
+                locale: 'en-US', is_active: true, is_admin: true
+            } } });
+        }
+        if (url.pathname === '/api/app/info') return route.fulfill({ json: { app_version: 'test' } });
+        if (url.pathname === '/api/datasources') {
+            return route.fulfill({ json: [
+                { id: 1, name: 'opengauss_5.0(58)', db_type: 'opengauss', host: '127.0.0.1', port: 5432 },
+                { id: 2, name: 'mysql_5.5(71:3306)', db_type: 'mysql', host: '127.0.0.1', port: 3306 },
+            ] });
+        }
+        if (url.pathname === '/api/inspections/reports') {
+            return route.fulfill({ json: { report: [
+                {
+                    report_id: 2474, datasource_name: 'opengauss_5.0(58)',
+                    title: '连接失败巡检 - opengauss_5.0(58)', trigger_type: 'connection_failure',
+                    trigger_reason: 'Database connection failed: opengauss_5.0(58) (opengauss)',
+                    created_at: '2026-07-22T10:51:59Z', status: 'completed', error_message: null,
+                },
+                {
+                    report_id: 2475, datasource_name: 'mysql_5.5(71:3306)',
+                    title: '手动巡检 - mysql_5.5(71:3306)', trigger_type: 'manual',
+                    trigger_reason: '人工触发巡检', created_at: '2026-07-22T11:32:59Z',
+                    status: 'completed', error_message: null,
+                },
+            ], total: 2 } });
+        }
+        return route.fulfill({ json: [] });
+    });
+
+    await page.goto('/index.html#login');
+    await page.locator('#login-username').fill('admin');
+    await page.locator('#login-password').fill('password');
+    await page.locator('#login-btn').click();
+    await page.waitForURL('**#dashboard');
+    await page.evaluate(() => Router.navigate('inspection'));
+
+    await expect(page.locator('.inspection-table tbody tr')).toHaveCount(2);
+    await expect(page.locator('.inspection-col-title').nth(1)).toContainText('Connection Failure Inspection - opengauss_5.0(58)');
+    await expect(page.locator('.inspection-col-title').nth(2)).toContainText('Manual Inspection - mysql_5.5(71:3306)');
+    await expect(page.locator('.inspection-col-trigger').nth(1)).toContainText('Connection failure');
+    await expect(page.locator('.inspection-col-reason').nth(2)).toContainText('Manual inspection');
+    await expect(page.locator('#filterTriggerType option')).toHaveText([
+        'All trigger types', 'Manual', 'Scheduled', 'Anomaly', 'Connection failure', 'Baseline deviation'
+    ]);
+    await expectNoChineseUi(page, '#page-content', 'populated inspection reports');
+});
+
 test('Alert Management localizes populated events, subscriptions, templates, and dialogs', async ({ page }) => {
     let savedTemplatePayload = null;
     const templateConfig = {
@@ -160,7 +213,7 @@ test('Alert Management localizes populated events, subscriptions, templates, and
     const event = {
         id: 10, datasource_id: 1, severity: 'critical', status: 'active',
         fault_domain: 'performance', lifecycle_stage: 'escalated', alert_type: 'threshold_violation',
-        metric_name: 'cpu_usage', title: 'CPU usage remains high', alert_count: 2,
+        metric_name: 'cpu_usage', title: 'CPU 使用率阈值告警', alert_count: 2,
         event_started_at: '2026-07-22T08:00:00Z', event_ended_at: '2026-07-22T09:15:00Z',
         root_cause: 'A batch workload saturated the CPU.', recommended_actions: 'Reduce batch concurrency.',
         datasource_silence_until: '2099-07-22T10:00:00Z', datasource_silence_reason: 'Maintenance window',
@@ -183,12 +236,12 @@ test('Alert Management localizes populated events, subscriptions, templates, and
             return route.fulfill({ json: { alerts: [{
                 id: 20, status: 'active', severity: 'critical', alert_type: 'threshold_violation',
                 metric_name: 'cpu_usage', metric_value: 96, threshold_value: 90,
-                created_at: '2026-07-22T09:15:00Z', title: 'CPU threshold exceeded', content: 'CPU usage exceeded its threshold.',
+                created_at: '2026-07-22T09:15:00Z', title: 'CPU 使用率阈值告警', content: 'CPU usage exceeded its threshold.',
                 diagnosis_context: {
                     datasource_info: { name: 'primary-db', db_type: 'postgresql', host: '127.0.0.1', port: 5432, database: 'dbclaw', connection_status: 'normal' },
                     case_summary: 'Sustained CPU pressure', diagnosis_summary: 'A batch job is consuming CPU.',
                     root_cause: 'Batch concurrency is too high.', recommended_action: 'Reduce concurrency.',
-                    linked_report: { report_id: 30, status: 'completed', created_at: '2026-07-22T09:20:00Z' }
+                    linked_report: { report_id: 30, title: '异常巡检 - primary-db', trigger_type: 'anomaly', status: 'completed', created_at: '2026-07-22T09:20:00Z' }
                 }
             }] } });
         }
@@ -250,6 +303,7 @@ test('Alert Management localizes populated events, subscriptions, templates, and
     await page.locator('#login-username').fill('admin');
     await page.locator('#login-password').fill('password');
     await page.locator('#login-btn').click();
+    await page.waitForURL('**#dashboard');
     await page.evaluate(() => Router.navigate('alerts'));
     await expect(page.locator('.events-table')).toBeVisible();
     await expectNoChineseUi(page, '#page-content', 'populated alert events');
@@ -400,7 +454,8 @@ test('populated resource overview localizes dynamic labels and relative times', 
         if (url.pathname === '/api/hosts') return route.fulfill({ json: hosts });
         if (url.pathname === '/api/alerts') {
             return route.fulfill({ json: { alerts: [{
-                id: 10, datasource_id: 1, severity: 'critical', title: 'Database connection failed', created_at: createdAt
+                id: 10, datasource_id: 1, severity: 'critical', alert_type: 'system_error',
+                metric_name: 'connection_status', title: '数据库连接失败', created_at: createdAt
             }], total: 1 } });
         }
         if (url.pathname === '/api/metrics/batch/dashboard') {
@@ -428,7 +483,8 @@ test('populated resource overview localizes dynamic labels and relative times', 
     await expect(page.locator('#panel-hosts')).toContainText('no data received for over 5 minutes');
     await expect(page.locator('#panel-dbs')).toContainText('Datasource health');
     await expect(page.locator('#panel-alerts')).toContainText('Active alerts');
-    await expect(page.locator('#panel-alerts .alert-time')).toContainText('hours ago');
+    await expect(page.locator('#panel-alerts .alert-title')).toHaveText('Database connection failed');
+    await expect(page.locator('#panel-alerts .alert-time')).toContainText('days ago');
     await expect(page.locator('#anomaly-grid')).toContainText('Connection failed');
     await expect(page.locator('#anomaly-grid')).toContainText('Active connections');
     await expect(page.locator('#last-update')).toContainText('Last updated');

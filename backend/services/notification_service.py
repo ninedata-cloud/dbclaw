@@ -22,7 +22,8 @@ from backend.models.user import User
 from backend.models.system_config import SystemConfig
 from backend.models.datasource import Datasource
 from backend.models.soft_delete import alive_filter
-from backend.utils.datetime_helper import now, format_local_datetime
+from backend.i18n.locale import DEFAULT_LOCALE, DEFAULT_TIMEZONE, normalize_locale, normalize_timezone
+from backend.utils.datetime_helper import now, format_in_timezone
 
 logger = logging.getLogger(__name__)
 
@@ -31,21 +32,50 @@ class NotificationService:
     """Notification dispatch service"""
 
     _METRIC_DISPLAY_LABELS = {
-        "connections_active": "活跃连接数",
-        "active_connections": "活跃连接数",
-        "connection_count": "活跃连接数",
-        "threads_running": "活跃连接数",
-        "connections_total": "总连接数",
-        "total_connections": "总连接数",
-        "threads_connected": "总连接数",
+        "zh-CN": {
+            "connections_active": "活跃连接数", "active_connections": "活跃连接数",
+            "connection_count": "活跃连接数", "threads_running": "活跃连接数",
+            "connections_total": "总连接数", "total_connections": "总连接数",
+            "threads_connected": "总连接数",
+        },
+        "en-US": {
+            "connections_active": "Active connections", "active_connections": "Active connections",
+            "connection_count": "Active connections", "threads_running": "Active connections",
+            "connections_total": "Total connections", "total_connections": "Total connections",
+            "threads_connected": "Total connections",
+        },
+    }
+
+    _COPY = {
+        "zh-CN": {
+            "database_info": "数据库信息", "name": "名称", "type": "类型", "address": "地址",
+            "database": "数据库", "none": "无", "alert_details": "告警详情", "severity": "严重程度",
+            "alert_type": "告警类型", "created_at": "创建时间", "alert": "告警", "metric": "指标",
+            "threshold": "阈值", "trigger_reason": "触发原因", "time": "时间", "alert_title": "告警标题",
+            "triggered_at": "触发时间", "ai_diagnosis": "AI 诊断", "root_cause": "🔍 根本原因",
+            "diagnosis_summary": "💬 诊断摘要", "recommended_actions": "🛠 处置建议", "unknown": "未知",
+        },
+        "en-US": {
+            "database_info": "Datasource", "name": "Name", "type": "Type", "address": "Address",
+            "database": "Database", "none": "None", "alert_details": "Alert details", "severity": "Severity",
+            "alert_type": "Alert type", "created_at": "Created at", "alert": "Alert", "metric": "Metric",
+            "threshold": "Threshold", "trigger_reason": "Trigger reason", "time": "Time", "alert_title": "Alert title",
+            "triggered_at": "Triggered at", "ai_diagnosis": "AI diagnosis", "root_cause": "🔍 Root cause",
+            "diagnosis_summary": "💬 Diagnosis summary", "recommended_actions": "🛠 Recommended actions", "unknown": "Unknown",
+        },
     }
 
     @staticmethod
-    def _display_metric_name(metric_name: Optional[str]) -> Optional[str]:
+    def _display_metric_name(metric_name: Optional[str], locale: str = DEFAULT_LOCALE) -> Optional[str]:
         normalized = (metric_name or "").strip()
         if not normalized:
             return None
-        return NotificationService._METRIC_DISPLAY_LABELS.get(normalized.lower(), normalized)
+        locale = normalize_locale(locale)
+        return NotificationService._METRIC_DISPLAY_LABELS[locale].get(normalized.lower(), normalized)
+
+    @staticmethod
+    def _copy(locale: str) -> Dict[str, str]:
+        return NotificationService._COPY[normalize_locale(locale)]
 
     @staticmethod
     def _format_diagnosis_markdown(text: Optional[str], *, max_items: int = 5) -> Optional[str]:
@@ -76,7 +106,6 @@ class NotificationService:
             return items[0]
         return "\n".join(f"- {item}" for item in items)
 
-    @staticmethod
     @staticmethod
     async def check_subscription_match(
         alert: AlertMessage,
@@ -165,7 +194,9 @@ class NotificationService:
         alert: AlertMessage,
         recipient: str,
         subscription_id: int,
-        datasource: Optional[Any] = None
+        datasource: Optional[Any] = None,
+        locale: str = DEFAULT_LOCALE,
+        timezone: str = DEFAULT_TIMEZONE,
     ) -> AlertDeliveryLog:
         """Send email notification"""
         log = AlertDeliveryLog(
@@ -173,7 +204,9 @@ class NotificationService:
             subscription_id=subscription_id,
             channel="email",
             recipient=recipient,
-            status="pending"
+            status="pending",
+            rendered_locale=normalize_locale(locale),
+            rendered_timezone=normalize_timezone(timezone),
         )
         db.add(log)
 
@@ -198,27 +231,30 @@ class NotificationService:
             msg = MIMEMultipart()
             msg['From'] = smtp_from
             msg['To'] = recipient
-            msg['Subject'] = f"[{NotificationService._map_severity(alert.severity)}] {alert.title}"
+            locale = normalize_locale(locale)
+            timezone = normalize_timezone(timezone)
+            copy = NotificationService._copy(locale)
+            msg['Subject'] = f"[{NotificationService._map_severity(alert.severity, locale)}] {alert.title}"
 
             ds_info = ""
             if datasource:
-                ds_info = f"""\n数据库信息：
+                ds_info = f"""\n{copy['database_info']}:
 --------------
-名称：{datasource.name}
-类型：{datasource.db_type.upper()}
-地址：{datasource.host}:{datasource.port}
-数据库：{datasource.database or '无'}
+{copy['name']}: {datasource.name}
+{copy['type']}: {datasource.db_type.upper()}
+{copy['address']}: {datasource.host}:{datasource.port}
+{copy['database']}: {datasource.database or copy['none']}
 """
 
             body = f"""
-告警详情：
+{copy['alert_details']}:
 --------------
-严重程度：{NotificationService._map_severity(alert.severity)}
-告警类型：{NotificationService._map_alert_type(alert.alert_type)}
+{copy['severity']}: {NotificationService._map_severity(alert.severity, locale)}
+{copy['alert_type']}: {NotificationService._map_alert_type(alert.alert_type, locale)}
 {ds_info}
 {alert.content}
 
-创建时间：{format_local_datetime(alert.created_at)}
+{copy['created_at']}: {format_in_timezone(alert.created_at, timezone)}
 """
             msg.attach(MIMEText(body, 'plain'))
             if smtp_use_tls:
@@ -250,7 +286,9 @@ class NotificationService:
         alert: AlertMessage,
         recipient: str,
         subscription_id: int,
-        datasource: Optional[Any] = None
+        datasource: Optional[Any] = None,
+        locale: str = DEFAULT_LOCALE,
+        timezone: str = DEFAULT_TIMEZONE,
     ) -> AlertDeliveryLog:
         """Send SMS notification"""
         log = AlertDeliveryLog(
@@ -258,7 +296,9 @@ class NotificationService:
             subscription_id=subscription_id,
             channel="sms",
             recipient=recipient,
-            status="pending"
+            status="pending",
+            rendered_locale=normalize_locale(locale),
+            rendered_timezone=normalize_timezone(timezone),
         )
         db.add(log)
 
@@ -276,12 +316,14 @@ class NotificationService:
                 if not webhook_url:
                     raise ValueError("SMS webhook URL not configured")
 
+                locale = normalize_locale(locale)
+                copy = NotificationService._copy(locale)
                 ds_prefix = f"[{datasource.name}/{datasource.db_type.upper()}] " if datasource else ""
                 # Send via webhook
                 async with aiohttp.ClientSession() as session:
                     payload = {
                         "phone": recipient,
-                        "message": f"[{NotificationService._map_severity(alert.severity)}告警] {ds_prefix}{alert.title}: {alert.content[:100]}"
+                        "message": f"[{NotificationService._map_severity(alert.severity, locale)} {copy['alert']}] {ds_prefix}{alert.title}: {alert.content[:100]}"
                     }
                     async with session.post(webhook_url, json=payload) as response:
                         if response.status != 200:
@@ -310,7 +352,9 @@ class NotificationService:
         alert: AlertMessage,
         recipient: str,
         subscription_id: int,
-        datasource: Optional[Any] = None
+        datasource: Optional[Any] = None,
+        locale: str = DEFAULT_LOCALE,
+        timezone: str = DEFAULT_TIMEZONE,
     ) -> AlertDeliveryLog:
         """Send phone call notification"""
         log = AlertDeliveryLog(
@@ -318,7 +362,9 @@ class NotificationService:
             subscription_id=subscription_id,
             channel="phone",
             recipient=recipient,
-            status="pending"
+            status="pending",
+            rendered_locale=normalize_locale(locale),
+            rendered_timezone=normalize_timezone(timezone),
         )
         db.add(log)
 
@@ -336,12 +382,14 @@ class NotificationService:
                 if not webhook_url:
                     raise ValueError("Phone webhook URL not configured")
 
+                locale = normalize_locale(locale)
+                copy = NotificationService._copy(locale)
                 ds_prefix = f"[{datasource.name}/{datasource.db_type.upper()}] " if datasource else ""
                 # Send via webhook
                 async with aiohttp.ClientSession() as session:
                     payload = {
                         "phone": recipient,
-                        "message": f"[告警] {ds_prefix}{alert.title}，严重程度：{NotificationService._map_severity(alert.severity)}"
+                        "message": f"[{copy['alert']}] {ds_prefix}{alert.title}; {copy['severity']}: {NotificationService._map_severity(alert.severity, locale)}"
                     }
                     async with session.post(webhook_url, json=payload) as response:
                         if response.status != 200:
@@ -383,7 +431,6 @@ class NotificationService:
         return []
 
     @staticmethod
-    @staticmethod
     def _is_feishu_webhook(url: str) -> bool:
         """Check if URL is a Feishu/Lark webhook"""
         return 'open.feishu.cn' in url or 'open.larksuite.com' in url
@@ -394,21 +441,29 @@ class NotificationService:
         return 'oapi.dingtalk.com' in url
 
     @staticmethod
-    def _map_severity(severity: str) -> str:
-        """Map severity code to Chinese label"""
-        labels = {'critical': '严重', 'high': '高', 'medium': '中', 'low': '低'}
+    def _map_severity(severity: str, locale: str = DEFAULT_LOCALE) -> str:
+        """Map severity code to a localized label."""
+        labels_by_locale = {
+            'zh-CN': {'critical': '严重', 'high': '高', 'medium': '中', 'low': '低'},
+            'en-US': {'critical': 'Critical', 'high': 'High', 'medium': 'Medium', 'low': 'Low'},
+        }
+        labels = labels_by_locale[normalize_locale(locale)]
         return labels.get(severity, severity)
 
     @staticmethod
-    def _map_alert_type(alert_type: str) -> str:
-        """Map alert_type code to Chinese label"""
-        labels = {
-            'threshold_violation': '超过阈值',
-            'baseline_deviation': '偏离基线',
-            'custom_expression': '自定义表达式',
-            'system_error': '系统错误',
-            'ai_policy_violation': 'AI 判警',
+    def _map_alert_type(alert_type: str, locale: str = DEFAULT_LOCALE) -> str:
+        """Map alert type code to a localized label."""
+        labels_by_locale = {
+            'zh-CN': {
+                'threshold_violation': '超过阈值', 'baseline_deviation': '偏离基线',
+                'custom_expression': '自定义表达式', 'system_error': '系统错误', 'ai_policy_violation': 'AI 判警',
+            },
+            'en-US': {
+                'threshold_violation': 'Threshold violation', 'baseline_deviation': 'Baseline deviation',
+                'custom_expression': 'Custom expression', 'system_error': 'System error', 'ai_policy_violation': 'AI policy',
+            },
         }
+        labels = labels_by_locale[normalize_locale(locale)]
         return labels.get(alert_type, alert_type)
 
     @staticmethod
@@ -427,22 +482,30 @@ class NotificationService:
         return f'{webhook_url}&timestamp={timestamp}&sign={sign}'
 
     @staticmethod
-    def _build_dingtalk_payload(alert: AlertMessage, datasource=None) -> dict:
+    def _build_dingtalk_payload(
+        alert: AlertMessage,
+        datasource=None,
+        locale: str = DEFAULT_LOCALE,
+        timezone: str = DEFAULT_TIMEZONE,
+    ) -> dict:
         """Build DingTalk markdown message payload"""
-        severity_label = NotificationService._map_severity(alert.severity)
-        alert_type_label = NotificationService._map_alert_type(alert.alert_type)
-        metric_display_name = NotificationService._display_metric_name(alert.metric_name)
+        locale = normalize_locale(locale)
+        timezone = normalize_timezone(timezone)
+        copy = NotificationService._copy(locale)
+        severity_label = NotificationService._map_severity(alert.severity, locale)
+        alert_type_label = NotificationService._map_alert_type(alert.alert_type, locale)
+        metric_display_name = NotificationService._display_metric_name(alert.metric_name, locale)
         lines = [f'### [{severity_label}] {alert.title}']
         if datasource:
-            lines.append(f'**数据库：** {datasource.name} ({datasource.db_type.upper()}) {datasource.host}:{datasource.port}')
-        lines.append(f'**告警类型：** {alert_type_label}')
+            lines.append(f"**{copy['database']}:** {datasource.name} ({datasource.db_type.upper()}) {datasource.host}:{datasource.port}")
+        lines.append(f"**{copy['alert_type']}:** {alert_type_label}")
         if metric_display_name and alert.metric_value is not None:
-            lines.append(f'**指标：** {metric_display_name} = {alert.metric_value:.2f}')
+            lines.append(f"**{copy['metric']}:** {metric_display_name} = {alert.metric_value:.2f}")
         if alert.threshold_value is not None:
-            lines.append(f'**阈值：** {alert.threshold_value:.2f}')
+            lines.append(f"**{copy['threshold']}:** {alert.threshold_value:.2f}")
         if alert.trigger_reason:
-            lines.append(f'**触发原因：** {alert.trigger_reason}')
-        lines.append(f'**时间：** {format_local_datetime(alert.created_at)}')
+            lines.append(f"**{copy['trigger_reason']}:** {alert.trigger_reason}")
+        lines.append(f"**{copy['time']}:** {format_in_timezone(alert.created_at, timezone)}")
         return {
             'msgtype': 'markdown',
             'markdown': {
@@ -452,9 +515,16 @@ class NotificationService:
         }
 
     @staticmethod
-    @staticmethod
-    def _build_feishu_payload(alert: AlertMessage, datasource=None) -> dict:
+    def _build_feishu_payload(
+        alert: AlertMessage,
+        datasource=None,
+        locale: str = DEFAULT_LOCALE,
+        timezone: str = DEFAULT_TIMEZONE,
+    ) -> dict:
         """Build Feishu-compatible card message payload"""
+        locale = normalize_locale(locale)
+        timezone = normalize_timezone(timezone)
+        copy = NotificationService._copy(locale)
         severity = (alert.severity or '').lower()
         severity_colors = {
             'critical': 'red',
@@ -463,28 +533,28 @@ class NotificationService:
             'low': 'orange'
         }
         color = severity_colors.get(severity, 'blue')
-        severity_label = NotificationService._map_severity(alert.severity)
-        alert_type_label = NotificationService._map_alert_type(alert.alert_type)
-        metric_display_name = NotificationService._display_metric_name(alert.metric_name)
+        severity_label = NotificationService._map_severity(alert.severity, locale)
+        alert_type_label = NotificationService._map_alert_type(alert.alert_type, locale)
+        metric_display_name = NotificationService._display_metric_name(alert.metric_name, locale)
 
         elements = []
 
         # 告警信息
         alert_info = [
-            f"**告警标题：** {alert.title}",
-            f"**严重程度：** {severity_label}",
-            f"**告警类型：** {alert_type_label}",
+            f"**{copy['alert_title']}:** {alert.title}",
+            f"**{copy['severity']}:** {severity_label}",
+            f"**{copy['alert_type']}:** {alert_type_label}",
         ]
         is_ai_policy = (alert.alert_type or "") == "ai_policy_violation"
         if metric_display_name and alert.metric_value is not None:
-            alert_info.append(f"**指标：** {metric_display_name} = {alert.metric_value:.2f}")
+            alert_info.append(f"**{copy['metric']}:** {metric_display_name} = {alert.metric_value:.2f}")
         elif metric_display_name and not is_ai_policy:
-            alert_info.append(f"**指标：** {metric_display_name}")
+            alert_info.append(f"**{copy['metric']}:** {metric_display_name}")
         if alert.threshold_value is not None:
-            alert_info.append(f"**阈值：** {alert.threshold_value:.2f}")
+            alert_info.append(f"**{copy['threshold']}:** {alert.threshold_value:.2f}")
         if alert.trigger_reason:
-            alert_info.append(f"**触发原因：** {alert.trigger_reason}")
-        alert_info.append(f"**触发时间：** {format_local_datetime(alert.created_at)}")
+            alert_info.append(f"**{copy['trigger_reason']}:** {alert.trigger_reason}")
+        alert_info.append(f"**{copy['triggered_at']}:** {format_in_timezone(alert.created_at, timezone)}")
         elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(alert_info)}})
 
         root_cause_markdown = NotificationService._format_diagnosis_markdown(getattr(alert, "root_cause", None))
@@ -495,21 +565,21 @@ class NotificationService:
             elements.append({"tag": "hr"})
             elements.append({
                 "tag": "div",
-                "text": {"tag": "lark_md", "content": "**AI 诊断**"}
+                "text": {"tag": "lark_md", "content": f"**{copy['ai_diagnosis']}**"}
             })
             if root_cause_markdown:
-                elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**🔍 根本原因**\n" + root_cause_markdown[:800]}})
+                elements.append({"tag": "div", "text": {"tag": "lark_md", "content": f"**{copy['root_cause']}**\n" + root_cause_markdown[:800]}})
             elif summary_markdown:
-                elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**💬 诊断摘要**\n" + summary_markdown[:500]}})
+                elements.append({"tag": "div", "text": {"tag": "lark_md", "content": f"**{copy['diagnosis_summary']}**\n" + summary_markdown[:500]}})
             if recommended_actions_markdown:
-                elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**🛠 处置建议**\n" + recommended_actions_markdown[:800]}})
+                elements.append({"tag": "div", "text": {"tag": "lark_md", "content": f"**{copy['recommended_actions']}**\n" + recommended_actions_markdown[:800]}})
 
         return {
             "msg_type": "interactive",
             "card": {
                 "config": {"wide_screen_mode": True},
                 "header": {
-                    "title": {"tag": "plain_text", "content": f"[DBClaw 告警] {datasource.name if datasource else '未知'}"},
+                    "title": {"tag": "plain_text", "content": f"[DBClaw {copy['alert']}] {datasource.name if datasource else copy['unknown']}"},
                     "template": color
                 },
                 "elements": elements
@@ -522,7 +592,9 @@ class NotificationService:
         alert: AlertMessage,
         webhook_url: str,
         subscription_id: int,
-        datasource: Optional[Any] = None
+        datasource: Optional[Any] = None,
+        locale: str = DEFAULT_LOCALE,
+        timezone: str = DEFAULT_TIMEZONE,
     ) -> AlertDeliveryLog:
         """Send webhook notification"""
         log = AlertDeliveryLog(
@@ -530,17 +602,19 @@ class NotificationService:
             subscription_id=subscription_id,
             channel="webhook",
             recipient=webhook_url,
-            status="pending"
+            status="pending",
+            rendered_locale=normalize_locale(locale),
+            rendered_timezone=normalize_timezone(timezone),
         )
         db.add(log)
 
         try:
             async with aiohttp.ClientSession() as session:
                 if NotificationService._is_feishu_webhook(webhook_url):
-                    payload = NotificationService._build_feishu_payload(alert, datasource)
+                    payload = NotificationService._build_feishu_payload(alert, datasource, locale, timezone)
                 elif NotificationService._is_dingtalk_webhook(webhook_url):
                     signed_url = NotificationService._build_dingtalk_url(webhook_url, None)
-                    payload = NotificationService._build_dingtalk_payload(alert, datasource)
+                    payload = NotificationService._build_dingtalk_payload(alert, datasource, locale, timezone)
                     timeout = aiohttp.ClientTimeout(total=10)
                     async with session.post(signed_url, json=payload, timeout=timeout) as response:
                         resp_text = await response.text()

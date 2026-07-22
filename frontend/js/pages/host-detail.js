@@ -439,129 +439,12 @@ const HostDetailPage = {
             const swapUsed = swapTotal - swapFree;
             const swapUsedPercent = swapTotal > 0 ? ((swapUsed / swapTotal) * 100).toFixed(1) : 0;
 
-            container.innerHTML = `
-                <div class="host-config-page">
-                    <div class="host-config-header">
-                        <div class="host-config-header-info">
-                            <h2>${Utils.escapeHtml(this.currentHost.name)}</h2>
-                            <p>${Utils.escapeHtml(config.system.hostname)} · ${Utils.escapeHtml(config.system.os_name)} ${Utils.escapeHtml(config.system.os_version)}</p>
-                        </div>
-                        <div class="host-config-header-actions">
-                            <button class="btn btn-secondary btn-sm" id="refresh-config-btn">
-                                <i data-lucide="refresh-cw"></i> ${I18n.t('hostDetail.refreshConfig')}
-                            </button>
-                            <div class="host-config-collected-at">
-                                <i data-lucide="clock"></i>
-                                <span>${I18n.t('hostDetail.collectedAt', { time: this._formatDateTime(config.collected_at) })}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="host-config-grid">
-                        <!-- 系统信息 -->
-                        <div class="host-config-card">
-                            <div class="host-config-card-header">
-                                <i data-lucide="monitor"></i>
-                                <h3>${I18n.t('hostDetail.systemInfo')}</h3>
-                            </div>
-                            <div class="host-config-card-body">
-                                <div class="host-config-item">
-                                    <span class="host-config-label">${I18n.t('hostDetail.hostname')}</span>
-                                    <span class="host-config-value">${Utils.escapeHtml(config.system.hostname)}</span>
-                                </div>
-                                <div class="host-config-item">
-                                    <span class="host-config-label">${I18n.t('hostDetail.operatingSystem')}</span>
-                                    <span class="host-config-value">${Utils.escapeHtml(config.system.os_name)}</span>
-                                </div>
-                                <div class="host-config-item">
-                                    <span class="host-config-label">${I18n.t('hostDetail.systemVersion')}</span>
-                                    <span class="host-config-value">${Utils.escapeHtml(config.system.os_version || '-')}</span>
-                                </div>
-                                <div class="host-config-item">
-                                    <span class="host-config-label">${I18n.t('hostDetail.kernelVersion')}</span>
-                                    <span class="host-config-value">${Utils.escapeHtml(config.system.kernel)}</span>
-                                </div>
-                                <div class="host-config-item">
-                                    <span class="host-config-label">${I18n.t('hostDetail.uptimeLabel')}</span>
-                                    <span class="host-config-value">${uptimeText}</span>
-                                </div>
-                                <div class="host-config-item">
-                                    <span class="host-config-label">${I18n.t('hostDetail.loadAverage')}</span>
-                                    <span class="host-config-value">${config.system.load_avg_1} / ${config.system.load_avg_5} / ${config.system.load_avg_15}</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- CPU 信息 -->
-                        <div class="host-config-card">
-                            <div class="host-config-card-header">
-                                <i data-lucide="cpu"></i>
-                                <h3>${I18n.t('hostDetail.cpuInfo')}</h3>
-                            </div>
-                            <div class="host-config-card-body">
-                                <div class="host-config-item">
-                                    <span class="host-config-label">${I18n.t('hostDetail.processorModel')}</span>
-                                    <span class="host-config-value">${Utils.escapeHtml(config.cpu.model)}</span>
-                                </div>
-                                <div class="host-config-item">
-                                    <span class="host-config-label">${I18n.t('hostDetail.physicalCpuCount')}</span>
-                                    <span class="host-config-value">${config.cpu.physical_cpus}</span>
-                                </div>
-                                <div class="host-config-item">
-                                    <span class="host-config-label">${I18n.t('hostDetail.logicalCoreCount')}</span>
-                                    <span class="host-config-value">${config.cpu.cores}</span>
-                                </div>
-                                <div class="host-config-item">
-                                    <span class="host-config-label">${I18n.t('hostDetail.cpuFrequency')}</span>
-                                    <span class="host-config-value">${config.cpu.mhz} MHz</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- 内存信息 -->
-                        <div class="host-config-card">
-                            <div class="host-config-card-header">
-                                <i data-lucide="memory-stick"></i>
-                                <h3>${I18n.t('hostDetail.memoryInfo')}</h3>
-                            </div>
-                            <div class="host-config-card-body">
-                                <div class="host-config-item">
-                                    <span class="host-config-label">${I18n.t('hostDetail.totalMemory')}</span>
-                                    <span class="host-config-value">${this._formatBytes(memTotal)}</span>
-                                </div>
-                                <div class="host-config-item">
-                                    <span class="host-config-label">${I18n.t('hostDetail.usedMemory')}</span>
-                                    <span class="host-config-value">${this._formatBytes(memUsed)} (${memUsedPercent}%)</span>
-                                </div>
-                                <div class="host-config-item">
-                                    <span class="host-config-label">${I18n.t('hostDetail.availableMemory')}</span>
-                                    <span class="host-config-value">${this._formatBytes(memAvailable)}</span>
-                                </div>
-                                <div class="host-config-item">
-                                    <span class="host-config-label">${I18n.t('hostDetail.buffers')}</span>
-                                    <span class="host-config-value">${this._formatBytes(memBuffers)}</span>
-                                </div>
-                                <div class="host-config-item">
-                                    <span class="host-config-label">${I18n.t('hostDetail.cache')}</span>
-                                    <span class="host-config-value">${this._formatBytes(memCached)}</span>
-                                </div>
-                                ${swapTotal > 0 ? `
+            container.innerHTML = I18n.t('pageCopy.hostDetail.hostInformationGrid', { value0: Utils.escapeHtml(this.currentHost.name), value1: Utils.escapeHtml(config.system.hostname), value2: Utils.escapeHtml(config.system.os_name), value3: Utils.escapeHtml(config.system.os_version), value4: I18n.t('hostDetail.refreshConfig'), value5: I18n.t('hostDetail.collectedAt', { time: this._formatDateTime(config.collected_at) }), value6: I18n.t('hostDetail.systemInfo'), value7: I18n.t('hostDetail.hostname'), value8: Utils.escapeHtml(config.system.hostname), value9: I18n.t('hostDetail.operatingSystem'), value10: Utils.escapeHtml(config.system.os_name), value11: I18n.t('hostDetail.systemVersion'), value12: Utils.escapeHtml(config.system.os_version || '-'), value13: I18n.t('hostDetail.kernelVersion'), value14: Utils.escapeHtml(config.system.kernel), value15: I18n.t('hostDetail.uptimeLabel'), value16: uptimeText, value17: I18n.t('hostDetail.loadAverage'), value18: config.system.load_avg_1, value19: config.system.load_avg_5, value20: config.system.load_avg_15, value21: I18n.t('hostDetail.cpuInfo'), value22: I18n.t('hostDetail.processorModel'), value23: Utils.escapeHtml(config.cpu.model), value24: I18n.t('hostDetail.physicalCpuCount'), value25: config.cpu.physical_cpus, value26: I18n.t('hostDetail.logicalCoreCount'), value27: config.cpu.cores, value28: I18n.t('hostDetail.cpuFrequency'), value29: config.cpu.mhz, value30: I18n.t('hostDetail.memoryInfo'), value31: I18n.t('hostDetail.totalMemory'), value32: this._formatBytes(memTotal), value33: I18n.t('hostDetail.usedMemory'), value34: this._formatBytes(memUsed), value35: memUsedPercent, value36: I18n.t('hostDetail.availableMemory'), value37: this._formatBytes(memAvailable), value38: I18n.t('hostDetail.buffers'), value39: this._formatBytes(memBuffers), value40: I18n.t('hostDetail.cache'), value41: this._formatBytes(memCached), value42: swapTotal > 0 ? `
                                 <div class="host-config-item">
                                     <span class="host-config-label">${I18n.t('hostDetail.swap')}</span>
                                     <span class="host-config-value">${this._formatBytes(swapUsed)} / ${this._formatBytes(swapTotal)} (${swapUsedPercent}%)</span>
                                 </div>
-                                ` : ''}
-                            </div>
-                        </div>
-
-                        <!-- 磁盘信息 -->
-                        <div class="host-config-card host-config-card-wide">
-                            <div class="host-config-card-header">
-                                <i data-lucide="hard-drive"></i>
-                                <h3>${I18n.t('hostDetail.diskInfo')}</h3>
-                            </div>
-                            <div class="host-config-card-body">
-                                ${config.disk.length > 0 ? `
+                                ` : '', value43: I18n.t('hostDetail.diskInfo'), value44: config.disk.length > 0 ? `
                                     <div class="host-config-table-container">
                                         <table class="host-config-table">
                                             <thead>
@@ -593,18 +476,7 @@ const HostDetailPage = {
                                             </tbody>
                                         </table>
                                     </div>
-                                ` : `<p class="host-config-empty">${I18n.t('hostDetail.noDiskInfo')}</p>`}
-                            </div>
-                        </div>
-
-                        <!-- 网络接口 -->
-                        <div class="host-config-card host-config-card-wide">
-                            <div class="host-config-card-header">
-                                <i data-lucide="network"></i>
-                                <h3>${I18n.t('hostDetail.networkInterfaces')}</h3>
-                            </div>
-                            <div class="host-config-card-body">
-                                ${config.network.length > 0 ? `
+                                ` : `<p class="host-config-empty">${I18n.t('hostDetail.noDiskInfo')}</p>`, value45: I18n.t('hostDetail.networkInterfaces'), value46: config.network.length > 0 ? `
                                     <div class="host-config-table-container">
                                         <table class="host-config-table">
                                             <thead>
@@ -625,13 +497,7 @@ const HostDetailPage = {
                                             </tbody>
                                         </table>
                                     </div>
-                                ` : `<p class="host-config-empty">${I18n.t('hostDetail.noNetworkInterfaces')}</p>`}
-                            </div>
-                        </div>
-                    </div>
-
-                </div>
-            `;
+                                ` : `<p class="host-config-empty">${I18n.t('hostDetail.noNetworkInterfaces')}</p>` });
 
             DOM.createIcons();
 
@@ -751,27 +617,7 @@ const HostDetailPage = {
         const memoryUsed = Number.isFinite(memoryUsedBytes) ? this._formatBytes(memoryUsedBytes) : I18n.t('hostDetail.unknownValue');
         const diskUsed = Number.isFinite(diskUsedBytes) ? this._formatBytes(diskUsedBytes) : I18n.t('hostDetail.unknownValue');
 
-        container.innerHTML = `
-            <div class="host-monitor-page">
-                <!-- 工具栏 -->
-                <div class="instance-embedded-toolbar">
-                    <div class="instance-embedded-title">${I18n.t('hostDetail.performanceMonitoring')}</div>
-                    <div style="display: flex; gap: 12px; align-items: center;">
-                        <select id="monitor-time-range" class="filter-select">
-                            <option value="1" ${this.currentTimeRange === 1 ? 'selected' : ''}>${I18n.t('hostDetail.ranges.minute1')}</option>
-                            <option value="10" ${this.currentTimeRange === 10 ? 'selected' : ''}>${I18n.t('hostDetail.ranges.minute10')}</option>
-                            <option value="60" ${this.currentTimeRange === 60 ? 'selected' : ''}>${I18n.t('hostDetail.ranges.hour1')}</option>
-                            <option value="360" ${this.currentTimeRange === 360 ? 'selected' : ''}>${I18n.t('hostDetail.ranges.hour6')}</option>
-                            <option value="1440" ${this.currentTimeRange === 1440 ? 'selected' : ''}>${I18n.t('hostDetail.ranges.day1')}</option>
-                            <option value="10080" ${this.currentTimeRange === 10080 ? 'selected' : ''}>${I18n.t('hostDetail.ranges.day7')}</option>
-                            <option value="43200" ${this.currentTimeRange === 43200 ? 'selected' : ''}>${I18n.t('hostDetail.ranges.month1')}</option>
-                            <option value="custom">${I18n.t('hostDetail.ranges.custom')}</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- 指标卡片 -->
-                ${metric ? `
+        container.innerHTML = I18n.t('pageCopy.hostDetail.hostInformationGrid2', { value0: I18n.t('hostDetail.performanceMonitoring'), value1: this.currentTimeRange === 1 ? 'selected' : '', value2: I18n.t('hostDetail.ranges.minute1'), value3: this.currentTimeRange === 10 ? 'selected' : '', value4: I18n.t('hostDetail.ranges.minute10'), value5: this.currentTimeRange === 60 ? 'selected' : '', value6: I18n.t('hostDetail.ranges.hour1'), value7: this.currentTimeRange === 360 ? 'selected' : '', value8: I18n.t('hostDetail.ranges.hour6'), value9: this.currentTimeRange === 1440 ? 'selected' : '', value10: I18n.t('hostDetail.ranges.day1'), value11: this.currentTimeRange === 10080 ? 'selected' : '', value12: I18n.t('hostDetail.ranges.day7'), value13: this.currentTimeRange === 43200 ? 'selected' : '', value14: I18n.t('hostDetail.ranges.month1'), value15: I18n.t('hostDetail.ranges.custom'), value16: metric ? `
                 <div class="grid-4 mb-24">
                     <div class="metric-card">
                         <div class="metric-card-label">${I18n.t('hostDetail.cpuUsage')}</div>
@@ -793,75 +639,7 @@ const HostDetailPage = {
                         <div class="metric-card-meta">${I18n.t('hostDetail.lastUpdated', { time: this._formatDateTime(metric.collected_at, 'time') })}</div>
                     </div>
                 </div>
-                ` : ''}
-
-                <!-- 基础指标图表 -->
-                <h3 class="mb-16">${I18n.t('hostDetail.basicMetrics')}</h3>
-                <div class="chart-grid mb-24">
-                    <div class="chart-panel">
-                        <div class="chart-panel-header">
-                            <span class="chart-panel-title">${I18n.t('hostDetail.cpuUsage')} (%)</span>
-                        </div>
-                        <div class="chart-container">
-                            <canvas id="cpu-chart"></canvas>
-                        </div>
-                    </div>
-                    <div class="chart-panel">
-                        <div class="chart-panel-header">
-                            <span class="chart-panel-title">${I18n.t('hostDetail.memoryUsageRate')} (%)</span>
-                        </div>
-                        <div class="chart-container">
-                            <canvas id="memory-chart"></canvas>
-                        </div>
-                    </div>
-                    <div class="chart-panel">
-                        <div class="chart-panel-header">
-                            <span class="chart-panel-title">${I18n.t('hostDetail.diskUsageRate')} (%)</span>
-                        </div>
-                        <div class="chart-container">
-                            <canvas id="disk-chart"></canvas>
-                        </div>
-                    </div>
-                    <div class="chart-panel">
-                        <div class="chart-panel-header">
-                            <span class="chart-panel-title">${I18n.t('hostDetail.loadAverage1m')}</span>
-                        </div>
-                        <div class="chart-container">
-                            <canvas id="load-chart"></canvas>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 磁盘和网络 IO 图表 -->
-                <h3 class="mb-16 mt-24">${I18n.t('hostDetail.diskAndNetworkIo')}</h3>
-                <div class="chart-grid">
-                    <div class="chart-panel">
-                        <div class="chart-panel-header">
-                            <span class="chart-panel-title">${I18n.t('hostDetail.diskIops')}</span>
-                        </div>
-                        <div class="chart-container">
-                            <canvas id="disk-iops-chart"></canvas>
-                        </div>
-                    </div>
-                    <div class="chart-panel">
-                        <div class="chart-panel-header">
-                            <span class="chart-panel-title">${I18n.t('hostDetail.diskIoThroughput')}</span>
-                        </div>
-                        <div class="chart-container">
-                            <canvas id="disk-io-chart"></canvas>
-                        </div>
-                    </div>
-                    <div class="chart-panel">
-                        <div class="chart-panel-header">
-                            <span class="chart-panel-title">${I18n.t('hostDetail.networkIoThroughput')}</span>
-                        </div>
-                        <div class="chart-container">
-                            <canvas id="network-io-chart"></canvas>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
+                ` : '', value17: I18n.t('hostDetail.basicMetrics'), value18: I18n.t('hostDetail.cpuUsage'), value19: I18n.t('hostDetail.memoryUsageRate'), value20: I18n.t('hostDetail.diskUsageRate'), value21: I18n.t('hostDetail.loadAverage1m'), value22: I18n.t('hostDetail.diskAndNetworkIo'), value23: I18n.t('hostDetail.diskIops'), value24: I18n.t('hostDetail.diskIoThroughput'), value25: I18n.t('hostDetail.networkIoThroughput') });
 
         await this._loadMonitorData(this.currentTimeRange);
 
@@ -1135,40 +913,7 @@ const HostDetailPage = {
     async _renderProcessesTab(container) {
         const processes = await API.getHostProcesses(this.currentHost.id);
 
-        container.innerHTML = `
-            <div style="margin-bottom:16px">
-                <input type="text" class="filter-input" id="process-search" placeholder="${I18n.t('hostDetail.processSearch')}" style="max-width:300px">
-            </div>
-            <table class="host-process-table">
-                <thead>
-                    <tr>
-                        <th data-sort="pid">PID</th>
-                        <th data-sort="user">${I18n.t('hostDetail.user')}</th>
-                        <th data-sort="cpu_percent">CPU %</th>
-                        <th data-sort="memory_percent">${I18n.t('hostDetail.memoryUsageRate')} %</th>
-                        <th data-sort="state">${I18n.t('hostDetail.state')}</th>
-                        <th>${I18n.t('hostDetail.command')}</th>
-                    </tr>
-                </thead>
-                <tbody id="process-table-body"></tbody>
-            </table>
-
-            <!-- 进程详情抽屉 -->
-            <div id="process-detail-drawer" class="drawer">
-                <div class="drawer-overlay"></div>
-                <div class="drawer-content">
-                    <div class="drawer-header">
-                        <h3>${I18n.t('hostDetail.processDetails')}</h3>
-                        <button class="drawer-close" id="close-process-drawer" aria-label="${I18n.t('hostDetail.closeProcessDetails')}">
-                            <i data-lucide="x"></i>
-                        </button>
-                    </div>
-                    <div class="drawer-body" id="process-detail-content">
-                        <div class="loading-overlay"><div class="spinner"></div></div>
-                    </div>
-                </div>
-            </div>
-        `;
+        container.innerHTML = I18n.t('pageCopy.hostDetail.pidValueCpuValueValueValueValue', { value0: I18n.t('hostDetail.processSearch'), value1: I18n.t('hostDetail.user'), value2: I18n.t('hostDetail.memoryUsageRate'), value3: I18n.t('hostDetail.state'), value4: I18n.t('hostDetail.command'), value5: I18n.t('hostDetail.processDetails'), value6: I18n.t('hostDetail.closeProcessDetails') });
 
         this._renderProcessTable(processes);
 
@@ -1260,103 +1005,10 @@ const HostDetailPage = {
                 return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
             };
 
-            content.innerHTML = `
-                <div class="process-detail-container">
-                    <!-- 基本信息 -->
-                    <div class="process-detail-section">
-                        <h4><i data-lucide="info"></i> ${I18n.t('hostDetail.tabs.info')}</h4>
-                        <div class="process-detail-grid">
-                            <div class="process-detail-item">
-                                <span class="process-detail-label">PID</span>
-                                <span class="process-detail-value">${detail.pid}</span>
-                            </div>
-                            <div class="process-detail-item">
-                                <span class="process-detail-label">${I18n.t('hostDetail.user')}</span>
-                                <span class="process-detail-value">${Utils.escapeHtml(detail.user || '-')}</span>
-                            </div>
-                            <div class="process-detail-item">
-                                <span class="process-detail-label">${I18n.t('hostDetail.state')}</span>
-                                <span class="process-detail-value">${Utils.escapeHtml(detail.state || '-')}</span>
-                            </div>
-                            <div class="process-detail-item">
-                                <span class="process-detail-label">${I18n.t('hostDetail.startTime')}</span>
-                                <span class="process-detail-value">${Utils.escapeHtml(detail.start_time || '-')}</span>
-                            </div>
-                            <div class="process-detail-item">
-                                <span class="process-detail-label">${I18n.t('hostDetail.cpuUsage')}</span>
-                                <span class="process-detail-value">${this._formatPercent(detail.cpu_percent)}%</span>
-                            </div>
-                            <div class="process-detail-item">
-                                <span class="process-detail-label">${I18n.t('hostDetail.memoryUsageRate')}</span>
-                                <span class="process-detail-value">${this._formatPercent(detail.memory_percent)}%</span>
-                            </div>
-                            <div class="process-detail-item">
-                                <span class="process-detail-label">${I18n.t('hostDetail.virtualMemory')}</span>
-                                <span class="process-detail-value">${formatBytes(detail.vsz * 1024)}</span>
-                            </div>
-                            <div class="process-detail-item">
-                                <span class="process-detail-label">${I18n.t('hostDetail.residentMemory')}</span>
-                                <span class="process-detail-value">${formatBytes(detail.rss * 1024)}</span>
-                            </div>
-                            <div class="process-detail-item">
-                                <span class="process-detail-label">${I18n.t('hostDetail.cpuTime')}</span>
-                                <span class="process-detail-value">${Utils.escapeHtml(detail.cpu_time || '-')}</span>
-                            </div>
-                            <div class="process-detail-item">
-                                <span class="process-detail-label">${I18n.t('hostDetail.workingDirectory')}</span>
-                                <span class="process-detail-value" style="word-break:break-all">${Utils.escapeHtml(detail.cwd || '-')}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 命令详情 -->
-                    <div class="process-detail-section">
-                        <h4><i data-lucide="terminal"></i> ${I18n.t('hostDetail.commandDetails')}</h4>
-                        <div class="process-detail-code">
-                            <div><strong>${I18n.t('hostDetail.command')}:</strong></div>
-                            <pre>${Utils.escapeHtml(detail.command || '-')}</pre>
-                            ${detail.cmdline ? `
+            content.innerHTML = I18n.t('pageCopy.hostDetail.processDetails', { value0: I18n.t('hostDetail.tabs.info'), value1: detail.pid, value2: I18n.t('hostDetail.user'), value3: Utils.escapeHtml(detail.user || '-'), value4: I18n.t('hostDetail.state'), value5: Utils.escapeHtml(detail.state || '-'), value6: I18n.t('hostDetail.startTime'), value7: Utils.escapeHtml(detail.start_time || '-'), value8: I18n.t('hostDetail.cpuUsage'), value9: this._formatPercent(detail.cpu_percent), value10: I18n.t('hostDetail.memoryUsageRate'), value11: this._formatPercent(detail.memory_percent), value12: I18n.t('hostDetail.virtualMemory'), value13: formatBytes(detail.vsz * 1024), value14: I18n.t('hostDetail.residentMemory'), value15: formatBytes(detail.rss * 1024), value16: I18n.t('hostDetail.cpuTime'), value17: Utils.escapeHtml(detail.cpu_time || '-'), value18: I18n.t('hostDetail.workingDirectory'), value19: Utils.escapeHtml(detail.cwd || '-'), value20: I18n.t('hostDetail.commandDetails'), value21: I18n.t('hostDetail.command'), value22: Utils.escapeHtml(detail.command || '-'), value23: detail.cmdline ? `
                                 <div style="margin-top:12px"><strong>${I18n.t('hostDetail.fullCommandLine')}:</strong></div>
                                 <pre>${Utils.escapeHtml(detail.cmdline)}</pre>
-                            ` : ''}
-                        </div>
-                    </div>
-
-                    <!-- 磁盘 IO -->
-                    <div class="process-detail-section">
-                        <h4><i data-lucide="hard-drive"></i> ${I18n.t('hostDetail.diskIo')}</h4>
-                        <div class="process-detail-grid">
-                            <div class="process-detail-item">
-                                <span class="process-detail-label">${I18n.t('hostDetail.readBytes')}</span>
-                                <span class="process-detail-value">${formatBytes(detail.io?.read_bytes || 0)}</span>
-                            </div>
-                            <div class="process-detail-item">
-                                <span class="process-detail-label">${I18n.t('hostDetail.writeBytes')}</span>
-                                <span class="process-detail-value">${formatBytes(detail.io?.write_bytes || 0)}</span>
-                            </div>
-                            <div class="process-detail-item">
-                                <span class="process-detail-label">${I18n.t('hostDetail.readChars')}</span>
-                                <span class="process-detail-value">${formatBytes(detail.io?.read_chars || 0)}</span>
-                            </div>
-                            <div class="process-detail-item">
-                                <span class="process-detail-label">${I18n.t('hostDetail.writeChars')}</span>
-                                <span class="process-detail-value">${formatBytes(detail.io?.write_chars || 0)}</span>
-                            </div>
-                            <div class="process-detail-item">
-                                <span class="process-detail-label">${I18n.t('hostDetail.readSyscalls')}</span>
-                                <span class="process-detail-value">${detail.io?.read_syscalls || 0}</span>
-                            </div>
-                            <div class="process-detail-item">
-                                <span class="process-detail-label">${I18n.t('hostDetail.writeSyscalls')}</span>
-                                <span class="process-detail-value">${detail.io?.write_syscalls || 0}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 网络连接 -->
-                    <div class="process-detail-section">
-                        <h4><i data-lucide="network"></i> ${I18n.t('hostDetail.networkConnections')}</h4>
-                        ${detail.network_connections && detail.network_connections.length > 0 ? `
+                            ` : '', value24: I18n.t('hostDetail.diskIo'), value25: I18n.t('hostDetail.readBytes'), value26: formatBytes(detail.io?.read_bytes || 0), value27: I18n.t('hostDetail.writeBytes'), value28: formatBytes(detail.io?.write_bytes || 0), value29: I18n.t('hostDetail.readChars'), value30: formatBytes(detail.io?.read_chars || 0), value31: I18n.t('hostDetail.writeChars'), value32: formatBytes(detail.io?.write_chars || 0), value33: I18n.t('hostDetail.readSyscalls'), value34: detail.io?.read_syscalls || 0, value35: I18n.t('hostDetail.writeSyscalls'), value36: detail.io?.write_syscalls || 0, value37: I18n.t('hostDetail.networkConnections'), value38: detail.network_connections && detail.network_connections.length > 0 ? `
                             <div class="process-network-table-container">
                                 <table class="process-network-table">
                                     <thead>
@@ -1385,11 +1037,7 @@ const HostDetailPage = {
                                     </tbody>
                                 </table>
                             </div>
-                        ` : `<p style="color:var(--text-secondary);padding:12px">${I18n.t('hostDetail.noActiveConnections')}</p>`}
-                    </div>
-
-                    <!-- 环境变量 -->
-                    ${detail.environment && Object.keys(detail.environment).length > 0 ? `
+                        ` : `<p style="color:var(--text-secondary);padding:12px">${I18n.t('hostDetail.noActiveConnections')}</p>`, value39: detail.environment && Object.keys(detail.environment).length > 0 ? `
                         <div class="process-detail-section">
                             <h4><i data-lucide="settings"></i> ${I18n.t('hostDetail.environmentPreview')}</h4>
                             <div class="process-detail-code">
@@ -1398,9 +1046,7 @@ const HostDetailPage = {
                                 ).join('\n')}</pre>
                             </div>
                         </div>
-                    ` : ''}
-                </div>
-            `;
+                    ` : '' });
 
             DOM.createIcons();
         } catch (error) {

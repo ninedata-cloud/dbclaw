@@ -101,6 +101,34 @@ def test_build_feishu_payload_uses_summary_when_root_cause_missing():
 
 
 @pytest.mark.unit
+def test_build_feishu_payload_renders_english_and_requested_timezone():
+    alert = SimpleNamespace(
+        severity="critical",
+        alert_type="system_error",
+        title="Connection failed",
+        metric_name="active_connections",
+        metric_value=0,
+        threshold_value=None,
+        trigger_reason="Connection refused",
+        created_at=datetime(2026, 1, 1, 8, 0, 0),
+        root_cause="Network route unavailable",
+        recommended_actions="Check the firewall",
+        ai_diagnosis_summary="",
+    )
+    payload = NotificationService._build_feishu_payload(
+        alert,
+        None,
+        locale="en-US",
+        timezone="America/New_York",
+    )
+    rendered = "\n".join(str(item) for item in payload["card"]["elements"])
+    assert "Alert title" in rendered
+    assert "Root cause" in rendered
+    assert "Recommended actions" in rendered
+    assert "严重程度" not in rendered
+
+
+@pytest.mark.unit
 def test_build_dingtalk_url_adds_sign_when_secret(monkeypatch):
     monkeypatch.setattr("time.time", lambda: 1000.0)
     url = NotificationService._build_dingtalk_url(
@@ -208,6 +236,8 @@ def test_map_helpers_fallback_to_original_value():
     assert NotificationService._map_severity("unknown") == "unknown"
     assert NotificationService._map_alert_type("system_error") == "系统错误"
     assert NotificationService._map_alert_type("custom") == "custom"
+    assert NotificationService._map_severity("critical", "en-US") == "Critical"
+    assert NotificationService._map_alert_type("system_error", "en-US") == "System error"
 
 
 @pytest.mark.service
@@ -221,6 +251,8 @@ async def test_send_email_marks_failed_when_smtp_config_incomplete():
     log = await NotificationService._send_email(db, _alert(), "ops@example.com", 10)
 
     assert log.status == "failed"
+    assert log.rendered_locale == "zh-CN"
+    assert log.rendered_timezone == "Asia/Shanghai"
     assert "SMTP configuration incomplete" in log.error_message
     assert added == [log]
     db.commit.assert_awaited_once()
@@ -240,6 +272,8 @@ async def test_send_sms_marks_failed_when_webhook_missing():
     log = await NotificationService._send_sms(db, _alert(), "13800000000", 20)
 
     assert log.status == "failed"
+    assert log.rendered_locale == "zh-CN"
+    assert log.rendered_timezone == "Asia/Shanghai"
     assert "SMS webhook URL not configured" in log.error_message
     assert added == [log]
     db.commit.assert_awaited_once()
@@ -259,6 +293,8 @@ async def test_send_phone_marks_failed_for_unsupported_provider():
     log = await NotificationService._send_phone(db, _alert(), "13800000000", 30)
 
     assert log.status == "failed"
+    assert log.rendered_locale == "zh-CN"
+    assert log.rendered_timezone == "Asia/Shanghai"
     assert "Phone provider twilio not implemented" in log.error_message
     assert added == [log]
     db.commit.assert_awaited_once()

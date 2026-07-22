@@ -43,6 +43,11 @@ class SkillRegistry:
             existing_skill.permissions = skill_def.permissions
             existing_skill.timeout = skill_def.timeout
             existing_skill.code = skill_def.code
+            existing_skill.i18n = {
+                locale: translation.model_dump()
+                for locale, translation in skill_def.i18n.items()
+            }
+            existing_skill.content_locale = "en-US" if is_builtin else existing_skill.content_locale
             skill = existing_skill
         else:
             # Create new skill
@@ -59,6 +64,11 @@ class SkillRegistry:
                 permissions=skill_def.permissions,
                 timeout=skill_def.timeout,
                 code=skill_def.code,
+                i18n={
+                    locale: translation.model_dump()
+                    for locale, translation in skill_def.i18n.items()
+                },
+                content_locale="en-US" if is_builtin else "und",
                 is_builtin=is_builtin,
                 is_enabled=True,
             )

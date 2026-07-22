@@ -323,3 +323,37 @@ code: |
           }
       
       return {"success": False, "error": f"Unknown action: {action}"}
+
+i18n:
+  zh-CN:
+    name: 管理技能
+    description: 执行“管理技能”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      action: action。
+      skill_id: 技能 ID。
+      name: 名称。
+      version: 版本。
+      category: 分类。
+      description: 描述。
+      tags: 标签。
+      parameters: 参数定义。
+      permissions: 权限列表。
+      timeout: 超时时间。
+      code: code。
+    permission_descriptions: {}
+  en-US:
+    name: Manage Skill
+    description: Manage custom skills - list, get, create, update, enable, disable. Builtin skills cannot be modified.
+    parameter_descriptions:
+      action: Operation type - list, get, create, update, enable, disable
+      skill_id: Skill ID (required for create/get/update/enable/disable actions)
+      name: Skill name (required for create)
+      version: Skill version (optional, default "1.0.0")
+      category: Skill category (optional for create/update, used for filtering in list)
+      description: Skill description (optional for create/update)
+      tags: Skill tags (optional for create/update)
+      parameters: Skill parameters definition (optional for create/update)
+      permissions: Required permissions (optional for create/update)
+      timeout: Execution timeout in seconds (optional for create/update)
+      code: Skill code (required for create)
+    permission_descriptions: {}

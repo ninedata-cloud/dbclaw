@@ -18,6 +18,8 @@ PRE_CREATE_MIGRATIONS: List[Callable[[], Awaitable[None]]] = [
 POST_CREATE_MIGRATIONS: List[Callable[[], Awaitable[None]]] = [
     # 用户界面语言偏好
     lambda: _run_add_user_locale(),
+    # 内容语言、时区与通知渲染元数据
+    lambda: _run_add_i18n_metadata(),
     # 添加 inspection_trigger.error_message 字段
     lambda: _run_add_inspection_trigger_error_message(),
     # 添加 ai_model.reasoning_effort 字段
@@ -42,6 +44,12 @@ POST_CREATE_MIGRATIONS: List[Callable[[], Awaitable[None]]] = [
 async def _run_add_user_locale():
     """添加 app_user.locale 字段并回填历史用户。"""
     from backend.migrations.add_user_locale import upgrade
+    await upgrade()
+
+
+async def _run_add_i18n_metadata():
+    """添加国际化内容和时区元数据。"""
+    from backend.migrations.add_i18n_metadata import upgrade
     await upgrade()
 
 

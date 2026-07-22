@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
@@ -8,6 +8,15 @@ from backend.models.user import User
 from backend.models.system_config import SystemConfig
 from backend.schemas.system_config import SystemConfigCreate, SystemConfigUpdate, SystemConfigResponse
 from backend.services import config_service
+from backend.i18n.errors import ApiError
+from backend.i18n.locale import (
+    DEFAULT_LOCALE,
+    DEFAULT_TIMEZONE,
+    normalize_locale,
+    normalize_timezone,
+    set_system_defaults,
+    message_payload,
+)
 from backend.services.monitoring_scheduler_service import (
     is_monitoring_collection_interval_config,
     normalize_monitoring_collection_interval_seconds,
@@ -18,17 +27,28 @@ router = APIRouter(prefix="/api/system-configs", tags=["system-configs"])
 
 
 def _validate_special_config(key: str, value: Optional[str], value_type: Optional[str]):
+    if key == "i18n.default_locale" and value is not None and not normalize_locale(value):
+        raise ApiError(400, "auth.locale_invalid", {"locale": value})
+    if key == "i18n.default_timezone" and value is not None and not normalize_timezone(value):
+        raise ApiError(400, "auth.timezone_invalid", {"timezone": value})
     if not is_monitoring_collection_interval_config(key):
         return
 
     if value_type is not None and value_type != "integer":
-        raise HTTPException(status_code=400, detail="全局监控采集周期必须使用整数类型")
+        raise ApiError(400, "request.validation.invalid")
 
     if value is not None:
         try:
             normalize_monitoring_collection_interval_seconds(value)
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise ApiError(400, "request.validation.invalid") from exc
+
+
+async def _refresh_i18n_defaults(db: AsyncSession) -> None:
+    set_system_defaults(
+        await config_service.get_config(db, "i18n.default_locale", DEFAULT_LOCALE),
+        await config_service.get_config(db, "i18n.default_timezone", DEFAULT_TIMEZONE),
+    )
 
 
 @router.get("", response_model=List[SystemConfigResponse])
@@ -51,7 +71,7 @@ async def get_config(
     """Get single configuration"""
     config = await db.get(SystemConfig, id)
     if not config or not config.is_active:
-        raise HTTPException(status_code=404, detail="Configuration not found")
+        raise ApiError(404, "config.not_found")
     return config
 
 
@@ -69,9 +89,11 @@ async def create_config(
         )
         if is_monitoring_collection_interval_config(data.key):
             await refresh_monitoring_schedulers()
+        if data.key.startswith("i18n.default_"):
+            await _refresh_i18n_defaults(db)
         return config
     except IntegrityError:
-        raise HTTPException(status_code=400, detail="Configuration key already exists")
+        raise ApiError(400, "operation.not_allowed")
 
 
 @router.put("/{id}", response_model=SystemConfigResponse)
@@ -85,7 +107,7 @@ async def update_config(
     from backend.utils.encryption import encrypt_value
     config = await db.get(SystemConfig, id)
     if not config:
-        raise HTTPException(status_code=404, detail="Configuration not found")
+        raise ApiError(404, "config.not_found")
 
     _validate_special_config(config.key, data.value, data.value_type)
 
@@ -109,6 +131,8 @@ async def update_config(
     await db.refresh(config)
     if is_monitoring_collection_interval_config(config.key):
         await refresh_monitoring_schedulers()
+    if config.key.startswith("i18n.default_"):
+        await _refresh_i18n_defaults(db)
     # Decrypt value before returning
     if config.is_encrypted and config.value:
         from backend.utils.encryption import decrypt_value
@@ -125,10 +149,12 @@ async def delete_config(
     """Soft delete configuration by setting is_active=False"""
     config = await db.get(SystemConfig, id)
     if not config:
-        raise HTTPException(status_code=404, detail="Configuration not found")
+        raise ApiError(404, "config.not_found")
 
     config.is_active = False
     await db.commit()
     if is_monitoring_collection_interval_config(config.key):
         await refresh_monitoring_schedulers()
-    return {"message": "Configuration deleted successfully"}
+    if config.key.startswith("i18n.default_"):
+        await _refresh_i18n_defaults(db)
+    return message_payload("config.deleted")

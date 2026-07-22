@@ -38,3 +38,21 @@ code: |
       result = await context.execute_query(sql, datasource_id)
 
       return result
+
+i18n:
+  zh-CN:
+    name: 执行只读诊断查询
+    description: 执行“执行只读诊断查询”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+      sql: SQL 语句。
+    permission_descriptions:
+      execute_query: 允许执行受控数据库查询
+  en-US:
+    name: Execute Diagnostic Query
+    description: Execute a read-only SQL query for diagnostic purposes. Supports SELECT, SHOW, EXPLAIN, EXEC/EXECUTE (SQL Server), and DESCRIBE statements across all database types
+    parameter_descriptions:
+      datasource_id: The datasource ID
+      sql: The SQL query to execute (SELECT, SHOW, EXPLAIN, EXEC/EXECUTE, or DESCRIBE)
+    permission_descriptions:
+      execute_query: Execute governed database queries

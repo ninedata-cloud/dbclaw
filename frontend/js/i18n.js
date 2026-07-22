@@ -2,17 +2,36 @@
 (function (global) {
     const STORAGE_KEY = 'dbclaw_locale';
     const DEFAULT_LOCALE = 'zh-CN';
-    const SUPPORTED = Object.freeze(['zh-CN', 'en-US']);
     const catalogs = global.DBClawLocales || {};
+    const localeDefinitions = {
+        'zh-CN': { aliases: ['zh', 'zh-cn', 'zh-hans', 'zh-hans-cn'], labelKey: 'common.chinese', dir: 'ltr' },
+        'en-US': { aliases: ['en', 'en-us'], labelKey: 'common.english', dir: 'ltr' }
+    };
     let locale = DEFAULT_LOCALE;
-    let observer = null;
+    const metrics = { missingKey: 0, invalidLocale: 0 };
 
     function normalize(value) {
         if (!value) return null;
         const candidate = String(value).replace('_', '-').toLowerCase();
-        if (candidate === 'zh' || candidate === 'zh-cn' || candidate === 'zh-hans') return 'zh-CN';
-        if (candidate === 'en' || candidate === 'en-us') return 'en-US';
+        for (const [code, definition] of Object.entries(localeDefinitions)) {
+            if (code.toLowerCase() === candidate || definition.aliases.includes(candidate)) return code;
+        }
         return null;
+    }
+
+    function registerLocale(code, catalog, definition = {}) {
+        if (!code || !catalog) throw new Error('A locale code and catalog are required');
+        catalogs[code] = catalog;
+        localeDefinitions[code] = {
+            aliases: (definition.aliases || []).map(value => String(value).toLowerCase()),
+            labelKey: definition.labelKey || `languages.${code}`,
+            dir: definition.dir || 'ltr'
+        };
+    }
+
+    function getTimeZone() {
+        const user = typeof Store !== 'undefined' ? Store.get('currentUser') : null;
+        return user && user.timezone ? user.timezone : undefined;
     }
 
     function readStoredLocale() {
@@ -33,6 +52,7 @@
     function t(key, params = {}) {
         const value = lookup(locale, key) ?? lookup(DEFAULT_LOCALE, key);
         if (value === undefined) {
+            metrics.missingKey += 1;
             console.warn(`[i18n] Missing translation key: ${key}`);
             return key;
         }
@@ -82,131 +102,24 @@
 
     function updateDocumentMetadata() {
         document.documentElement.lang = locale;
+        document.documentElement.dir = localeDefinitions[locale]?.dir || 'ltr';
         document.title = t('app.title');
         const subtitle = document.querySelector('.sidebar-title-cn');
         if (subtitle) subtitle.textContent = t('app.subtitle');
     }
 
-    function translateLegacyValue(value, allowPartial = false) {
-        if (typeof value !== 'string' || locale === DEFAULT_LOCALE) return value;
-        const direct = lookup(locale, 'legacy') || {};
-        if (Object.prototype.hasOwnProperty.call(direct, value)) return direct[value];
-        if (!allowPartial) return value;
-
-        // Longest-first phrase replacement covers legacy template strings that
-        // combine a UI label with dynamic values. Unknown fragments (including
-        // user and database content) are deliberately preserved.
-        let translatedValue = value;
-        const phrases = Object.entries(direct).sort((a, b) => b[0].length - a[0].length);
-        for (const [source, translated] of phrases) {
-            if (source.length < 2) continue;
-            if (translatedValue.includes(source)) translatedValue = translatedValue.split(source).join(translated);
-        }
-        // Single-character counters are safe to translate only when they are
-        // used as numeric units. Replacing them globally would corrupt words
-        // such as "执行" or user-provided Chinese content.
-        for (const source of ['天', '分', '秒', '行', '条', '页', '项', '级']) {
-            const translated = direct[source];
-            if (!translated) continue;
-            const unitPattern = new RegExp(`(^|\\d\\s*)${source}(?=$|[\\s\\d·|,.，。)）])`, 'g');
-            translatedValue = translatedValue.replace(unitPattern, (match, prefix) => `${prefix}${translated}`);
-        }
-        if (translatedValue !== value && locale === 'en-US') {
-            translatedValue = translatedValue
-                .replace(/：\s*/g, ': ')
-                .replace(/；\s*/g, '; ')
-                .replace(/，\s*/g, ', ')
-                .replace(/（/g, '(')
-                .replace(/）/g, ')')
-                .replace(/\s{2,}/g, ' ');
-        }
-        return translatedValue;
-    }
-
-    function looksLikeDynamicUiText(value) {
-        if (!/[\u3400-\u9fff]/.test(value)) return false;
-        // Interpolated UI strings usually combine translated labels with a
-        // count, timestamp, status separator, or another runtime value.
-        return /\d/.test(value) || /[:：·|()（）]/.test(value);
-    }
-
-    function shouldSkip(node) {
-        const parent = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
-        return !parent || Boolean(parent.closest(
-            'script,style,code,pre,textarea,[data-i18n-ignore],.monaco-editor,.CodeMirror,.xterm'
-        ));
-    }
-
-    function translateTextNode(node) {
-        if (shouldSkip(node)) return;
-        const raw = node.nodeValue;
-        const trimmed = raw.trim();
-        if (!trimmed) return;
-        const parent = node.parentElement;
-        const allowPartial = Boolean(parent && (
-            /^(BUTTON|LABEL|TH|H1|H2|H3|H4|OPTION|SUMMARY)$/.test(parent.tagName)
-            || parent.closest('[data-i18n-auto]')
-            || /(?:title|label|header|hint|help|empty|loading|error|toast|modal|badge|status|toolbar|pagination|filter|action)/.test(parent.className || '')
-        )) || looksLikeDynamicUiText(trimmed);
-        const translated = translateLegacyValue(trimmed, allowPartial);
-        if (translated !== trimmed) {
-            const start = raw.slice(0, raw.indexOf(trimmed));
-            const end = raw.slice(raw.indexOf(trimmed) + trimmed.length);
-            node.nodeValue = start + translated + end;
-        }
-    }
-
-    function translateElement(element) {
-        if (shouldSkip(element)) return;
-        for (const attr of ['placeholder', 'title', 'aria-label']) {
-            if (!element.hasAttribute || !element.hasAttribute(attr)) continue;
-            const current = element.getAttribute(attr);
-            const translated = translateLegacyValue(current, true);
-            if (translated !== current) element.setAttribute(attr, translated);
-        }
-        if (element.tagName === 'INPUT' && ['button', 'submit', 'reset'].includes(element.type)) {
-            element.value = translateLegacyValue(element.value, true);
-        }
-    }
-
-    function translateDom(root = document.body) {
-        if (!root) return;
-        if (root.nodeType === Node.TEXT_NODE) {
-            translateTextNode(root);
-            return;
-        }
-        translateElement(root);
-        const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
-        let node;
-        while ((node = walker.nextNode())) {
-            if (node.nodeType === Node.TEXT_NODE) translateTextNode(node);
-            else translateElement(node);
-        }
-    }
-
-    function startObserver() {
-        if (observer || !document.body) return;
-        observer = new MutationObserver(records => {
-            for (const record of records) {
-                if (record.type === 'characterData') translateTextNode(record.target);
-                else if (record.type === 'attributes') translateElement(record.target);
-                else record.addedNodes.forEach(node => translateDom(node));
-            }
-        });
-        observer.observe(document.body, {
-            childList: true, subtree: true, characterData: true, attributes: true,
-            attributeFilter: ['placeholder', 'title', 'aria-label']
-        });
-    }
-
     function setLocale(value, options = {}) {
-        const next = normalize(value) || DEFAULT_LOCALE;
+        const normalized = normalize(value);
+        if (value && !normalized) {
+            metrics.invalidLocale += 1;
+            console.warn(`[i18n] Invalid locale: ${value}`);
+        }
+        const next = normalized || DEFAULT_LOCALE;
         locale = next;
         if (options.persist !== false) {
             try { localStorage.setItem(STORAGE_KEY, next); } catch (_) { /* storage is optional */ }
         }
         updateDocumentMetadata();
-        translateDom();
         document.dispatchEvent(new CustomEvent('dbclaw:localechange', { detail: { locale: next } }));
         return next;
     }
@@ -230,6 +143,15 @@
             }
             setLocale(next);
             DirtyState.clear();
+            if (global.Modal && !DOM.$('#modal-overlay')?.classList.contains('hidden')) Modal.hide();
+            if (global.Toast?.clear) Toast.clear();
+            // Monaco's NLS bundle is selected by the AMD loader and cannot be
+            // replaced after it has loaded. Reload only in that case; the
+            // persisted session, locale, hash route and saved content survive.
+            if (global.monaco) {
+                global.location.reload();
+                return true;
+            }
             if (typeof Sidebar !== 'undefined' && currentUser) Sidebar.render();
             if (typeof Router !== 'undefined' && typeof Router.refreshCurrentRoute === 'function') await Router.refreshCurrentRoute();
             return true;
@@ -243,10 +165,10 @@
         const select = document.createElement('select');
         select.className = `language-selector ${className}`.trim();
         select.setAttribute('aria-label', t('language.switch'));
-        select.innerHTML = `
-            <option value="zh-CN">${t('common.chinese')}</option>
-            <option value="en-US">${t('common.english')}</option>
-        `;
+        select.innerHTML = Object.entries(localeDefinitions)
+            .filter(([code]) => catalogs[code])
+            .map(([code, definition]) => `<option value="${code}">${t(definition.labelKey)}</option>`)
+            .join('');
         select.value = locale;
         select.addEventListener('change', async () => {
             const previous = locale;
@@ -258,27 +180,28 @@
     locale = readStoredLocale() || DEFAULT_LOCALE;
     global.DirtyState = DirtyState;
     global.I18n = {
-        supportedLocales: SUPPORTED,
+        get supportedLocales() { return Object.keys(localeDefinitions).filter(code => catalogs[code]); },
         defaultLocale: DEFAULT_LOCALE,
-        normalize, t, plural, skillCategory, getLocale: () => locale, setLocale, switchLocale,
-        createSelector, translateDom, translateLegacyText: value => translateLegacyValue(value, true),
+        normalize, registerLocale, t, plural, skillCategory, getLocale: () => locale, setLocale, switchLocale,
+        getMetrics: () => ({ ...metrics }),
+        createSelector,
         configDescription: (key, fallback = '') => lookup(locale, `configDescriptions.${key}`) || fallback,
         formatNumber: (value, options) => new Intl.NumberFormat(locale, options).format(value),
-        formatDate: (value, options) => new Intl.DateTimeFormat(locale, options).format(new Date(value)),
+        formatDate: (value, options = {}) => new Intl.DateTimeFormat(locale, { timeZone: getTimeZone(), ...options }).format(new Date(value)),
         formatTime: (value, options = {}) => {
             const hasFields = ['hour', 'minute', 'second'].some(key => Object.prototype.hasOwnProperty.call(options, key));
-            return new Intl.DateTimeFormat(locale, hasFields ? options : { timeStyle: 'medium', ...options }).format(new Date(value));
+            const timeOptions = hasFields ? options : { timeStyle: 'medium', ...options };
+            return new Intl.DateTimeFormat(locale, { timeZone: getTimeZone(), ...timeOptions }).format(new Date(value));
         },
-        formatRelativeTime: (value, unit, options) => new Intl.RelativeTimeFormat(locale, options).format(value, unit)
+        formatRelativeTime: (value, unit, options) => new Intl.RelativeTimeFormat(locale, options).format(value, unit),
+        formatList: (values, options) => new Intl.ListFormat(locale, options).format(values),
+        formatUnit: (value, unit, options = {}) => new Intl.NumberFormat(locale, {
+            style: 'unit', unit, unitDisplay: 'short', ...options
+        }).format(value)
     };
-
-    const nativeConfirm = global.confirm.bind(global);
-    global.confirm = message => nativeConfirm(translateLegacyValue(String(message), true));
 
     document.addEventListener('DOMContentLoaded', () => {
         updateDocumentMetadata();
-        translateDom();
-        startObserver();
         const markDirtyFromEvent = event => {
             if (event.target.closest('#modal-container')) DirtyState.mark('modal');
             else if (event.target.closest('[data-dirty-track],.CodeMirror,.document-editor')) DirtyState.mark('page');

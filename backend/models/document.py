@@ -13,6 +13,7 @@ class DocCategory(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), nullable=False)
+    code = Column(String(100), nullable=True, index=True)
     db_type = Column(String(50), nullable=False)  # mysql/oceanbase-mysql/postgresql/oracle/sqlserver/general
     parent_id = Column(Integer, nullable=True)
     sort_order = Column(Integer, default=0)
@@ -31,6 +32,8 @@ class DocDocument(SoftDeleteMixin, Base):
     category_id = Column(Integer, nullable=False)
     title = Column(String(200), nullable=False)
     content = Column(Text, nullable=False)   # 完整 Markdown，最大约 50K 字符
+    content_locale = Column(String(35), nullable=False, default="und", server_default="und", index=True)
+    translation_group_id = Column(String(100), nullable=True, index=True)
     summary = Column(Text, nullable=True)    # 100 字内摘要，供 AI 目录使用
     is_builtin = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)

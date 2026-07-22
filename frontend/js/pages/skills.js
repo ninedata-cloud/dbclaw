@@ -17,7 +17,7 @@ const SkillsPage = {
             ]);
             this._categories = categoriesRes.categories || [];
 
-            Header.render('技能管理', this._buildHeaderActions());
+            Header.render(I18n.t('pageCopy.skills.skillManagement'), this._buildHeaderActions());
             this._renderGrid(content, skills);
         } catch (error) {
             console.error('Error loading skills:', error);
@@ -33,32 +33,14 @@ const SkillsPage = {
 
     _buildHeaderActions() {
         const filters = DOM.el('div', { className: 'dashboard-filters' });
-        filters.innerHTML = `
-            <div style=\"position:relative;display:flex;align-items:center;\">
-                <i data-lucide=\"search\" style=\"position:absolute;left:8px;width:14px;height:14px;color:var(--text-secondary);pointer-events:none;z-index:1;\"></i>
-                <input type=\"text\" id=\"search-input\" class=\"filter-input\"
-                       placeholder=\"${I18n.t('placeholders.searchSkills')}\"
-                       style=\"padding-left:28px;min-width:200px;\"
-                       onkeyup=\"SkillsPage.handleSearch(event)\">
-            </div>
-            <select id=\"category-filter\" class=\"filter-select\" onchange=\"SkillsPage.filterSkills()\">
-                <option value=\"\">全部分类</option>
-                ${this._categories.map(cat => `<option value=\"${cat}\">${I18n.skillCategory(cat)}</option>`).join('')}
-            </select>
-            <label class=\"filter-checkbox\">
-                <input type=\"checkbox\" id=\"builtin-filter\" onchange=\"SkillsPage.filterSkills()\"> 仅内置
-            </label>
-            <label class=\"filter-checkbox\">
-                <input type=\"checkbox\" id=\"enabled-filter\" checked onchange=\"SkillsPage.filterSkills()\"> 已启用
-            </label>
-        `;
+        filters.innerHTML = I18n.t('pageCopy.skills.allCategoriesValueBuiltInOnlyEnabled', { value0: I18n.t('placeholders.searchSkills'), value1: this._categories.map(cat => `<option value=\"${cat}\">${I18n.skillCategory(cat)}</option>`).join('') });
 
         const importBtn = DOM.el('button', { className: 'btn btn-secondary' });
-        importBtn.innerHTML = '<i data-lucide=\"upload\"></i> 导入';
+        importBtn.innerHTML = I18n.t('pageCopy.skills.import');
         importBtn.onclick = () => SkillsPage.importSkill();
 
         const createBtn = DOM.el('button', { className: 'btn btn-primary' });
-        createBtn.innerHTML = '<i data-lucide=\"plus\"></i> 创建技能';
+        createBtn.innerHTML = I18n.t('pageCopy.skills.createSkills');
         createBtn.onclick = () => SkillsPage.createSkill();
 
         setTimeout(() => DOM.createIcons(), 0);
@@ -182,29 +164,9 @@ const SkillsPage = {
 
             Modal.show({
                 title: skill.name,
-                content: `
-                    <div class="skill-details">
-                        <p><strong>ID:</strong> ${skill.id}</p>
-                        <p><strong>版本:</strong> ${skill.version}</p>
-                        <p><strong>分类:</strong> ${skill.category ? I18n.skillCategory(skill.category) : 'N/A'}</p>
-                        <p><strong>${this._t('description')}:</strong> ${skill.description}</p>
-
-                        <h4>${this._t('parameters')}:</h4>
-                        <ul>
-                            ${skill.parameters.map(p => `
+                content: I18n.t("pageCopy.skills.viewSkillContent", { value0: skill.id, value1: skill.version, value2: skill.category ? I18n.skillCategory(skill.category) : 'N/A', value3: this._t('description'), value4: skill.description, value5: this._t('parameters'), value6: skill.parameters.map(p => `
                                 <li><strong>${p.name}</strong> (${p.type}${p.required ? `, ${this._t('required')}` : ''}): ${p.description}</li>
-                            `).join('')}
-                        </ul>
-
-                        <h4>${this._t('permissions')}:</h4>
-                        <ul>
-                            ${skill.permissions.map(p => `<li>${p}</li>`).join('')}
-                        </ul>
-
-                        <h4>${this._t('code')}:</h4>
-                        <pre><code>${skill.code}</code></pre>
-                    </div>
-                `,
+                            `).join(''), value7: this._t('permissions'), value8: skill.permissions.map(p => `<li>${p}</li>`).join(''), value9: this._t('code'), value10: skill.code }),
                 size: 'large'
             });
         } catch (error) {
@@ -353,7 +315,7 @@ const SkillsPage = {
                         <pre><code>${JSON.stringify(result, null, 2)}</code></pre>
                     `;
                 } catch (error) {
-                    resultDiv.innerHTML = `<p class="error">${I18n.translateLegacyText('错误')}: ${error.message}</p>`;
+                    resultDiv.innerHTML = `<p class="error">${I18n.t('pageCopy.skills.error')}: ${error.message}</p>`;
                 }
             });
         } catch (error) {
@@ -362,7 +324,11 @@ const SkillsPage = {
     },
 
     async exportSkill(skillId) {
-        window.location.href = `/api/skills/${skillId}/export`;
+        try {
+            await API.exportSkill(skillId);
+        } catch (error) {
+            Toast.error(this._t('exportFailed'));
+        }
     },
 
     async toggleSkill(skillId, enabled) {
@@ -408,7 +374,7 @@ const SkillsPage = {
             formData.append('file', file);
 
             try {
-                const response = await fetch('/api/skills/import', {
+                const response = await API.fetch('/api/skills/import', {
                     method: 'POST',
                     credentials: 'same-origin',
                     body: formData
@@ -431,91 +397,7 @@ const SkillsPage = {
     async createSkill() {
         Modal.show({
             title: this._t('createTitle'),
-            content: `
-                <form id="create-skill-form">
-                    <div class="form-group">
-                        <label>${this._t('skillId')} *</label>
-                        <input type="text" id="skill-id" class="form-control"
-                               pattern="[a-z0-9_]+"
-                               placeholder="${I18n.t('placeholders.skillId')}" required>
-                        <small class="form-text">${this._t('idHint')}</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label>${this._t('name')} *</label>
-                        <input type="text" id="skill-name" class="form-control"
-                               placeholder="${I18n.t('placeholders.skillName')}" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label>${this._t('version')} *</label>
-                        <input type="text" id="skill-version" class="form-control"
-                               pattern="\\d+\\.\\d+\\.\\d+"
-                               placeholder="${I18n.t('placeholders.version')}" value="1.0.0" required>
-                        <small class="form-text">${this._t('versionHint')}</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label>${this._t('category')}</label>
-                        <input type="text" id="skill-category" class="form-control"
-                               placeholder="${I18n.t('placeholders.categories')}">
-                    </div>
-
-                    <div class="form-group">
-                        <label>${this._t('description')} *</label>
-                        <textarea id="skill-description" class="form-control" rows="3"
-                                  placeholder="${this._t('describePlaceholder')}" required></textarea>
-                    </div>
-
-                    <div class="form-group">
-                        <label>${this._t('tags')}</label>
-                        <input type="text" id="skill-tags" class="form-control"
-                               placeholder="${I18n.t('skills.tagsPlaceholder')}">
-                    </div>
-
-                    <div class="form-group">
-                        <label>${this._t('permissions')}</label>
-                        <div id="permissions-checkboxes" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
-                            <label><input type="checkbox" value="execute_query"> execute_query</label>
-                            <label><input type="checkbox" value="execute_command"> execute_command</label>
-                            <label><input type="checkbox" value="read_logs"> read_logs</label>
-                            <label><input type="checkbox" value="modify_config"> modify_config</label>
-                            <label><input type="checkbox" value="access_kb"> access_kb</label>
-                            <label><input type="checkbox" value="read_datasource"> read_datasource</label>
-                            <label><input type="checkbox" value="execute_any_sql"> execute_any_sql (危险)</label>
-                            <label><input type="checkbox" value="execute_any_os_command"> execute_any_os_command (危险)</label>
-                            <label><input type="checkbox" value="access_external_api"> access_external_api</label>
-                            <label><input type="checkbox" value="admin"> admin</label>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>${this._t('timeout')}</label>
-                        <input type="number" id="skill-timeout" class="form-control"
-                               min="1" max="300" placeholder="${this._t('defaultSeconds')}">
-                        <small class="form-text">${this._t('timeoutHint')}</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label>${this._t('parametersJson')}</label>
-                        <textarea id="skill-parameters" class="form-control" rows="6"
-                                  placeholder='[{"name": "param1", "type": "string", "required": true, "description": "Parameter description"}]'>[]</textarea>
-                        <small class="form-text">${this._t('parametersHint')}</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label>${this._t('code')} *</label>
-                        <textarea id="skill-code" class="form-control" rows="12"
-                                  placeholder="async def execute(context, params):\n    # Your code here\n    return {'result': 'success'}" required></textarea>
-                        <small class="form-text">${this._t('codeHint')}</small>
-                    </div>
-
-                    <div style="display: flex; gap: 10px; margin-top: 20px;">
-                        <button type="submit" class="btn btn-primary">${this._t('create')}</button>
-                        <button type="button" class="btn btn-secondary" onclick="Modal.hide()">${this._t('cancel')}</button>
-                    </div>
-                </form>
-            `,
+            content: I18n.t("pageCopy.skills.createSkillContent", { value0: this._t('skillId'), value1: I18n.t('placeholders.skillId'), value2: this._t('idHint'), value3: this._t('name'), value4: I18n.t('placeholders.skillName'), value5: this._t('version'), value6: I18n.t('placeholders.version'), value7: this._t('versionHint'), value8: this._t('category'), value9: I18n.t('placeholders.categories'), value10: this._t('description'), value11: this._t('describePlaceholder'), value12: this._t('tags'), value13: I18n.t('skills.tagsPlaceholder'), value14: this._t('permissions'), value15: this._t('timeout'), value16: this._t('defaultSeconds'), value17: this._t('timeoutHint'), value18: this._t('parametersJson'), value19: this._t('parametersHint'), value20: this._t('code'), value21: this._t('codeHint'), value22: this._t('create'), value23: this._t('cancel') }),
             size: 'large'
         });
 

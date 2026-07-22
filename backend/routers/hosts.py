@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
@@ -13,6 +13,8 @@ from backend.schemas.host import (
 from backend.utils.encryption import encrypt_value, decrypt_value
 from backend.dependencies import get_current_user
 from backend.utils.datetime_helper import to_utc_isoformat, now
+from backend.i18n.locale import get_active_locale, message_payload, translate
+from backend.i18n.errors import ApiError
 
 logger = logging.getLogger(__name__)
 
@@ -197,7 +199,7 @@ async def create_host(data: HostCreate, db: AsyncSession = Depends(get_db)):
 async def update_host(host_id: int, data: HostUpdate, db: AsyncSession = Depends(get_db)):
     host = await get_alive_by_id(db, Host, host_id)
     if not host:
-        raise HTTPException(status_code=404, detail="SSH host not found")
+        raise ApiError(404, "host.not_found")
 
     update_data = data.model_dump(exclude_unset=True)
     if "password" in update_data:
@@ -258,10 +260,10 @@ async def delete_host(
 ):
     host = await get_alive_by_id(db, Host, host_id)
     if not host:
-        raise HTTPException(status_code=404, detail="SSH host not found")
+        raise ApiError(404, "host.not_found")
     host.soft_delete(current_user.id)
     await db.commit()
-    return {"message": "SSH host deleted"}
+    return message_payload("host.deleted")
 
 
 @router.get("/{host_id}/summary")
@@ -272,7 +274,7 @@ async def get_host_summary(host_id: int, db: AsyncSession = Depends(get_db)):
 
     host = await get_alive_by_id(db, Host, host_id)
     if not host:
-        raise HTTPException(status_code=404, detail="SSH host not found")
+        raise ApiError(404, "host.not_found")
 
     # 获取最新指标
     metric_result = await db.execute(
@@ -323,7 +325,7 @@ async def get_host_metric(
 
     host = await get_alive_by_id(db, Host, host_id)
     if not host:
-        raise HTTPException(status_code=404, detail="SSH host not found")
+        raise ApiError(404, "host.not_found")
 
     # 查询指定时间范围内的指标
     start_time = now() - timedelta(hours=hours)
@@ -359,7 +361,7 @@ async def get_host_network_topology(host_id: int, db: AsyncSession = Depends(get
 
     host = await get_alive_by_id(db, Host, host_id)
     if not host:
-        raise HTTPException(status_code=404, detail="SSH host not found")
+        raise ApiError(404, "host.not_found")
 
     try:
         ssh_pool = get_ssh_pool()
@@ -378,7 +380,7 @@ async def get_host_network_topology(host_id: int, db: AsyncSession = Depends(get
             }
     except Exception as e:
         logger.error(f"Failed to get network topology for host {host_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get network topology")
+        raise ApiError(500, "operation.failed")
 
 
 @router.get("/{host_id}/processes")
@@ -389,7 +391,7 @@ async def get_host_processes(host_id: int, db: AsyncSession = Depends(get_db)):
 
     host = await get_alive_by_id(db, Host, host_id)
     if not host:
-        raise HTTPException(status_code=404, detail="SSH host not found")
+        raise ApiError(404, "host.not_found")
 
     try:
         ssh_pool = get_ssh_pool()
@@ -398,7 +400,7 @@ async def get_host_processes(host_id: int, db: AsyncSession = Depends(get_db)):
             return processes
     except Exception as e:
         logger.error(f"Failed to get processes for host {host_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get processes")
+        raise ApiError(500, "operation.failed")
 
 
 @router.get("/{host_id}/processes/{pid}")
@@ -409,7 +411,7 @@ async def get_process_detail(host_id: int, pid: int, db: AsyncSession = Depends(
 
     host = await get_alive_by_id(db, Host, host_id)
     if not host:
-        raise HTTPException(status_code=404, detail="SSH host not found")
+        raise ApiError(404, "host.not_found")
 
     try:
         ssh_pool = get_ssh_pool()
@@ -418,7 +420,7 @@ async def get_process_detail(host_id: int, pid: int, db: AsyncSession = Depends(
             return detail
     except Exception as e:
         logger.error(f"Failed to get process detail for host {host_id}, pid {pid}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get process detail")
+        raise ApiError(500, "operation.failed")
 
 
 @router.post("/test", response_model=SSHTestResult)
@@ -432,18 +434,22 @@ async def test_host_connection(data: HostCreate):
             private_key=data.private_key,
             auth_type=data.auth_type,
         )
-        output = ssh.execute("echo 'SSH connection successful'")
-        return SSHTestResult(success=True, message=output.strip())
-    except Exception as e:
-        logger.error(f"Failed to test SSH host {data.host}:{data.port} ({data.username}): {e}", exc_info=True)
-        return SSHTestResult(success=False, message=str(e))
+        ssh.execute("echo 'SSH connection successful'")
+        return SSHTestResult(success=True, message=translate(get_active_locale(), "host.connection_test_success"))
+    except Exception:
+        logger.exception("Failed to test SSH host %s:%s (%s)", data.host, data.port, data.username)
+        return SSHTestResult(
+            success=False,
+            message=translate(get_active_locale(), "host.connection_test_failed"),
+            error_code="host.connection_test_failed",
+        )
 
 
 @router.post("/{host_id}/test", response_model=SSHTestResult)
 async def test_host(host_id: int, db: AsyncSession = Depends(get_db)):
     host = await get_alive_by_id(db, Host, host_id)
     if not host:
-        raise HTTPException(status_code=404, detail="SSH host not found")
+        raise ApiError(404, "host.not_found")
 
     try:
         password = decrypt_value(host.password_encrypted) if host.password_encrypted else None
@@ -456,7 +462,7 @@ async def test_host(host_id: int, db: AsyncSession = Depends(get_db)):
             private_key=private_key,
             auth_type=host.auth_type,
         )
-        output = ssh.execute("echo 'SSH connection successful'")
+        ssh.execute("echo 'SSH connection successful'")
 
         # 更新 OS 版本信息
         try:
@@ -483,7 +489,11 @@ async def test_host(host_id: int, db: AsyncSession = Depends(get_db)):
         except Exception as e:
             logger.warning(f"Failed to collect metrics after test for host {host.name}: {e}")
 
-        return SSHTestResult(success=True, message=output.strip())
-    except Exception as e:
-        logger.error(f"Failed to test SSH host {host_id} ({host.name}): {e}", exc_info=True)
-        return SSHTestResult(success=False, message=str(e))
+        return SSHTestResult(success=True, message=translate(get_active_locale(), "host.connection_test_success"))
+    except Exception:
+        logger.exception("Failed to test SSH host %s (%s)", host_id, host.name)
+        return SSHTestResult(
+            success=False,
+            message=translate(get_active_locale(), "host.connection_test_failed"),
+            error_code="host.connection_test_failed",
+        )

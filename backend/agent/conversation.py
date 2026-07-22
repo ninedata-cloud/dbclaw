@@ -8,6 +8,7 @@ from backend.agent.prompts import SYSTEM_PROMPT
 from backend.agent.tools import get_filtered_tools
 from backend.agent.context_builder import execute_tool
 from backend.services.ai_agent import get_ai_client, stream_assistant_turn
+from backend.i18n.locale import get_active_locale, translate
 
 logger = logging.getLogger(__name__)
 
@@ -154,9 +155,17 @@ async def run_conversation(
                     "content": tool_result,
                 })
 
-        except Exception as e:
-            logger.error(f"Conversation error at round {round_num}: {e}")
-            yield {"type": "error", "content": f"Error: {str(e)}"}
+        except Exception:
+            logger.exception("Conversation error at round %s", round_num)
+            yield {
+                "type": "error",
+                "content": translate(get_active_locale(), "ai.session.error_safe"),
+                "error_code": "ai.session.error_safe",
+            }
             return
 
-    yield {"type": "error", "content": "Maximum tool call rounds reached. Please try a more specific question."}
+    yield {
+        "type": "error",
+        "content": translate(get_active_locale(), "ai.response.max_rounds", {"rounds": MAX_TOOL_ROUNDS}),
+        "error_code": "ai.response.max_rounds",
+    }

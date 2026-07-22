@@ -2,7 +2,7 @@
 Integration API 端点
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional, Dict, Any
 
@@ -15,6 +15,8 @@ from backend.schemas.integration import (
 )
 from backend.services.integration_service import IntegrationService
 from backend.routers.auth import get_current_user
+from backend.i18n.locale import message_payload
+from backend.i18n.errors import ApiError
 
 router = APIRouter(prefix="/api", tags=["integration"])
 
@@ -27,16 +29,16 @@ async def create_integration(
 ):
     """创建 Integration（仅管理员）"""
     if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="需要管理员权限")
+        raise ApiError(403, "auth.admin_required")
 
     if data.is_builtin:
-        raise HTTPException(status_code=400, detail="不能创建内置模板")
+        raise ApiError(400, "operation.not_allowed")
 
     try:
         integration = await IntegrationService.create_integration(db, data)
         return integration
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise ApiError(400, "operation.failed") from e
 
 
 @router.get("/integrations", response_model=List[IntegrationResponse])
@@ -68,7 +70,7 @@ async def get_integration(
     """获取单个 Integration"""
     integration = await IntegrationService.get_integration(db, integration_id)
     if not integration:
-        raise HTTPException(status_code=404, detail="Integration 不存在")
+        raise ApiError(404, "integration.not_found")
     return integration
 
 
@@ -82,10 +84,10 @@ async def update_integration(
     """更新 Integration"""
     integration = await IntegrationService.get_integration(db, integration_id)
     if not integration:
-        raise HTTPException(status_code=404, detail="Integration 不存在")
+        raise ApiError(404, "integration.not_found")
 
     if integration.is_builtin and not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="需要管理员权限")
+        raise ApiError(403, "auth.admin_required")
 
     if not integration.is_builtin and not current_user.is_admin:
         pass
@@ -94,7 +96,7 @@ async def update_integration(
         updated = await IntegrationService.update_integration(db, integration_id, data)
         return updated
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise ApiError(400, "operation.failed") from e
 
 
 @router.delete("/integrations/{integration_id}")
@@ -105,13 +107,13 @@ async def delete_integration(
 ):
     """删除 Integration（仅管理员）"""
     if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="需要管理员权限")
+        raise ApiError(403, "auth.admin_required")
 
     try:
         await IntegrationService.delete_integration(db, integration_id)
-        return {"message": "删除成功"}
+        return message_payload("integration.deleted")
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise ApiError(400, "operation.failed") from e
 
 
 @router.post("/integrations/{integration_id}/test")
@@ -136,7 +138,7 @@ async def test_integration(
         )
         return result
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise ApiError(400, "operation.failed") from e
 
 
 @router.post("/integrations/load-builtin")
@@ -146,7 +148,7 @@ async def load_builtin_templates(
 ):
     """加载内置模板（仅管理员）"""
     if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="需要管理员权限")
+        raise ApiError(403, "auth.admin_required")
 
     await IntegrationService.load_builtin_templates(db)
-    return {"message": "内置模板加载成功"}
+    return message_payload("integration.templates_loaded")

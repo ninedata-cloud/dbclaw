@@ -532,6 +532,7 @@ async def _persist_assistant_message(
     render_segments: list[dict[str, Any]] | None,
     status: str,
     usage_totals: dict[str, int] | None = None,
+    content_locale: str = "und",
 ) -> ChatMessage:
     assistant_msg = await _load_assistant_message_by_run_id(
         db,
@@ -546,6 +547,7 @@ async def _persist_assistant_message(
             run_id=run_id,
             render_segments=clone_render_segments(render_segments),
             status=status,
+            content_locale=content_locale,
         )
         if usage_totals:
             assistant_msg.input_tokens = int(usage_totals.get("input_tokens") or 0)
@@ -559,6 +561,7 @@ async def _persist_assistant_message(
     assistant_msg.content = content
     assistant_msg.render_segments = clone_render_segments(render_segments)
     assistant_msg.status = status
+    assistant_msg.content_locale = content_locale
     if usage_totals:
         assistant_msg.input_tokens = int(usage_totals.get("input_tokens") or 0)
         assistant_msg.output_tokens = int(usage_totals.get("output_tokens") or 0)
@@ -1141,6 +1144,7 @@ async def process_stream_events(
             render_segments=render_segments,
             status=status,
             usage_totals=usage_totals,
+            content_locale=normalize_locale(locale) or DEFAULT_LOCALE,
         )
 
     try:
@@ -1303,6 +1307,7 @@ async def process_stream_events(
                     render_segments=render_segments,
                     status=ASSISTANT_STATUS_CANCELLED,
                     usage_totals=usage_totals,
+                    content_locale=normalize_locale(locale) or DEFAULT_LOCALE,
                 )
             except Exception as save_err:
                 logger.error(f"Failed to save partial response on cancel: {save_err}")
@@ -1346,6 +1351,7 @@ async def prepare_user_turn(
     model_id: int | None = None,
     history_window_hours: int | None = None,
     payload_skill_authorizations: dict[str, Any] | None = None,
+    content_locale: str = "und",
 ) -> tuple[list[dict[str, Any]], int | None, int | None, int | None, Any, Any, Any]:
     attachments = attachments or []
     effective_datasource_id = payload_datasource_id
@@ -1360,6 +1366,7 @@ async def prepare_user_turn(
         role="user",
         content=user_message or "[Attachment]",
         attachments=attachments,
+        content_locale=content_locale,
     )
     db.add(msg)
 

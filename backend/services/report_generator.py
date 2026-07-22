@@ -8,8 +8,8 @@ from backend.models.report import Report
 from backend.models.soft_delete import alive_filter
 from backend.agent.prompts import REPORT_GENERATION_PROMPT
 from backend.agent.conversation_skills import generate_report_with_skills
-from backend.utils.datetime_helper import now
-from backend.i18n.locale import DEFAULT_LOCALE, normalize_locale, translate
+from backend.utils.datetime_helper import format_in_timezone, now
+from backend.i18n.locale import DEFAULT_LOCALE, DEFAULT_TIMEZONE, resolve_preferences, translate
 
 logger = logging.getLogger(__name__)
 
@@ -21,12 +21,16 @@ REPORT_TRIGGER_LABELS = {
         "manual": "手动",
         "anomaly": "异常",
         "connection_failure": "连接失败",
+        "baseline": "基线",
+        "threshold": "阈值",
     },
     "en-US": {
         "scheduled": "Scheduled",
         "manual": "Manual",
         "anomaly": "Anomaly",
         "connection_failure": "Connection Failure",
+        "baseline": "Baseline",
+        "threshold": "Threshold",
     },
 }
 
@@ -73,22 +77,32 @@ class ReportGenerator:
     def __init__(self, db):
         self.db = db
 
-    async def generate_inspection_report(self, trigger_id: int, locale: str | None = None) -> int:
+    async def generate_inspection_report(
+        self,
+        trigger_id: int,
+        locale: str | None = None,
+        timezone: str | None = None,
+    ) -> int:
         """Generate AI-driven inspection report from trigger"""
         from backend.models.inspection_trigger import InspectionTrigger
         from backend.models.inspection_config import InspectionConfig
         from backend.agent.conversation_skills import generate_report_with_skills
 
-        response_locale = normalize_locale(locale) or DEFAULT_LOCALE
         result = await self.db.execute(select(InspectionTrigger).where(InspectionTrigger.id == trigger_id))
         trigger = result.scalar_one_or_none()
         if not trigger:
             raise ValueError(f"Inspection trigger {trigger_id} not found")
+        response_locale, response_timezone = resolve_preferences(
+            locale=locale or getattr(trigger, "requested_locale", None),
+            timezone=timezone or getattr(trigger, "requested_timezone", None),
+        )
 
         result = await self.db.execute(select(Datasource).where(Datasource.id == trigger.datasource_id, alive_filter(Datasource)))
         datasource = result.scalar_one_or_none()
         if not datasource:
-            return await self._create_failed_report_for_missing_datasource(trigger, response_locale)
+            return await self._create_failed_report_for_missing_datasource(
+                trigger, response_locale, response_timezone
+            )
 
         result = await self.db.execute(select(InspectionConfig).where(InspectionConfig.datasource_id == trigger.datasource_id))
         config = result.scalar_one_or_none()
@@ -106,7 +120,9 @@ class ReportGenerator:
             trigger_type=trigger.trigger_type,
             trigger_id=trigger.id,
             trigger_reason=trigger.trigger_reason,
-            generation_method="ai"
+            generation_method="ai",
+            generation_locale=response_locale,
+            generation_timezone=response_timezone,
         )
         self.db.add(report)
         await self.db.flush()
@@ -157,7 +173,7 @@ class ReportGenerator:
 
                 # Wrap in styled HTML document
                 report.content_html = f"""<!DOCTYPE html>
-<html>
+<html lang="{response_locale}">
 <head>
     <meta charset="UTF-8">
     <title>{translate(response_locale, "ai.report.title", {"trigger_type": _report_trigger_label(trigger.trigger_type, response_locale), "datasource": datasource.name})}</title>
@@ -281,7 +297,7 @@ class ReportGenerator:
         {content_html_body}
         <div class="footer">
             <p>{translate(response_locale, "ai.report.footer.generated")}</p>
-            <p>{translate(response_locale, "ai.report.footer.datasource", {"datasource": datasource.name, "db_type": datasource.db_type.upper(), "generated_at": now().strftime('%Y-%m-%d %H:%M')})}</p>
+            <p>{translate(response_locale, "ai.report.footer.datasource", {"datasource": datasource.name, "db_type": datasource.db_type.upper(), "generated_at": format_in_timezone(now(), response_timezone, '%Y-%m-%d %H:%M')})}</p>
         </div>
     </div>
 </body>
@@ -301,7 +317,7 @@ class ReportGenerator:
                 report.summary = report.summary or translate(response_locale, "ai.report.failed")
                 report.content_md = report.content_md or ""
                 report.content_html = report.content_html if report.content_html else None
-                report.error_message = str(e)
+                report.error_message = translate(response_locale, "ai.report.failed")
                 report.skill_executions = report.skill_executions or []
                 if report.completed_at is None:
                     report.completed_at = now()
@@ -311,7 +327,12 @@ class ReportGenerator:
 
         return report_id
 
-    async def _create_failed_report_for_missing_datasource(self, trigger, locale: str = DEFAULT_LOCALE) -> int:
+    async def _create_failed_report_for_missing_datasource(
+        self,
+        trigger,
+        locale: str = DEFAULT_LOCALE,
+        timezone: str = DEFAULT_TIMEZONE,
+    ) -> int:
         message = (
             f"Datasource {trigger.datasource_id} for inspection trigger {trigger.id} "
             "was not found or has been deleted"
@@ -341,6 +362,8 @@ class ReportGenerator:
             trigger_id=trigger.id,
             trigger_reason=trigger.trigger_reason,
             generation_method="ai",
+            generation_locale=locale,
+            generation_timezone=timezone,
             error_message=message,
             skill_executions=[],
             completed_at=now(),

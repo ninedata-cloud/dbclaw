@@ -74,3 +74,19 @@ code: |
               "error": f"Failed to trigger inspection: {str(e)}",
               "datasource_id": datasource_id
           }
+
+i18n:
+  zh-CN:
+    name: 触发巡检
+    description: 执行“触发巡检”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+      reason: 原因。
+    permission_descriptions: {}
+  en-US:
+    name: Trigger Inspection
+    description: Manually trigger database inspection for a datasource
+    parameter_descriptions:
+      datasource_id: Target datasource ID to inspect
+      reason: Trigger reason description (default "Manual inspection via AI")
+    permission_descriptions: {}

@@ -209,7 +209,7 @@ const DatasourceForm = {
                     html += `
                         <div class="form-group">
                             <label>${prop.title || key} ${required ? '*' : ''}</label>
-                            <input type="${type}" class="form-input inbound-param" data-key="${key}" data-format="${prop.format || ''}" value="${value}" placeholder="${this._escapeHtml(I18n.translateLegacyText(prop.description || ''))}">
+                            <input type="${type}" class="form-input inbound-param" data-key="${key}" data-format="${prop.format || ''}" value="${value}" placeholder="${this._escapeHtml(prop.description || '')}">
                         </div>
                     `;
                 }

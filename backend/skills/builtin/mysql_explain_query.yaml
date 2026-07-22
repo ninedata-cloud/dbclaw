@@ -45,3 +45,21 @@ code: |
           },
           "explain_json": json_result.get("data", []) if json_result.get("success") else None
       }
+
+i18n:
+  zh-CN:
+    name: MySQL 执行计划分析
+    description: 执行“MySQL 执行计划分析”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+      sql: SQL 语句。
+    permission_descriptions:
+      execute_query: 允许执行受控数据库查询
+  en-US:
+    name: MySQL Explain Query
+    description: Get the execution plan for a SQL query to analyze its performance
+    parameter_descriptions:
+      datasource_id: The database connection ID
+      sql: The SQL query to explain
+    permission_descriptions:
+      execute_query: Execute governed database queries

@@ -52,3 +52,21 @@ code: |
           "plan": plan_result.get("data", []),
           "count": len(plan_result.get("data", []))
       }
+
+i18n:
+  zh-CN:
+    name: SAP HANA 执行计划分析
+    description: 执行“SAP HANA 执行计划分析”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+      sql: SQL 语句。
+    permission_descriptions:
+      execute_query: 允许执行受控数据库查询
+  en-US:
+    name: HANA Explain Query
+    description: Get execution plan for a SAP HANA SQL query to analyze query performance and optimization opportunities
+    parameter_descriptions:
+      datasource_id: The database connection ID
+      sql: The SQL query to explain
+    permission_descriptions:
+      execute_query: Execute governed database queries

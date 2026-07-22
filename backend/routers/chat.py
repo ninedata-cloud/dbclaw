@@ -3,12 +3,13 @@ import json
 import logging
 from datetime import datetime
 from urllib.parse import urlparse
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException, Query
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, UploadFile, File, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from typing import List
 
 from backend.database import get_db, async_session
+from backend.i18n.errors import ApiError
 from backend.config import get_settings
 from backend.agent.skill_authorization import (
     build_skill_authorization_catalog,
@@ -35,7 +36,7 @@ from backend.services.chat_orchestration_service import (
 from backend.services.config_service import get_config
 from backend.services.session_service import SessionService
 from backend.utils.json_sanitizer import sanitize_for_json
-from backend.i18n.locale import DEFAULT_LOCALE, normalize_locale, translate
+from backend.i18n.locale import DEFAULT_LOCALE, message_payload, normalize_locale, parse_accept_language, translate
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
@@ -254,7 +255,7 @@ async def _get_owned_session(db: AsyncSession, session_id: int, user: User) -> D
     )
     session = result.scalar_one_or_none()
     if not session:
-        raise HTTPException(status_code=404, detail="会话不存在")
+        raise ApiError(404, "resource.not_found")
     return session
 
 
@@ -351,6 +352,7 @@ async def create_session(data: ChatSessionCreate, db: AsyncSession = Depends(get
         ai_model_id=data.ai_model_id,
         disabled_tools=data.disabled_tools,
         skill_authorizations=skill_authorizations,
+        default_locale=user.locale,
     )
     db.add(session)
     await db.commit()
@@ -373,11 +375,11 @@ async def upload_attachment(
     # Check file size
     file_content = await file.read()
     if len(file_content) > AttachmentHandler.MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail="文件过大（最大 10MB）")
+        raise ApiError(400, "upload.too_large", {"max_size": "10MB"})
 
     # Check file type
     if not AttachmentHandler.is_allowed_file(file.filename):
-        raise HTTPException(status_code=400, detail="不支持的文件类型")
+        raise ApiError(400, "upload.unsupported_type")
 
     # Save attachment
     try:
@@ -385,7 +387,7 @@ async def upload_attachment(
         return metadata
     except Exception as e:
         logger.error(f"Failed to save attachment for session {session_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="保存附件失败")
+        raise ApiError(500, "operation.failed")
 
 
 @router.get("/api/chat/sessions/{session_id}/messages", response_model=List[ChatMessageResponse])
@@ -417,7 +419,7 @@ async def delete_session(session_id: int, db: AsyncSession = Depends(get_db), us
     session.soft_delete(user.id)
     PENDING_APPROVALS.pop(session_id, None)
     await db.commit()
-    return {"message": "Session deleted"}
+    return message_payload("chat.session_deleted")
 
 
 @router.delete("/api/chat/sessions/{session_id}/messages")
@@ -436,7 +438,7 @@ async def clear_session_messages(session_id: int, db: AsyncSession = Depends(get
     session.updated_at = now()
     PENDING_APPROVALS.pop(session_id, None)
     await db.commit()
-    return {"message": "Messages cleared"}
+    return message_payload("chat.messages_cleared")
 
 
 @router.post("/api/chat/sessions/{session_id}/approvals/{approval_id}/resolve")
@@ -465,7 +467,7 @@ async def resolve_chat_approval(
             locale=user.locale,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+        raise ApiError(404, "ai.approval.not_found") from exc
     finally:
         ACTIVE_STREAM_TASKS.pop(session_id, None)
         _clear_stream_state(session_id)
@@ -475,14 +477,20 @@ async def resolve_chat_approval(
 
 @router.websocket("/ws/chat/{session_id}")
 async def chat_websocket(websocket: WebSocket, session_id: int):
+    response_locale = (
+        normalize_locale(websocket.query_params.get("lang"))
+        or parse_accept_language(websocket.headers.get("accept-language"))
+        or DEFAULT_LOCALE
+    )
     if not await _validate_websocket_origin(websocket):
-        await websocket.close(code=1008, reason="Invalid origin")
+        await websocket.close(code=1008, reason=translate(response_locale, "request.invalid_origin"))
         return
 
     user, owned_session = await _authenticate_websocket_session(websocket, session_id)
     if not user or not owned_session:
-        await websocket.close(code=1008, reason="Invalid or expired session")
+        await websocket.close(code=1008, reason=translate(response_locale, "auth.session_expired"))
         return
+    response_locale = normalize_locale(getattr(user, "locale", None)) or DEFAULT_LOCALE
 
     await websocket.accept()
     _register_socket(session_id, websocket)
@@ -528,9 +536,10 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
 
             refreshed_user, refreshed_session = await _authenticate_websocket_session(websocket, session_id)
             if not refreshed_user or not refreshed_session:
-                await websocket.close(code=1008, reason="Session expired")
+                await websocket.close(code=1008, reason=translate(response_locale, "auth.session_expired"))
                 return
             user = refreshed_user
+            response_locale = normalize_locale(getattr(user, "locale", None)) or DEFAULT_LOCALE
             user_message = data.get("message", "")
             payload_datasource_id = data.get("datasource_id")
             payload_host_id = data.get("host_id")
@@ -580,6 +589,7 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
                             payload_host_id=h_id,
                             model_id=m_id,
                             payload_skill_authorizations=skill_auths,
+                            content_locale=response_locale,
                         )
 
                         await process_stream_events(
@@ -610,7 +620,7 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
                     logger.error(f"Stream task error for session {sid}: {e}", exc_info=True)
                     await _emit_session_event(sid, {
                         "type": "error",
-                        "content": translate(response_locale, "ai.session.error", {"error": str(e)}),
+                        "content": translate(response_locale, "ai.session.error_safe"),
                     })
                 finally:
                     ACTIVE_STREAM_TASKS.pop(sid, None)
@@ -626,7 +636,12 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
         _unregister_socket(session_id, websocket)
         logger.error(f"Chat WebSocket error: {e}", exc_info=True)
         try:
-            await websocket.send_json({"type": "error", "content": str(e)})
-            await websocket.close(code=1011, reason=f"Server error: {str(e)[:100]}")
+            safe_message = translate(response_locale, "ai.session.error_safe")
+            await websocket.send_json({
+                "type": "error",
+                "error_code": "ai.session.error_safe",
+                "content": safe_message,
+            })
+            await websocket.close(code=1011, reason=safe_message)
         except Exception as e:
             logger.debug("Failed to send error message to WebSocket: %s", e)

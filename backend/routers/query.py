@@ -5,7 +5,7 @@ import inspect
 from collections import defaultdict, deque
 from uuid import uuid4
 from typing import Optional, List, Dict
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -23,6 +23,7 @@ from backend.services.asyncpg_query_executor import execute_asyncpg_query
 from backend.services.query_execution_state import QueryExecutionState, QueryCancelledError
 from backend.utils.encryption import decrypt_value
 from backend.utils.db_connector import _is_read_only_query
+from backend.i18n.errors import ApiError
 
 from backend.dependencies import get_current_user
 
@@ -84,7 +85,7 @@ async def _get_connector_for(datasource_id: int, db: AsyncSession, database_over
     result = await db.execute(select(Datasource).where(Datasource.id == datasource_id, alive_filter(Datasource)))
     datasource = result.scalar_one_or_none()
     if not datasource:
-        raise HTTPException(status_code=404, detail="Datasource not found")
+        raise ApiError(404, "datasource.not_found")
     password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
     target_database = database_override if database_override is not None else datasource.database
     return get_connector(
@@ -227,7 +228,7 @@ async def execute_query(
     current_user=Depends(get_current_user),
 ):
     if not _is_read_only_query(req.sql):
-        raise HTTPException(status_code=400, detail="Only read-only queries are allowed. DML/DDL statements are blocked.")
+        raise ApiError(400, "query.read_only")
 
     history = _query_history_by_user[current_user.id]
     selected_database = _normalize_optional_text(req.database)
@@ -282,12 +283,12 @@ async def execute_query(
             message=result.get("message"),
         )
     except QueryCancelledError:
-        raise HTTPException(status_code=409, detail="查询已取消")
+        raise ApiError(409, "query.cancelled")
     except Exception as e:
         if execution_state.cancel_requested:
-            raise HTTPException(status_code=409, detail="查询已取消") from e
+            raise ApiError(409, "query.cancelled") from e
         logger.error(f"Query execute failed: datasource_id={req.datasource_id}, sql={req.sql!r}, error={e}", exc_info=True)
-        raise HTTPException(status_code=400, detail=str(e))
+        raise ApiError(400, "operation.failed") from e
     finally:
         await _remove_active_query(request_id)
         await connector.close()
@@ -323,19 +324,19 @@ async def cancel_query(
                 exc,
                 exc_info=True,
             )
-            raise HTTPException(status_code=400, detail=f"取消查询失败: {exc}") from exc
+            raise ApiError(400, "operation.failed") from exc
 
     connector, _ = await _get_connector_for(execution_state.datasource_id, db)
     try:
         result = await connector.cancel_query(execution_state.session_id)
         if isinstance(result, dict) and result.get("success") is False:
-            raise HTTPException(status_code=400, detail=result.get("message") or "取消查询失败")
+            raise ApiError(400, "operation.failed")
 
         message = result.get("message") if isinstance(result, dict) else None
         return QueryCancelResponse(success=True, message=message or "已发送取消请求")
     except NotImplementedError as exc:
-        raise HTTPException(status_code=400, detail="当前数据源暂不支持取消 SQL 执行") from exc
-    except HTTPException:
+        raise ApiError(400, "operation.not_allowed") from exc
+    except ApiError:
         raise
     except Exception as exc:
         logger.warning(
@@ -346,7 +347,7 @@ async def cancel_query(
             exc,
             exc_info=True,
         )
-        raise HTTPException(status_code=400, detail=f"取消查询失败: {exc}") from exc
+        raise ApiError(400, "operation.failed") from exc
     finally:
         await connector.close()
 
@@ -354,7 +355,7 @@ async def cancel_query(
 @router.post("/explain")
 async def explain_query(req: QueryExplainRequest, db: AsyncSession = Depends(get_db)):
     if not _is_read_only_query(req.sql):
-        raise HTTPException(status_code=400, detail="Only read-only queries can be explained.")
+        raise ApiError(400, "query.read_only")
 
     selected_database = _normalize_optional_text(req.database)
     selected_schema = _normalize_optional_text(req.schema_name)
@@ -367,7 +368,7 @@ async def explain_query(req: QueryExplainRequest, db: AsyncSession = Depends(get
         return result
     except Exception as e:
         logger.error(f"Query explain failed: datasource_id={req.datasource_id}, sql={req.sql!r}, error={e}", exc_info=True)
-        raise HTTPException(status_code=400, detail=str(e))
+        raise ApiError(400, "operation.failed") from e
     finally:
         await connector.close()
 
@@ -388,7 +389,7 @@ async def get_databases(datasource_id: int, database: Optional[str] = None, db: 
         return [SchemaInfo(name=s) for s in schemas]
     except Exception as e:
         logger.error(f"Error fetching schemas: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise ApiError(400, "operation.failed") from e
     finally:
         await connector.close()
 
@@ -408,7 +409,7 @@ async def get_tables(
         return [TableInfo(**t) for t in tables]
     except Exception as e:
         logger.error(f"Error fetching tables: {e}", exc_info=True)
-        raise HTTPException(status_code=400, detail=str(e))
+        raise ApiError(400, "operation.failed") from e
     finally:
         await connector.close()
 
@@ -429,6 +430,6 @@ async def get_columns(
         return [ColumnInfo(**c) for c in columns]
     except Exception as e:
         logger.error(f"Error fetching columns: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise ApiError(400, "operation.failed") from e
     finally:
         await connector.close()

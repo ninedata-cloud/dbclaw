@@ -18,18 +18,12 @@ const DatasourcesPage = {
             this._applySort();
             Store.set('datasources', this.allDatasources);
 
-            Header.render('数据源管理', this._buildHeaderActions());
+            Header.render(I18n.t('pageCopy.datasources.datasourceManagement'), this._buildHeaderActions());
 
             content.innerHTML = '';
 
             if (this.allDatasources.length === 0) {
-                content.innerHTML = `
-                    <div class="empty-state">
-                        <i data-lucide="database"></i>
-                        <h3>暂无数据源</h3>
-                        <p>添加第一个数据库连接以开始监控和诊断</p>
-                    </div>
-                `;
+                content.innerHTML = I18n.t('pageCopy.datasources.noDatasourcesAddYourFirstDatabaseConnection');
                 DOM.createIcons();
                 return;
             }
@@ -45,7 +39,7 @@ const DatasourcesPage = {
             this._loadLatestMetrics();
 
         } catch (err) {
-            Toast.error('加载数据源失败: ' + err.message);
+            Toast.error(err.message || I18n.t('common.requestFailed'));
         }
     },
 
@@ -120,20 +114,14 @@ const DatasourcesPage = {
         if (!state.isSilenced) return '';
 
         const titleParts = [
-            `静默至：${Format.datetime(datasource.silence_until)}`,
-            `剩余：${this._formatHourValue(state.remainingHours)} 小时`,
+            I18n.t('pageCopy.datasources.silenceUntilValue', { value0: Format.datetime(datasource.silence_until) }),
+            I18n.t('pageCopy.datasources.remainingValueHours', { value0: this._formatHourValue(state.remainingHours) }),
         ];
         if (state.reason) {
-            titleParts.push(`原因：${state.reason}`);
+            titleParts.push(I18n.t('pageCopy.datasources.reasonValue', { value0: state.reason }));
         }
 
-        return `
-            <div style="margin-top:6px;">
-                <span class="badge badge-warning" title="${this._escapeAttr(titleParts.join('\n'))}">
-                    告警静默中 ${this._escapeHtml(this._formatHourValue(state.remainingHours))}h
-                </span>
-            </div>
-        `;
+        return I18n.t('pageCopy.datasources.theAlarmIsSilentValueH', { value0: this._escapeAttr(titleParts.join('\n')), value1: this._escapeHtml(this._formatHourValue(state.remainingHours)) });
     },
 
     async _loadLatestMetrics() {
@@ -147,24 +135,10 @@ const DatasourcesPage = {
 
     _buildHeaderActions() {
         const filtersContainer = DOM.el('div', { className: 'dashboard-filters' });
-        filtersContainer.innerHTML = `
-            <input type="text" id="filterName" class="filter-input" placeholder="${I18n.t('placeholders.searchDatasource')}">
-            <input type="text" id="filterTags" class="filter-input" placeholder="${I18n.t('placeholders.filterTags')}">
-            <select id="filterType" class="filter-select">
-                <option value="">所有类型</option>
-                <option value="mysql">MySQL</option>
-                <option value="postgresql">PostgreSQL</option>
-                <option value="oracle">Oracle</option>
-                <option value="sqlserver">SQL Server</option>
-                <option value="tdsql-c-mysql">TDSQL-C MySQL</option>
-                <option value="oceanbase-mysql">OceanBase MySQL</option>
-                <option value="opengauss">openGauss</option>
-                <option value="hana">SAP HANA</option>
-            </select>
-        `;
+        filtersContainer.innerHTML = I18n.t('pageCopy.datasources.allTypesMysqlPostgresqlOracleSqlServer', { value0: I18n.t('placeholders.searchDatasource'), value1: I18n.t('placeholders.filterTags') });
 
         const newBtn = DOM.el('button', { className: 'btn btn-primary' });
-        newBtn.innerHTML = '<i data-lucide="plus"></i> 新建数据源';
+        newBtn.innerHTML = I18n.t('pageCopy.datasources.createANewDatasource');
         newBtn.onclick = () => DatasourceForm.show(null, () => this.render());
 
         setTimeout(() => {
@@ -204,7 +178,7 @@ const DatasourcesPage = {
             this._renderTable();
             this._loadLatestMetrics();
         } catch (err) {
-            Toast.error('筛选失败: ' + err.message);
+            Toast.error(err.message || I18n.t('common.requestFailed'));
         }
     },
 
@@ -213,10 +187,10 @@ const DatasourcesPage = {
         const message = conn.connection_error || '';
 
         const statusMap = {
-            normal: { icon: '✓', label: '正常', class: 'badge-success', title: message || '连接正常' },
-            failed: { icon: '✗', label: '失败', class: 'badge-danger', title: message || '连接失败' },
-            warning: { icon: '⚠', label: '警告', class: 'badge-warning', title: message || '连接警告' },
-            unknown: { icon: '○', label: '未知', class: 'badge-secondary', title: message || '暂无监控数据' }
+            normal: { icon: '✓', label: I18n.t('pageCopy.datasources.healthy'), class: 'badge-success', title: message || I18n.t('pageCopy.datasources.connectionHealthy') },
+            failed: { icon: '✗', label: I18n.t('pageCopy.datasources.failed'), class: 'badge-danger', title: message || I18n.t('pageCopy.datasources.connectionFailed') },
+            warning: { icon: '⚠', label: I18n.t('pageCopy.datasources.warning'), class: 'badge-warning', title: message || I18n.t('pageCopy.datasources.connectionWarning') },
+            unknown: { icon: '○', label: I18n.t('pageCopy.datasources.unknown'), class: 'badge-secondary', title: message || I18n.t('pageCopy.datasources.noMonitoringData') }
         };
 
         const s = statusMap[status] || statusMap.unknown;
@@ -328,129 +302,57 @@ const DatasourcesPage = {
         const container = DOM.$('#datasource-table-container');
         if (!container) return;
 
-        container.innerHTML = `
-            <div class="data-table-container datasource-table-shell">
-                <table class="data-table datasource-table">
-                    <colgroup>
-                        <col class="datasource-col-id">
-                        <col class="datasource-col-name">
-                        <col class="datasource-col-type">
-                        <col class="datasource-col-tags">
-                        <col class="datasource-col-host">
-                        <col class="datasource-col-database">
-                        <col class="datasource-col-status">
-                        <col class="datasource-col-cpu">
-                        <col class="datasource-col-qps">
-                        <col class="datasource-col-connections">
-                        <col class="datasource-col-actions">
-                    </colgroup>
-                    <thead>
-                        <tr>
-                            <th class="sortable" data-sort="id">编号 <span class="sort-icon" data-field="id"></span></th>
-                            <th class="sortable" data-sort="name">名称 <span class="sort-icon" data-field="name"></span></th>
-                            <th class="sortable" data-sort="db_type">类型 <span class="sort-icon" data-field="db_type"></span></th>
-                            <th>标签</th>
-                            <th class="sortable" data-sort="host">主机 <span class="sort-icon" data-field="host"></span></th>
-                            <th class="sortable" data-sort="database">数据库 <span class="sort-icon" data-field="database"></span></th>
-                            <th class="sortable" data-sort="connection_status">连接状态 <span class="sort-icon" data-field="connection_status"></span></th>
-                            <th class="sortable" data-sort="cpu_usage">CPU <span class="sort-icon" data-field="cpu_usage"></span></th>
-                            <th class="sortable" data-sort="qps">QPS <span class="sort-icon" data-field="qps"></span></th>
-                            <th class="sortable" data-sort="connections_active">活跃连接 <span class="sort-icon" data-field="connections_active"></span></th>
-                            <th class="datasource-actions-header">操作</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${this.filteredDatasources.map(conn => {
+        container.innerHTML = I18n.t('pageCopy.datasources.idNameTypeTagsHostDatabaseConnection', { value0: this.filteredDatasources.map(conn => {
                             const silenceState = this._getSilenceState(conn);
                             const hostDisplay = `${conn.host}:${conn.port}`;
                             const silenceMenuItems = silenceState.isSilenced
                                 ? [
                                     this._renderActionMenuItem({
-                                        label: '调整告警静默',
+                                        label: I18n.t('pageCopy.datasources.adjustAlarmSilence'),
                                         icon: 'bell-ring',
                                         onClick: `DatasourcesPage._showSilenceModal(${conn.id})`
                                     }),
                                     this._renderActionMenuItem({
-                                        label: '取消告警静默',
+                                        label: I18n.t('pageCopy.datasources.cancelAlarmSilence'),
                                         icon: 'bell-off',
                                         onClick: `DatasourcesPage._cancelDatasourceSilence(${conn.id})`,
                                         danger: true
                                     })
                                 ].join('')
                                 : this._renderActionMenuItem({
-                                    label: '设置告警静默',
+                                    label: I18n.t('pageCopy.datasources.silenceAlerts'),
                                     icon: 'bell-off',
                                     onClick: `DatasourcesPage._showSilenceModal(${conn.id})`
                                 });
 
-                            return `
-                                <tr>
-                                    <td class="instance-mono">${conn.id}</td>
-                                    <td>
-                                        <strong>${this._escapeHtml(conn.name)}</strong>
-                                        ${this._renderSilenceBadge(conn)}
-                                    </td>
-                                    <td><span class="badge badge-info">${this._escapeHtml(this._getDbTypeLabel(conn.db_type))}</span></td>
-                                    <td>${this._renderTags(conn.tags || [])}</td>
-                                    <td class="datasource-host-cell" title="${this._escapeAttr(hostDisplay)}">${this._escapeHtml(hostDisplay)}</td>
-                                    <td title="${this._escapeAttr(conn.database || '-')}">${this._escapeHtml(conn.database || '-')}</td>
-                                    <td>${this._getStatusBadge(conn)}</td>
-                                    ${this._renderMetricsCell(conn)}
-                                    <td class="datasource-actions-cell">
-                                        <div class="ds-action-more datasource-action-menu">
-                                            <button
-                                                type="button"
-                                                class="btn btn-sm btn-secondary datasource-action-trigger"
-                                                onclick="DatasourcesPage._toggleMoreMenu(event, ${conn.id})"
-                                                title="操作菜单"
-                                                aria-label="操作菜单"
-                                            >
-                                                <i data-lucide="more-horizontal"></i>
-                                            </button>
-                                            <div class="ds-more-menu datasource-more-menu" id="more-menu-${conn.id}" style="display:none;">
-                                                ${this._renderActionMenuItem({
-                                                    label: '实例详情',
+                            return I18n.t('pageCopy.datasources.datasourceRow', { value0: conn.id, value1: this._escapeHtml(conn.name), value2: this._renderSilenceBadge(conn), value3: this._escapeHtml(this._getDbTypeLabel(conn.db_type)), value4: this._renderTags(conn.tags || []), value5: this._escapeAttr(hostDisplay), value6: this._escapeHtml(hostDisplay), value7: this._escapeAttr(conn.database || '-'), value8: this._escapeHtml(conn.database || '-'), value9: this._getStatusBadge(conn), value10: this._renderMetricsCell(conn), value11: conn.id, value12: conn.id, value13: this._renderActionMenuItem({
+                                                    label: I18n.t('pageCopy.datasources.instanceDetails'),
                                                     icon: 'panel-left',
                                                     onClick: `DatasourcesPage._openInstanceDetail(${conn.id})`
-                                                })}
-                                                ${this._renderActionMenuItem({
-                                                    label: '编辑数据源',
+                                                }), value14: this._renderActionMenuItem({
+                                                    label: I18n.t('pageCopy.datasources.editDatasource'),
                                                     icon: 'pencil',
                                                     onClick: `DatasourcesPage._editDatasource(${conn.id})`
-                                                })}
-                                                ${this._renderActionMenuItem({
-                                                    label: '立即巡检',
+                                                }), value15: this._renderActionMenuItem({
+                                                    label: I18n.t('pageCopy.datasources.runInspectionNow'),
                                                     icon: 'zap',
                                                     onClick: `DatasourcesPage._triggerInspection(${conn.id}, event)`
-                                                })}
-                                                ${this._renderActionMenuItem({
-                                                    label: '测试连接',
+                                                }), value16: this._renderActionMenuItem({
+                                                    label: I18n.t('pageCopy.datasources.testConnection'),
                                                     icon: 'plug',
                                                     onClick: `DatasourcesPage._testDatasource(${conn.id})`
-                                                })}
-                                                ${this._renderActionMenuItem({
-                                                    label: '巡检与告警配置',
+                                                }), value17: this._renderActionMenuItem({
+                                                    label: I18n.t('pageCopy.datasources.inspectionAndAlarmConfiguration'),
                                                     icon: 'settings',
                                                     onClick: `DatasourcesPage._showInspectionConfig(${conn.id})`
-                                                })}
-                                                ${silenceMenuItems}
-                                                ${this._renderActionMenuItem({
-                                                    label: '删除数据源',
+                                                }), value18: silenceMenuItems, value19: this._renderActionMenuItem({
+                                                    label: I18n.t('pageCopy.datasources.deleteDatasource'),
                                                     icon: 'trash-2',
                                                     onClick: `DatasourcesPage._deleteDatasource(${conn.id})`,
                                                     danger: true,
                                                     dividerBefore: true
-                                                })}
-                                            </div>
-                                        </div>
-                                    </td>
-                                </tr>
-                            `;
-                        }).join('')}
-                    </tbody>
-                </table>
-            </div>
-        `;
+                                                }) });
+                        }).join('') });
         this._updateSortIcons();
         container.querySelectorAll('th.sortable').forEach(th => {
             th.addEventListener('click', () => {
@@ -511,14 +413,14 @@ const DatasourcesPage = {
                 const versionDisplay = result.version && datasource
                     ? this._simplifyVersion(result.version, datasource.db_type).short
                     : result.version || '';
-                Toast.success(`连接成功! ${versionDisplay}`);
+                Toast.success(I18n.t('pageCopy.datasources.connectedValue', { value0: versionDisplay }));
             } else {
-                Toast.error(`连接失败: ${result.message}`);
+                Toast.error(result.message || I18n.t('common.failed'));
             }
             // 重新加载数据源列表以更新连接状态
             await this._reloadWithFilters();
         } catch (err) {
-            Toast.error('测试失败: ' + err.message);
+            Toast.error(err.message || I18n.t('common.requestFailed'));
         }
     },
 
@@ -543,38 +445,15 @@ const DatasourcesPage = {
 
         const state = this._getSilenceState(conn);
         const defaultHours = state.isSilenced ? this._formatHourValue(state.remainingHours) : '1';
-        const currentStatusHtml = state.isSilenced ? `
-            <div style="margin-bottom:12px;padding:10px 12px;border-radius:8px;background:rgba(217,119,6,0.12);color:var(--text-primary);">
-                <div style="font-weight:600;margin-bottom:4px;">当前处于告警静默中</div>
-                <div style="font-size:12px;color:var(--text-secondary);">截止时间：${this._escapeHtml(Format.datetime(conn.silence_until))}</div>
-                <div style="font-size:12px;color:var(--text-secondary);">剩余时长：${this._escapeHtml(this._formatHourValue(state.remainingHours))} 小时</div>
-                ${state.reason ? `<div style="font-size:12px;color:var(--text-secondary);">静默原因：${this._escapeHtml(state.reason)}</div>` : ''}
-            </div>
-        ` : '';
+        const currentStatusHtml = state.isSilenced ? I18n.t('pageCopy.datasources.currentlyInAlarmSilenceDeadlineValueRemaining', { value0: this._escapeHtml(Format.datetime(conn.silence_until)), value1: this._escapeHtml(this._formatHourValue(state.remainingHours)), value2: state.reason ? I18n.t('pageCopy.datasources.reasonForSilenceValue', { value0: this._escapeHtml(state.reason) }) : '' }) : '';
 
         Modal.show({
-            title: '设置告警静默',
-            content: `
-                <div style="padding:6px 0;">
-                    <div style="margin-bottom:12px;color:var(--text-secondary);line-height:1.6;">
-                        为数据源 <strong>${this._escapeHtml(conn.name)}</strong> 设置告警静默。静默期间将暂停该数据源的告警触发与通知。
-                    </div>
-                    ${currentStatusHtml}
-                    <div class="form-group">
-                        <label for="datasource-silence-hours">静默时长（小时）</label>
-                        <input id="datasource-silence-hours" type="number" class="form-input" min="0.5" max="240" step="0.5" value="${this._escapeAttr(defaultHours)}" placeholder="1">
-                        <small class="text-muted">默认 1 小时，可设置范围 0.5 ~ 240 小时</small>
-                    </div>
-                    <div class="form-group" style="margin-top:12px;">
-                        <label for="datasource-silence-reason">静默原因（可选）</label>
-                        <textarea id="datasource-silence-reason" class="form-input" rows="3" maxlength="500" placeholder="${I18n.t('placeholders.silenceReason')}">${this._escapeHtml(state.reason || '')}</textarea>
-                    </div>
-                </div>
-            `,
+            title: I18n.t('pageCopy.datasources.silenceAlerts'),
+            content: I18n.t("pageCopy.datasources._showSilenceModalContent", { value0: this._escapeHtml(conn.name), value1: currentStatusHtml, value2: this._escapeAttr(defaultHours), value3: I18n.t('placeholders.silenceReason'), value4: this._escapeHtml(state.reason || '') }),
             buttons: [
-                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
+                { text: I18n.t('pageCopy.datasources.cancel'), variant: 'secondary', onClick: () => Modal.hide() },
                 {
-                    text: state.isSilenced ? '更新静默' : '开始静默',
+                    text: state.isSilenced ? I18n.t('pageCopy.datasources.updateSilently') : I18n.t('pageCopy.datasources.startSilence'),
                     variant: 'primary',
                     onClick: () => this._setDatasourceSilence(id)
                 }
@@ -588,11 +467,11 @@ const DatasourcesPage = {
         const hours = parseFloat(hoursValue);
 
         if (!Number.isFinite(hours)) {
-            Toast.error('请输入有效的静默时长');
+            Toast.error(I18n.t('alerts.silence.invalidDuration'));
             return;
         }
         if (hours < 0.5 || hours > 240) {
-            Toast.error('静默时长必须在 0.5 到 240 小时之间');
+            Toast.error(I18n.t('alerts.silence.outOfRange'));
             return;
         }
 
@@ -602,10 +481,10 @@ const DatasourcesPage = {
                 reason: reasonValue || null,
             });
             Modal.hide();
-            Toast.success(`已设置告警静默 ${this._formatHourValue(result.remaining_hours ?? hours)} 小时`);
+            Toast.success(I18n.t('pageCopy.datasources.alertSilenceEnabledValueHours', { value0: this._formatHourValue(result.remaining_hours ?? hours) }));
             await this.render();
         } catch (err) {
-            Toast.error('设置告警静默失败: ' + err.message);
+            Toast.error(err.message || I18n.t('common.requestFailed'));
         }
     },
 
@@ -614,21 +493,21 @@ const DatasourcesPage = {
         if (!conn) return;
 
         Modal.show({
-            title: '取消告警静默',
-            content: `确认取消数据源 <strong>${this._escapeHtml(conn.name)}</strong> 的告警静默吗？取消后将立即恢复该数据源的告警触发与通知。`,
+            title: I18n.t('pageCopy.datasources.cancelAlarmSilence'),
+            content: I18n.t("pageCopy.datasources._cancelDatasourceSilenceContent", { value0: this._escapeHtml(conn.name) }),
             buttons: [
-                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
+                { text: I18n.t('pageCopy.datasources.cancel'), variant: 'secondary', onClick: () => Modal.hide() },
                 {
-                    text: '确认取消',
+                    text: I18n.t('pageCopy.datasources.confirmCancellation'),
                     variant: 'danger',
                     onClick: async () => {
                         try {
                             await API.cancelDatasourceSilence(id);
                             Modal.hide();
-                            Toast.success('已取消告警静默');
+                            Toast.success(I18n.t('pageCopy.datasources.alarmSilenceHasBeenCanceled'));
                             await this.render();
                         } catch (err) {
-                            Toast.error('取消告警静默失败: ' + err.message);
+                            Toast.error(err.message || I18n.t('common.requestFailed'));
                         }
                     }
                 }
@@ -638,18 +517,18 @@ const DatasourcesPage = {
 
     async _deleteDatasource(id) {
         const conn = this.allDatasources.find(c => c.id === id);
-        if (!conn || !confirm(`删除数据源 "${conn.name}"? 此操作无法撤销`)) return;
+        if (!conn || !confirm(I18n.t('pageCopy.datasources.deleteDatasourceValueThisActionCannotBe', { value0: conn.name }))) return;
         try {
             await API.deleteDatasource(id);
-            Toast.success('数据源已删除');
+            Toast.success(I18n.t('pageCopy.datasources.datasourceDeleted'));
             this.render();
         } catch (err) {
-            Toast.error('删除失败: ' + err.message);
+            Toast.error(err.message || I18n.t('common.requestFailed'));
         }
     },
 
     async _triggerInspection(datasourceId, triggerEvent = null) {
-        if (!confirm('触发手动巡检? 这将生成一份全面的诊断报告')) {
+        if (!confirm(I18n.t('pageCopy.datasources.triggerManualInspectionThisWillGenerateA'))) {
             return;
         }
         const trigger = triggerEvent?.target?.closest('button');
@@ -659,9 +538,9 @@ const DatasourcesPage = {
         }
         try {
             await API.post(`/api/inspections/trigger/${datasourceId}`);
-            Toast.success('巡检已成功触发!');
+            Toast.success(I18n.t('pageCopy.datasources.inspectionHasBeenSuccessfullyTriggered'));
         } catch (err) {
-            Toast.error('触发巡检失败: ' + err.message);
+            Toast.error(err.message || I18n.t('common.requestFailed'));
         } finally {
             if (trigger) {
                 trigger.innerHTML = '<i data-lucide="more-horizontal"></i>';
@@ -688,86 +567,35 @@ const DatasourcesPage = {
             const selectedTemplateId = effectiveConfig?.alert_template_id || this._inspectionTemplates.find((item) => item.is_default)?.id || '';
 
             Modal.show({
-                title: '巡检与告警配置',
-                content: `
-                    <div style="padding:10px;">
-                        <label style="display:block;margin-bottom:15px;">
-                            <input type="checkbox" id="enableAuto" ${effectiveConfig?.enabled ? 'checked' : ''}>
-                            启用自动巡检
-                        </label>
-                        <label style="display:block;margin-bottom:10px;">
-                            巡检频率:
-                            <select id="scheduleInterval" style="width:100%;padding:8px;margin-top:5px;">
-                                ${this._buildScheduleIntervalOptions(effectiveConfig?.schedule_interval || 86400)}
-                            </select>
-                        </label>
-                        <p style="font-size:12px;color:#666;margin-top:5px;">
-                            推荐先使用模板默认策略，实例侧只保留少量运行开关，降低配置门槛。
-                        </p>
-                        <label style="display:block;margin-bottom:15px;margin-top:15px;">
-                            <input type="checkbox" id="useAI" ${effectiveConfig?.use_ai_analysis !== false ? 'checked' : ''}>
-                            使用 AI 分析
-                        </label>
-
-                        <div style="border-top:1px solid #ddd;margin-top:20px;padding-top:20px;">
-                            <h4 style="margin-bottom:15px;font-size:14px;font-weight:600;">告警模板</h4>
-                            <label style="display:block;margin-bottom:10px;">
-                                <select id="alertTemplateId" style="width:100%;padding:8px;margin-top:5px;">
-                                    <option value="">请选择告警模板</option>
-                                    ${this._inspectionTemplates.filter((item) => item.enabled || item.id === selectedTemplateId).map((item) => `
+                title: I18n.t('pageCopy.datasources.inspectionAndAlarmConfiguration'),
+                content: I18n.t("pageCopy.datasources._showInspectionConfigContent", { value0: effectiveConfig?.enabled ? 'checked' : '', value1: this._buildScheduleIntervalOptions(effectiveConfig?.schedule_interval || 86400), value2: effectiveConfig?.use_ai_analysis !== false ? 'checked' : '', value3: this._inspectionTemplates.filter((item) => item.enabled || item.id === selectedTemplateId).map((item) => `
                                         <option value="${item.id}" ${String(selectedTemplateId) === String(item.id) ? 'selected' : ''}>
-                                            ${this._escapeHtml(item.name)}${item.is_default ? '（默认）' : ''}
+                                            ${this._escapeHtml(item.name)}${item.is_default ? I18n.t('pageCopy.datasources._showInspectionConfigContent2') : ''}
                                         </option>
-                                    `).join('')}
-                                </select>
-                            </label>
-                            <div id="alertTemplatePreview" style="font-size:12px;color:#666;border:1px solid #eee;border-radius:8px;padding:12px;min-height:96px;">
-                                ${this._renderAlertTemplatePreview(selectedTemplateId, baselineSummary)}
-                            </div>
-                            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
-                                <button id="openAlertTemplatesBtn" class="btn btn-secondary" type="button">管理告警模板</button>
-                                <button id="viewBaselineDetailBtn" class="btn btn-secondary" type="button">查看基线详情</button>
-                                <button id="rebuildBaselineBtn" class="btn btn-secondary" type="button">重建当前实例基线</button>
-                            </div>
-                            <p style="font-size:12px;color:#666;margin-top:8px;">
-                                阈值、基线和事件级 AI 诊断都统一维护在模板里，实例配置只负责“选哪套策略”。
-                            </p>
-                        </div>
-
-                        <div style="border-top:1px solid #ddd;margin-top:20px;padding-top:20px;">
-                            <h4 style="margin-bottom:15px;font-size:14px;font-weight:600;">当前运行状态</h4>
-                            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;font-size:12px;color:#666;">
-                                <div>当前模板：${this._escapeHtml(config?.alert_template_name || '未绑定模板')}</div>
-                                <div>下次计划时间：${this._escapeHtml(config?.next_scheduled_at ? Format.datetime(config.next_scheduled_at) : '-')}</div>
-                                <div>上次执行时间：${this._escapeHtml(config?.last_scheduled_at ? Format.datetime(config.last_scheduled_at) : '-')}</div>
-                                <div>基线画像：${baselineSummary?.profile_count || 0} 个时间槽</div>
-                            </div>
-                        </div>
-                    </div>
-                `,
+                                    `).join(''), value4: this._renderAlertTemplatePreview(selectedTemplateId, baselineSummary), value5: this._escapeHtml(config?.alert_template_name || I18n.t('pageCopy.datasources._showInspectionConfigContent3')), value6: this._escapeHtml(config?.next_scheduled_at ? Format.datetime(config.next_scheduled_at) : '-'), value7: this._escapeHtml(config?.last_scheduled_at ? Format.datetime(config.last_scheduled_at) : '-'), value8: baselineSummary?.profile_count || 0 }),
                 buttons: [
-                    { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
-                    { text: '保存', variant: 'primary', onClick: () => this._saveInspectionConfig(datasourceId) }
+                    { text: I18n.t('pageCopy.datasources.cancel'), variant: 'secondary', onClick: () => Modal.hide() },
+                    { text: I18n.t('pageCopy.datasources.save'), variant: 'primary', onClick: () => this._saveInspectionConfig(datasourceId) }
                 ]
             });
 
             this._setupInspectionConfigListeners(datasourceId);
         } catch (error) {
-            Toast.error('加载巡检与告警配置失败: ' + error.message);
+            Toast.error(error.message || I18n.t('common.requestFailed'));
         }
     },
 
     _buildScheduleIntervalOptions(currentValue) {
         const presets = [
-            { value: 3600, label: '每小时' },
-            { value: 21600, label: '每 6 小时' },
-            { value: 86400, label: '每天' },
-            { value: 604800, label: '每周' },
-            { value: 2592000, label: '每月' },
+            { value: 3600, label: I18n.t('pageCopy.datasources.hourly') },
+            { value: 21600, label: I18n.t('pageCopy.datasources.every6Hours') },
+            { value: 86400, label: I18n.t('pageCopy.datasources.everyDay') },
+            { value: 604800, label: I18n.t('pageCopy.datasources.weekly') },
+            { value: 2592000, label: I18n.t('pageCopy.datasources.monthly') },
         ];
         const numericCurrent = parseInt(currentValue, 10) || 86400;
         const hasCurrent = presets.some((item) => item.value === numericCurrent);
-        const items = hasCurrent ? presets : presets.concat([{ value: numericCurrent, label: `自定义（${numericCurrent} 秒）` }]);
+        const items = hasCurrent ? presets : presets.concat([{ value: numericCurrent, label: I18n.t('pageCopy.datasources.customValueSeconds', { value0: numericCurrent }) }]);
         return items.map((item) => `<option value="${item.value}" ${item.value === numericCurrent ? 'selected' : ''}>${item.label}</option>`).join('');
     },
 
@@ -786,40 +614,26 @@ const DatasourcesPage = {
     _renderAlertTemplatePreview(templateId, baselineSummary = null) {
         const template = (this._inspectionTemplates || []).find((item) => String(item.id) === String(templateId));
         if (!template) {
-            return '选择模板后，这里会展示该模板的阈值、基线和事件诊断摘要。';
+            return I18n.t('pageCopy.datasources.afterSelectingATemplateASummaryOf');
         }
 
         const config = this._normalizeAlertTemplateConfig(template.template_config);
         const customExpression = config.threshold_rules?.custom_expression;
         const thresholdSummary = customExpression?.expression
-            ? `自定义表达式：${customExpression.expression}`
+            ? I18n.t('pageCopy.datasources.customExpressionValue', { value0: customExpression.expression })
             : [
                 ['cpu_usage', 'CPU'],
-                ['disk_usage', '磁盘'],
-                ['connections_active', '连接'],
+                ['disk_usage', I18n.t('pageCopy.datasources.disk')],
+                ['connections_active', I18n.t('pageCopy.datasources.connection')],
             ].map(([key, label]) => {
                 const rule = config.threshold_rules?.[key];
-                return rule?.threshold != null ? `${label}>${rule.threshold}（${rule.duration || '-'}秒）` : null;
+                return rule?.threshold != null ? I18n.t('pageCopy.datasources.conditionDuration', { value0: label, value1: rule.threshold, value2: rule.duration || '-' }) : null;
             }).filter(Boolean).join(' / ');
         const baselineText = config.baseline_config?.enabled
-            ? `已启用${baselineSummary ? `，当前实例已有 ${baselineSummary.profile_count || 0} 个时间槽画像` : ''}`
-            : '未启用';
-        const eventAIText = config.event_ai_config?.enabled !== false ? '开启' : '关闭';
-        return `
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-                <strong>${this._escapeHtml(template.name)}</strong>
-                ${template.is_default ? '<span class="badge badge-info">默认模板</span>' : ''}
-                <span class="badge ${template.enabled ? 'badge-success' : 'badge-secondary'}">${template.enabled ? '启用中' : '已停用'}</span>
-            </div>
-            <div style="line-height:1.7;">
-                <div>判警方式：${this._escapeHtml(config.alert_engine_mode === 'ai' ? 'AI 判警' : '阈值判警')}</div>
-                <div>基础阈值：${this._escapeHtml(thresholdSummary || '未配置')}</div>
-                <div>实例基线：${this._escapeHtml(baselineText)}</div>
-                <div>事件级 AI 诊断：${this._escapeHtml(eventAIText)}</div>
-                ${config.alert_engine_mode === 'ai' && config.ai_policy_text ? `<div>AI 规则：${this._escapeHtml(config.ai_policy_text)}</div>` : ''}
-                ${template.summary ? `<div>摘要：${this._escapeHtml(template.summary)}</div>` : ''}
-            </div>
-        `;
+            ? I18n.t('pageCopy.datasources.enabledValue', { value0: baselineSummary ? I18n.t('pageCopy.datasources.currentinstanceValueTimeSlotPortrait', { value0: baselineSummary.profile_count || 0 }) : '' })
+            : I18n.t('pageCopy.datasources.notEnabled');
+        const eventAIText = config.event_ai_config?.enabled !== false ? I18n.t('pageCopy.datasources.enabled') : I18n.t('pageCopy.datasources.close');
+        return I18n.t('pageCopy.datasources.alertTemplatePreview', { value0: this._escapeHtml(template.name), value1: template.is_default ? I18n.t('pageCopy.datasources.defaultTemplate') : '', value2: template.enabled ? 'badge-success' : 'badge-secondary', value3: template.enabled ? I18n.t('pageCopy.datasources.enable') : I18n.t('pageCopy.datasources.disabled'), value4: this._escapeHtml(config.alert_engine_mode === 'ai' ? I18n.t('pageCopy.datasources.aiAlertEvaluation') : I18n.t('pageCopy.datasources.thresholdEvaluation')), value5: this._escapeHtml(thresholdSummary || I18n.t('pageCopy.datasources.notConfigured')), value6: this._escapeHtml(baselineText), value7: this._escapeHtml(eventAIText), value8: config.alert_engine_mode === 'ai' && config.ai_policy_text ? I18n.t('pageCopy.datasources.aiValue', { value0: this._escapeHtml(config.ai_policy_text) }) : '', value9: template.summary ? I18n.t('pageCopy.datasources.summaryLabel', { value0: this._escapeHtml(template.summary) }) : '' });
     },
 
     _syncInspectionTemplatePreview(selectedTemplateId = null) {
@@ -857,17 +671,17 @@ const DatasourcesPage = {
         DOM.$('#rebuildBaselineBtn')?.addEventListener('click', async () => {
             const btn = DOM.$('#rebuildBaselineBtn');
             btn.disabled = true;
-            btn.textContent = '重建中...';
+            btn.textContent = I18n.t('pageCopy.datasources.rebuilding');
             try {
                 const result = await API.post(`/api/inspections/baseline/${datasourceId}/rebuild`);
                 this._inspectionBaselineSummary = result;
                 this._syncInspectionTemplatePreview();
-                Toast.success('历史基线重建完成');
+                Toast.success(I18n.t('pageCopy.datasources.historicalBaselineReconstructionCompleted'));
             } catch (err) {
-                Toast.error('重建基线失败: ' + err.message);
+                Toast.error(err.message || I18n.t('common.requestFailed'));
             } finally {
                 btn.disabled = false;
-                btn.textContent = '重建当前实例基线';
+                btn.textContent = I18n.t('pageCopy.datasources.rebuildTheCurrentInstanceBaseline');
             }
         });
 
@@ -888,18 +702,18 @@ const DatasourcesPage = {
             const summary = await API.get(`/api/inspections/baseline/${datasourceId}?limit=500`);
             const content = this._renderBaselineDetailContent(summary || {});
             Modal.show({
-                title: '实例基线详情',
+                title: I18n.t('pageCopy.datasources.instanceBaselineDetails'),
                 content,
                 size: 'xlarge',
                 width: '1080px',
                 bodyClassName: 'baseline-detail-modal-body',
                 onHide: () => this._showInspectionConfig(datasourceId, draft),
                 buttons: [
-                    { text: '关闭', variant: 'secondary', onClick: () => Modal.hide() },
+                    { text: I18n.t('pageCopy.datasources.close'), variant: 'secondary', onClick: () => Modal.hide() },
                 ],
             });
         } catch (error) {
-            Toast.error('加载基线详情失败: ' + error.message);
+            Toast.error(error.message || I18n.t('common.requestFailed'));
         }
     },
 
@@ -910,40 +724,15 @@ const DatasourcesPage = {
         const groupedProfiles = this._groupBaselineProfiles(profiles);
 
         const summaryCard = DOM.el('div', { className: 'baseline-detail-summary' });
-        summaryCard.innerHTML = `
-            <div class="baseline-detail-summary-item">
-                <div class="baseline-detail-summary-label">基线状态</div>
-                <div class="baseline-detail-summary-value">${enabled ? '已启用' : '未启用'}</div>
-            </div>
-            <div class="baseline-detail-summary-item">
-                <div class="baseline-detail-summary-label">画像数量</div>
-                <div class="baseline-detail-summary-value">${summary?.profile_count || 0}</div>
-            </div>
-            <div class="baseline-detail-summary-item">
-                <div class="baseline-detail-summary-label">学习天数</div>
-                <div class="baseline-detail-summary-value">${summary?.diagnostics?.learning_days || '-'}</div>
-            </div>
-            <div class="baseline-detail-summary-item">
-                <div class="baseline-detail-summary-label">最少样本数</div>
-                <div class="baseline-detail-summary-value">${summary?.diagnostics?.min_samples || '-'}</div>
-            </div>
-            <div class="baseline-detail-summary-item">
-                <div class="baseline-detail-summary-label">默认指标</div>
-                <div class="baseline-detail-summary-value baseline-detail-summary-metrics">${Array.isArray(summary?.diagnostics?.default_metrics) && summary.diagnostics.default_metrics.length
+        summaryCard.innerHTML = I18n.t('pageCopy.datasources.baselineStatusValueNumberOfPortraitsValue', { value0: enabled ? I18n.t('pageCopy.datasources.enabled2') : I18n.t('pageCopy.datasources.notEnabled'), value1: summary?.profile_count || 0, value2: summary?.diagnostics?.learning_days || '-', value3: summary?.diagnostics?.min_samples || '-', value4: Array.isArray(summary?.diagnostics?.default_metrics) && summary.diagnostics.default_metrics.length
                     ? summary.diagnostics.default_metrics.map((metric) => this._escapeHtml(this._getBaselineMetricLabel(metric))).join(' / ')
-                    : '-'}</div>
-            </div>
-            <div class="baseline-detail-summary-item baseline-detail-summary-item-wide">
-                <div class="baseline-detail-summary-label">最近更新时间</div>
-                <div class="baseline-detail-summary-value">${summary?.last_profile_updated_at ? this._escapeHtml(Format.datetime(summary.last_profile_updated_at)) : '-'}</div>
-            </div>
-        `;
+                    : '-', value5: summary?.last_profile_updated_at ? this._escapeHtml(Format.datetime(summary.last_profile_updated_at)) : '-' });
         wrapper.appendChild(summaryCard);
 
         if (!enabled) {
             wrapper.appendChild(DOM.el('div', {
                 className: 'empty-state',
-                innerHTML: '<h3>当前模板未启用实例基线</h3><p>请选择启用基线的告警模板后，再查看画像明细。</p>',
+                innerHTML: I18n.t('pageCopy.datasources.instanceBaselinesAreNotEnabledForThe'),
             }));
             return wrapper;
         }
@@ -951,7 +740,7 @@ const DatasourcesPage = {
         if (!profiles.length) {
             wrapper.appendChild(DOM.el('div', {
                 className: 'empty-state',
-                innerHTML: '<h3>暂无基线画像</h3><p>可以先等待系统自然积累样本，或回到上一层点击“重建当前实例基线”。</p>',
+                innerHTML: I18n.t('pageCopy.datasources.noBaselineImageYetYouCanWait'),
             }));
             return wrapper;
         }
@@ -1004,12 +793,12 @@ const DatasourcesPage = {
                 }
                 const levelClass = this._getBaselineCellLevel(metricName, item, metricConfig);
                 const sampleCount = item.sample_count ?? '-';
-                const label = `${this._getWeekdayLabel(weekday)} ${String(hour).padStart(2, '0')}:00 | 均值 ${this._formatBaselineNumber(item.avg_value)}${this._getBaselineMetricUnit(metricName)} | P95 ${this._formatBaselineNumber(item.p95_value)}${this._getBaselineMetricUnit(metricName)} | 样本 ${sampleCount}`;
+                const label = I18n.t('pageCopy.datasources.baselineSlotSummary', { value0: this._getWeekdayLabel(weekday), value1: String(hour).padStart(2, '0'), value2: this._formatBaselineNumber(item.avg_value), value3: this._getBaselineMetricUnit(metricName), value4: this._formatBaselineNumber(item.p95_value), value5: this._getBaselineMetricUnit(metricName), value6: sampleCount });
                 return `<span class="baseline-heatmap-cell ${levelClass}" title="${this._escapeAttr(label)}"></span>`;
             }).join('');
             return `
                 <div class="baseline-heatmap-row">
-                    <div class="baseline-heatmap-row-label">${this._escapeHtml(this._getWeekdayLabel(weekday).replace('周', ''))}</div>
+                    <div class="baseline-heatmap-row-label">${this._escapeHtml(this._getWeekdayLabel(weekday).replace(I18n.t('pageCopy.datasources.weekLabel'), ''))}</div>
                     <div class="baseline-heatmap-row-cells">${cells}</div>
                 </div>
             `;
@@ -1018,34 +807,7 @@ const DatasourcesPage = {
         const avgRange = this._buildBaselineRangeText(items, 'avg_value', metricName);
         const p95Range = this._buildBaselineRangeText(items, 'p95_value', metricName);
 
-        card.innerHTML = `
-            <div class="baseline-metric-card-header">
-                <div>
-                    <div class="baseline-metric-card-title">${this._escapeHtml(this._getBaselineMetricLabel(metricName))}</div>
-                    <div class="baseline-metric-card-subtitle">
-                        ${items.length} 个时间槽
-                        ${latestItem?.updated_at ? ` · 更新于 ${this._escapeHtml(Format.datetime(latestItem.updated_at))}` : ''}
-                    </div>
-                </div>
-                <div class="baseline-metric-card-stats">
-                    <span>均值区间 ${this._escapeHtml(avgRange)}</span>
-                    <span>P95 区间 ${this._escapeHtml(p95Range)}</span>
-                </div>
-            </div>
-            <div class="baseline-heatmap">
-                <div class="baseline-heatmap-hours">
-                    ${hoursHeader}
-                </div>
-                <div class="baseline-heatmap-body">
-                    ${rows}
-                </div>
-            </div>
-            <div class="baseline-metric-card-legend">
-                <span class="baseline-legend-dot baseline-legend-dot-low"></span> 低负载
-                <span class="baseline-legend-dot baseline-legend-dot-medium"></span> 中等负载
-                <span class="baseline-legend-dot baseline-legend-dot-high"></span> 高负载
-            </div>
-        `;
+        card.innerHTML = I18n.t('pageCopy.datasources.baselineProfileSummary', { value0: this._escapeHtml(this._getBaselineMetricLabel(metricName)), value1: items.length, value2: latestItem?.updated_at ? I18n.t('pageCopy.datasources.updateValue', { value0: this._escapeHtml(Format.datetime(latestItem.updated_at)) }) : '', value3: this._escapeHtml(avgRange), value4: this._escapeHtml(p95Range), value5: hoursHeader, value6: rows });
         return card;
     },
 
@@ -1119,14 +881,14 @@ const DatasourcesPage = {
     },
 
     _getWeekdayLabel(weekday) {
-        return ['周一', '周二', '周三', '周四', '周五', '周六', '周日'][Number(weekday) || 0] || `星期${weekday}`;
+        return [I18n.t('pageCopy.datasources.monday'), I18n.t('pageCopy.datasources.tuesday'), I18n.t('pageCopy.datasources.wednesday'), I18n.t('pageCopy.datasources.thursday'), I18n.t('pageCopy.datasources.friday'), I18n.t('pageCopy.datasources.saturday'), I18n.t('pageCopy.datasources.sunday')][Number(weekday) || 0] || I18n.t('pageCopy.datasources.weekValue', { value0: weekday });
     },
 
     _getBaselineMetricLabel(metricName) {
         return {
-            cpu_usage: 'CPU 使用率',
-            disk_usage: '磁盘使用率',
-            connections_active: '活跃连接数',
+            cpu_usage: I18n.t('pageCopy.datasources.cpuUsage'),
+            disk_usage: I18n.t('pageCopy.datasources.diskUsage'),
+            connections_active: I18n.t('pageCopy.datasources.activeConnections'),
             qps: 'QPS',
             tps: 'TPS',
         }[metricName] || metricName || '-';
@@ -1153,7 +915,7 @@ const DatasourcesPage = {
         const alert_template_id = DOM.$('#alertTemplateId')?.value ? parseInt(DOM.$('#alertTemplateId')?.value, 10) : null;
 
         if (!alert_template_id) {
-            Toast.error('请先选择告警模板');
+            Toast.error(I18n.t('alerts.templates.selectRequired'));
             return;
         }
 
@@ -1176,14 +938,14 @@ const DatasourcesPage = {
                 event_ai_config: baseConfig?.event_ai_config || {},
             });
             Modal.hide();
-            Toast.success('巡检与告警配置已保存');
+            Toast.success(I18n.t('pageCopy.datasources.inspectionAndAlarmConfigurationHasBeenSaved'));
         } catch (error) {
-            Toast.error('保存巡检与告警配置失败: ' + error.message);
+            Toast.error(error.message || I18n.t('common.requestFailed'));
         }
     },
 
     _simplifyVersion(fullVersion, dbType) {
-        if (!fullVersion) return { short: '未知版本', full: '', details: '' };
+        if (!fullVersion) return { short: I18n.t('pageCopy.datasources.unknownVersion'), full: '', details: '' };
 
         const patterns = {
             'postgresql': /PostgreSQL\s+([\d.]+)/i,

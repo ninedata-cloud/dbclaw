@@ -48,3 +48,19 @@ code: |
           "FROM pg_stat_user_indexes ORDER BY idx_scan DESC LIMIT 50"
       )
       return {"success": True, "data": result}
+
+i18n:
+  zh-CN:
+    name: openGauss 索引使用情况
+    description: 执行“openGauss 索引使用情况”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+    permission_descriptions:
+      read_datasource: 允许读取数据源和平台元数据
+  en-US:
+    name: opengauss_get_index_usage
+    description: Get index usage statistics from openGauss pg_stat_user_indexes
+    parameter_descriptions:
+      datasource_id: ID of the openGauss datasource
+    permission_descriptions:
+      read_datasource: Read datasource and platform metadata

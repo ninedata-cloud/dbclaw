@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -18,6 +18,7 @@ from backend.schemas.auth import (
     UserResponse,
 )
 from backend.i18n.errors import ApiError
+from backend.i18n.locale import message_payload
 from backend.utils.security import verify_password, hash_password
 from backend.dependencies import get_current_user
 from backend.services.session_service import SessionService
@@ -110,9 +111,8 @@ async def update_me(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    current_user.display_name = data.display_name
-    current_user.email = data.email
-    current_user.phone = data.phone
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(current_user, field, value)
     await db.commit()
     await db.refresh(current_user)
     return current_user
@@ -125,6 +125,8 @@ async def update_my_locale(
     db: AsyncSession = Depends(get_db),
 ):
     current_user.locale = data.locale
+    if data.timezone is not None:
+        current_user.timezone = data.timezone
     await db.commit()
     await db.refresh(current_user)
     return current_user
@@ -144,7 +146,7 @@ async def logout(
         await SessionService.revoke_session(db, session, "logout")
         await db.commit()
     _clear_session_cookie(response)
-    return {"message": "Logged out"}
+    return message_payload("auth.logout.success")
 
 
 @router.post("/logout-all")
@@ -152,7 +154,7 @@ async def logout_all(current_user: User = Depends(get_current_user), db: AsyncSe
     current_user.session_version += 1
     await SessionService.revoke_user_session(db, current_user.id, "logout_all")
     await db.commit()
-    return {"message": "All sessions revoked"}
+    return message_payload("auth.logout_all.success")
 
 
 @router.post("/change-password")
@@ -171,4 +173,4 @@ async def change_password(
     await SessionService.revoke_user_session(db, current_user.id, "password_changed")
     await db.commit()
     _clear_session_cookie(response)
-    return {"message": "Password changed successfully"}
+    return message_payload("auth.password_changed.success")

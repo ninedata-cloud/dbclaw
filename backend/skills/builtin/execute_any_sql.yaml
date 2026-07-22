@@ -34,3 +34,23 @@ code: |
       result = await context.execute_query(sql, datasource_id, allow_write=True)
 
       return result
+
+i18n:
+  zh-CN:
+    name: 执行任意 SQL 命令
+    description: 执行“执行任意 SQL 命令”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+      sql: SQL 语句。
+    permission_descriptions:
+      execute_any_sql: 高风险：允许执行任意 SQL
+      admin: 需要管理员权限
+  en-US:
+    name: Execute Any SQL Command
+    description: Execute ANY SQL command including DDL, DML, DCL operations. WARNING - This can modify database structure, data, and permissions. Use with extreme caution.
+    parameter_descriptions:
+      datasource_id: The datasource ID
+      sql: The SQL command to execute (any valid SQL statement)
+    permission_descriptions:
+      execute_any_sql: 'High risk: execute unrestricted SQL'
+      admin: Administrator privileges required

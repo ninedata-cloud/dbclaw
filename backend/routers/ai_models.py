@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from typing import List
@@ -9,6 +9,7 @@ import json
 import logging
 
 from backend.database import get_db
+from backend.i18n.errors import ApiError
 from backend.models.ai_model import AIModel
 from backend.schemas.ai_model import (
     AIModelCreate,
@@ -20,6 +21,7 @@ from backend.schemas.ai_model import (
 from backend.dependencies import get_current_user
 from backend.utils.encryption import encrypt_value, decrypt_value
 from backend.services.ai_agent import get_ai_client, request_text_response
+from backend.i18n.locale import message_payload
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +94,7 @@ async def create_model(data: AIModelCreate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(AIModel).filter(AIModel.name == data.name))
     existing = result.scalar_one_or_none()
     if existing:
-        raise HTTPException(status_code=400, detail="模型名称已存在")
+        raise ApiError(400, "operation.not_allowed")
 
     model = AIModel(
         name=data.name,
@@ -118,7 +120,7 @@ async def update_model(model_id: int, data: AIModelUpdate, db: AsyncSession = De
     result = await db.execute(select(AIModel).filter(AIModel.id == model_id))
     model = result.scalar_one_or_none()
     if not model:
-        raise HTTPException(status_code=404, detail="模型不存在")
+        raise ApiError(404, "model.not_found")
 
     if data.name:
         model.name = data.name
@@ -155,11 +157,11 @@ async def delete_model(model_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(AIModel).filter(AIModel.id == model_id))
     model = result.scalar_one_or_none()
     if not model:
-        raise HTTPException(status_code=404, detail="模型不存在")
+        raise ApiError(404, "model.not_found")
 
     model.is_active = False
     await db.commit()
-    return {"message": "Model deleted"}
+    return message_payload("model.deleted")
 
 
 @router.post("/{model_id}/test-chat", response_model=AIModelTestChatResponse)
@@ -167,12 +169,12 @@ async def test_model_chat(model_id: int, data: AIModelTestChatRequest, db: Async
     result = await db.execute(select(AIModel).filter(AIModel.id == model_id, AIModel.is_active == True))
     model = result.scalar_one_or_none()
     if not model:
-        raise HTTPException(status_code=404, detail="模型不存在或已停用")
+        raise ApiError(404, "model.not_found")
 
     try:
         api_key = decrypt_api_key(model.api_key_encrypted)
     except Exception:
-        raise HTTPException(status_code=400, detail="模型 API Key 解密失败，请检查加密配置")
+        raise ApiError(400, "operation.failed")
 
     client = get_ai_client(
         api_key=api_key,
@@ -182,7 +184,7 @@ async def test_model_chat(model_id: int, data: AIModelTestChatRequest, db: Async
         reasoning_effort=getattr(model, "reasoning_effort", None),
     )
     if not client:
-        raise HTTPException(status_code=400, detail="模型配置无效，请检查 API Key、Base URL 和模型名称")
+        raise ApiError(400, "request.validation.invalid")
 
     messages = [
         {"role": "system", "content": "你是一个用于模型连通性测试的 AI 助手，请简洁回答用户问题。"},
@@ -201,16 +203,13 @@ async def test_model_chat(model_id: int, data: AIModelTestChatRequest, db: Async
         response_details = _format_exception_response(e)
         if response_details:
             logger.exception("Model invocation failed; full response: %s", response_details)
-            raise HTTPException(
-                status_code=502,
-                detail=f"模型调用失败：{str(e)}；response={response_details}",
-            )
+            raise ApiError(502, "operation.failed") from e
         logger.exception("Model invocation failed")
-        raise HTTPException(status_code=502, detail=f"模型调用失败：{str(e)}")
+        raise ApiError(502, "operation.failed") from e
 
     latency_ms = int((perf_counter() - started_at) * 1000)
     if not reply:
-        raise HTTPException(status_code=502, detail="模型未返回有效回复")
+        raise ApiError(502, "operation.failed")
 
     return AIModelTestChatResponse(
         reply=reply,
@@ -225,11 +224,10 @@ async def set_default_model(model_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(AIModel).filter(AIModel.id == model_id))
     model = result.scalar_one_or_none()
     if not model:
-        raise HTTPException(status_code=404, detail="模型不存在")
+        raise ApiError(404, "model.not_found")
 
     await db.execute(update(AIModel).values(is_default=False))
     model.is_default = True
     await db.commit()
 
-    return {"message": "Default model updated"}
-
+    return message_payload("model.default_updated")

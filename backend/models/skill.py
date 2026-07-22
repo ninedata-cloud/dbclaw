@@ -25,6 +25,8 @@ class Skill(Base):
     author_id = Column(Integer, nullable=True)
     category = Column(String(50), nullable=True)
     description = Column(Text, nullable=True)
+    content_locale = Column(String(35), nullable=False, default="und", server_default="und")
+    i18n = Column(JSONB, nullable=False, default=dict, server_default='{}')
     tags = Column(JSONB, nullable=False, default=list)  # List of strings
     parameters = Column(JSONB, nullable=False, default=list)  # List of parameter definitions
     dependencies = Column(JSONB, nullable=False, default=list)  # List of dependency specifications

@@ -18,7 +18,8 @@ class WSManager {
         }
 
         const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${location.host}${this.url}`;
+        const separator = this.url.includes('?') ? '&' : '?';
+        const wsUrl = `${protocol}//${location.host}${this.url}${separator}lang=${encodeURIComponent(I18n.getLocale())}`;
         this.ws = new WebSocket(wsUrl);
 
         this.ws.onopen = () => {

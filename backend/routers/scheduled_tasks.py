@@ -1,7 +1,7 @@
 """Scheduled task management API."""
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
@@ -14,6 +14,8 @@ from backend.schemas.scheduled_task import (
     ScheduledTaskUpdate,
 )
 from backend.services.scheduled_task_service import ScheduledTaskService
+from backend.i18n.locale import message_payload
+from backend.i18n.errors import ApiError
 
 router = APIRouter(prefix="/api", tags=["scheduled-tasks"])
 
@@ -38,7 +40,7 @@ async def create_scheduled_task(
     try:
         return await ScheduledTaskService.create_task(db, data, current_user.id)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise ApiError(400, "request.validation.invalid") from exc
 
 
 @router.get("/scheduled-tasks/{task_id}", response_model=ScheduledTaskResponse)
@@ -49,7 +51,7 @@ async def get_scheduled_task(
 ):
     task = await ScheduledTaskService.get_task(db, task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
+        raise ApiError(404, "task.not_found")
     return task
 
 
@@ -65,7 +67,8 @@ async def update_scheduled_task(
     except ValueError as exc:
         detail = str(exc)
         status_code = 404 if detail == "任务不存在" else 400
-        raise HTTPException(status_code=status_code, detail=detail) from exc
+        error_code = "task.not_found" if status_code == 404 else "request.validation.invalid"
+        raise ApiError(status_code, error_code) from exc
 
 
 @router.delete("/scheduled-tasks/{task_id}")
@@ -76,9 +79,9 @@ async def delete_scheduled_task(
 ):
     try:
         await ScheduledTaskService.delete_task(db, task_id, current_user.id)
-        return {"message": "删除成功"}
+        return message_payload("task.deleted")
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise ApiError(404, "task.not_found") from exc
 
 
 @router.post("/scheduled-tasks/{task_id}/run", response_model=ScheduledTaskRunResponse)
@@ -89,7 +92,7 @@ async def run_scheduled_task(
     try:
         return await ScheduledTaskService.execute_task_by_id(task_id, trigger_source="manual")
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise ApiError(404, "task.not_found") from exc
 
 
 @router.get("/scheduled-tasks/{task_id}/runs", response_model=List[ScheduledTaskRunResponse])
@@ -102,7 +105,7 @@ async def list_scheduled_task_runs(
 ):
     task = await ScheduledTaskService.get_task(db, task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
+        raise ApiError(404, "task.not_found")
     return await ScheduledTaskService.list_runs(db, task_id, limit=limit, offset=offset)
 
 
@@ -114,5 +117,5 @@ async def get_scheduled_task_run(
 ):
     run = await ScheduledTaskService.get_run(db, run_id)
     if not run:
-        raise HTTPException(status_code=404, detail="运行记录不存在")
+        raise ApiError(404, "resource.not_found")
     return run

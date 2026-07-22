@@ -54,6 +54,7 @@ class AlertEvent(Base):
     diagnosis_status = Column(String(20), nullable=True)  # pending / in_progress / completed / failed
     diagnosis_started_at = Column(DateTime(timezone=True), nullable=True, index=True)
     diagnosis_completed_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    diagnosis_locale = Column(String(35), nullable=True)
     diagnosis_source_event_id = Column(Integer, nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 

@@ -130,3 +130,21 @@ code: |
           results["diagnosis"]["mount_options"] = mount_opts.get("output", "")
 
       return results
+
+i18n:
+  zh-CN:
+    name: 诊断磁盘 I/O 性能
+    description: 执行“诊断磁盘 I/O 性能”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+      host_id: 主机 ID。
+    permission_descriptions:
+      execute_command: 允许执行受控主机命令
+  en-US:
+    name: Diagnose Disk I/O Performance
+    description: Diagnose disk I/O performance by checking iostat, I/O wait, per-device read/write rates, latency, queue depth, and top I/O consuming processes
+    parameter_descriptions:
+      datasource_id: The database connection ID (must have host configured)
+      host_id: The SSH host ID to execute commands on (alternative to datasource_id)
+    permission_descriptions:
+      execute_command: Execute governed host commands

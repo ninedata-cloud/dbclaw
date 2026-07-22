@@ -62,3 +62,19 @@ code: |
           "connections": result.get("data", []),
           "columns": result.get("columns", [])
       }
+
+i18n:
+  zh-CN:
+    name: SQL Server 活跃连接
+    description: 执行“SQL Server 活跃连接”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+    permission_descriptions:
+      execute_query: 允许执行受控数据库查询
+  en-US:
+    name: SQL Server Active Connections
+    description: List all active database connections with their current state and queries
+    parameter_descriptions:
+      datasource_id: The database connection ID
+    permission_descriptions:
+      execute_query: Execute governed database queries

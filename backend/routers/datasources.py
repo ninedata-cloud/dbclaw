@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, and_, cast, Text, desc, true
 from typing import List
@@ -6,6 +6,7 @@ import asyncio
 import logging
 
 from backend.database import get_db
+from backend.i18n.errors import ApiError
 from backend.models.datasource import Datasource
 from backend.models.datasource_metric import DatasourceMetric
 from backend.models.integration import Integration
@@ -19,6 +20,7 @@ from backend.services.connection_diagnostic_service import ConnectionDiagnosticS
 from backend.services.db_connector import get_connector
 from backend.services.integration_scheduler import sync_datasource_schedule, unschedule_datasource
 from backend.dependencies import get_current_user
+from backend.i18n.locale import get_active_locale, message_payload, translate
 
 logger = logging.getLogger(__name__)
 
@@ -51,21 +53,21 @@ async def validate_integration_binding(
         return
 
     if not inbound_source:
-        raise HTTPException(status_code=400, detail="使用集成采集时，必须配置 inbound_source")
+        raise ApiError(400, "request.validation.invalid")
 
     integration_ref = inbound_source.get("integration_id")
     if not integration_ref:
-        raise HTTPException(status_code=400, detail="使用集成采集时，必须选择入站 Integration")
+        raise ApiError(400, "request.validation.invalid")
 
     integration = await get_alive_by_id(db, Integration, integration_ref)
     if not integration:
-        raise HTTPException(status_code=400, detail="入站 Integration 不存在")
+        raise ApiError(400, "request.validation.invalid")
 
     if integration.integration_type != 'inbound_metric':
-        raise HTTPException(status_code=400, detail="所选 Integration 不是入站指标集成")
+        raise ApiError(400, "request.validation.invalid")
 
     if integration.integration_id in {"builtin_aliyun_rds", "builtin_huaweicloud_rds", "builtin_tencentcloud_rds"} and not (external_instance_id or "").strip():
-        raise HTTPException(status_code=400, detail="当前云厂商 RDS 外部采集必须填写实例 ID（external_instance_id）")
+        raise ApiError(400, "request.validation.invalid")
 
 
 router = APIRouter(prefix="/api/datasources", tags=["datasources"], dependencies=[Depends(get_current_user)])
@@ -257,7 +259,7 @@ async def create_datasource(data: DatasourceCreate, db: AsyncSession = Depends(g
 async def get_datasource(datasource_id: int, db: AsyncSession = Depends(get_db)):
     datasource = await get_alive_by_id(db, Datasource, datasource_id)
     if not datasource:
-        raise HTTPException(status_code=404, detail="数据源不存在")
+        raise ApiError(404, "datasource.not_found")
     return datasource
 
 
@@ -267,7 +269,7 @@ async def update_datasource(datasource_id: int, data: DatasourceUpdate, db: Asyn
 
     datasource = await get_alive_by_id(db, Datasource, datasource_id)
     if not datasource:
-        raise HTTPException(status_code=404, detail="数据源不存在")
+        raise ApiError(404, "datasource.not_found")
 
     update_data = data.model_dump(exclude_unset=True)
     if "password" in update_data:
@@ -333,7 +335,7 @@ async def delete_datasource(
 
     datasource = await get_alive_by_id(db, Datasource, datasource_id)
     if not datasource:
-        raise HTTPException(status_code=404, detail="数据源不存在")
+        raise ApiError(404, "datasource.not_found")
 
     datasource.soft_delete(current_user.id)
     await db.commit()
@@ -344,7 +346,7 @@ async def delete_datasource(
     MetricNormalizer.clear_cache(datasource_id)
 
     logger.info(f"Soft deleted datasource {datasource_id}")
-    return {"message": "Datasource deleted"}
+    return message_payload("datasource.deleted")
 
 
 @router.post("/test", response_model=DatasourceTestResult)
@@ -373,9 +375,13 @@ async def test_datasource_connection(data: DatasourceTestRequest, db: AsyncSessi
             include_host_checks=False,
             include_tcp_checks=True,
         )
-    except Exception as e:
-        logger.error(f"Failed to test connection to {data.host}:{data.port}: {e}", exc_info=True)
-        return DatasourceTestResult(success=False, message=str(e))
+    except Exception:
+        logger.exception("Failed to test datasource connection to %s:%s", data.host, data.port)
+        return DatasourceTestResult(
+            success=False,
+            message=translate(get_active_locale(), "datasource.connection_test_failed"),
+            error_code="datasource.connection_test_failed",
+        )
 
 
 @router.post("/{datasource_id}/test", response_model=DatasourceTestResult)
@@ -385,7 +391,7 @@ async def test_datasource(datasource_id: int, db: AsyncSession = Depends(get_db)
 
     datasource = await get_alive_by_id(db, Datasource, datasource_id)
     if not datasource:
-        raise HTTPException(status_code=404, detail="数据源不存在")
+        raise ApiError(404, "datasource.not_found")
 
     diagnostic_service = ConnectionDiagnosticService(db)
     diagnosis = await diagnostic_service.diagnose_datasource(
@@ -419,7 +425,7 @@ async def set_datasource_silence(
 
     datasource = await get_alive_by_id(db, Datasource, datasource_id)
     if not datasource:
-        raise HTTPException(status_code=404, detail="数据源不存在")
+        raise ApiError(404, "datasource.not_found")
 
     # 计算静默截止时间
     silence_until = now() + timedelta(hours=request.hours)
@@ -450,7 +456,7 @@ async def cancel_datasource_silence(
     """取消数据源静默，恢复监控和告警"""
     datasource = await get_alive_by_id(db, Datasource, datasource_id)
     if not datasource:
-        raise HTTPException(status_code=404, detail="数据源不存在")
+        raise ApiError(404, "datasource.not_found")
 
     # 清除静默配置
     datasource.silence_until = None
@@ -480,7 +486,7 @@ async def get_datasource_silence_status(
 
     datasource = await get_alive_by_id(db, Datasource, datasource_id)
     if not datasource:
-        raise HTTPException(status_code=404, detail="数据源不存在")
+        raise ApiError(404, "datasource.not_found")
 
     # 检查是否在静默期内
     is_silenced = False
@@ -516,7 +522,7 @@ async def get_datasource_top_sql(
     """获取数据源 TOP SQL 统计信息"""
     datasource = await get_alive_by_id(db, Datasource, datasource_id)
     if not datasource:
-        raise HTTPException(status_code=404, detail="数据源不存在")
+        raise ApiError(404, "datasource.not_found")
 
     try:
         password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
@@ -533,10 +539,7 @@ async def get_datasource_top_sql(
 
         # 检查服务是否支持 get_top_sql 方法
         if not hasattr(service, 'get_top_sql'):
-            raise HTTPException(
-                status_code=400,
-                detail=f"数据库类型 {datasource.db_type} 暂不支持 TOP SQL 功能"
-            )
+            raise ApiError(400, "operation.not_allowed", {"db_type": datasource.db_type})
 
         top_sql_list = await service.get_top_sql(limit=min(limit, 500))
         return {
@@ -546,11 +549,11 @@ async def get_datasource_top_sql(
             "total_count": len(top_sql_list),
             "data": top_sql_list,
         }
-    except HTTPException:
+    except ApiError:
         raise
     except Exception as e:
         logger.error(f"Failed to get TOP SQL for datasource {datasource_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="获取 TOP SQL 失败")
+        raise ApiError(500, "operation.failed")
 
 
 @router.post("/{datasource_id}/explain-sql")
@@ -562,11 +565,11 @@ async def explain_sql(
     """获取 SQL 执行计划"""
     sql_text = request.get("sql_text")
     if not sql_text:
-        raise HTTPException(status_code=400, detail="SQL 文本不能为空")
+        raise ApiError(400, "request.validation.invalid")
 
     datasource = await get_alive_by_id(db, Datasource, datasource_id)
     if not datasource:
-        raise HTTPException(status_code=404, detail="数据源不存在")
+        raise ApiError(404, "datasource.not_found")
 
     try:
         password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
@@ -583,10 +586,7 @@ async def explain_sql(
 
         # 检查服务是否支持 explain_sql 方法
         if not hasattr(service, 'explain_sql'):
-            raise HTTPException(
-                status_code=400,
-                detail=f"数据库类型 {datasource.db_type} 暂不支持执行计划功能"
-            )
+            raise ApiError(400, "operation.not_allowed", {"db_type": datasource.db_type})
 
         explain_result = await service.explain_sql(sql_text)
         return {
@@ -594,11 +594,11 @@ async def explain_sql(
             "sql_text": sql_text,
             "explain_result": explain_result,
         }
-    except HTTPException:
+    except ApiError:
         raise
     except Exception as e:
         logger.error(f"Failed to explain SQL for datasource {datasource_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="获取执行计划失败")
+        raise ApiError(500, "operation.failed")
 
 
 @router.post("/{datasource_id}/diagnose-sql")
@@ -617,11 +617,11 @@ async def diagnose_sql(
     sql_stats = request.get("sql_stats", {})
 
     if not sql_text:
-        raise HTTPException(status_code=400, detail="SQL 文本不能为空")
+        raise ApiError(400, "request.validation.invalid")
 
     datasource = await get_alive_by_id(db, Datasource, datasource_id)
     if not datasource:
-        raise HTTPException(status_code=404, detail="数据源不存在")
+        raise ApiError(404, "datasource.not_found")
 
     try:
         # 构建诊断提示词
@@ -682,7 +682,7 @@ async def diagnose_sql(
         )
         model = result.scalars().first()
         if not model:
-            raise HTTPException(status_code=500, detail="未配置可用的 AI 模型")
+            raise ApiError(500, "ai.model_not_configured")
 
         ai_client = get_ai_client(
             api_key=decrypt_api_key(model.api_key_encrypted),
@@ -692,7 +692,7 @@ async def diagnose_sql(
             reasoning_effort=getattr(model, "reasoning_effort", None),
         )
         if not ai_client:
-            raise HTTPException(status_code=500, detail="AI 客户端初始化失败")
+            raise ApiError(500, "operation.failed")
 
         diagnosis_result = await request_text_response(
             ai_client=ai_client,
@@ -704,8 +704,8 @@ async def diagnose_sql(
             "sql_text": sql_text,
             "diagnosis": diagnosis_result,
         }
-    except HTTPException:
+    except ApiError:
         raise
     except Exception as e:
         logger.error(f"Failed to diagnose SQL for datasource {datasource_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="AI 诊断失败")
+        raise ApiError(500, "operation.failed")

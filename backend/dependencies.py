@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 

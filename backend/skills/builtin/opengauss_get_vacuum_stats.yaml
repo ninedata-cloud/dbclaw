@@ -49,3 +49,19 @@ code: |
           "FROM pg_stat_user_tables ORDER BY n_dead_tup DESC LIMIT 50"
       )
       return {"success": True, "data": result}
+
+i18n:
+  zh-CN:
+    name: openGauss VACUUM 统计
+    description: 执行“openGauss VACUUM 统计”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+    permission_descriptions:
+      read_datasource: 允许读取数据源和平台元数据
+  en-US:
+    name: opengauss_get_vacuum_stats
+    description: Get vacuum and autovacuum statistics for openGauss
+    parameter_descriptions:
+      datasource_id: ID of the openGauss datasource
+    permission_descriptions:
+      read_datasource: Read datasource and platform metadata

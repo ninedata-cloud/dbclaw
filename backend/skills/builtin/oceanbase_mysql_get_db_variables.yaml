@@ -26,3 +26,19 @@ code: |
           if len(row) >= 2:
               variables[str(row[0])] = row[1]
       return {"success": True, "variables": variables}
+
+i18n:
+  zh-CN:
+    name: OceanBase MySQL 数据库参数
+    description: 执行“OceanBase MySQL 数据库参数”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+    permission_descriptions:
+      execute_query: 允许执行受控数据库查询
+  en-US:
+    name: OceanBase MySQL Variables
+    description: Get OceanBase MySQL tenant variables and parameters
+    parameter_descriptions:
+      datasource_id: The OceanBase MySQL datasource ID
+    permission_descriptions:
+      execute_query: Execute governed database queries

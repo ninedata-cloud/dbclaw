@@ -20,6 +20,7 @@ from backend.services.feishu_service import format_reply_text
 from backend.services.weixin_service import weixin_service
 from backend.utils.encryption import decrypt_value
 from backend.utils.datetime_helper import now
+from backend.i18n.locale import resolve_background_preferences, translate
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +171,8 @@ class WeixinBotService:
             await db.commit()
             return binding
 
-        session = DiagnosticSession(user_id=None, title=title)
+        locale, _timezone = await resolve_background_preferences(db)
+        session = DiagnosticSession(user_id=None, title=title, default_locale=locale)
         db.add(session)
         await db.commit()
         await db.refresh(session)
@@ -230,6 +232,11 @@ class WeixinBotService:
             return False
 
         action, approval_id = command
+        locale, _timezone = await resolve_background_preferences(
+            db,
+            locale=getattr(binding, "locale", None),
+            timezone=getattr(binding, "timezone", None),
+        )
         chunks: list[str] = []
 
         async def on_event(event_obj: dict[str, Any]) -> None:
@@ -250,13 +257,15 @@ class WeixinBotService:
                 user_id=None,
                 pending_approvals=PENDING_APPROVALS,
                 on_event=on_event,
+                locale=locale,
             )
-        except Exception as exc:
+        except Exception:
+            logger.exception("Failed to process Weixin approval: session_id=%s approval_id=%s", binding.session_id, approval_id)
             await WeixinBotService._send_text_reply(
                 bot_binding,
                 to_user_id=sender_user_id,
                 context_token=context_token,
-                text=f"审批处理失败：{str(exc)}",
+                text=translate(locale, "bot.approval.failed"),
             )
             return True
 
@@ -265,11 +274,11 @@ class WeixinBotService:
                 bot_binding,
                 to_user_id=sender_user_id,
                 context_token=context_token,
-                text="已拒绝执行该操作。",
+                text=translate(locale, "bot.approval.rejected"),
             )
             return True
 
-        final_text = format_reply_text("".join(chunks)) or "已批准执行。"
+        final_text = format_reply_text("".join(chunks)) or translate(locale, "bot.approval.approved")
         await WeixinBotService._send_text_reply(
             bot_binding,
             to_user_id=sender_user_id,
@@ -308,6 +317,11 @@ class WeixinBotService:
             integration=integration,
             title=title,
         )
+        locale, _timezone = await resolve_background_preferences(
+            db,
+            locale=getattr(binding, "locale", None),
+            timezone=getattr(binding, "timezone", None),
+        )
 
         handled = await WeixinBotService._handle_approval_command(
             db,
@@ -330,6 +344,7 @@ class WeixinBotService:
             payload_datasource_id=None,
             model_id=None,
             history_window_hours=BOT_HISTORY_WINDOW_HOURS,
+            content_locale=locale,
         )
 
         chunks: list[str] = []
@@ -355,12 +370,13 @@ class WeixinBotService:
             pending_approvals=PENDING_APPROVALS,
             on_event=on_event,
             history_window_hours=BOT_HISTORY_WINDOW_HOURS,
+            locale=locale,
         )
 
         await WeixinBotService.mark_event_processed(db, event_id=event_id, message_id=raw_message_id or None, event_type=event_type)
 
         final_text = format_reply_text("".join(chunks))
-        reply_text = final_text or "已收到消息。"
+        reply_text = final_text or translate(locale, "bot.message_received")
         # outbound 的 to_user_id 应为消息发送者（用户），而非 bot 自己的 ID
         reply_to = sender_user_id if not group_id else receiver_user_id or sender_user_id
         logger.debug(f"[Weixin reply] to={reply_to[:30]}, context={context_token[:20]}")

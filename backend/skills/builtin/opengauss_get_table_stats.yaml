@@ -45,3 +45,19 @@ code: |
 
       table_stats = await connector.get_table_stats()
       return {"success": True, "data": table_stats}
+
+i18n:
+  zh-CN:
+    name: openGauss 表统计信息
+    description: 执行“openGauss 表统计信息”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+    permission_descriptions:
+      read_datasource: 允许读取数据源和平台元数据
+  en-US:
+    name: opengauss_get_table_stats
+    description: Get table statistics for openGauss
+    parameter_descriptions:
+      datasource_id: ID of the openGauss datasource
+    permission_descriptions:
+      read_datasource: Read datasource and platform metadata

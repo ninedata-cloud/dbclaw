@@ -3,6 +3,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 from backend.schemas.base import BaseSchema
+from backend.i18n.locale import normalize_locale, normalize_timezone
 
 
 # Alert Message Schemas
@@ -16,6 +17,9 @@ class AlertMessageBase(BaseModel):
     metric_value: Optional[float] = None
     threshold_value: Optional[float] = None
     trigger_reason: Optional[str] = None
+    message_code: Optional[str] = None
+    message_params: Dict[str, Any] = Field(default_factory=dict)
+    content_locale: str = "zh-CN"
 
 
 class AlertMessageCreate(AlertMessageBase):
@@ -122,6 +126,8 @@ class AlertSubscriptionBase(BaseModel):
     integration_targets: List[IntegrationTarget] = Field(..., min_length=1)
     enabled: bool = True
     aggregation_script: Optional[str] = None
+    locale: Optional[str] = None
+    timezone: Optional[str] = None
 
     @field_validator('severity_levels')
     @classmethod
@@ -130,6 +136,26 @@ class AlertSubscriptionBase(BaseModel):
         if v and not all(s in valid_severities for s in v):
             raise ValueError(f'Severity levels must be one of: {valid_severities}')
         return v
+
+    @field_validator('locale')
+    @classmethod
+    def validate_locale(cls, value):
+        if value is None:
+            return None
+        normalized = normalize_locale(value)
+        if not normalized:
+            raise ValueError('Unsupported locale')
+        return normalized
+
+    @field_validator('timezone')
+    @classmethod
+    def validate_timezone(cls, value):
+        if value is None:
+            return None
+        normalized = normalize_timezone(value)
+        if not normalized:
+            raise ValueError('Invalid IANA time zone')
+        return normalized
 
 
 class AlertSubscriptionCreate(AlertSubscriptionBase):
@@ -143,6 +169,11 @@ class AlertSubscriptionUpdate(BaseModel):
     integration_targets: Optional[List[IntegrationTarget]] = None
     enabled: Optional[bool] = None
     aggregation_script: Optional[str] = None
+    locale: Optional[str] = None
+    timezone: Optional[str] = None
+
+    _validate_locale = field_validator('locale')(AlertSubscriptionBase.validate_locale.__func__)
+    _validate_timezone = field_validator('timezone')(AlertSubscriptionBase.validate_timezone.__func__)
 
 
 class AlertSubscriptionResponse(BaseSchema):
@@ -154,6 +185,8 @@ class AlertSubscriptionResponse(BaseSchema):
     integration_targets: List[IntegrationTarget] = Field(default_factory=list)
     enabled: bool = True
     aggregation_script: Optional[str] = None
+    locale: Optional[str] = None
+    timezone: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -169,6 +202,8 @@ class AlertDeliveryLogBase(BaseModel):
     recipient: str = Field(..., max_length=255)
     status: str = Field(default="pending", pattern="^(pending|sent|failed)$")
     error_message: Optional[str] = None
+    rendered_locale: Optional[str] = None
+    rendered_timezone: Optional[str] = None
     sent_at: Optional[datetime] = None
 
 
@@ -227,6 +262,7 @@ class AlertEventBase(BaseModel):
     root_cause: Optional[str] = None
     recommended_actions: Optional[str] = None
     diagnosis_status: Optional[str] = None
+    diagnosis_locale: Optional[str] = None
 
 
 class AlertEventResponse(AlertEventBase, BaseSchema):

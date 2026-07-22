@@ -49,3 +49,19 @@ code: |
           "slow_queries": slow_queries,
           "count": len(slow_queries)
       }
+
+i18n:
+  zh-CN:
+    name: SAP HANA 慢查询
+    description: 执行“SAP HANA 慢查询”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+    permission_descriptions:
+      execute_query: 允许执行受控数据库查询
+  en-US:
+    name: HANA Slow Queries
+    description: Get list of expensive/slow queries from SAP HANA M_EXPENSIVE_STATEMENTS view to identify performance bottlenecks
+    parameter_descriptions:
+      datasource_id: The database connection ID
+    permission_descriptions:
+      execute_query: Execute governed database queries

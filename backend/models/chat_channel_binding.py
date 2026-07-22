@@ -29,6 +29,8 @@ class ChatChannelBinding(Base):
     default_model_id = Column(Integer, nullable=True)
     kb_ids = Column(JSONB, nullable=True)
     disabled_tools = Column(JSONB, nullable=True)
+    locale = Column(String(35), nullable=True)
+    timezone = Column(String(64), nullable=True)
     last_message_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())

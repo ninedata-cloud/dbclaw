@@ -3,6 +3,7 @@ DateTime helper utilities - use timezone-aware UTC timestamps consistently.
 """
 from datetime import datetime, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 def now() -> datetime:
@@ -84,3 +85,25 @@ def format_local_datetime(dt: Optional[datetime], fmt: str = "%Y-%m-%d %H:%M:%S"
 
     local_dt = to_local_time(dt, tz_offset_hours)
     return local_dt.strftime(fmt)
+
+
+def to_timezone(dt: Optional[datetime], timezone_name: str = "Asia/Shanghai") -> Optional[datetime]:
+    """Convert a timestamp to an IANA time zone without losing DST rules."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    try:
+        target = ZoneInfo(timezone_name)
+    except (ZoneInfoNotFoundError, ValueError):
+        target = ZoneInfo("Asia/Shanghai")
+    return dt.astimezone(target)
+
+
+def format_in_timezone(
+    dt: Optional[datetime],
+    timezone_name: str = "Asia/Shanghai",
+    fmt: str = "%Y-%m-%d %H:%M:%S",
+) -> str:
+    localized = to_timezone(dt, timezone_name)
+    return localized.strftime(fmt) if localized else ""

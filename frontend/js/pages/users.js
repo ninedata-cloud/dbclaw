@@ -8,7 +8,7 @@ const UsersPage = {
     },
 
     async render() {
-        Header.render('用户管理', DOM.el('button', {
+        Header.render(I18n.t('pageCopy.users.userManagement'), DOM.el('button', {
             className: 'btn btn-primary',
             innerHTML: `<i data-lucide="plus"></i> ${I18n.t('users.newUser')}`,
             onClick: () => this._showCreateModal()
@@ -22,24 +22,11 @@ const UsersPage = {
             content.innerHTML = '';
 
             const info = DOM.el('div', { className: 'flex-between mb-16' });
-            info.appendChild(DOM.el('span', { className: 'text-muted text-sm', textContent: `${users.length} 个用户` }));
+            info.appendChild(DOM.el('span', { className: 'text-muted text-sm', textContent: I18n.t('pageCopy.users.userCount', { value0: users.length }) }));
             content.appendChild(info);
 
             const table = DOM.el('table', { className: 'data-table' });
-            table.innerHTML = `
-                <thead>
-                    <tr>
-                        <th>用户名</th>
-                        <th>显示名称</th>
-                        <th>邮箱</th>
-                        <th>电话</th>
-                        <th>角色</th>
-                        <th>状态</th>
-                        <th>创建时间</th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
-            `;
+            table.innerHTML = I18n.t('pageCopy.users.usernameDisplayNameEmailPhoneRoleStatus');
             const tbody = DOM.el('tbody');
 
             for (const user of users) {
@@ -49,8 +36,8 @@ const UsersPage = {
                     <td>${Utils.escapeHtml(user.display_name || '-')}</td>
                     <td>${Utils.escapeHtml(user.email || '-')}</td>
                     <td>${Utils.escapeHtml(this._maskPhone(user.phone))}</td>
-                    <td><span class="badge ${user.is_admin ? 'badge-primary' : 'badge-secondary'}">${user.is_admin ? '管理员' : '用户'}</span></td>
-                    <td><span class="badge ${user.is_active ? 'badge-success' : 'badge-secondary'}">${user.is_active ? '活跃' : '禁用'}</span></td>
+                    <td><span class="badge ${user.is_admin ? 'badge-primary' : 'badge-secondary'}">${user.is_admin ? I18n.t('pageCopy.users.administrator') : I18n.t('pageCopy.users.user')}</span></td>
+                    <td><span class="badge ${user.is_active ? 'badge-success' : 'badge-secondary'}">${user.is_active ? I18n.t('pageCopy.users.active') : I18n.t('pageCopy.users.disable')}</span></td>
                     <td>${Format.datetime(user.created_at)}</td>
                     <td class="actions-cell"></td>
                 `;
@@ -64,7 +51,7 @@ const UsersPage = {
                 const editBtn = DOM.el('button', {
                     className: 'btn btn-sm btn-secondary',
                     innerHTML: '<i data-lucide="pencil"></i>',
-                    title: '编辑用户',
+                    title: I18n.t('pageCopy.users.editUser'),
                     onClick: () => this._showEditModal(user)
                 });
                 actionsCell.appendChild(editBtn);
@@ -74,7 +61,7 @@ const UsersPage = {
                     const toggleBtn = DOM.el('button', {
                         className: `btn btn-sm ${user.is_active ? 'btn-warning' : 'btn-success'}`,
                         innerHTML: `<i data-lucide="${user.is_active ? 'user-x' : 'user-check'}"></i>`,
-                        title: I18n.translateLegacyText(user.is_active ? '禁用' : '启用'),
+                        title: user.is_active ? I18n.t('pageCopy.users.disable') : I18n.t('pageCopy.users.enable'),
                         onClick: () => this._toggleStatus(user)
                     });
                     actionsCell.appendChild(toggleBtn);
@@ -85,7 +72,7 @@ const UsersPage = {
                     const resetBtn = DOM.el('button', {
                         className: 'btn btn-sm btn-secondary',
                         innerHTML: '<i data-lucide="key"></i>',
-                        title: '重置密码',
+                        title: I18n.t('pageCopy.users.resetPassword'),
                         onClick: () => this._showResetPasswordModal(user)
                     });
                     actionsCell.appendChild(resetBtn);
@@ -95,7 +82,7 @@ const UsersPage = {
                 const logsBtn = DOM.el('button', {
                     className: 'btn btn-sm btn-secondary',
                     innerHTML: '<i data-lucide="scroll-text"></i>',
-                    title: I18n.translateLegacyText('登录记录'),
+                    title: I18n.t('pageCopy.users.signInHistory'),
                     onClick: () => this._showLoginLogs(user)
                 });
                 actionsCell.appendChild(logsBtn);
@@ -105,7 +92,7 @@ const UsersPage = {
                     const deleteBtn = DOM.el('button', {
                         className: 'btn btn-sm btn-danger',
                         innerHTML: '<i data-lucide="trash-2"></i>',
-                        title: I18n.translateLegacyText('删除'),
+                        title: I18n.t('pageCopy.users.delete'),
                         onClick: () => this._deleteUser(user)
                     });
                     actionsCell.appendChild(deleteBtn);
@@ -120,45 +107,20 @@ const UsersPage = {
             content.appendChild(container);
             DOM.createIcons();
         } catch (err) {
-            Toast.error(I18n.translateLegacyText('加载失败') + ': ' + err.message);
+            Toast.error(I18n.t('pageCopy.users.loadFailed') + ': ' + err.message);
         }
     },
 
     _showCreateModal() {
         const form = DOM.el('div');
-        form.innerHTML = `
-            <div class="form-group">
-                <label>用户名</label>
-                <input type="text" id="new-username" class="form-input" placeholder="${I18n.t('placeholders.username')}" required>
-            </div>
-            <div class="form-group">
-                <label>密码</label>
-                <input type="password" id="new-password" class="form-input" placeholder="${I18n.t('placeholders.passwordMin')}">
-            </div>
-            <div class="form-group">
-                <label>显示名称</label>
-                <input type="text" id="new-display-name" class="form-input" placeholder="${I18n.t('placeholders.displayNameOptional')}">
-            </div>
-            <div class="form-group">
-                <label>邮箱</label>
-                <input type="email" id="new-email" class="form-input" placeholder="${I18n.t('placeholders.emailOptional')}">
-            </div>
-            <div class="form-group">
-                <label>电话</label>
-                <input type="text" id="new-phone" class="form-input" placeholder="${I18n.t('placeholders.phoneOptional')}">
-            </div>
-            <div class="form-group" style="display:flex;align-items:center;gap:8px;">
-                <input type="checkbox" id="new-is-admin">
-                <label for="new-is-admin" style="margin:0">管理员</label>
-            </div>
-        `;
+        form.innerHTML = I18n.t('pageCopy.users.usernamePasswordDisplayNameEmailPhoneAdministrator', { value0: I18n.t('placeholders.username'), value1: I18n.t('placeholders.passwordMin'), value2: I18n.t('placeholders.displayNameOptional'), value3: I18n.t('placeholders.emailOptional'), value4: I18n.t('placeholders.phoneOptional') });
 
         Modal.show({
-            title: '新建用户',
+            title: I18n.t('pageCopy.users.newUser'),
             content: form,
             buttons: [
-                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
-                { text: '创建', variant: 'primary', onClick: () => this._createUser() },
+                { text: I18n.t('pageCopy.users.cancel'), variant: 'secondary', onClick: () => Modal.hide() },
+                { text: I18n.t('pageCopy.users.create'), variant: 'primary', onClick: () => this._createUser() },
             ]
         });
     },
@@ -172,18 +134,18 @@ const UsersPage = {
         const is_admin = DOM.$('#new-is-admin').checked;
 
         if (!username || !password) {
-            Toast.error('用户名和密码不能为空');
+            Toast.error(I18n.t('users.credentialsRequired'));
             return;
         }
         if (password.length < 6) {
-            Toast.error('密码不能少于 6 位');
+            Toast.error(I18n.t('pageCopy.users.passwordMustBeAtLeast6Characters'));
             return;
         }
 
         try {
             await API.createUser({ username, password, display_name: display_name || null, email: email || null, phone: phone || null, is_admin });
             Modal.hide();
-            Toast.success('用户创建成功');
+            Toast.success(I18n.t('pageCopy.users.userCreated'));
             this.render();
         } catch (err) {
             Toast.error(err.message);
@@ -202,31 +164,14 @@ const UsersPage = {
 
     _showEditModal(user) {
         const form = DOM.el('div');
-        form.innerHTML = `
-            <div class="form-group">
-                <label>显示名称</label>
-                <input type="text" id="edit-display-name" class="form-input" placeholder="${I18n.t('placeholders.displayNameOptional')}" value="${Utils.escapeHtml(user.display_name || '')}">
-            </div>
-            <div class="form-group">
-                <label>邮箱</label>
-                <input type="email" id="edit-email" class="form-input" placeholder="${I18n.t('placeholders.emailOptional')}" value="${Utils.escapeHtml(user.email || '')}">
-            </div>
-            <div class="form-group">
-                <label>电话</label>
-                <input type="text" id="edit-phone" class="form-input" placeholder="${I18n.t('placeholders.phoneOptional')}" value="${Utils.escapeHtml(user.phone || '')}">
-            </div>
-            <div class="form-group" style="display:flex;align-items:center;gap:8px;">
-                <input type="checkbox" id="edit-is-admin" ${user.is_admin ? 'checked' : ''}>
-                <label for="edit-is-admin" style="margin:0">管理员</label>
-            </div>
-        `;
+        form.innerHTML = I18n.t('pageCopy.users.displayNameEmailPhoneAdministrator', { value0: I18n.t('placeholders.displayNameOptional'), value1: Utils.escapeHtml(user.display_name || ''), value2: I18n.t('placeholders.emailOptional'), value3: Utils.escapeHtml(user.email || ''), value4: I18n.t('placeholders.phoneOptional'), value5: Utils.escapeHtml(user.phone || ''), value6: user.is_admin ? 'checked' : '' });
 
         Modal.show({
-            title: `编辑用户 - ${Utils.escapeHtml(user.username)}`,
+            title: I18n.t('pageCopy.users.editUserValue', { value0: Utils.escapeHtml(user.username) }),
             content: form,
             buttons: [
-                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
-                { text: '保存', variant: 'primary', onClick: async () => {
+                { text: I18n.t('pageCopy.users.cancel'), variant: 'secondary', onClick: () => Modal.hide() },
+                { text: I18n.t('pageCopy.users.save'), variant: 'primary', onClick: async () => {
                     const display_name = DOM.$('#edit-display-name').value.trim();
                     const email = DOM.$('#edit-email').value.trim();
                     const phone = DOM.$('#edit-phone').value.trim();
@@ -239,7 +184,7 @@ const UsersPage = {
                             is_admin
                         });
                         Modal.hide();
-                        Toast.success('用户信息已更新');
+                        Toast.success(I18n.t('pageCopy.users.userUpdated'));
                         this.render();
                     } catch (err) {
                         Toast.error(err.message);
@@ -254,21 +199,21 @@ const UsersPage = {
         form.innerHTML = `
             <p style="margin-bottom:12px;color:var(--text-secondary)">${I18n.t('users.resetFor', { username: `<strong>${Utils.escapeHtml(user.username)}</strong>` })}</p>
             <div class="form-group">
-                <label>${I18n.translateLegacyText('新密码')}</label>
+                <label>${I18n.t('pageCopy.users.newPassword')}</label>
                 <input type="password" id="reset-password" class="form-input" placeholder="${I18n.t('placeholders.newPasswordMin')}">
             </div>
         `;
 
         Modal.show({
-            title: '重置密码',
+            title: I18n.t('pageCopy.users.resetPassword'),
             content: form,
             size: 'small',
             buttons: [
                 { text: I18n.t('common.cancel'), variant: 'secondary', onClick: () => Modal.hide() },
-                { text: I18n.translateLegacyText('重置'), variant: 'primary', onClick: async () => {
+                { text: I18n.t('pageCopy.users.reset'), variant: 'primary', onClick: async () => {
                     const pw = DOM.$('#reset-password').value;
                     if (!pw || pw.length < 6) {
-                        Toast.error(I18n.translateLegacyText('密码不能少于 6 位'));
+                        Toast.error(I18n.t('pageCopy.users.passwordMustBeAtLeast6Characters'));
                         return;
                     }
                     try {
@@ -292,16 +237,7 @@ const UsersPage = {
                 container.innerHTML = `<p style="text-align:center;color:var(--text-muted);padding:24px;">${I18n.t('users.noLoginLogs')}</p>`;
             } else {
                 const table = DOM.el('table', { className: 'data-table' });
-                table.innerHTML = `
-                    <thead>
-                        <tr>
-                            <th>时间</th>
-                            <th>IP 地址</th>
-                            <th>用户 Agent</th>
-                            <th>结果</th>
-                        </tr>
-                    </thead>
-                `;
+                table.innerHTML = I18n.t('pageCopy.users.timeIpAddressUserAgentResult');
                 const tbody = DOM.el('tbody');
                 for (const log of logs) {
                     const loginTime = log.login_time || log.logged_in_at;

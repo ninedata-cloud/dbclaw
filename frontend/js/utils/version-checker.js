@@ -33,18 +33,18 @@
 
         const banner = DOM.el('div', { className: 'version-update-banner', id: 'version-update-banner' },
             DOM.el('div', { className: 'version-update-content' },
-                DOM.el('strong', { textContent: '检测到新版本' }),
-                DOM.el('span', { textContent: `${getDisplayVersion(appInfo, assetVersion)} 可刷新后生效` })
+                DOM.el('strong', { textContent: I18n.t('pageCopy.versionChecker.aNewVersionIsAvailable') }),
+                DOM.el('span', { textContent: I18n.t('pageCopy.versionChecker.refreshToApplyUpdate', { value0: getDisplayVersion(appInfo, assetVersion) }) })
             ),
             DOM.el('button', {
                 className: 'btn btn-primary btn-sm',
-                textContent: '立即刷新',
+                textContent: I18n.t('pageCopy.versionChecker.refreshNow'),
                 onClick: () => window.location.reload()
             }),
             DOM.el('button', {
                 className: 'version-update-dismiss',
-                textContent: '稍后',
-                title: '暂不刷新',
+                textContent: I18n.t('pageCopy.versionChecker.later'),
+                title: I18n.t('pageCopy.versionChecker.notNow'),
                 onClick: () => removeExistingPrompt()
             })
         );
@@ -65,7 +65,7 @@
 
         inFlight = true;
         try {
-            const response = await fetch(`/api/app/info?ts=${Date.now()}`, {
+            const response = await API.fetch(`/api/app/info?ts=${Date.now()}`, {
                 cache: 'no-store',
                 credentials: 'same-origin',
                 headers: { Accept: 'application/json' }

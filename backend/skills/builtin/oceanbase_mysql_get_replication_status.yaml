@@ -35,3 +35,19 @@ code: |
           return {"success": True, "servers": fallback.get("data", []), "columns": fallback.get("columns", []), "source": "DBA_OB_SERVERS"}
 
       return {"success": False, "error": result.get("error") or fallback.get("error") or "OceanBase server status is not accessible"}
+
+i18n:
+  zh-CN:
+    name: OceanBase MySQL 复制状态
+    description: 执行“OceanBase MySQL 复制状态”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+    permission_descriptions:
+      execute_query: 允许执行受控数据库查询
+  en-US:
+    name: OceanBase MySQL Cluster Status
+    description: Get OceanBase MySQL tenant cluster/server status from OceanBase system views
+    parameter_descriptions:
+      datasource_id: The OceanBase MySQL datasource ID
+    permission_descriptions:
+      execute_query: Execute governed database queries

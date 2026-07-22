@@ -26,6 +26,7 @@ from backend.services.alert_service import AlertService
 from backend.services.config_service import get_config
 from backend.utils.datetime_helper import now
 from backend.utils.encryption import decrypt_value
+from backend.i18n.locale import DEFAULT_LOCALE, normalize_locale, translate
 
 logger = logging.getLogger(__name__)
 
@@ -1779,6 +1780,7 @@ def _build_alert_ai_messages(
     binding: AlertAIPolicyBinding,
     feature_summary: dict[str, Any],
     state: AlertAIRuntimeState,
+    locale: str = DEFAULT_LOCALE,
 ) -> list[dict[str, Any]]:
     analysis_config = normalize_analysis_config(binding.analysis_config)
     system_prompt = (
@@ -1797,6 +1799,10 @@ def _build_alert_ai_messages(
         "如果 policy.severity_constraint_mode 为 explicit，则你必须返回与 policy.policy_severity_hint 完全一致的 severity。"
         'JSON 格式必须是 {"decision":"alert|no_alert|recover","severity":"critical|high|medium|low","confidence":0.0,"reason":"localized concise reason","evidence":["localized evidence"],"trigger_inspection":true}'
     )
+    if normalize_locale(locale) == "en-US":
+        system_prompt += " All reason and evidence values MUST be written in English."
+    else:
+        system_prompt += " reason 和 evidence 必须使用简体中文。"
     user_payload = {
         "policy": {
             "source": binding.policy_source,
@@ -1854,15 +1860,18 @@ def should_skip_candidate_due_to_interval(
 def enforce_policy_severity_constraint(
     judge_result: AlertAIJudgeResult,
     binding: AlertAIPolicyBinding,
+    locale: str = DEFAULT_LOCALE,
 ) -> AlertAIJudgeResult:
     judge_result.policy_severity_hint = binding.policy_severity_hint
 
     if binding.severity_constraint_mode == SEVERITY_SOURCE_EXPLICIT and binding.policy_severity_hint:
         if judge_result.severity != binding.policy_severity_hint:
-            judge_result.error_message = (
-                f"模型返回等级 {judge_result.severity} 与模板显式等级 {binding.policy_severity_hint} 不一致"
+            judge_result.error_message = translate(
+                locale,
+                "alert.ai.severity_mismatch",
+                {"actual": judge_result.severity, "expected": binding.policy_severity_hint},
             )
-            judge_result.reason = f"AI 判警失败：{judge_result.error_message}"
+            judge_result.reason = judge_result.error_message
             judge_result.severity_source = SEVERITY_SOURCE_INVALID
             return judge_result
 
@@ -1881,14 +1890,16 @@ async def evaluate_alert_ai_policy(
     state: AlertAIRuntimeState,
     *,
     mode: str = "formal",
+    locale: str = DEFAULT_LOCALE,
 ) -> tuple[AlertAIJudgeResult, AlertAIEvaluationLog]:
+    locale = normalize_locale(locale) or DEFAULT_LOCALE
     client, model = await resolve_alert_ai_client(db, preferred_model_id=binding.model_id)
     if not client or not model:
         judge_result = AlertAIJudgeResult(
             decision=AI_DECISION_NO_ALERT,
             severity="medium",
             confidence=0.0,
-            reason="AI 判警失败：AI 判警模型未配置",
+            reason=translate(locale, "alert.ai.model_not_configured"),
             evidence=[],
             trigger_inspection=False,
             raw_response="",
@@ -1921,7 +1932,7 @@ async def evaluate_alert_ai_policy(
         return judge_result, log_entry
 
     timeout_seconds = await get_ai_alert_timeout_seconds(db)
-    messages = _build_alert_ai_messages(binding, feature_summary, state)
+    messages = _build_alert_ai_messages(binding, feature_summary, state, locale=locale)
     raw_response = ""
     usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
     error_message = None
@@ -1941,14 +1952,15 @@ async def evaluate_alert_ai_policy(
         if parsed is None:
             raise ValueError("模型未返回合法 JSON")
         judge_result = _normalize_judge_result(parsed, raw_response)
-        judge_result = enforce_policy_severity_constraint(judge_result, binding)
-    except Exception as exc:
-        error_message = str(exc)
+        judge_result = enforce_policy_severity_constraint(judge_result, binding, locale=locale)
+    except Exception:
+        logger.exception("AI alert policy evaluation failed for datasource %s", datasource.id)
+        error_message = translate(locale, "alert.ai.evaluation_failed")
         judge_result = AlertAIJudgeResult(
             decision=AI_DECISION_NO_ALERT,
             severity="medium",
             confidence=0.0,
-            reason=f"AI 判警失败：{error_message}",
+            reason=error_message,
             evidence=[],
             trigger_inspection=False,
             raw_response=raw_response,

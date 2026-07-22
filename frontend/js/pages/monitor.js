@@ -367,14 +367,14 @@ const MonitorPage = {
             id: 'time-range-select'
         });
         const timeRanges = [
-            { value: 1, label: '最近 1 分钟' },
-            { value: 10, label: '最近 10 分钟' },
-            { value: 60, label: '最近 1 小时' },
-            { value: 360, label: '最近 6 小时' },
-            { value: 1440, label: '最近 1 天' },
-            { value: 10080, label: '最近 7 天' },
-            { value: 43200, label: '最近 1 个月' },
-            { value: 'custom', label: '自定义时间' }
+            { value: 1, label: I18n.t('pageCopy.monitor.last1Minute') },
+            { value: 10, label: I18n.t('pageCopy.monitor.last10Minutes') },
+            { value: 60, label: I18n.t('pageCopy.monitor.last1Hour') },
+            { value: 360, label: I18n.t('pageCopy.monitor.last6Hours') },
+            { value: 1440, label: I18n.t('pageCopy.monitor.last1Day') },
+            { value: 10080, label: I18n.t('pageCopy.monitor.last7Days') },
+            { value: 43200, label: I18n.t('pageCopy.monitor.lastMonth') },
+            { value: 'custom', label: I18n.t('pageCopy.monitor.customTime') }
         ];
         for (const range of timeRanges) {
             const opt = DOM.el('option', {
@@ -403,11 +403,11 @@ const MonitorPage = {
         const realtimeBtn = DOM.el('button', {
             className: 'btn btn-secondary',
             id: 'realtime-toggle',
-            textContent: '实时监控'
+            textContent: I18n.t('pageCopy.monitor.realTimeMonitoring')
         });
         realtimeBtn.addEventListener('click', () => {
             this.isRealtime = !this.isRealtime;
-            realtimeBtn.textContent = this.isRealtime ? '实时监控' : '暂停实时';
+            realtimeBtn.textContent = this.isRealtime ? I18n.t('pageCopy.monitor.realTimeMonitoring') : I18n.t('pageCopy.monitor.pauseRealTime');
             realtimeBtn.className = this.isRealtime ? 'btn btn-secondary' : 'btn btn-outline';
             const selectedDatasourceId = this._getSelectedDatasourceId();
             if (this.isRealtime && selectedDatasourceId) {
@@ -422,7 +422,7 @@ const MonitorPage = {
         const refreshBtn = DOM.el('button', {
             className: 'btn btn-primary',
             id: 'refresh-btn',
-            innerHTML: '<i data-lucide="refresh-cw"></i> 刷新'
+            innerHTML: I18n.t('pageCopy.monitor.refresh')
         });
         refreshBtn.addEventListener('click', async () => {
             const selectedDatasourceId = this._getSelectedDatasourceId();
@@ -430,7 +430,7 @@ const MonitorPage = {
 
             // Disable button and show loading state
             refreshBtn.disabled = true;
-            refreshBtn.innerHTML = '<i data-lucide="loader"></i> 采集中...';
+            refreshBtn.innerHTML = I18n.t('pageCopy.monitor.collecting');
 
             try {
                 await API.refreshMetrics(selectedDatasourceId);
@@ -440,11 +440,11 @@ const MonitorPage = {
                 await this._loadLatestData(selectedDatasourceId);
             } catch (e) {
                 console.error('[Monitor] Failed to refresh metrics:', e);
-                alert('刷新失败: ' + e.message);
+                alert(I18n.t('pageCopy.monitor.refreshFailed') + e.message);
             } finally {
                 // Re-enable button
                 refreshBtn.disabled = false;
-                refreshBtn.innerHTML = '<i data-lucide="refresh-cw"></i> 刷新';
+                refreshBtn.innerHTML = I18n.t('pageCopy.monitor.refresh');
                 DOM.createIcons();
             }
         });
@@ -465,12 +465,12 @@ const MonitorPage = {
             });
             embeddedToolbar.appendChild(DOM.el('div', {
                 className: 'instance-embedded-title',
-                textContent: '性能监控'
+                textContent: I18n.t('pageCopy.monitor.performanceMonitoring')
             }));
             embeddedToolbar.appendChild(headerActions);
             content.appendChild(embeddedToolbar);
         } else {
-            Header.render('性能监控', headerActions);
+            Header.render(I18n.t('pageCopy.monitor.performanceMonitoring'), headerActions);
         }
 
         if (!conn && connections.length === 0) {
@@ -488,58 +488,51 @@ const MonitorPage = {
 
         // Health Status Banner
         const healthBanner = DOM.el('div', { className: 'health-banner mb-24', id: 'health-banner' });
-        healthBanner.innerHTML = `
-            <span class="health-banner-icon">⚪</span>
-            <span class="health-banner-status">数据库健康状态: 检查中...</span>
-            <div class="health-banner-details" id="health-details"></div>
-        `;
+        healthBanner.innerHTML = I18n.t('pageCopy.monitor.databaseHealthStatusChecking');
         content.appendChild(healthBanner);
 
         // Database Metric cards row
         const dbMetricsRow = DOM.el('div', { className: 'grid-4 mb-24', id: 'monitor-metrics' });
         const connectionCard = DOM.el('div', { className: 'metric-card metric-card-connection-overview' });
-        connectionCard.innerHTML = `
-            <div class="metric-card-label">连接数（活跃/总数/最大）</div>
-            <div class="connection-overview-value" data-connection-metric="summary">--/--/--</div>
-        `;
+        connectionCard.innerHTML = I18n.t('pageCopy.monitor.numberOfConnectionsActiveTotalMaximum');
         dbMetricsRow.appendChild(connectionCard);
         dbMetricsRow.appendChild(MetricCard.create('QPS', '--'));
-        dbMetricsRow.appendChild(MetricCard.create('缓存命中率', '--'));
-        dbMetricsRow.appendChild(MetricCard.create('运行时间', '--'));
+        dbMetricsRow.appendChild(MetricCard.create(I18n.t('pageCopy.monitor.cacheHitRate'), '--'));
+        dbMetricsRow.appendChild(MetricCard.create(I18n.t('pageCopy.monitor.runTime'), '--'));
         content.appendChild(dbMetricsRow);
 
         // OS Metric cards row
         const osMetricsRow = DOM.el('div', { className: 'grid-4 mb-24', id: 'os-metrics' });
-        osMetricsRow.appendChild(MetricCard.create('CPU 使用率', '--'));
-        osMetricsRow.appendChild(MetricCard.create('内存使用率', '--'));
-        osMetricsRow.appendChild(MetricCard.create('磁盘使用率', '--'));
-        osMetricsRow.appendChild(MetricCard.create('负载平均', '--'));
+        osMetricsRow.appendChild(MetricCard.create(I18n.t('pageCopy.monitor.cpuUsage'), '--'));
+        osMetricsRow.appendChild(MetricCard.create(I18n.t('pageCopy.monitor.memoryUsage'), '--'));
+        osMetricsRow.appendChild(MetricCard.create(I18n.t('pageCopy.monitor.diskUsage'), '--'));
+        osMetricsRow.appendChild(MetricCard.create(I18n.t('pageCopy.monitor.loadAverage'), '--'));
         content.appendChild(osMetricsRow);
 
         // Database Charts section
-        const dbSection = DOM.el('h3', { textContent: '数据库指标', className: 'mb-16' });
+        const dbSection = DOM.el('h3', { textContent: I18n.t('pageCopy.monitor.databaseMetrics'), className: 'mb-16' });
         content.appendChild(dbSection);
 
         const chartsGrid = DOM.el('div', { className: 'chart-grid', id: 'monitor-charts' });
-        chartsGrid.appendChild(ChartPanel.create('connections', '活跃连接'));
-        chartsGrid.appendChild(ChartPanel.create('qps', '每秒查询数'));
-        chartsGrid.appendChild(ChartPanel.create('cache_hit', '缓存命中率 (%)'));
-        chartsGrid.appendChild(ChartPanel.create('tps', '每秒事务数'));
-        chartsGrid.appendChild(ChartPanel.create('network', '网络 I/O'));
-        chartsGrid.appendChild(ChartPanel.create('latency', '慢查询'));
+        chartsGrid.appendChild(ChartPanel.create('connections', I18n.t('pageCopy.monitor.activeConnections')));
+        chartsGrid.appendChild(ChartPanel.create('qps', I18n.t('pageCopy.monitor.queriesPerSecond')));
+        chartsGrid.appendChild(ChartPanel.create('cache_hit', I18n.t('pageCopy.monitor.cacheHitRate2')));
+        chartsGrid.appendChild(ChartPanel.create('tps', I18n.t('pageCopy.monitor.transactionsPerSecond')));
+        chartsGrid.appendChild(ChartPanel.create('network', I18n.t('pageCopy.monitor.networkIO')));
+        chartsGrid.appendChild(ChartPanel.create('latency', I18n.t('pageCopy.monitor.slowQuery')));
         content.appendChild(chartsGrid);
 
         // OS Charts section
-        const osSection = DOM.el('h3', { textContent: '操作系统指标', className: 'mb-16 mt-24' });
+        const osSection = DOM.el('h3', { textContent: I18n.t('pageCopy.monitor.operatingSystemMetrics'), className: 'mb-16 mt-24' });
         content.appendChild(osSection);
 
         const osChartsGrid = DOM.el('div', { className: 'chart-grid', id: 'os-charts' });
-        osChartsGrid.appendChild(ChartPanel.create('cpu_usage', 'CPU 使用率 (%)'));
-        osChartsGrid.appendChild(ChartPanel.create('memory_usage', '内存使用率 (%)'));
-        osChartsGrid.appendChild(ChartPanel.create('disk_usage', '磁盘使用率 (%)'));
-        osChartsGrid.appendChild(ChartPanel.create('load_avg', '负载平均 (1分钟)'));
-        osChartsGrid.appendChild(ChartPanel.create('disk_io', '磁盘 I/O (读/写 操作/秒)'));
-        osChartsGrid.appendChild(ChartPanel.create('network_io', '网络 I/O (接收/发送)'));
+        osChartsGrid.appendChild(ChartPanel.create('cpu_usage', I18n.t('pageCopy.monitor.cpuUsage2')));
+        osChartsGrid.appendChild(ChartPanel.create('memory_usage', I18n.t('pageCopy.monitor.memoryUsage2')));
+        osChartsGrid.appendChild(ChartPanel.create('disk_usage', I18n.t('pageCopy.monitor.diskUsage2')));
+        osChartsGrid.appendChild(ChartPanel.create('load_avg', I18n.t('pageCopy.monitor.loadAverage1Minute')));
+        osChartsGrid.appendChild(ChartPanel.create('disk_io', I18n.t('pageCopy.monitor.diskIOReadWriteOperationsSecond')));
+        osChartsGrid.appendChild(ChartPanel.create('network_io', I18n.t('pageCopy.monitor.networkIOReceiveTransmit')));
         content.appendChild(osChartsGrid);
 
         // Init charts after DOM is ready - use requestAnimationFrame to ensure canvas elements are rendered
@@ -557,8 +550,8 @@ const MonitorPage = {
                 } else if (id === 'connections') {
                     config.data = {
                         datasets: [
-                            this._buildMultiLineDataset('活跃连接数', '#10b981', 'rgba(16,185,129,0.1)'),
-                            this._buildMultiLineDataset('总连接数', '#2f81f7', 'rgba(47,129,247,0.1)')
+                            this._buildMultiLineDataset(I18n.t('pageCopy.monitor.activeConnections2'), '#10b981', 'rgba(16,185,129,0.1)'),
+                            this._buildMultiLineDataset(I18n.t('pageCopy.monitor.totalConnections'), '#2f81f7', 'rgba(47,129,247,0.1)')
                         ]
                     };
                     config.options = {
@@ -570,8 +563,8 @@ const MonitorPage = {
                     const networkConfig = this._buildNetworkChartOptions();
                     config.data = {
                         datasets: [
-                            this._buildMultiLineDataset('接收', '#10b981', 'rgba(16,185,129,0.1)'),
-                            this._buildMultiLineDataset('发送', '#8b5cf6', 'rgba(139,92,246,0.1)')
+                            this._buildMultiLineDataset(I18n.t('pageCopy.monitor.receive'), '#10b981', 'rgba(16,185,129,0.1)'),
+                            this._buildMultiLineDataset(I18n.t('pageCopy.monitor.send'), '#8b5cf6', 'rgba(139,92,246,0.1)')
                         ]
                     };
                     config.options = networkConfig.options;
@@ -597,8 +590,8 @@ const MonitorPage = {
                 if (id === 'disk_io') {
                     config.data = {
                         datasets: [
-                            this._buildMultiLineDataset('读', '#2f81f7', 'rgba(47,129,247,0.1)'),
-                            this._buildMultiLineDataset('写', '#f97316', 'rgba(249,115,22,0.1)')
+                            this._buildMultiLineDataset(I18n.t('pageCopy.monitor.readLabel'), '#2f81f7', 'rgba(47,129,247,0.1)'),
+                            this._buildMultiLineDataset(I18n.t('pageCopy.monitor.writeLabel'), '#f97316', 'rgba(249,115,22,0.1)')
                         ]
                     };
                     config.options = {
@@ -610,8 +603,8 @@ const MonitorPage = {
                     const networkConfig = this._buildNetworkChartOptions();
                     config.data = {
                         datasets: [
-                            this._buildMultiLineDataset('接收', '#10b981', 'rgba(16,185,129,0.1)'),
-                            this._buildMultiLineDataset('发送', '#8b5cf6', 'rgba(139,92,246,0.1)')
+                            this._buildMultiLineDataset(I18n.t('pageCopy.monitor.receive'), '#10b981', 'rgba(16,185,129,0.1)'),
+                            this._buildMultiLineDataset(I18n.t('pageCopy.monitor.send'), '#8b5cf6', 'rgba(139,92,246,0.1)')
                         ]
                     };
                     config.options = networkConfig.options;
@@ -682,7 +675,7 @@ const MonitorPage = {
             this._updateHealthBanner({
                 healthy: false,
                 status: 'unknown',
-                message: '无法获取健康状态',
+                message: I18n.t('pageCopy.monitor.unableToGetHealthStatus'),
                 violations: []
             });
         }
@@ -693,7 +686,7 @@ const MonitorPage = {
         if (Array.isArray(health.violations) && health.violations.some(item => item?.type === 'connection_failure')) {
             return true;
         }
-        return String(health.message || '').includes('连接失败');
+        return String(health.message || '').includes(I18n.t('pageCopy.monitor.connectionFailed'));
     },
 
     _updateHealthBanner(health) {
@@ -702,14 +695,14 @@ const MonitorPage = {
 
         const isConnectionFailure = this._isConnectionFailureHealth(health);
         const statusMap = {
-            'healthy': { icon: '✓', text: '健康', color: 'var(--accent-green)' },
-            'warning': { icon: '⚠', text: '警告', color: 'var(--accent-yellow)' },
-            'critical': { icon: '✗', text: '异常', color: 'var(--accent-red)' },
-            'unknown': { icon: '?', text: '未知', color: 'var(--text-muted)' }
+            'healthy': { icon: '✓', text: I18n.t('pageCopy.monitor.healthy'), color: 'var(--accent-green)' },
+            'warning': { icon: '⚠', text: I18n.t('pageCopy.monitor.warning'), color: 'var(--accent-yellow)' },
+            'critical': { icon: '✗', text: I18n.t('pageCopy.monitor.abnormal'), color: 'var(--accent-red)' },
+            'unknown': { icon: '?', text: I18n.t('pageCopy.monitor.unknown'), color: 'var(--text-muted)' }
         };
 
         const statusInfo = statusMap[health.status] || statusMap.unknown;
-        const statusText = isConnectionFailure ? '连接失败' : statusInfo.text;
+        const statusText = isConnectionFailure ? I18n.t('pageCopy.monitor.connectionFailed') : statusInfo.text;
 
         // Update icon with color
         const iconEl = banner.querySelector('.health-banner-icon');
@@ -718,7 +711,7 @@ const MonitorPage = {
 
         // Update status text
         const statusEl = banner.querySelector('.health-banner-status');
-        statusEl.innerHTML = `数据库健康状态: <span style="color:${statusInfo.color}">${statusText}</span> - ${health.message}`;
+        statusEl.innerHTML = I18n.t('pageCopy.monitor.databaseHealthStatusValueValue', { value0: statusInfo.color, value1: statusText, value2: health.message });
 
         // Update details section
         const detailsEl = DOM.$('#health-details');
@@ -731,25 +724,16 @@ const MonitorPage = {
                 const item = DOM.el('div', { className: 'health-violation-item' });
 
                 if (violation.type === 'threshold') {
-                    item.innerHTML = `
-                        <span style="color:var(--accent-red)">✗</span>
-                        <span>${violation.metric}: ${violation.value.toFixed(2)} (阈值: ${violation.threshold})</span>
-                    `;
+                    item.innerHTML = I18n.t('pageCopy.monitor.thresholdViolation', { value0: violation.metric, value1: violation.value.toFixed(2), value2: violation.threshold });
                 } else if (violation.type === 'connection_failure') {
                     item.innerHTML = `
                         <span style="color:var(--accent-red)">✗</span>
-                        <span>${violation.detail || health.message || '数据库连接失败'}</span>
+                        <span>${violation.detail || health.message || I18n.t('pageCopy.monitor.databaseconnectionFailed')}</span>
                     `;
                 } else if (violation.type === 'custom_expression') {
-                    item.innerHTML = `
-                        <span style="color:var(--accent-red)">✗</span>
-                        <span>自定义规则触发: ${violation.expression}</span>
-                    `;
+                    item.innerHTML = I18n.t('pageCopy.monitor.customRuleTriggerValue', { value0: violation.expression });
                 } else if (violation.type === 'ai_policy') {
-                    item.innerHTML = `
-                        <span style="color:var(--accent-red)">✗</span>
-                        <span>AI 规则触发: ${violation.policy || 'AI 告警规则'}${violation.confidence != null ? `（置信度 ${(Number(violation.confidence) * 100).toFixed(0)}%）` : ''}</span>
-                    `;
+                    item.innerHTML = I18n.t('pageCopy.monitor.aiRuleTriggerValueValue', { value0: violation.policy || I18n.t('pageCopy.monitor.aiAlarm'), value1: violation.confidence != null ? I18n.t('pageCopy.monitor.confidenceLabel', { value0: (Number(violation.confidence) * 100).toFixed(0) }) : '' });
                 }
 
                 violationsList.appendChild(item);
@@ -773,7 +757,7 @@ const MonitorPage = {
         const modal = DOM.el('div', { className: 'modal', style: { maxWidth: '500px' } });
 
         const header = DOM.el('div', { className: 'modal-header' });
-        header.appendChild(DOM.el('h3', { textContent: '自定义时间范围' }));
+        header.appendChild(DOM.el('h3', { textContent: I18n.t('pageCopy.monitor.customTimeRange') }));
         const closeBtn = DOM.el('button', { className: 'btn-icon', innerHTML: '<i data-lucide="x"></i>' });
         closeBtn.addEventListener('click', () => {
             document.body.removeChild(dialog);
@@ -794,7 +778,7 @@ const MonitorPage = {
 
         // Start time
         const startGroup = DOM.el('div', { className: 'form-group' });
-        startGroup.appendChild(DOM.el('label', { textContent: '开始时间' }));
+        startGroup.appendChild(DOM.el('label', { textContent: I18n.t('pageCopy.monitor.startedAt') }));
         const startInput = DOM.el('input', {
             type: 'datetime-local',
             className: 'filter-input inspection-date-input',
@@ -807,7 +791,7 @@ const MonitorPage = {
 
         // End time
         const endGroup = DOM.el('div', { className: 'form-group' });
-        endGroup.appendChild(DOM.el('label', { textContent: '结束时间' }));
+        endGroup.appendChild(DOM.el('label', { textContent: I18n.t('pageCopy.monitor.endedAt') }));
         const endInput = DOM.el('input', {
             type: 'datetime-local',
             className: 'filter-input inspection-date-input',
@@ -821,27 +805,27 @@ const MonitorPage = {
         modal.appendChild(body);
 
         const footer = DOM.el('div', { className: 'modal-footer' });
-        const cancelBtn = DOM.el('button', { className: 'btn btn-secondary', textContent: '取消' });
+        const cancelBtn = DOM.el('button', { className: 'btn btn-secondary', textContent: I18n.t('pageCopy.monitor.cancel') });
         cancelBtn.addEventListener('click', () => {
             document.body.removeChild(dialog);
             DOM.$('#time-range-select').value = this.currentTimeRange;
         });
-        const confirmBtn = DOM.el('button', { className: 'btn btn-primary', textContent: '确定' });
+        const confirmBtn = DOM.el('button', { className: 'btn btn-primary', textContent: I18n.t('pageCopy.monitor.ok') });
         confirmBtn.addEventListener('click', () => {
             const start = startInput.value;
             const end = endInput.value;
             if (!start || !end) {
-                alert('请选择开始和结束时间');
+                alert(I18n.t('pageCopy.monitor.selectAStartAndEndTime'));
                 return;
             }
             if (new Date(start) >= new Date(end)) {
-                alert('开始时间必须早于结束时间');
+                alert(I18n.t('pageCopy.monitor.startTimeMustBeEarlierThanEnd'));
                 return;
             }
             this.isRealtime = false;
             const selectedDatasourceId = this._getSelectedDatasourceId();
             if (!selectedDatasourceId) {
-                alert('请先选择数据源');
+                alert(I18n.t('pageCopy.monitor.pleaseSelectDatasourceFirst'));
                 document.body.removeChild(dialog);
                 DOM.$('#time-range-select').value = this.currentTimeRange;
                 return;
@@ -849,7 +833,7 @@ const MonitorPage = {
             this._loadCustomRange(selectedDatasourceId, start, end).then((hasData) => {
                 if (hasData) {
                     document.body.removeChild(dialog);
-                    DOM.$('#realtime-toggle').textContent = '暂停实时';
+                    DOM.$('#realtime-toggle').textContent = I18n.t('pageCopy.monitor.pauseRealTime');
                     DOM.$('#realtime-toggle').className = 'btn btn-outline';
                 } else {
                     // Keep dialog open when no data
@@ -883,7 +867,7 @@ const MonitorPage = {
             console.log('[Monitor] Loaded custom range metrics:', metrics.length, 'records');
 
             if (metrics.length === 0) {
-                alert('所选时间范围内没有数据');
+                alert(I18n.t('pageCopy.monitor.thereIsNoDataInTheSelected'));
                 return false;
             }
 
@@ -908,7 +892,7 @@ const MonitorPage = {
             return true;
         } catch (e) {
             console.error('[Monitor] Failed to load custom range:', e);
-            alert('加载数据失败: ' + e.message);
+            alert(I18n.t('pageCopy.monitor.failedToLoadData') + e.message);
             return false;
         }
     },

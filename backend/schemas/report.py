@@ -28,6 +28,8 @@ class ReportResponse(TimestampSerializerMixin, BaseModel):
     ai_model_id: Optional[int] = None
     kb_ids: Optional[List[int]] = None
     generation_method: Optional[str] = None
+    generation_locale: str = "zh-CN"
+    generation_timezone: str = "Asia/Shanghai"
     error_message: Optional[str] = None
 
     class Config:

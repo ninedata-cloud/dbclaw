@@ -1,10 +1,13 @@
 """
 Skill management API endpoints
 """
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+import logging
+
+from fastapi import APIRouter, Depends, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from backend.database import get_db
+from backend.i18n.errors import ApiError
 from backend.models.user import User
 from backend.dependencies import get_current_user
 from backend.skills.registry import SkillRegistry
@@ -23,13 +26,33 @@ from backend.skills.schema import (
 )
 from backend.models.skill import Skill, SkillRating, SkillExecution
 from sqlalchemy import select, func
+from backend.i18n.locale import get_active_locale, message_payload, translate
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
+logger = logging.getLogger(__name__)
+
+
+def _serialize_skill(skill: Skill, locale: str) -> dict:
+    """Localize built-in metadata while leaving user-authored skills untouched."""
+    payload = SkillResponse.model_validate(skill).model_dump(mode="json")
+    if not skill.is_builtin:
+        return payload
+    translation = (getattr(skill, "i18n", None) or {}).get(locale)
+    if not isinstance(translation, dict):
+        return payload
+    payload["name"] = translation.get("name") or payload["name"]
+    payload["description"] = translation.get("description") or payload["description"]
+    parameter_descriptions = translation.get("parameter_descriptions") or {}
+    for parameter in payload["parameters"]:
+        parameter["description"] = parameter_descriptions.get(
+            parameter["name"], parameter["description"]
+        )
+    return payload
 
 
 def _require_admin(current_user: User) -> None:
     if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Only admins can manage or execute skills")
+        raise ApiError(403, "auth.admin_required")
 
 
 @router.get("", response_model=List[SkillResponse])
@@ -45,7 +68,7 @@ async def list_skills(
     skills = await registry.list_skills(
         category=category, is_enabled=is_enabled, is_builtin=is_builtin
     )
-    return skills
+    return [_serialize_skill(skill, get_active_locale()) for skill in skills]
 
 
 @router.get("/categories")
@@ -70,7 +93,7 @@ async def search_skills(
     """Search skills by name or description"""
     registry = SkillRegistry(db)
     skills = await registry.search_skills(q)
-    return skills
+    return [_serialize_skill(skill, get_active_locale()) for skill in skills]
 
 
 @router.get("/{skill_id}", response_model=SkillResponse)
@@ -83,8 +106,8 @@ async def get_skill(
     registry = SkillRegistry(db)
     skill = await registry.get_skill(skill_id)
     if not skill:
-        raise HTTPException(status_code=404, detail="Skill not found")
-    return skill
+        raise ApiError(404, "skill.not_found")
+    return _serialize_skill(skill, get_active_locale())
 
 
 @router.post("", response_model=SkillResponse)
@@ -100,9 +123,9 @@ async def create_skill(
         skill = await registry.register_skill(
             skill_create.skill, author_id=current_user.id, is_builtin=False
         )
-        return skill
+        return _serialize_skill(skill, get_active_locale())
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise ApiError(400, "operation.failed") from e
 
 
 @router.put("/{skill_id}", response_model=SkillResponse)
@@ -118,7 +141,7 @@ async def update_skill(
     skill = await registry.get_skill(skill_id)
 
     if not skill:
-        raise HTTPException(status_code=404, detail="Skill not found")
+        raise ApiError(404, "skill.not_found")
 
     # Update fields
     if skill_update.name is not None:
@@ -135,14 +158,12 @@ async def update_skill(
 
         is_valid, errors = SkillValidator.validate_code(skill_update.code)
         if not is_valid:
-            raise HTTPException(
-                status_code=400, detail=f"Invalid code: {', '.join(errors)}"
-            )
+            raise ApiError(400, "request.validation.invalid", {"errors": errors})
         skill.code = skill_update.code
 
     await db.commit()
     await db.refresh(skill)
-    return skill
+    return _serialize_skill(skill, get_active_locale())
 
 
 @router.delete("/{skill_id}")
@@ -157,16 +178,16 @@ async def delete_skill(
     skill = await registry.get_skill(skill_id)
 
     if not skill:
-        raise HTTPException(status_code=404, detail="Skill not found")
+        raise ApiError(404, "skill.not_found")
 
     if skill.is_builtin:
-        raise HTTPException(status_code=403, detail="Cannot delete built-in skills")
+        raise ApiError(403, "operation.not_allowed")
 
     try:
         await registry.unregister_skill(skill_id)
-        return {"success": True, "message": "Skill deleted"}
+        return message_payload("skill.deleted", success=True)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise ApiError(400, "operation.failed") from e
 
 
 @router.post("/{skill_id}/test", response_model=SkillExecutionResponse)
@@ -182,9 +203,9 @@ async def test_skill(
     skill = await registry.get_skill(skill_id)
 
     if not skill:
-        raise HTTPException(status_code=404, detail="Skill not found")
+        raise ApiError(404, "skill.not_found")
     if not skill.is_builtin:
-        raise HTTPException(status_code=403, detail="Custom skill execution is disabled until a safer sandbox is implemented")
+        raise ApiError(403, "operation.not_allowed")
 
     # Determine timeout for testing (use skill timeout or default)
     from backend.skills.executor import SkillExecutor
@@ -211,9 +232,13 @@ async def test_skill(
             success=True, result=result, execution_time_ms=execution_time_ms
         )
     except Exception as e:
+        logger.exception("Built-in skill test failed: skill_id=%s", skill_id)
         execution_time_ms = int((time.time() - start_time) * 1000)
         return SkillExecutionResponse(
-            success=False, error=str(e), execution_time_ms=execution_time_ms
+            success=False,
+            error=translate(get_active_locale(), "operation.failed"),
+            error_code="operation.failed",
+            execution_time_ms=execution_time_ms,
         )
 
 
@@ -226,7 +251,7 @@ async def import_skill(
     """Import a skill from YAML file"""
     _require_admin(current_user)
     if not file.filename.endswith((".yaml", ".yml")):
-        raise HTTPException(status_code=400, detail="File must be YAML format")
+        raise ApiError(400, "upload.unsupported_type")
 
     try:
         content = await file.read()
@@ -239,7 +264,7 @@ async def import_skill(
         )
         return skill
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to import skill: {str(e)}")
+        raise ApiError(400, "request.validation.invalid") from e
 
 
 @router.get("/{skill_id}/export")
@@ -253,10 +278,10 @@ async def export_skill(
     skill = await registry.get_skill(skill_id)
 
     if not skill:
-        raise HTTPException(status_code=404, detail="Skill not found")
+        raise ApiError(404, "skill.not_found")
 
     # Convert to SkillDefinition
-    from backend.skills.schema import SkillDefinition, SkillParameter
+    from backend.skills.schema import SkillDefinition, SkillParameter, SkillTranslation
 
     skill_def = SkillDefinition(
         id=skill.id,
@@ -270,6 +295,10 @@ async def export_skill(
         dependencies=skill.dependencies or [],
         permissions=skill.permissions or [],
         code=skill.code,
+        i18n={
+            locale: SkillTranslation(**translation)
+            for locale, translation in (skill.i18n or {}).items()
+        },
     )
 
     yaml_content = SkillLoader.dump_to_yaml(skill_def)
@@ -295,7 +324,7 @@ async def rate_skill(
     skill = await registry.get_skill(skill_id)
 
     if not skill:
-        raise HTTPException(status_code=404, detail="Skill not found")
+        raise ApiError(404, "skill.not_found")
 
     # Check if user already rated this skill
     result = await db.execute(

@@ -39,3 +39,15 @@ code: |
       }
 
       return result
+
+i18n:
+  zh-CN:
+    name: 获取当前时间
+    description: 执行“获取当前时间”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions: {}
+    permission_descriptions: {}
+  en-US:
+    name: Get Current Time
+    description: Get current system time and date information. This skill is always available and does not require any authorization.
+    parameter_descriptions: {}
+    permission_descriptions: {}

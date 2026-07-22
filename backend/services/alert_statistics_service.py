@@ -108,8 +108,8 @@ async def query_alert_statistics(
     try:
         parsed_start = _parse_datetime(start_time)
         parsed_end = _parse_datetime(end_time)
-    except ValueError as exc:
-        return {"success": False, "error": str(exc)}
+    except ValueError:
+        return {"success": False, "error": "invalid_time_range", "error_code": "request.validation.invalid"}
 
     window_end = parsed_end or now()
     window_start = parsed_start or (window_end - timedelta(hours=24))

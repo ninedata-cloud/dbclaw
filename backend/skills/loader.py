@@ -36,6 +36,7 @@ class SkillLoader:
             permissions=data.get("permissions", []),
             timeout=data.get("timeout"),
             code=data["code"],
+            i18n=data.get("i18n", {}),
         )
 
         return skill_def
@@ -65,6 +66,10 @@ class SkillLoader:
             "permissions": skill_def.permissions,
             "timeout": skill_def.timeout,
             "code": skill_def.code,
+            "i18n": {
+                locale: translation.model_dump()
+                for locale, translation in skill_def.i18n.items()
+            },
         }
 
         return yaml.dump(data, default_flow_style=False, sort_keys=False)

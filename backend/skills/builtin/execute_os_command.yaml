@@ -55,3 +55,70 @@ code: |
       result = await context.execute_command_on_host(command, host_id)
 
       return result
+
+i18n:
+  zh-CN:
+    name: 执行只读操作系统命令
+    description: 执行“执行只读操作系统命令”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      host_id: 主机 ID。
+      command: 命令。
+    permission_descriptions:
+      execute_command: 允许执行受控主机命令
+  en-US:
+    name: Execute OS Command
+    description: 'Execute READ-ONLY diagnostic shell commands on a server via SSH host connection.
+
+
+      ALLOWED commands (read-only diagnostics):
+
+      - System info: uname, hostname, uptime, date, whoami, id
+
+      - Process monitoring: ps, top, htop, pgrep, pidof
+
+      - Resource usage: df, du, free, vmstat, iostat, mpstat, sar
+
+      - Network: netstat, ss, ip addr, ifconfig, ping, traceroute, nslookup, dig
+
+      - Logs: cat, tail, head, grep, less, more (for reading log files)
+
+      - File inspection: ls, find, stat, file, wc, md5sum
+
+      - Database processes: checking MySQL/PostgreSQL/Oracle/SQL Server/openGauss processes and connections
+
+      - Docker：ps,logs,stats,inspect,exec
+
+      - Performance: iotop, iftop, dstat, perf
+
+      - Output safe redirection: >, >>, | (pipe), tee
+
+
+      BLOCKED commands (will be rejected):
+
+      - File operations: rm, rmdir, mv, cp (with output redirection)
+
+      - Permissions: chmod, chown, chgrp
+
+      - Process control: kill, pkill, killall
+
+      - System control: shutdown, reboot, halt, systemctl stop/start/restart, service stop/start/restart
+
+      - Disk operations: mkfs, fdisk, parted, dd, format
+
+      - Network config: iptables, firewall-cmd
+
+      - User management: useradd, userdel, usermod, groupadd, groupdel
+
+      - Package management: apt install, yum install, dnf install
+
+      - Downloads: wget, curl -o/-O
+
+
+      For write operations or blocked commands, use ''execute_any_os_command'' skill instead (requires admin permission).
+
+      '
+    parameter_descriptions:
+      host_id: The SSH host ID to execute the command on
+      command: The shell command to execute
+    permission_descriptions:
+      execute_command: Execute governed host commands

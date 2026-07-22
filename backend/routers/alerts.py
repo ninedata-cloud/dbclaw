@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
@@ -12,8 +12,17 @@ from backend.database import get_db
 from backend.dependencies import get_current_user
 from backend.models.user import User
 from backend.models.soft_delete import alive_filter, get_alive_by_id
+from backend.i18n.locale import DEFAULT_LOCALE, get_active_locale, message_payload, normalize_locale, parse_accept_language
+from backend.i18n.errors import ApiError
 from backend.services.alert_service import AlertService
-from backend.services.alert_service import build_alert_display_metric_name, build_alert_display_title
+from backend.services.alert_service import (
+    build_alert_title_and_content,
+    build_alert_display_metric_name,
+    build_alert_display_title,
+    is_connection_status_alert,
+    is_structured_system_alert,
+    render_alert_title_and_content,
+)
 from backend.services.alert_event_service import AlertEventService
 from backend.services.notification_service import NotificationService
 from backend.services.public_share_service import PublicShareService
@@ -50,6 +59,29 @@ from backend.schemas.alert import (
 
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 logger = logging.getLogger(__name__)
+
+PUBLIC_ALERT_LABELS = {
+    "zh-CN": {
+        "root_cause": "根本原因", "actions": "建议措施", "ai_diagnosis": "AI 诊断分析",
+        "linked_report": "关联诊断报告", "report": "报告", "view_report": "查看报告",
+        "pending": "待处理", "running": "生成中", "completed": "已完成", "failed": "失败",
+        "triggered_at": "触发时间", "trigger_reason": "触发原因", "datasource": "数据库配置信息",
+        "name": "名称", "type": "类型", "connection": "连接", "connection_status": "连接状态",
+        "remark": "备注", "alert_details": "告警详情", "metric": "指标名称", "current": "当前值",
+        "threshold": "阈值", "acknowledged_at": "确认时间", "recovered_at": "恢复时间",
+        "details": "详细内容",
+    },
+    "en-US": {
+        "root_cause": "Root cause", "actions": "Recommended actions", "ai_diagnosis": "AI diagnosis",
+        "linked_report": "Linked diagnostic report", "report": "Report", "view_report": "View report",
+        "pending": "Pending", "running": "Generating", "completed": "Completed", "failed": "Failed",
+        "triggered_at": "Triggered", "trigger_reason": "Trigger reason", "datasource": "Datasource configuration",
+        "name": "Name", "type": "Type", "connection": "Connection", "connection_status": "Connection status",
+        "remark": "Remark", "alert_details": "Alert details", "metric": "Metric", "current": "Current value",
+        "threshold": "Threshold", "acknowledged_at": "Acknowledged", "recovered_at": "Recovered",
+        "details": "Details",
+    },
+}
 
 
 def _extract_recommended_action(text: Optional[str]) -> Optional[str]:
@@ -155,7 +187,7 @@ def _resolve_subscription_user_id(requested_user_id: Optional[int], current_user
         return current_user.id
     if current_user.is_admin:
         return requested_user_id
-    raise HTTPException(status_code=403, detail="不能访问其他用户的订阅")
+    raise ApiError(403, "operation.not_allowed")
 
 
 async def _get_subscription_for_user(db: AsyncSession, subscription_id: int, current_user: User):
@@ -163,13 +195,14 @@ async def _get_subscription_for_user(db: AsyncSession, subscription_id: int, cur
 
     subscription = await get_alive_by_id(db, AlertSubscription, subscription_id)
     if not subscription:
-        raise HTTPException(status_code=404, detail="Subscription not found")
+        raise ApiError(404, "subscription.not_found")
     if not current_user.is_admin and subscription.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="不能操作其他用户的订阅")
+        raise ApiError(403, "operation.not_allowed")
     return subscription
 
 
 async def _build_alert_response(db: AsyncSession, alert) -> AlertMessageResponse:
+    localized_title, localized_content = render_alert_title_and_content(alert)
     datasource = await get_alive_by_id(db, Datasource, alert.datasource_id)
 
     report_result = await db.execute(
@@ -214,7 +247,10 @@ async def _build_alert_response(db: AsyncSession, alert) -> AlertMessageResponse
             if not diagnosis_summary and event_obj.ai_diagnosis_summary:
                 diagnosis_summary = event_obj.ai_diagnosis_summary
 
-    case_summary = alert.trigger_reason or alert.content.split("\n")[0] if alert.content else None
+    if is_connection_status_alert(alert.alert_type, alert.metric_name):
+        case_summary = localized_content.split("\n")[0] if localized_content else localized_title
+    else:
+        case_summary = alert.trigger_reason or (localized_content.split("\n")[0] if localized_content else None)
     if not diagnosis_summary:
         diagnosis_summary = report.summary if report else None
     recommended_action = _extract_recommended_action(report.content_md if report else None)
@@ -235,16 +271,19 @@ async def _build_alert_response(db: AsyncSession, alert) -> AlertMessageResponse
     datasource_info = _build_datasource_info(datasource)
 
     payload = AlertMessageResponse.model_validate(alert)
+    payload.title, payload.content = localized_title, localized_content
     payload.title = build_alert_display_title(
         alert_type=payload.alert_type,
         title=payload.title,
         metric_name=payload.metric_name,
         trigger_reason=payload.trigger_reason,
+        locale=get_active_locale(),
     )
     payload.metric_name = build_alert_display_metric_name(
         alert_type=payload.alert_type,
         metric_name=payload.metric_name,
         trigger_reason=payload.trigger_reason,
+        locale=get_active_locale(),
     )
     payload.diagnosis_context = AlertDiagnosisContext(
         datasource_name=datasource.name if datasource else None,
@@ -275,18 +314,30 @@ async def _load_latest_alert_trigger_reasons(db: AsyncSession, events) -> dict[i
 
 def _build_event_response(event, datasource=None, latest_trigger_reason: Optional[str] = None) -> AlertEventResponse:
     payload = AlertEventResponse.model_validate(event)
-    payload.title = build_alert_display_title(
-        alert_type=payload.alert_type,
-        title=payload.title,
-        metric_name=payload.metric_name,
-        trigger_reason=latest_trigger_reason,
-        fault_domain=payload.fault_domain,
-    )
+    if is_structured_system_alert(payload.alert_type, payload.metric_name):
+        payload.title, _ = build_alert_title_and_content(
+            alert_type=payload.alert_type or "",
+            metric_name=payload.metric_name,
+            metric_value=None,
+            threshold_value=None,
+            trigger_reason=latest_trigger_reason,
+            locale=get_active_locale(),
+        )
+    else:
+        payload.title = build_alert_display_title(
+            alert_type=payload.alert_type,
+            title=payload.title,
+            metric_name=payload.metric_name,
+            trigger_reason=latest_trigger_reason,
+            fault_domain=payload.fault_domain,
+            locale=get_active_locale(),
+        )
     payload.metric_name = build_alert_display_metric_name(
         alert_type=payload.alert_type,
         metric_name=payload.metric_name,
         trigger_reason=latest_trigger_reason,
         fault_domain=payload.fault_domain,
+        locale=get_active_locale(),
     )
     # Add datasource silence information
     if datasource:
@@ -302,13 +353,26 @@ async def _build_event_context(db: AsyncSession, event) -> AlertDiagnosisContext
     recommended_action = _extract_recommended_action(event.recommended_actions or event.ai_diagnosis_summary)
     baseline_comparisons = await _build_event_baseline_comparisons(db, event)
     latest_alert = await db.get(AlertMessage, event.latest_alert_id) if getattr(event, "latest_alert_id", None) else None
-    display_title = build_alert_display_title(
-        alert_type=getattr(event, "alert_type", None),
-        title=getattr(event, "title", None),
-        metric_name=getattr(event, "metric_name", None),
-        trigger_reason=getattr(latest_alert, "trigger_reason", None),
-        fault_domain=getattr(event, "fault_domain", None),
-    )
+    if latest_alert:
+        display_title, _ = render_alert_title_and_content(latest_alert)
+    elif is_structured_system_alert(getattr(event, "alert_type", None), getattr(event, "metric_name", None)):
+        display_title, _ = build_alert_title_and_content(
+            alert_type=getattr(event, "alert_type", None) or "",
+            metric_name=getattr(event, "metric_name", None),
+            metric_value=None,
+            threshold_value=None,
+            trigger_reason=None,
+            locale=get_active_locale(),
+        )
+    else:
+        display_title = build_alert_display_title(
+            alert_type=getattr(event, "alert_type", None),
+            title=getattr(event, "title", None),
+            metric_name=getattr(event, "metric_name", None),
+            trigger_reason=None,
+            fault_domain=getattr(event, "fault_domain", None),
+            locale=get_active_locale(),
+        )
     return AlertDiagnosisContext(
         datasource_name=datasource.name if datasource else None,
         datasource_type=datasource.db_type if datasource else None,
@@ -347,7 +411,7 @@ async def list_alerts(
         try:
             datasource_id_list = [int(x.strip()) for x in datasource_ids.split(",")]
         except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid datasource_ids format")
+            raise ApiError(400, "request.validation.invalid")
 
     params = AlertQueryParams(
         datasource_ids=datasource_id_list,
@@ -393,7 +457,7 @@ async def list_alert_event(
         try:
             datasource_id_list = [int(x.strip()) for x in datasource_ids.split(",")]
         except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid datasource_ids format")
+            raise ApiError(400, "request.validation.invalid")
 
     events_with_datasource, total = await AlertEventService.get_events(
         db=db,
@@ -465,7 +529,7 @@ async def acknowledge_event(
         return _build_event_response(event, datasource, getattr(latest_alert, "trigger_reason", None))
     except ValueError as e:
         await db.rollback()
-        raise HTTPException(status_code=404, detail=str(e))
+        raise ApiError(404, "resource.not_found") from e
     except Exception as e:
         await db.rollback()
         raise
@@ -486,7 +550,7 @@ async def resolve_event(
         return _build_event_response(event, datasource, getattr(latest_alert, "trigger_reason", None))
     except ValueError as e:
         await db.rollback()
-        raise HTTPException(status_code=404, detail=str(e))
+        raise ApiError(404, "resource.not_found") from e
     except Exception as e:
         await db.rollback()
         raise
@@ -503,7 +567,7 @@ async def get_event_context(
     result = await db.execute(select(AlertEvent).where(AlertEvent.id == event_id))
     event = result.scalar_one_or_none()
     if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
+        raise ApiError(404, "resource.not_found")
 
     return await _build_event_context(db, event)
 
@@ -517,7 +581,7 @@ async def get_alert(
     """Get alert details"""
     alert = await AlertService.get_alert_by_id(db, alert_id)
     if not alert:
-        raise HTTPException(status_code=404, detail="Alert not found")
+        raise ApiError(404, "alert.not_found")
 
     return await _build_alert_response(db, alert)
 
@@ -561,7 +625,7 @@ async def get_alert_context(
     """Get compact diagnosis context for P0 alert->report->chat loop"""
     alert = await AlertService.get_alert_by_id(db, alert_id)
     if not alert:
-        raise HTTPException(status_code=404, detail="Alert not found")
+        raise ApiError(404, "alert.not_found")
 
     response = await _build_alert_response(db, alert)
     return response.diagnosis_context or AlertDiagnosisContext()
@@ -570,12 +634,23 @@ async def get_alert_context(
 @router.get("/public/{alert_id}/page", response_class=HTMLResponse)
 async def public_alert_page(
     alert_id: int,
+    request: Request,
     token: str = Query(...),
+    lang: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db)
 ):
     """Render public alert detail page with datasource config and AI diagnosis"""
     PublicShareService.verify_alert_share_token(token, alert_id)
     alert = await PublicShareService.get_alert_or_404(db, alert_id)
+    locale = (
+        normalize_locale(lang)
+        or parse_accept_language(request.headers.get("Accept-Language"))
+        or getattr(alert, "content_locale", None)
+        or DEFAULT_LOCALE
+    )
+    alert_title, alert_content = render_alert_title_and_content(alert, locale)
+    en = locale == "en-US"
+    labels = PUBLIC_ALERT_LABELS[locale]
 
     # Fetch datasource info
     datasource = await get_alive_by_id(db, Datasource, alert.datasource_id)
@@ -603,15 +678,18 @@ async def public_alert_page(
     # Severity badge
     sev = alert.severity or ''
     sev_color = {'critical': '#dc2626', 'high': '#ea580c', 'medium': '#ca8a04', 'low': '#16a34a'}.get(sev.lower(), '#6b7280')
-    sev_label = {'critical': '严重', 'high': '高', 'medium': '中', 'low': '低'}.get(sev.lower(), sev)
+    sev_labels = ({'critical': 'Critical', 'high': 'High', 'medium': 'Medium', 'low': 'Low'} if en else {'critical': '严重', 'high': '高', 'medium': '中', 'low': '低'})
+    sev_label = sev_labels.get(sev.lower(), sev)
     severity_badge = f'<span class="sev-badge" style="background:{sev_color};color:#fff;padding:2px 10px;border-radius:4px;font-size:12px;font-weight:600;">{escape_html(sev_label)}</span>'
 
     # Status label
-    status_label = {'active': '活跃', 'acknowledged': '已确认', 'resolved': '已解决'}.get(alert.status or '', alert.status or '-')
+    status_labels = ({'active': 'Active', 'acknowledged': 'Acknowledged', 'resolved': 'Resolved'} if en else {'active': '活跃', 'acknowledged': '已确认', 'resolved': '已解决'})
+    status_label = status_labels.get(alert.status or '', alert.status or '-')
     status_color = {'active': '#dc2626', 'acknowledged': '#ea580c', 'resolved': '#16a34a'}.get(alert.status or '', '#6b7280')
 
     # Alert type label
-    alert_type_label = {'threshold_violation': '超过阈值', 'baseline_deviation': '偏离基线', 'custom_expression': '自定义表达式', 'system_error': '系统错误', 'ai_policy_violation': '智能判定异常'}.get(alert.alert_type or '', alert.alert_type or '-')
+    type_labels = ({'threshold_violation': 'Threshold exceeded', 'baseline_deviation': 'Baseline deviation', 'custom_expression': 'Custom expression', 'system_error': 'System error', 'ai_policy_violation': 'AI policy alert'} if en else {'threshold_violation': '超过阈值', 'baseline_deviation': '偏离基线', 'custom_expression': '自定义表达式', 'system_error': '系统错误', 'ai_policy_violation': '智能判定异常'})
+    alert_type_label = type_labels.get(alert.alert_type or '', alert.alert_type or '-')
 
     # Datasource info
     ds_name = escape_html(datasource.name if datasource else '-')
@@ -621,20 +699,21 @@ async def public_alert_page(
     ds_db = escape_html(datasource.database if datasource and datasource.database else '-')
     ds_remark = escape_html(datasource.remark if datasource and datasource.remark else '')
     ds_status = datasource.connection_status if datasource else 'unknown'
-    ds_status_label = {'normal': '正常', 'warning': '警告', 'failed': '失败', 'unknown': '未知'}.get(ds_status, ds_status)
+    ds_status_labels = ({'normal': 'Normal', 'warning': 'Warning', 'failed': 'Failed', 'unknown': 'Unknown'} if en else {'normal': '正常', 'warning': '警告', 'failed': '失败', 'unknown': '未知'})
+    ds_status_label = ds_status_labels.get(ds_status, ds_status)
     ds_status_color = {'normal': '#16a34a', 'warning': '#ca8a04', 'failed': '#dc2626', 'unknown': '#6b7280'}.get(ds_status, '#6b7280')
 
     # AI diagnosis sections
     has_diagnosis = ai_root_cause or ai_actions
     ai_diagnosis_html = ''
     if has_diagnosis:
-        root_cause_block = f'<div class="diag-block root-cause"><div class="diag-label">🔍 根本原因</div><div class="diag-content">{escape_html(ai_root_cause)}</div></div>' if ai_root_cause else ''
-        actions_block = f'<div class="diag-block actions"><div class="diag-label">🛠 建议措施</div><div class="diag-content">{escape_html(ai_actions)}</div></div>' if ai_actions else ''
+        root_cause_block = f'<div class="diag-block root-cause"><div class="diag-label">🔍 {labels["root_cause"]}</div><div class="diag-content">{escape_html(ai_root_cause)}</div></div>' if ai_root_cause else ''
+        actions_block = f'<div class="diag-block actions"><div class="diag-label">🛠 {labels["actions"]}</div><div class="diag-content">{escape_html(ai_actions)}</div></div>' if ai_actions else ''
         ai_diagnosis_html = f'''
         <div class="section ai-section">
             <div class="section-header">
                 <span class="section-icon">🧠</span>
-                <span class="section-title">AI 诊断分析</span>
+                <span class="section-title">{labels["ai_diagnosis"]}</span>
             </div>
             <div class="section-body">
                 {root_cause_block}
@@ -646,27 +725,27 @@ async def public_alert_page(
     report_html = ''
     if report:
         report_token = PublicShareService.create_report_share_token(report.id, get_settings().public_share_expire_minutes)
-        report_status_label = {'pending': '待处理', 'running': '生成中', 'completed': '已完成', 'failed': '失败'}.get(report.status or '', report.status or '-')
+        report_status_label = {key: labels[key] for key in ('pending', 'running', 'completed', 'failed')}.get(report.status or '', report.status or '-')
         report_html = f'''
         <div class="section report-section">
             <div class="section-header">
                 <span class="section-icon">📋</span>
-                <span class="section-title">关联诊断报告</span>
+                <span class="section-title">{labels["linked_report"]}</span>
             </div>
             <div class="section-body">
                 <div class="report-info">
                     <div class="report-meta">
                         <span class="report-time">{report.created_at}</span>
-                        <span class="report-title">{escape_html(report.title or f"报告 #{report.id}")}</span>
+                        <span class="report-title">{escape_html(report.title or f'{labels["report"]} #{report.id}')}</span>
                         <span class="report-status">{report_status_label}</span>
                     </div>
-                    <a class="btn btn-secondary" href="/api/inspections/report/public/{report.id}/page?token={report_token}">查看报告</a>
+                    <a class="btn btn-secondary" href="/api/inspections/report/public/{report.id}/page?token={report_token}">{labels["view_report"]}</a>
                 </div>
             </div>
         </div>'''
 
     # Render markdown content
-    content_md = alert.content or ''
+    content_md = alert_content or ''
     try:
         from markdown_it import MarkdownIt
         md = MarkdownIt("commonmark", {"breaks": True, "html": True})
@@ -675,13 +754,13 @@ async def public_alert_page(
     except Exception:
         content_html = f"<pre>{escape_html(content_md)}</pre>"
 
-    return f"""
+    page_html = f"""
     <!DOCTYPE html>
-    <html lang=\"zh-CN\">
+    <html lang=\"{locale}\">
     <head>
         <meta charset=\"UTF-8\">
         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-        <title>{escape_html(alert.title)} - 告警详情</title>
+        <title>{escape_html(alert_title)} - {'Alert details' if en else '告警详情'}</title>
         <link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/github-markdown@2.10.0/github-markdown.min.css\">
         <style>
             :root {{
@@ -756,38 +835,38 @@ async def public_alert_page(
     </head>
     <body>
         <div class="container">
-            <h1 class="alert-title">{escape_html(alert.title)}</h1>
+            <h1 class="alert-title">{escape_html(alert_title)}</h1>
 
             <div class="meta-row">
                 <span class="meta-item">{severity_badge}</span>
                 <span class="meta-item" style="color:{status_color};font-weight:500;">● {status_label}</span>
-                <span class="meta-item">触发时间：{alert.created_at}</span>
+                <span class="meta-item">{labels["triggered_at"]}: {alert.created_at}</span>
             </div>
 
-            {f'<div class="trigger-block">触发原因：{escape_html(alert.trigger_reason)}</div>' if alert.trigger_reason else ''}
+            {f'<div class="trigger-block">{labels["trigger_reason"]}: {escape_html(alert.trigger_reason)}</div>' if alert.trigger_reason else ''}
 
             <!-- 数据库配置信息 -->
             <div class="section">
                 <div class="section-header">
                     <span class="section-icon">📊</span>
-                    <span class="section-title">数据库配置信息</span>
+                    <span class="section-title">{labels["datasource"]}</span>
                 </div>
                 <div class="section-body">
                     <div class="grid-2">
                         <div class="field">
-                            <div class="field-label">名称</div>
+                            <div class="field-label">{labels["name"]}</div>
                             <div class="field-value">{ds_name}</div>
                         </div>
                         <div class="field">
-                            <div class="field-label">类型</div>
+                            <div class="field-label">{labels["type"]}</div>
                             <div class="field-value">{ds_type}</div>
                         </div>
                         <div class="field">
-                            <div class="field-label">连接</div>
+                            <div class="field-label">{labels["connection"]}</div>
                             <div class="field-value">{ds_host}:{ds_port} / {ds_db}</div>
                         </div>
                         <div class="field">
-                            <div class="field-label">连接状态</div>
+                            <div class="field-label">{labels["connection_status"]}</div>
                             <div class="field-value">
                                 <span style="display:inline-flex;align-items:center;gap:4px;">
                                     <span class="status-dot" style="background:{ds_status_color};"></span>
@@ -796,7 +875,7 @@ async def public_alert_page(
                             </div>
                         </div>
                     </div>
-                    {f'<div class="remark-block"><div class="remark-label">备注</div><div class="remark-content">{ds_remark}</div></div>' if ds_remark else ''}
+                    {f'<div class="remark-block"><div class="remark-label">{labels["remark"]}</div><div class="remark-content">{ds_remark}</div></div>' if ds_remark else ''}
                 </div>
             </div>
 
@@ -804,32 +883,32 @@ async def public_alert_page(
             <div class="section">
                 <div class="section-header">
                     <span class="section-icon">⚠️</span>
-                    <span class="section-title">告警详情</span>
+                    <span class="section-title">{labels["alert_details"]}</span>
                 </div>
                 <div class="section-body">
                     <div class="grid-3">
                         <div class="field">
-                            <div class="field-label">告警类型</div>
+                            <div class="field-label">{labels["type"]}</div>
                             <div class="field-value">{alert_type_label}</div>
                         </div>
                         <div class="field">
-                            <div class="field-label">指标名称</div>
+                            <div class="field-label">{labels["metric"]}</div>
                             <div class="field-value">{escape_html(alert.metric_name or '-')}</div>
                         </div>
                         <div class="field">
-                            <div class="field-label">当前值</div>
+                            <div class="field-label">{labels["current"]}</div>
                             <div class="field-value">{'{:.2f}'.format(alert.metric_value) if alert.metric_value is not None else '-'}</div>
                         </div>
                         <div class="field">
-                            <div class="field-label">阈值</div>
+                            <div class="field-label">{labels["threshold"]}</div>
                             <div class="field-value">{'{:.2f}'.format(alert.threshold_value) if alert.threshold_value is not None else '-'}</div>
                         </div>
                         <div class="field">
-                            <div class="field-label">确认时间</div>
+                            <div class="field-label">{labels["acknowledged_at"]}</div>
                             <div class="field-value">{alert.acknowledged_at or '-'}</div>
                         </div>
                         <div class="field">
-                            <div class="field-label">恢复时间</div>
+                            <div class="field-label">{labels["recovered_at"]}</div>
                             <div class="field-value">{alert.resolved_at or '-'}</div>
                         </div>
                     </div>
@@ -843,7 +922,7 @@ async def public_alert_page(
             <div class="section">
                 <div class="section-header">
                     <span class="section-icon">📝</span>
-                    <span class="section-title">详细内容</span>
+                    <span class="section-title">{labels["details"]}</span>
                 </div>
                 <div class="content-block markdown-body">{content_html}</div>
             </div>
@@ -851,6 +930,7 @@ async def public_alert_page(
     </body>
     </html>
     """
+    return HTMLResponse(content=page_html, headers={"Content-Language": locale})
 
 
 @router.post("/{alert_id}/acknowledge", response_model=AlertMessageResponse)
@@ -864,7 +944,7 @@ async def acknowledge_alert(
     del request
     alert = await AlertService.acknowledge_alert(db, alert_id, current_user.id)
     if not alert:
-        raise HTTPException(status_code=404, detail="Alert not found")
+        raise ApiError(404, "alert.not_found")
 
     return await _build_alert_response(db, alert)
 
@@ -878,7 +958,7 @@ async def resolve_alert(
     """Resolve an alert"""
     alert = await AlertService.resolve_alert(db, alert_id)
     if not alert:
-        raise HTTPException(status_code=404, detail="Alert not found")
+        raise ApiError(404, "alert.not_found")
 
     return await _build_alert_response(db, alert)
 
@@ -925,7 +1005,7 @@ async def update_subscription(
         update_data.model_dump(exclude_unset=True)
     )
     if not updated:
-        raise HTTPException(status_code=404, detail="Subscription not found")
+        raise ApiError(404, "subscription.not_found")
 
     return AlertSubscriptionResponse.model_validate(updated)
 
@@ -939,9 +1019,9 @@ async def delete_subscription(
     """Delete an alert subscription"""
     success = await AlertService.delete_subscription(db, subscription_id, current_user.id)
     if not success:
-        raise HTTPException(status_code=404, detail="Subscription not found")
+        raise ApiError(404, "subscription.not_found")
 
-    return {"message": "Subscription deleted successfully"}
+    return message_payload("subscription.deleted")
 
 
 @router.post("/subscriptions/{subscription_id}/test")
@@ -971,7 +1051,7 @@ async def test_notification(
     )
 
     return {
-        "message": "Test notification sent",
+        **message_payload("notification.test_sent"),
         "alert_id": test_alert.id,
         "deliveries": [
             {

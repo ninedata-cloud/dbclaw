@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from fastapi import HTTPException, status
+from fastapi import status
 from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +10,7 @@ from backend.models.report import Report
 from backend.models.soft_delete import alive_filter, get_alive_by_id
 from backend.services.config_service import get_config
 from backend.utils.security import create_public_share_token, decode_public_share_token
+from backend.i18n.errors import ApiError
 
 
 class PublicShareService:
@@ -39,20 +40,14 @@ class PublicShareService:
         try:
             decode_public_share_token(token, "alert", alert_id)
         except JWTError:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="分享链接无效或已过期"
-            )
+            raise ApiError(status.HTTP_401_UNAUTHORIZED, "auth.session_expired")
 
     @staticmethod
     def verify_report_share_token(token: str, report_id: int) -> None:
         try:
             decode_public_share_token(token, "report", report_id)
         except JWTError:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="分享链接无效或已过期"
-            )
+            raise ApiError(status.HTTP_401_UNAUTHORIZED, "auth.session_expired")
 
     @staticmethod
     async def get_report_by_alert_id(db: AsyncSession, alert_id: int) -> Report | None:
@@ -65,12 +60,12 @@ class PublicShareService:
     async def get_alert_or_404(db: AsyncSession, alert_id: int) -> AlertMessage:
         alert = await db.get(AlertMessage, alert_id)
         if not alert:
-            raise HTTPException(status_code=404, detail="Alert not found")
+            raise ApiError(404, "alert.not_found")
         return alert
 
     @staticmethod
     async def get_report_or_404(db: AsyncSession, report_id: int) -> Report:
         report = await get_alive_by_id(db, Report, report_id)
         if not report:
-            raise HTTPException(status_code=404, detail="报告不存在")
+            raise ApiError(404, "report.not_found")
         return report

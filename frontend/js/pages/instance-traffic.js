@@ -68,70 +68,7 @@ const InstanceTrafficPage = {
     _renderShell() {
         if (!this.container) return;
 
-        this.container.innerHTML = `
-            <div class="instance-traffic-page">
-                <section class="instance-traffic-hero">
-                    <div class="instance-traffic-hero-bg"></div>
-                    <div class="instance-traffic-hero-header">
-                        <div id="instance-traffic-status" class="instance-traffic-status">正在加载流量数据...</div>
-                        <div class="instance-traffic-actions">
-                            <button class="btn btn-secondary" id="instance-traffic-refresh" type="button">
-                                <i data-lucide="refresh-cw"></i> 立即刷新
-                            </button>
-                        </div>
-                    </div>
-                    <div id="instance-traffic-stats" class="instance-traffic-stats"></div>
-                    <div id="instance-traffic-topology" class="instance-traffic-topology">
-                        <canvas id="instance-traffic-canvas" class="instance-traffic-canvas"></canvas>
-                        <div class="instance-traffic-grid"></div>
-                        <div class="instance-traffic-orbit orbit-1"></div>
-                        <div class="instance-traffic-orbit orbit-2"></div>
-                        <div class="instance-traffic-orbit orbit-3"></div>
-                        <div class="instance-traffic-server" id="instance-traffic-server">
-                            <div class="instance-traffic-server-rings"></div>
-                            <div class="instance-traffic-server-core">
-                                <div class="instance-traffic-server-icon">
-                                    <i data-lucide="database"></i>
-                                </div>
-                                <div class="instance-traffic-server-title" id="instance-traffic-server-title">数据库实例</div>
-                                <div class="instance-traffic-server-meta" id="instance-traffic-server-meta">等待数据...</div>
-                            </div>
-                        </div>
-                        <div id="instance-traffic-client-layer" class="instance-traffic-client-layer"></div>
-                        <div id="instance-traffic-empty" class="instance-traffic-empty hidden">
-                            <div class="instance-traffic-empty-icon"><i data-lucide="scan-search"></i></div>
-                            <div class="instance-traffic-empty-title">当前没有观测到客户端链路</div>
-                            <div class="instance-traffic-empty-text">实例仍会继续轮询，一旦有会话接入会自动生成流量拓扑。</div>
-                        </div>
-                    </div>
-                    <div class="instance-traffic-footer">
-                        <div id="instance-traffic-mode-pill" class="instance-traffic-mode-pill">等待数据</div>
-                        <div id="instance-traffic-legend" class="instance-traffic-legend"></div>
-                    </div>
-                </section>
-                <section class="instance-traffic-side">
-                    <div class="instance-panel instance-traffic-panel">
-                        <div class="instance-traffic-panel-header">
-                            <div>
-                                <h3>总流量趋势</h3>
-                            </div>
-                        </div>
-                        <div class="instance-traffic-chart-wrap">
-                            <canvas id="instance-traffic-history-chart"></canvas>
-                            <div id="instance-traffic-chart-empty" class="instance-traffic-chart-empty hidden">等待趋势数据...</div>
-                        </div>
-                    </div>
-                    <div class="instance-panel instance-traffic-panel instance-traffic-list-panel">
-                        <div class="instance-traffic-panel-header">
-                            <div>
-                                <h3>热点客户端</h3>
-                            </div>
-                        </div>
-                        <div id="instance-traffic-client-list" class="instance-traffic-client-list"></div>
-                    </div>
-                </section>
-            </div>
-        `;
+        this.container.innerHTML = I18n.t('pageCopy.instanceTraffic.loadingTrafficDataRefreshNowDatabaseInstance');
         DOM.createIcons();
     },
 
@@ -185,7 +122,7 @@ const InstanceTrafficPage = {
         this.refreshInFlight = true;
 
         if (showLoading && this.refs.status) {
-            this.refs.status.textContent = '正在加载流量数据...';
+            this.refs.status.textContent = I18n.t('pageCopy.instanceTraffic.loadingTrafficData');
         }
 
         try {
@@ -201,16 +138,16 @@ const InstanceTrafficPage = {
             this._schedulePolling();
         } catch (error) {
             if (!silent) {
-                Toast.error(error.message || '加载流量监控失败');
+                Toast.error(error.message || I18n.t('pageCopy.instanceTraffic.failedToLoadTrafficData'));
             }
             if (this.refs.status) {
-                this.refs.status.textContent = `流量数据加载失败：${error.message || '未知错误'}`;
+                this.refs.status.textContent = I18n.t('pageCopy.instanceTraffic.failedToLoadTrafficDataValue', { value0: error.message || I18n.t('pageCopy.instanceTraffic.unknownError') });
             }
             if (this.refs.list) {
                 this.refs.list.innerHTML = `
                     <div class="instance-traffic-list-empty">
                         <i data-lucide="triangle-alert"></i>
-                        <span>${this._escapeHtml(error.message || '加载失败')}</span>
+                        <span>${this._escapeHtml(error.message || I18n.t('pageCopy.instanceTraffic.loadFailed'))}</span>
                     </div>
                 `;
                 DOM.createIcons();
@@ -249,7 +186,7 @@ const InstanceTrafficPage = {
         if (!this.refs.status || !this.data) return;
         const modeLabel = this._rateModeLabel(this.data.rate_mode);
         const updatedAt = this.data.captured_at ? I18n.formatTime(this.data.captured_at) : '--';
-        this.refs.status.textContent = `${this.data.rate_label} · ${modeLabel} · 上次刷新 ${updatedAt} · ${this.pollIntervalSeconds}s 自动轮询`;
+        this.refs.status.textContent = I18n.t('pageCopy.instanceTraffic.pollingStatus', { value0: this.data.rate_label, value1: modeLabel, value2: updatedAt, value3: this.pollIntervalSeconds });
     },
 
     _renderStats() {
@@ -272,39 +209,18 @@ const InstanceTrafficPage = {
         const txRate = hasTrafficData && this.data.total_tx_rate != null ? Format.networkRate(this.data.total_tx_rate) : '--';
         const rxRate = hasTrafficData && this.data.total_rx_rate != null ? Format.networkRate(this.data.total_rx_rate) : '--';
 
-        let statsHtml = `
-            <div class="instance-traffic-stat-card compact">
-                <div class="instance-traffic-stat-label">客户端数量</div>
-                <div class="instance-traffic-stat-value">${this._escapeHtml(totalClientCount)}</div>
-            </div>
-            <div class="instance-traffic-stat-card compact">
-                <div class="instance-traffic-stat-label">会话数量</div>
-                <div class="instance-traffic-stat-triple">
-                    <span><strong>${this._escapeHtml(activeSessionCount)}</strong><em>活跃</em></span>
-                    <span><strong>${this._escapeHtml(totalSessionCount)}</strong><em>总数</em></span>
-                    <span><strong>${this._escapeHtml(maxSessionCount)}</strong><em>最大</em></span>
-                </div>
-            </div>
-        `;
+        let statsHtml = I18n.t('pageCopy.instanceTraffic.numberOfClientsValueNumberOfSessions', { value0: this._escapeHtml(totalClientCount), value1: this._escapeHtml(activeSessionCount), value2: this._escapeHtml(totalSessionCount), value3: this._escapeHtml(maxSessionCount) });
 
         // 只有在有实测流量数据时才显示网络流量卡片
         if (hasTrafficData) {
-            statsHtml += `
-                <div class="instance-traffic-stat-card compact">
-                    <div class="instance-traffic-stat-label">网络流量</div>
-                    <div class="instance-traffic-stat-pairs">
-                        <span>发送 <strong>${this._escapeHtml(txRate)}</strong></span>
-                        <span>接收 <strong>${this._escapeHtml(rxRate)}</strong></span>
-                    </div>
-                </div>
-            `;
+            statsHtml += I18n.t('pageCopy.instanceTraffic.networkTrafficSendValueReceiveValue', { value0: this._escapeHtml(txRate), value1: this._escapeHtml(rxRate) });
         }
 
         this.refs.stats.innerHTML = statsHtml;
 
         if (this.refs.modePill) {
             this.refs.modePill.className = `instance-traffic-mode-pill mode-${this._escapeHtml(this.data.rate_mode || 'unavailable')}`;
-            const modeText = this.data.rate_mode === 'measured' ? '链路实测' : '无流量数据';
+            const modeText = this.data.rate_mode === 'measured' ? I18n.t('pageCopy.instanceTraffic.linkActualTest') : I18n.t('pageCopy.instanceTraffic.noTrafficData');
             this.refs.modePill.textContent = `${this._rateModeLabel(this.data.rate_mode)} · ${modeText}`;
         }
     },
@@ -313,7 +229,7 @@ const InstanceTrafficPage = {
         if (!this.data) return;
         const datasource = this.data.datasource || this.datasource || {};
         if (this.refs.serverTitle) {
-            this.refs.serverTitle.textContent = datasource.name || '数据库实例';
+            this.refs.serverTitle.textContent = datasource.name || I18n.t('pageCopy.instanceTraffic.databaseInstance');
         }
         if (this.refs.serverMeta) {
             const metaParts = [
@@ -321,7 +237,7 @@ const InstanceTrafficPage = {
                 datasource.host ? `${datasource.host}:${datasource.port}` : null,
                 datasource.database || null,
             ].filter(Boolean);
-            this.refs.serverMeta.textContent = metaParts.join(' / ') || '等待流量数据';
+            this.refs.serverMeta.textContent = metaParts.join(' / ') || I18n.t('pageCopy.instanceTraffic.waitingForTrafficData');
         }
     },
 
@@ -331,12 +247,12 @@ const InstanceTrafficPage = {
         const visibleCount = this.visibleClients.length;
         const hiddenCount = Math.max(0, (this.data.clients || []).length - visibleCount);
         const parts = [
-            '<span class="legend-chip status-active">活跃 SQL</span>',
-            '<span class="legend-chip status-waiting">等待 / 堵塞</span>',
-            '<span class="legend-chip status-idle">空闲连接</span>',
+            I18n.t('pageCopy.instanceTraffic.activeSql'),
+            I18n.t('pageCopy.instanceTraffic.waitingBlocking'),
+            I18n.t('pageCopy.instanceTraffic.idleConnection'),
         ];
         if (hiddenCount > 0) {
-            parts.push(`<span class="legend-chip neutral">拓扑图显示前 ${visibleCount} 个热点，其余 ${hiddenCount} 个在右侧列表</span>`);
+            parts.push(I18n.t('pageCopy.instanceTraffic.beforeDisplayingTheTopologyMapValueHot', { value0: visibleCount, value1: hiddenCount }));
         }
         this.refs.legend.innerHTML = parts.join('');
     },
@@ -381,17 +297,12 @@ const InstanceTrafficPage = {
 
         const clients = this.data.clients || [];
         if (!clients.length) {
-            this.refs.list.innerHTML = `
-                <div class="instance-traffic-list-empty">
-                    <i data-lucide="orbit"></i>
-                    <span>等待客户端接入后生成链路榜单</span>
-                </div>
-            `;
+            this.refs.list.innerHTML = I18n.t('pageCopy.instanceTraffic.waitForClientAccessToGenerateLink');
             DOM.createIcons();
             return;
         }
 
-        const visibleHint = this.data.rate_mode === 'measured' ? '按实时链路带宽排序' : '按会话活跃度热度排序';
+        const visibleHint = this.data.rate_mode === 'measured' ? I18n.t('pageCopy.instanceTraffic.sortByRealTimeLinkBandwidth') : I18n.t('pageCopy.instanceTraffic.sortBySessionActivityPopularity');
         if (this.refs.listSubtitle) {
             this.refs.listSubtitle.textContent = visibleHint;
         }
@@ -486,11 +397,11 @@ const InstanceTrafficPage = {
                 this.refs.chartEmpty.classList.remove('hidden');
                 // 根据数据源类型显示不同提示
                 if (this.data && this.data.rate_mode === 'unavailable') {
-                    this.refs.chartEmpty.textContent = '当前数据库类型不支持网络流量采集';
+                    this.refs.chartEmpty.textContent = I18n.t('pageCopy.instanceTraffic.theCurrentDatabaseTypeDoesNotSupport');
                 } else if (supportsTraffic) {
-                    this.refs.chartEmpty.textContent = '等待趋势数据...';
+                    this.refs.chartEmpty.textContent = I18n.t('pageCopy.instanceTraffic.waitingForTrendData');
                 } else {
-                    this.refs.chartEmpty.textContent = '等待趋势数据...';
+                    this.refs.chartEmpty.textContent = I18n.t('pageCopy.instanceTraffic.waitingForTrendData');
                 }
             }
             if (this.historyChart) {
@@ -519,7 +430,7 @@ const InstanceTrafficPage = {
                     labels,
                     datasets: [
                         {
-                            label: '总带宽',
+                            label: I18n.t('pageCopy.instanceTraffic.totalBandwidth'),
                             data: totalData,
                             borderColor: '#7dd3fc',
                             backgroundColor: 'rgba(125, 211, 252, 0.18)',
@@ -529,7 +440,7 @@ const InstanceTrafficPage = {
                             pointRadius: 0,
                         },
                         {
-                            label: '入站',
+                            label: I18n.t('pageCopy.instanceTraffic.inbound'),
                             data: rxData,
                             borderColor: '#22c55e',
                             backgroundColor: 'rgba(34, 197, 94, 0.12)',
@@ -539,7 +450,7 @@ const InstanceTrafficPage = {
                             pointRadius: 0,
                         },
                         {
-                            label: '出站',
+                            label: I18n.t('pageCopy.instanceTraffic.outbound'),
                             data: txData,
                             borderColor: '#f59e0b',
                             backgroundColor: 'rgba(245, 158, 11, 0.12)',
@@ -795,61 +706,36 @@ const InstanceTrafficPage = {
     _showClientDetails(client) {
         const sqlHtml = (client.sql_samples || []).length
             ? client.sql_samples.map(sql => `<pre class="instance-inline-pre">${this._escapeHtml(sql)}</pre>`).join('')
-            : '<div class="instance-inline-pre">暂无可展示 SQL</div>';
+            : I18n.t('pageCopy.instanceTraffic.noSqlToDisplayYet');
 
         Modal.show({
-            title: `客户端链路详情 · ${client.client_label}`,
-            content: `
-                <div class="instance-traffic-modal">
-                    <div class="instance-traffic-modal-grid">
-                        <div class="instance-config-field">
-                            <div class="instance-config-label">链路强度</div>
-                            <div class="instance-config-value">${this._escapeHtml(this._clientRateLabel(client))}</div>
-                        </div>
-                        <div class="instance-config-field">
-                            <div class="instance-config-label">会话概况</div>
-                            <div class="instance-config-value">${this._escapeHtml(this._clientListMeta(client))}</div>
-                        </div>
-                        <div class="instance-config-field">
-                            <div class="instance-config-label">用户</div>
-                            <div class="instance-config-value">${this._escapeHtml((client.users || []).join(', ') || '-')}</div>
-                        </div>
-                        <div class="instance-config-field">
-                            <div class="instance-config-label">数据库</div>
-                            <div class="instance-config-value">${this._escapeHtml((client.databases || []).join(', ') || '-')}</div>
-                        </div>
-                    </div>
-                    <div class="instance-config-field full">
-                        <div class="instance-config-label">采样 SQL</div>
-                        <div class="instance-config-value">${sqlHtml}</div>
-                    </div>
-                </div>
-            `,
+            title: I18n.t('pageCopy.instanceTraffic.clientLinkDetailsValue', { value0: client.client_label }),
+            content: I18n.t("pageCopy.instanceTraffic._showClientDetailsContent", { value0: this._escapeHtml(this._clientRateLabel(client)), value1: this._escapeHtml(this._clientListMeta(client)), value2: this._escapeHtml((client.users || []).join(', ') || '-'), value3: this._escapeHtml((client.databases || []).join(', ') || '-'), value4: sqlHtml }),
             buttons: [
-                { text: '关闭', variant: 'secondary', onClick: () => Modal.hide() },
+                { text: I18n.t('pageCopy.instanceTraffic.close'), variant: 'secondary', onClick: () => Modal.hide() },
             ],
         });
     },
 
     _clientNodeMeta(client) {
-        const parts = [`${client.session_count || 0} 会话`];
+        const parts = [I18n.t('pageCopy.instanceTraffic.sessionCount', { value0: client.session_count || 0 })];
         if (client.active_session_count) {
-            parts.push(`${client.active_session_count} 活跃`);
+            parts.push(I18n.t('pageCopy.instanceTraffic.activeCount', { value0: client.active_session_count }));
         }
         if (client.waiting_session_count) {
-            parts.push(`${client.waiting_session_count} 等待`);
+            parts.push(I18n.t('pageCopy.instanceTraffic.waitingCount', { value0: client.waiting_session_count }));
         }
         return parts.join(' / ');
     },
 
     _clientListMeta(client) {
         const parts = [
-            `${client.session_count || 0} 会话`,
-            `${client.active_session_count || 0} 活跃`,
-            `${client.waiting_session_count || 0} 等待`,
+            I18n.t('pageCopy.instanceTraffic.sessionCount', { value0: client.session_count || 0 }),
+            I18n.t('pageCopy.instanceTraffic.activeCount', { value0: client.active_session_count || 0 }),
+            I18n.t('pageCopy.instanceTraffic.waitingCount', { value0: client.waiting_session_count || 0 }),
         ];
         if (client.max_duration_seconds != null) {
-            parts.push(`最长 ${Format.uptime(client.max_duration_seconds)}`);
+            parts.push(I18n.t('pageCopy.instanceTraffic.longestValue', { value0: Format.uptime(client.max_duration_seconds) }));
         }
         return parts.join(' · ');
     },
@@ -859,12 +745,12 @@ const InstanceTrafficPage = {
         if (client.estimated_total_rate != null) {
             return Format.networkRate(client.estimated_total_rate);
         }
-        return `热度 ${Math.round(client.heat_score || 0)}`;
+        return I18n.t('pageCopy.instanceTraffic.hotnessValue', { value0: Math.round(client.heat_score || 0) });
     },
 
     _rateModeLabel(mode) {
-        if (mode === 'measured') return '实测流量';
-        return '暂无流量';
+        if (mode === 'measured') return I18n.t('pageCopy.instanceTraffic.measuredFlowRate');
+        return I18n.t('pageCopy.instanceTraffic.noTrafficYet');
     },
 
     _getDbTypeLabel(dbType) {

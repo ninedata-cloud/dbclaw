@@ -55,3 +55,19 @@ code: |
           "log_file": log_file,
           "message": "Slow query log is enabled. Use execute_os_command to read the log file."
       }
+
+i18n:
+  zh-CN:
+    name: MySQL 慢查询
+    description: 执行“MySQL 慢查询”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+    permission_descriptions:
+      execute_query: 允许执行受控数据库查询
+  en-US:
+    name: MySQL Slow Queries
+    description: Get recent MySQL slow queries for performance analysis
+    parameter_descriptions:
+      datasource_id: The database connection ID
+    permission_descriptions:
+      execute_query: Execute governed database queries

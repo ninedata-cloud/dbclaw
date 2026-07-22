@@ -2,13 +2,14 @@ import re
 from typing import List, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import HTTPException
 
 from backend.models.document import DocCategory, DocDocument
 from backend.models.soft_delete import alive_filter, get_alive_by_id
 from backend.schemas.document import DocDocumentCreate, DocDocumentUpdate
 from backend.services.knowledge_compiler import compile_document_knowledge, normalize_diagnosis_profile
 from backend.skills.registry import SkillRegistry
+from backend.i18n.locale import DEFAULT_LOCALE, get_active_locale
+from backend.i18n.errors import ApiError
 
 
 def auto_summary(content: str) -> str:
@@ -125,7 +126,7 @@ async def list_documents_by_category(db: AsyncSession, category_id: int):
         .where(DocDocument.category_id == category_id, DocDocument.is_active == True, alive_filter(DocDocument))
         .order_by(DocDocument.sort_order)
     )
-    docs = result.scalars().all()
+    docs = select_document_translations(result.scalars().all(), get_active_locale())
     valid_skill_ids = await _get_valid_skill_ids(db)
     dirty = False
     for doc in docs:
@@ -139,7 +140,38 @@ async def list_documents_by_category(db: AsyncSession, category_id: int):
     return docs
 
 
-async def list_documents_for_ai(db: AsyncSession, db_type: Optional[str] = None) -> List[dict]:
+def select_document_translations(documents, locale: str):
+    """Choose one built-in translation per group; user documents remain untouched."""
+    documents = list(documents)
+    grouped: dict[str, list] = {}
+    for doc in documents:
+        group_id = getattr(doc, "translation_group_id", None)
+        if getattr(doc, "is_builtin", False) and group_id:
+            grouped.setdefault(group_id, []).append(doc)
+    choices = {}
+    for group_id, variants in grouped.items():
+        preferred = next((doc for doc in variants if doc.content_locale == locale), None)
+        fallback = next((doc for doc in variants if doc.content_locale == DEFAULT_LOCALE), None)
+        choices[group_id] = preferred or fallback or variants[0]
+
+    selected = []
+    emitted = set()
+    for doc in documents:
+        group_id = getattr(doc, "translation_group_id", None)
+        if group_id in choices:
+            if group_id not in emitted:
+                selected.append(choices[group_id])
+                emitted.add(group_id)
+        else:
+            selected.append(doc)
+    return selected
+
+
+async def list_documents_for_ai(
+    db: AsyncSession,
+    db_type: Optional[str] = None,
+    locale: Optional[str] = None,
+) -> List[dict]:
     """返回文档目录（不含完整 content），供 AI list_documents 工具使用"""
     q = (
         select(DocDocument, DocCategory.name.label("cat_name"), DocCategory.db_type.label("cat_db_type"))
@@ -153,8 +185,16 @@ async def list_documents_for_ai(db: AsyncSession, db_type: Optional[str] = None)
     docs = []
     valid_skill_ids = await _get_valid_skill_ids(db)
     dirty = False
-    for row in result.all():
+    rows = result.all()
+    selected_ids = {
+        doc.id for doc in select_document_translations(
+            [row.DocDocument for row in rows], locale or get_active_locale()
+        )
+    }
+    for row in rows:
         doc = row.DocDocument
+        if doc.id not in selected_ids:
+            continue
         if _document_needs_compilation(doc):
             await compile_document_record(db, doc, valid_skill_ids=valid_skill_ids, commit=False)
             dirty = True
@@ -184,7 +224,7 @@ async def list_documents_for_ai(db: AsyncSession, db_type: Optional[str] = None)
 async def get_document(db: AsyncSession, doc_id: int) -> DocDocument:
     doc = await get_alive_by_id(db, DocDocument, doc_id)
     if not doc:
-        raise HTTPException(status_code=404, detail="文档不存在")
+            raise ApiError(404, "document.not_found")
     return await ensure_document_compiled(db, doc, commit=True)
 
 
@@ -196,6 +236,8 @@ async def create_document(db: AsyncSession, data: DocDocumentCreate, user_id: in
         category_id=data.category_id,
         title=data.title,
         content=data.content,
+        content_locale=data.content_locale,
+        translation_group_id=data.translation_group_id,
         summary=summary,
         scope=data.scope or "tenant",
         doc_kind=data.doc_kind or "reference",
@@ -247,6 +289,6 @@ async def recompile_document(db: AsyncSession, doc_id: int) -> DocDocument:
 async def delete_document(db: AsyncSession, doc_id: int, user_id: int | None = None):
     doc = await get_document(db, doc_id)
     if doc.is_builtin:
-        raise HTTPException(status_code=403, detail="内置文档不可删除")
+            raise ApiError(403, "operation.not_allowed")
     doc.soft_delete(user_id)
     await db.commit()

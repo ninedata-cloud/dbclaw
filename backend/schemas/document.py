@@ -17,6 +17,7 @@ class DocDiagnosisProfile(BaseModel):
 class DocCategoryResponse(TimestampSerializerMixin, BaseModel):
     id: int
     name: str
+    code: Optional[str] = None
     db_type: str
     parent_id: Optional[int] = None
     sort_order: int
@@ -33,6 +34,7 @@ DocCategoryResponse.model_rebuild()
 
 class DocCategoryCreate(BaseModel):
     name: str
+    code: Optional[str] = None
     db_type: str
     parent_id: Optional[int] = None
     sort_order: int = 0
@@ -42,6 +44,8 @@ class DocCategoryCreate(BaseModel):
 class DocDocumentCreate(BaseModel):
     title: str
     content: str
+    content_locale: str = "und"
+    translation_group_id: Optional[str] = None
     summary: Optional[str] = None
     category_id: int
     scope: Optional[str] = None
@@ -61,6 +65,8 @@ class DocDocumentCreate(BaseModel):
 class DocDocumentUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
+    content_locale: Optional[str] = None
+    translation_group_id: Optional[str] = None
     summary: Optional[str] = None
     category_id: Optional[int] = None
     scope: Optional[str] = None
@@ -82,6 +88,8 @@ class DocDocumentListItem(TimestampSerializerMixin, BaseModel):
     """目录列表项，不含完整 content"""
     id: int
     title: str
+    content_locale: str = "und"
+    translation_group_id: Optional[str] = None
     summary: Optional[str]
     category_id: int
     is_builtin: bool

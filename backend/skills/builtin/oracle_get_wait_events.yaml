@@ -55,3 +55,21 @@ code: |
           "wait_events": result.get("data", []),
           "columns": result.get("columns", [])
       }
+
+i18n:
+  zh-CN:
+    name: Oracle 等待事件
+    description: 执行“Oracle 等待事件”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+      limit: 返回条数上限。
+    permission_descriptions:
+      execute_query: 允许执行受控数据库查询
+  en-US:
+    name: Oracle Wait Events
+    description: Get Oracle database wait events and statistics
+    parameter_descriptions:
+      datasource_id: The database connection ID
+      limit: Maximum number of wait events to return (default 20)
+    permission_descriptions:
+      execute_query: Execute governed database queries

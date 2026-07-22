@@ -54,3 +54,19 @@ code: |
           "tables": tables,
           "count": len(tables)
       }
+
+i18n:
+  zh-CN:
+    name: SAP HANA 表碎片分析
+    description: 执行“SAP HANA 表碎片分析”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+    permission_descriptions:
+      execute_query: 允许执行受控数据库查询
+  en-US:
+    name: HANA Table Fragmentation
+    description: Get SAP HANA table fragmentation information to identify tables that may benefit from reorganization
+    parameter_descriptions:
+      datasource_id: The database connection ID
+    permission_descriptions:
+      execute_query: Execute governed database queries

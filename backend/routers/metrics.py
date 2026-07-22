@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends, Query, HTTPException, Body
+from fastapi import APIRouter, Depends, Query, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from typing import List, Optional, Dict, Any
@@ -16,6 +16,8 @@ from backend.utils.datetime_helper import now, normalize_local_datetime, to_utc_
 from backend.services import metric_collector
 from backend.services.integration_scheduler import execute_integration
 from backend.services.alert_template_service import resolve_effective_inspection_config
+from backend.i18n.locale import message_payload
+from backend.i18n.errors import ApiError
 
 logger = logging.getLogger(__name__)
 
@@ -516,10 +518,10 @@ async def refresh_metrics(
     datasource = await get_alive_by_id(db, Datasource, conn_id)
 
     if not datasource:
-        raise HTTPException(status_code=404, detail="数据源不存在")
+        raise ApiError(404, "datasource.not_found")
 
     if not datasource.is_active:
-        raise HTTPException(status_code=400, detail="数据源未激活")
+        raise ApiError(400, "operation.not_allowed")
 
     # Trigger metric collection
     try:
@@ -527,7 +529,7 @@ async def refresh_metrics(
             await execute_integration(conn_id)
         else:
             await metric_collector.collect_metrics_for_connection(conn_id)
-        return {"success": True, "message": "指标采集已触发"}
+        return message_payload("metric.collection_triggered", success=True)
     except Exception as e:
         logger.error(f"Failed to collect metrics for datasource {conn_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="采集失败")
+        raise ApiError(500, "operation.failed")

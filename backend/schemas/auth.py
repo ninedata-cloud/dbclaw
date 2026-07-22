@@ -1,7 +1,29 @@
-from pydantic import BaseModel, Field
-from typing import Literal, Optional
+from pydantic import BaseModel, Field, field_validator
+from typing import Optional
 from datetime import datetime
 from backend.schemas.base import TimestampSerializerMixin
+from backend.i18n.locale import DEFAULT_LOCALE, DEFAULT_TIMEZONE, normalize_locale, normalize_timezone
+
+
+class PreferenceFields(BaseModel):
+    locale: str = DEFAULT_LOCALE
+    timezone: str = DEFAULT_TIMEZONE
+
+    @field_validator("locale")
+    @classmethod
+    def validate_locale(cls, value: str) -> str:
+        normalized = normalize_locale(value)
+        if not normalized:
+            raise ValueError("Unsupported locale")
+        return normalized
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        normalized = normalize_timezone(value)
+        if not normalized:
+            raise ValueError("Invalid IANA time zone")
+        return normalized
 
 
 class LoginRequest(BaseModel):
@@ -9,13 +31,12 @@ class LoginRequest(BaseModel):
     password: str
 
 
-class UserResponse(TimestampSerializerMixin, BaseModel):
+class UserResponse(TimestampSerializerMixin, PreferenceFields):
     id: int
     username: str
     display_name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
-    locale: Literal["zh-CN", "en-US"] = "zh-CN"
     is_active: bool
     is_admin: bool
     created_at: Optional[datetime] = None
@@ -38,10 +59,19 @@ class CurrentUserUpdateRequest(BaseModel):
     display_name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
+    locale: Optional[str] = None
+    timezone: Optional[str] = None
+
+    _validate_locale = field_validator("locale")(PreferenceFields.validate_locale.__func__)
+    _validate_timezone = field_validator("timezone")(PreferenceFields.validate_timezone.__func__)
 
 
 class LocaleUpdateRequest(BaseModel):
-    locale: Literal["zh-CN", "en-US"]
+    locale: str
+    timezone: Optional[str] = None
+
+    _validate_locale = field_validator("locale")(PreferenceFields.validate_locale.__func__)
+    _validate_timezone = field_validator("timezone")(PreferenceFields.validate_timezone.__func__)
 
 
 class UserCreate(BaseModel):
@@ -51,6 +81,11 @@ class UserCreate(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     is_admin: bool = False
+    locale: str = DEFAULT_LOCALE
+    timezone: str = DEFAULT_TIMEZONE
+
+    _validate_locale = field_validator("locale")(PreferenceFields.validate_locale.__func__)
+    _validate_timezone = field_validator("timezone")(PreferenceFields.validate_timezone.__func__)
 
 
 class UserUpdate(BaseModel):
@@ -58,6 +93,11 @@ class UserUpdate(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     is_admin: Optional[bool] = None
+    locale: Optional[str] = None
+    timezone: Optional[str] = None
+
+    _validate_locale = field_validator("locale")(PreferenceFields.validate_locale.__func__)
+    _validate_timezone = field_validator("timezone")(PreferenceFields.validate_timezone.__func__)
 
 
 class ResetPasswordRequest(BaseModel):

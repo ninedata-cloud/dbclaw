@@ -740,11 +740,14 @@ async def execute_skill_call(
         execution_id = await _get_latest_execution_id()
         return json.dumps(result, default=str), execution_time, execution_id, visualization
 
-    except Exception as e:
+    except Exception:
         execution_time = int((time.time() - start_time) * 1000)
-        logger.error(f"Error executing skill {skill_id}: {e}")
+        logger.exception("Error executing skill %s", skill_id)
         execution_id = await _get_latest_execution_id()
-        return json.dumps({"error": str(e)}), execution_time, execution_id, None
+        return json.dumps({
+            "error": "operation_failed",
+            "error_code": "operation.failed",
+        }), execution_time, execution_id, None
 
 
 async def run_conversation_with_skills(
@@ -1517,9 +1520,13 @@ async def run_conversation_with_skills(
                         "citations": (knowledge_context.get("knowledge_plan") or {}).get("citations") or [],
                     }
 
-        except Exception as e:
-            logger.error(f"Conversation error at round {round_num}: {e}")
-            yield {"type": "error", "message": _ai_text(locale, "ai.response.error", error=str(e))}
+        except Exception:
+            logger.exception("Conversation error at round %s", round_num)
+            yield {
+                "type": "error",
+                "message": _ai_text(locale, "ai.session.error_safe"),
+                "error_code": "ai.session.error_safe",
+            }
             return
 
     yield {
@@ -1763,8 +1770,13 @@ Use the available skills to collect evidence and write a complete report in the 
             "skill_executions": skill_executions,
         }
 
-    except Exception as e:
-        error_message = f"{type(e).__name__}: {str(e)}"
+    except Exception:
+        logger.exception("Automatic report generation failed")
+        error_message = _localized(
+            locale,
+            "报告生成过程中出错。",
+            "An error occurred during report generation.",
+        )
         saw_error = True
 
     if saw_error:

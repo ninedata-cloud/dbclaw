@@ -3,9 +3,9 @@ const AIModelsPage = {
     models: [],
 
     async render() {
-        Header.render('AI 模型', DOM.el('button', {
+        Header.render(I18n.t('pageCopy.aiModels.aiModels'), DOM.el('button', {
             className: 'btn btn-primary',
-            innerHTML: '<i data-lucide="plus"></i> 新建模型',
+            innerHTML: I18n.t('pageCopy.aiModels.newModel'),
             onClick: () => this._showForm(null)
         }));
 
@@ -17,19 +17,13 @@ const AIModelsPage = {
             content.innerHTML = '';
 
             if (this.models.length === 0) {
-                content.innerHTML = `
-                    <div class="empty-state">
-                        <i data-lucide="brain"></i>
-                        <h3>暂无 AI 模型</h3>
-                        <p>请先添加一个模型配置，用于诊断和对话能力测试。</p>
-                    </div>
-                `;
+                content.innerHTML = I18n.t('pageCopy.aiModels.noAiModelsAddAModelConfiguration');
                 DOM.createIcons();
                 return;
             }
 
             const bar = DOM.el('div', { className: 'flex-between mb-16' });
-            bar.appendChild(DOM.el('span', { className: 'text-muted text-sm', textContent: `${this.models.length} 个模型已配置` }));
+            bar.appendChild(DOM.el('span', { className: 'text-muted text-sm', textContent: I18n.t('pageCopy.aiModels.configuredModelCount', { value0: this.models.length }) }));
             content.appendChild(bar);
 
             const grid = DOM.el('div', { className: 'datasource-grid' });
@@ -39,32 +33,13 @@ const AIModelsPage = {
             content.appendChild(grid);
             DOM.createIcons();
         } catch (err) {
-            Toast.error('加载模型失败：' + err.message);
+            Toast.error(err.message || I18n.t('common.requestFailed'));
         }
     },
 
     _createCard(model) {
         const card = DOM.el('div', { className: 'datasource-card ai-model-card' });
-        card.innerHTML = `
-            <div class="datasource-card-header">
-                <span class="datasource-card-name">${this._escapeHtml(model.name)}</span>
-                <span class="badge ${model.is_default ? 'badge-success' : 'badge-info'}">${model.is_default ? '默认' : this._escapeHtml(this._providerLabel(model.provider))}</span>
-            </div>
-            <div class="datasource-card-info">
-                <span><i data-lucide="cpu"></i> ${this._escapeHtml(model.model_name)}</span>
-                <span><i data-lucide="plug-zap"></i> ${this._escapeHtml(this._protocolLabel(model.protocol))}</span>
-                <span><i data-lucide="brain-cog"></i> ${I18n.t('aiModels.reasoningEffort', { value: this._escapeHtml(this._reasoningEffortLabel(model.reasoning_effort)) })}</span>
-                <span><i data-lucide="database"></i> ${model.context_window ? `${String(Number(model.context_window))} tokens` : '未配置上下文上限'}</span>
-                <span><i data-lucide="link"></i> ${this._escapeHtml(model.base_url)}</span>
-                <span><i data-lucide="key-round"></i> ${this._escapeHtml(model.api_key_masked)}</span>
-            </div>
-            <div class="datasource-card-actions">
-                ${!model.is_default ? '<button class="btn btn-sm btn-secondary default-btn"><i data-lucide="star"></i> 设置为默认</button>' : '<button class="btn btn-sm btn-success" disabled><i data-lucide="check"></i> 默认</button>'}
-                <button class="btn btn-sm btn-secondary test-btn"><i data-lucide="message-square"></i> 测试</button>
-                <button class="btn btn-sm btn-secondary edit-btn"><i data-lucide="pencil"></i> 编辑</button>
-                <button class="btn btn-sm btn-danger delete-btn"><i data-lucide="trash-2"></i></button>
-            </div>
-        `;
+        card.innerHTML = I18n.t('pageCopy.aiModels.modelCard', { value0: this._escapeHtml(model.name), value1: model.is_default ? 'badge-success' : 'badge-info', value2: model.is_default ? I18n.t('pageCopy.aiModels.default') : this._escapeHtml(this._providerLabel(model.provider)), value3: this._escapeHtml(model.model_name), value4: this._escapeHtml(this._protocolLabel(model.protocol)), value5: I18n.t('aiModels.reasoningEffort', { value: this._escapeHtml(this._reasoningEffortLabel(model.reasoning_effort)) }), value6: model.context_window ? `${String(Number(model.context_window))} tokens` : I18n.t('pageCopy.aiModels.contextLimitNotConfigured'), value7: this._escapeHtml(model.base_url), value8: this._escapeHtml(model.api_key_masked), value9: !model.is_default ? I18n.t('pageCopy.aiModels.setAsDefault') : I18n.t('pageCopy.aiModels.default2') });
 
         if (!model.is_default) {
             card.querySelector('.default-btn').addEventListener('click', (e) => {
@@ -91,38 +66,7 @@ const AIModelsPage = {
     _showForm(model) {
         const isEdit = !!model;
         const form = DOM.el('form');
-        form.innerHTML = `
-            <div class="form-group"><label>名称</label><input type="text" class="form-input" name="name" required placeholder="Claude Opus 4.6" value="${this._escapeAttr(model?.name || '')}"></div>
-            <div class="form-row">
-                <div class="form-group"><label>提供商</label>
-                    <select class="form-select" name="provider">
-                        <option value="openai" ${model?.provider === 'openai' ? 'selected' : ''}>OpenAI</option>
-                        <option value="dashscope" ${model?.provider === 'dashscope' ? 'selected' : ''}>DashScope</option>
-                        <option value="anthropic" ${model?.provider === 'anthropic' ? 'selected' : ''}>Anthropic</option>
-                        <option value="other" ${model?.provider === 'other' ? 'selected' : ''}>Other</option>
-                    </select>
-                </div>
-                <div class="form-group"><label>协议</label>
-                    <select class="form-select" name="protocol">
-                        <option value="openai" ${model?.protocol === 'openai' || !model?.protocol ? 'selected' : ''}>OpenAI 协议</option>
-                        <option value="anthropic" ${model?.protocol === 'anthropic' ? 'selected' : ''}>Anthropic 原生协议</option>
-                    </select>
-                </div>
-            </div>
-            <div class="form-group"><label>模型名称</label><input type="text" class="form-input" name="model_name" required placeholder="claude-opus-4-6" value="${this._escapeAttr(model?.model_name || '')}"></div>
-            <div class="form-group"><label>推理强度</label>
-                <select class="form-select" name="reasoning_effort">
-                    <option value="" ${!model?.reasoning_effort ? 'selected' : ''}>默认</option>
-                    <option value="low" ${model?.reasoning_effort === 'low' ? 'selected' : ''}>低</option>
-                    <option value="medium" ${model?.reasoning_effort === 'medium' ? 'selected' : ''}>中</option>
-                    <option value="high" ${model?.reasoning_effort === 'high' ? 'selected' : ''}>高</option>
-                </select>
-            </div>
-            <div class="form-group"><label>上下文上限（tokens）</label><input type="number" min="1" step="1" class="form-input" name="context_window" placeholder="${I18n.t('placeholders.contextWindow')}" value="${this._escapeAttr(model?.context_window || '')}"></div>
-            <div class="form-group"><label>基础 URL</label><input type="text" class="form-input" name="base_url" required placeholder="https://api.anthropic.com" value="${this._escapeAttr(model?.base_url || '')}"></div>
-            <div class="form-group"><label>API 密钥</label><input type="password" class="form-input" name="api_key" ${isEdit ? '' : 'required'} placeholder="${isEdit ? I18n.t('placeholders.keepApiKey') : 'sk-ant-...'}"></div>
-            <div class="text-muted text-sm">选择 Anthropic 原生协议时，请填写 Anthropic Messages API 对应的 Base URL 与模型名。</div>
-        `;
+        form.innerHTML = I18n.t('pageCopy.aiModels.nameProviderOpenaiDashscopeAnthropicOtherProtocol', { value0: this._escapeAttr(model?.name || ''), value1: model?.provider === 'openai' ? 'selected' : '', value2: model?.provider === 'dashscope' ? 'selected' : '', value3: model?.provider === 'anthropic' ? 'selected' : '', value4: model?.provider === 'other' ? 'selected' : '', value5: model?.protocol === 'openai' || !model?.protocol ? 'selected' : '', value6: model?.protocol === 'anthropic' ? 'selected' : '', value7: this._escapeAttr(model?.model_name || ''), value8: !model?.reasoning_effort ? 'selected' : '', value9: model?.reasoning_effort === 'low' ? 'selected' : '', value10: model?.reasoning_effort === 'medium' ? 'selected' : '', value11: model?.reasoning_effort === 'high' ? 'selected' : '', value12: I18n.t('placeholders.contextWindow'), value13: this._escapeAttr(model?.context_window || ''), value14: this._escapeAttr(model?.base_url || ''), value15: isEdit ? '' : 'required', value16: isEdit ? I18n.t('placeholders.keepApiKey') : 'sk-ant-...' });
 
         const providerEl = form.querySelector('[name="provider"]');
         const protocolEl = form.querySelector('[name="protocol"]');
@@ -153,7 +97,7 @@ const AIModelsPage = {
 
         const submitBtn = DOM.el('button', {
             className: 'btn btn-primary',
-            textContent: isEdit ? '保存' : '创建',
+            textContent: isEdit ? I18n.t('pageCopy.aiModels.save') : I18n.t('pageCopy.aiModels.create'),
             type: 'button',
             onClick: () => form.requestSubmit()
         });
@@ -166,10 +110,10 @@ const AIModelsPage = {
                 if (isEdit) {
                     if (!data.api_key) delete data.api_key;
                     await API.updateAIModel(model.id, data);
-                    Toast.success('模型已更新');
+                    Toast.success(I18n.t('pageCopy.aiModels.modelUpdated'));
                 } else {
                     await API.createAIModel(data);
-                    Toast.success('模型已创建');
+                    Toast.success(I18n.t('pageCopy.aiModels.modelCreated'));
                 }
                 Modal.hide();
                 this.render();
@@ -179,10 +123,10 @@ const AIModelsPage = {
         }, { submitControls: [submitBtn] });
 
         const footer = DOM.el('div');
-        footer.appendChild(DOM.el('button', { className: 'btn btn-secondary', textContent: '取消', type: 'button', onClick: () => Modal.hide() }));
+        footer.appendChild(DOM.el('button', { className: 'btn btn-secondary', textContent: I18n.t('pageCopy.aiModels.cancel'), type: 'button', onClick: () => Modal.hide() }));
         footer.appendChild(submitBtn);
 
-        Modal.show({ title: isEdit ? '编辑模型' : '新建 AI 模型', content: form, footer, width: '520px' });
+        Modal.show({ title: isEdit ? I18n.t('pageCopy.aiModels.editModel') : I18n.t('pageCopy.aiModels.newAiModel'), content: form, footer, width: '520px' });
     },
 
     _showTestDialog(model) {
@@ -193,32 +137,14 @@ const AIModelsPage = {
         };
 
         const wrapper = DOM.el('div');
-        wrapper.innerHTML = `
-            <div class="mb-16" style="padding: 12px; border: 1px solid var(--border-color, #2a3441); border-radius: 10px; background: var(--panel-bg, rgba(255,255,255,0.02));">
-                <div class="text-sm" style="display: grid; gap: 6px;">
-                    <div><strong>模型：</strong>${this._escapeHtml(model.name)}</div>
-                    <div><strong>提供商：</strong>${this._escapeHtml(this._providerLabel(model.provider))}</div>
-                    <div><strong>协议：</strong>${this._escapeHtml(this._protocolLabel(model.protocol))}</div>
-                    <div><strong>模型名：</strong>${this._escapeHtml(model.model_name)}</div>
-                    <div><strong>推理强度：</strong>${this._escapeHtml(this._reasoningEffortLabel(model.reasoning_effort))}</div>
-                    <div><strong>上下文上限：</strong>${model.context_window ? `${String(Number(model.context_window))} tokens` : '未配置'}</div>
-                    <div><strong>基础 URL：</strong>${this._escapeHtml(model.base_url)}</div>
-                </div>
-            </div>
-            <div class="test-chat-messages" style="height: 320px; overflow-y: auto; border: 1px solid var(--border-color, #2a3441); border-radius: 10px; padding: 12px; background: var(--panel-bg, rgba(255,255,255,0.02)); display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px;"></div>
-            <div class="form-group" style="margin-bottom: 0;">
-                <label>测试消息</label>
-                <textarea class="form-input test-chat-input" rows="4" placeholder="${I18n.t('placeholders.modelTestMessage')}"></textarea>
-            </div>
-            <div class="text-muted text-sm" style="margin-top: 8px;">用于快速验证当前已保存模型是否可正常对话。</div>
-        `;
+        wrapper.innerHTML = I18n.t('pageCopy.aiModels.modelValueProviderValueAgreementValueModel', { value0: this._escapeHtml(model.name), value1: this._escapeHtml(this._providerLabel(model.provider)), value2: this._escapeHtml(this._protocolLabel(model.protocol)), value3: this._escapeHtml(model.model_name), value4: this._escapeHtml(this._reasoningEffortLabel(model.reasoning_effort)), value5: model.context_window ? `${String(Number(model.context_window))} tokens` : I18n.t('pageCopy.aiModels.notConfigured'), value6: this._escapeHtml(model.base_url), value7: I18n.t('placeholders.modelTestMessage') });
 
         const messagesEl = wrapper.querySelector('.test-chat-messages');
         const inputEl = wrapper.querySelector('.test-chat-input');
 
         const renderMessages = () => {
             if (state.messages.length === 0) {
-                messagesEl.innerHTML = '<div class="text-muted text-sm">请输入一条消息，验证该模型是否可正常回复。</div>';
+                messagesEl.innerHTML = I18n.t('pageCopy.aiModels.enterAMessageToVerifyThatThe');
                 return;
             }
 
@@ -227,7 +153,7 @@ const AIModelsPage = {
                 return `
                     <div style="display: flex; ${isUser ? 'justify-content: flex-end;' : 'justify-content: flex-start;'}">
                         <div style="max-width: 85%; padding: 10px 12px; border-radius: 10px; ${isUser ? 'background: #2563eb; color: #fff;' : 'background: var(--card-bg, #1f2937); border: 1px solid var(--border-color, #374151); color: inherit;'}">
-                            <div class="text-xs text-muted" style="margin-bottom: 6px; ${isUser ? 'color: rgba(255,255,255,0.8);' : ''}">${isUser ? '你' : '模型'}</div>
+                            <div class="text-xs text-muted" style="margin-bottom: 6px; ${isUser ? 'color: rgba(255,255,255,0.8);' : ''}">${isUser ? I18n.t('pageCopy.aiModels.currentUserLabel') : I18n.t('pageCopy.aiModels.model')}</div>
                             <div class="test-chat-message-content">${isUser ? this._escapeHtml(message.content).replace(/\n/g, '<br>') : MarkdownRenderer.render(message.content)}</div>
                         </div>
                     </div>
@@ -242,17 +168,17 @@ const AIModelsPage = {
         const sendBtn = DOM.el('button', {
             className: 'btn btn-primary',
             type: 'button',
-            innerHTML: '<i data-lucide="send"></i> 发送',
+            innerHTML: I18n.t('pageCopy.aiModels.send'),
         });
         const clearBtn = DOM.el('button', {
             className: 'btn btn-secondary',
             type: 'button',
-            textContent: '清空对话',
+            textContent: I18n.t('pageCopy.aiModels.clearConversation'),
         });
         const closeBtn = DOM.el('button', {
             className: 'btn btn-secondary',
             type: 'button',
-            textContent: '关闭',
+            textContent: I18n.t('pageCopy.aiModels.close'),
             onClick: () => Modal.hide(),
         });
 
@@ -260,8 +186,8 @@ const AIModelsPage = {
             sendBtn.disabled = state.sending;
             inputEl.disabled = state.sending;
             sendBtn.innerHTML = state.sending
-                ? '<div class="spinner"></div> 发送中'
-                : '<i data-lucide="send"></i> 发送';
+                ? I18n.t('pageCopy.aiModels.sending')
+                : I18n.t('pageCopy.aiModels.send');
             DOM.createIcons();
         };
 
@@ -312,30 +238,30 @@ const AIModelsPage = {
         footer.appendChild(clearBtn);
         footer.appendChild(sendBtn);
 
-        Modal.show({ title: `测试模型：${model.name}`, content: wrapper, footer, width: '760px' });
+        Modal.show({ title: I18n.t('pageCopy.aiModels.testModelValue', { value0: model.name }), content: wrapper, footer, width: '760px' });
         renderMessages();
         updateSendButton();
         inputEl.focus();
     },
 
     async _deleteModel(model) {
-        if (!confirm(`确定删除模型“${model.name}”吗？此操作不可撤销。`)) return;
+        if (!confirm(I18n.t('pageCopy.aiModels.okToDeleteModelValueThisAction', { value0: model.name }))) return;
         try {
             await API.deleteAIModel(model.id);
-            Toast.success('模型已删除');
+            Toast.success(I18n.t('pageCopy.aiModels.modelDeleted'));
             this.render();
         } catch (err) {
-            Toast.error('删除失败：' + err.message);
+            Toast.error(err.message || I18n.t('common.requestFailed'));
         }
     },
 
     async _setDefault(id) {
         try {
             await API.setDefaultAIModel(id);
-            Toast.success('默认模型已更新');
+            Toast.success(I18n.t('pageCopy.aiModels.defaultModelUpdated'));
             this.render();
         } catch (err) {
-            Toast.error('设置默认模型失败：' + err.message);
+            Toast.error(err.message || I18n.t('common.requestFailed'));
         }
     },
 
@@ -346,15 +272,15 @@ const AIModelsPage = {
             anthropic: 'Anthropic',
             other: 'Other',
         };
-        return labels[provider] || provider || '未知';
+        return labels[provider] || provider || I18n.t('pageCopy.aiModels.unknown');
     },
 
     _protocolLabel(protocol) {
         const labels = {
-            openai: 'OpenAI 协议',
-            anthropic: 'Anthropic 协议',
+            openai: I18n.t('pageCopy.aiModels.openaiProtocol'),
+            anthropic: I18n.t('pageCopy.aiModels.anthropicProtocol'),
         };
-        return labels[protocol] || protocol || '未知协议';
+        return labels[protocol] || protocol || I18n.t('pageCopy.aiModels.unknownProtocol');
     },
 
     _reasoningEffortLabel(reasoningEffort) {
@@ -363,7 +289,7 @@ const AIModelsPage = {
             medium: I18n.t('status.medium'),
             high: I18n.t('status.high'),
         };
-        return labels[reasoningEffort] || I18n.translateLegacyText('默认');
+        return labels[reasoningEffort] || I18n.t('pageCopy.aiModels.default');
     },
 
     _escapeHtml(value) {

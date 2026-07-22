@@ -113,3 +113,27 @@ code: |
           return {"success": False, "error": f"Recipient refused: {str(e)}"}
       except Exception as e:
           return {"success": False, "error": f"Failed to send email: {str(e)}"}
+
+i18n:
+  zh-CN:
+    name: 发送邮件
+    description: 执行“发送邮件”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      to: 收件人。
+      subject: 主题。
+      body: body。
+      cc: 抄送人。
+      html: html。
+    permission_descriptions:
+      access_external_api: 允许访问外部 API
+  en-US:
+    name: Send Email
+    description: Send an email to specified recipients using the configured SMTP server
+    parameter_descriptions:
+      to: Recipient email address (single address or comma-separated list)
+      subject: Email subject line
+      body: Email body content (plain text)
+      cc: CC email addresses (comma-separated)
+      html: Whether the body is HTML content (default false, plain text)
+    permission_descriptions:
+      access_external_api: Access external APIs

@@ -80,7 +80,7 @@ def test_create_integration_rejects_builtin_template_creation(client_factory, db
     )
 
     assert response.status_code == 400
-    assert "不能创建内置模板" in response.text
+    assert response.json()["detail"] == "operation.not_allowed"
 
 
 @pytest.mark.api
@@ -103,7 +103,8 @@ def test_test_integration_maps_value_error_to_400(mocker, client_factory, db_ove
     response = client.post("/api/integrations/1/test", json={"params": {}})
 
     assert response.status_code == 400
-    assert "boom" in response.text
+    assert response.json()["detail"] == "operation.failed"
+    assert "boom" not in response.text
 
 
 @pytest.mark.api

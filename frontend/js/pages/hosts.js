@@ -20,17 +20,11 @@ const HostsPage = {
             this._applySort();
             Store.set('hosts', this.allHosts);
 
-            Header.render('主机管理', this._buildHeaderActions());
+            Header.render(I18n.t('pageCopy.hosts.hostManagement'), this._buildHeaderActions());
             content.innerHTML = '';
 
             if (this.allHosts.length === 0) {
-                content.innerHTML = `
-                    <div class="empty-state">
-                        <i data-lucide="terminal"></i>
-                        <h3>暂无主机</h3>
-                        <p>添加第一台主机后，即可启用数据库隧道连接。</p>
-                    </div>
-                `;
+                content.innerHTML = I18n.t('pageCopy.hosts.noHostsAddYourFirstHostTo');
                 DOM.createIcons();
                 return;
             }
@@ -43,22 +37,17 @@ const HostsPage = {
             DOM.createIcons();
 
         } catch (err) {
-            Toast.error(I18n.translateLegacyText('加载失败') + ': ' + err.message);
+            Toast.error(I18n.t('pageCopy.hosts.loadFailed') + ': ' + err.message);
         }
     },
 
     _buildHeaderActions() {
         const filtersContainer = DOM.el('div', { className: 'dashboard-filters' });
-        filtersContainer.innerHTML = `
-            <input type="text" id="filter-search" class="filter-input" placeholder="${I18n.t('placeholders.searchHost')}" style="min-width:220px">
-            <button id="btn-search" class="btn btn-primary">
-                <i data-lucide="search"></i> 检索
-            </button>
-        `;
+        filtersContainer.innerHTML = I18n.t('pageCopy.hosts.search', { value0: I18n.t('placeholders.searchHost') });
 
         const addBtn = DOM.el('button', {
             className: 'btn btn-primary',
-            innerHTML: '<i data-lucide="plus"></i> 新建主机',
+            innerHTML: I18n.t('pageCopy.hosts.newHost'),
             onClick: () => this._showForm(null)
         });
 
@@ -139,26 +128,7 @@ const HostsPage = {
         const container = DOM.$('#host-table-container');
         if (!container) return;
 
-        container.innerHTML = `
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th class="sortable" data-sort="id">编号 <span class="sort-icon" data-field="id"></span></th>
-                        <th class="sortable" data-sort="name">名称 <span class="sort-icon" data-field="name"></span></th>
-                        <th class="sortable" data-sort="host">主机 <span class="sort-icon" data-field="host"></span></th>
-                        <th class="sortable" data-sort="port">端口 <span class="sort-icon" data-field="port"></span></th>
-                        <th class="sortable" data-sort="status">状态 <span class="sort-icon" data-field="status"></span></th>
-                        <th class="sortable" data-sort="cpu_usage">CPU <span class="sort-icon" data-field="cpu_usage"></span></th>
-                        <th class="sortable" data-sort="memory_usage">内存 <span class="sort-icon" data-field="memory_usage"></span></th>
-                        <th class="sortable" data-sort="disk_usage">磁盘 <span class="sort-icon" data-field="disk_usage"></span></th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${this.filteredHosts.map(host => this._renderHostRow(host)).join('')}
-                </tbody>
-            </table>
-        `;
+        container.innerHTML = I18n.t('pageCopy.hosts.idNameHostPortStatusCpuMemory', { value0: this.filteredHosts.map(host => this._renderHostRow(host)).join('') });
         this._updateSortIcons();
         container.querySelectorAll('th.sortable').forEach(th => {
             th.addEventListener('click', () => {
@@ -176,34 +146,7 @@ const HostsPage = {
         const memColor = this._getMetricColor(host.memory_usage);
         const diskColor = this._getMetricColor(host.disk_usage);
 
-        return `
-            <tr>
-                <td class="instance-mono">${host.id}</td>
-                <td><strong>${host.name}</strong></td>
-                <td>${host.host}</td>
-                <td>${host.port}</td>
-                <td>${statusBadge}</td>
-                <td class="${cpuColor}">${host.cpu_usage != null ? host.cpu_usage.toFixed(1) + '%' : '-'}</td>
-                <td class="${memColor}">${host.memory_usage != null ? host.memory_usage.toFixed(1) + '%' : '-'}</td>
-                <td class="${diskColor}">${host.disk_usage != null ? host.disk_usage.toFixed(1) + '%' : '-'}</td>
-                <td>
-                    <div style="display:flex;gap:4px;">
-                        <button class="btn btn-sm btn-primary" onclick="HostsPage._viewDetail(${host.id})" title="详情">
-                            <i data-lucide="eye"></i>
-                        </button>
-                        <button class="btn btn-sm btn-secondary" onclick="HostsPage._testHost(${host.id})" title="测试连接">
-                            <i data-lucide="plug"></i>
-                        </button>
-                        <button class="btn btn-sm btn-secondary" onclick="HostsPage._editHost(${host.id})" title="编辑">
-                            <i data-lucide="pencil"></i>
-                        </button>
-                        <button class="btn btn-sm btn-danger" onclick="HostsPage._deleteHost(${host.id})" title="删除">
-                            <i data-lucide="trash-2"></i>
-                        </button>
-                    </div>
-                </td>
-            </tr>
-        `;
+        return I18n.t('pageCopy.hosts.hostRow', { value0: host.id, value1: host.name, value2: host.host, value3: host.port, value4: statusBadge, value5: cpuColor, value6: host.cpu_usage != null ? host.cpu_usage.toFixed(1) + '%' : '-', value7: memColor, value8: host.memory_usage != null ? host.memory_usage.toFixed(1) + '%' : '-', value9: diskColor, value10: host.disk_usage != null ? host.disk_usage.toFixed(1) + '%' : '-', value11: host.id, value12: host.id, value13: host.id, value14: host.id });
     },
 
     _getStatusBadge(host) {
@@ -211,11 +154,11 @@ const HostsPage = {
         const message = host.status_message || '';
 
         const statusMap = {
-            normal: { icon: '✓', label: '正常', class: 'badge-success', title: message || '所有指标正常' },
-            warning: { icon: '⚠', label: '异常', class: 'badge-warning', title: message || '部分指标接近阈值' },
-            error: { icon: '✗', label: '严重', class: 'badge-danger', title: message || '部分指标超过阈值' },
-            offline: { icon: '○', label: '离线', class: 'badge-secondary', title: message || '暂无监控数据' },
-            unknown: { icon: '○', label: '未知', class: 'badge-secondary', title: message || '暂无监控数据' }
+            normal: { icon: '✓', label: I18n.t('pageCopy.hosts.healthy'), class: 'badge-success', title: message || I18n.t('pageCopy.hosts.allMetricsAreHealthy') },
+            warning: { icon: '⚠', label: I18n.t('pageCopy.hosts.abnormal'), class: 'badge-warning', title: message || I18n.t('pageCopy.hosts.someMetricsAreNearThresholds') },
+            error: { icon: '✗', label: I18n.t('pageCopy.hosts.critical'), class: 'badge-danger', title: message || I18n.t('pageCopy.hosts.someMetricsExceededThresholds') },
+            offline: { icon: '○', label: I18n.t('pageCopy.hosts.offline'), class: 'badge-secondary', title: message || I18n.t('pageCopy.hosts.noMonitoringData') },
+            unknown: { icon: '○', label: I18n.t('pageCopy.hosts.unknown'), class: 'badge-secondary', title: message || I18n.t('pageCopy.hosts.noMonitoringData') }
         };
 
         const s = statusMap[status] || statusMap.unknown;
@@ -236,14 +179,14 @@ const HostsPage = {
         try {
             const result = await API.testHost(id);
             if (result.success) {
-                Toast.success('连接成功!');
+                Toast.success(I18n.t('pageCopy.hosts.connected'));
             } else {
-                Toast.error(`连接测试失败: ${result.message}`);
+                Toast.error(result.message || I18n.t('common.failed'));
             }
             // 重新加载主机列表以更新状态和指标
             await this.render();
         } catch (err) {
-            Toast.error('测试失败: ' + err.message);
+            Toast.error(err.message || I18n.t('common.requestFailed'));
         } finally {
             btn.innerHTML = '<i data-lucide="plug"></i>';
             btn.disabled = false;
@@ -262,37 +205,20 @@ const HostsPage = {
 
     async _deleteHost(id) {
         const host = this.allHosts.find(h => h.id === id);
-        if (!host || !confirm(`确认删除主机 "${host.name}"？此操作无法撤销。`)) return;
+        if (!host || !confirm(I18n.t('pageCopy.hosts.confirmHostDeletionValueThisActionCannot', { value0: host.name }))) return;
         try {
             await API.deleteHost(id);
-            Toast.success('主机已删除');
+            Toast.success(I18n.t('pageCopy.hosts.hostDeleted'));
             this.render();
         } catch (err) {
-            Toast.error('删除失败: ' + err.message);
+            Toast.error(err.message || I18n.t('common.requestFailed'));
         }
     },
 
     _showForm(host) {
         const isEdit = !!host;
         const form = DOM.el('form');
-        form.innerHTML = `
-            <div class="form-group"><label>名称</label><input type="text" class="form-input" name="name" required placeholder="${I18n.t('placeholders.hostName')}" value="${host?.name || ''}"></div>
-            <div class="form-row">
-                <div class="form-group"><label>主机</label><input type="text" class="form-input" name="host" required placeholder="10.0.0.1" value="${host?.host || ''}"></div>
-                <div class="form-group"><label>端口</label><input type="number" class="form-input" name="port" value="${host?.port || 22}"></div>
-            </div>
-            <div class="form-row">
-                <div class="form-group"><label>用户名</label><input type="text" class="form-input" name="username" required placeholder="root" value="${host?.username || ''}"></div>
-                <div class="form-group"><label>认证方式</label>
-                    <select class="form-select" name="auth_type">
-                        <option value="password" ${host?.auth_type === 'password' || !host ? 'selected' : ''}>密码</option>
-                        <option value="key" ${host?.auth_type === 'key' ? 'selected' : ''}>私钥</option>
-                    </select>
-                </div>
-            </div>
-            <div class="form-group auth-password"><label>密码</label><input type="password" class="form-input" name="password" placeholder="${isEdit ? I18n.t('placeholders.keepUnchanged') : ''}"></div>
-            <div class="form-group auth-key" style="display:none"><label>私钥</label><textarea class="form-textarea" name="private_key" rows="4" placeholder="-----BEGIN RSA PRIVATE KEY-----"></textarea></div>
-        `;
+        form.innerHTML = I18n.t('pageCopy.hosts.nameHostPortUsernameAuthenticationMethodPassword', { value0: I18n.t('placeholders.hostName'), value1: host?.name || '', value2: host?.host || '', value3: host?.port || 22, value4: host?.username || '', value5: host?.auth_type === 'password' || !host ? 'selected' : '', value6: host?.auth_type === 'key' ? 'selected' : '', value7: isEdit ? I18n.t('placeholders.keepUnchanged') : '' });
 
         const authSelect = form.querySelector('[name="auth_type"]');
         const pwdGroup = form.querySelector('.auth-password');
@@ -307,7 +233,7 @@ const HostsPage = {
 
         const submitBtn = DOM.el('button', {
             className: 'btn btn-primary',
-            textContent: isEdit ? '更新' : '创建',
+            textContent: isEdit ? I18n.t('pageCopy.hosts.update') : I18n.t('pageCopy.hosts.create'),
             type: 'button',
             onClick: () => form.requestSubmit()
         });
@@ -322,7 +248,7 @@ const HostsPage = {
 
         const testBtn = DOM.el('button', {
             className: 'btn btn-secondary',
-            innerHTML: '<i data-lucide="plug"></i> 测试连接',
+            innerHTML: I18n.t('pageCopy.hosts.testConnection'),
             type: 'button',
             onClick: async (e) => {
                 const btn = e.currentTarget;
@@ -332,12 +258,12 @@ const HostsPage = {
                 try {
                     const result = await API.testHostConnection(getFormData());
                     if (result.success) {
-                        Toast.success('连接成功!');
+                        Toast.success(I18n.t('pageCopy.hosts.connected'));
                     } else {
-                        Toast.error(`连接测试失败: ${result.message}`);
+                        Toast.error(result.message || I18n.t('common.failed'));
                     }
                 } catch (err) {
-                    Toast.error('测试失败: ' + err.message);
+                    Toast.error(err.message || I18n.t('common.requestFailed'));
                 } finally {
                     btn.innerHTML = `<i data-lucide="plug"></i> ${rawText}`;
                     btn.disabled = false;
@@ -351,10 +277,10 @@ const HostsPage = {
             try {
                 if (isEdit) {
                     await API.updateHost(host.id, data);
-                    Toast.success('主机已更新');
+                    Toast.success(I18n.t('pageCopy.hosts.hostUpdated'));
                 } else {
                     await API.createHost(data);
-                    Toast.success('主机已创建');
+                    Toast.success(I18n.t('pageCopy.hosts.hostCreated'));
                 }
                 Modal.hide();
                 this.render();
@@ -370,11 +296,11 @@ const HostsPage = {
         const footerLeft = DOM.el('div');
         const footerRight = DOM.el('div', { style: 'display:flex;gap:8px;' });
         footerLeft.appendChild(testBtn);
-        footerRight.appendChild(DOM.el('button', { className: 'btn btn-secondary', textContent: '取消', type: 'button', onClick: () => Modal.hide() }));
+        footerRight.appendChild(DOM.el('button', { className: 'btn btn-secondary', textContent: I18n.t('pageCopy.hosts.cancel'), type: 'button', onClick: () => Modal.hide() }));
         footerRight.appendChild(submitBtn);
         footer.appendChild(footerLeft);
         footer.appendChild(footerRight);
 
-        Modal.show({ title: isEdit ? '编辑主机' : '新建主机', content: form, footer });
+        Modal.show({ title: isEdit ? I18n.t('pageCopy.hosts.editHost') : I18n.t('pageCopy.hosts.newHost2'), content: form, footer });
     },
 };

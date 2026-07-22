@@ -47,3 +47,15 @@ code: |
           "success": True,
           "datasource": datasource_list
       }
+
+i18n:
+  zh-CN:
+    name: 列出数据源
+    description: 执行“列出数据源”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions: {}
+    permission_descriptions: {}
+  en-US:
+    name: List Datasources
+    description: List all configured database datasource
+    parameter_descriptions: {}
+    permission_descriptions: {}

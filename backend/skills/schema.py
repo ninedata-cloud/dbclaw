@@ -17,6 +17,13 @@ class SkillParameter(BaseModel):
     items: Optional[Dict[str, Any]] = None  # For array item validation
 
 
+class SkillTranslation(BaseModel):
+    name: str
+    description: str
+    parameter_descriptions: Dict[str, str] = Field(default_factory=dict)
+    permission_descriptions: Dict[str, str] = Field(default_factory=dict)
+
+
 class SkillDefinition(BaseModel):
     id: str = Field(..., pattern=r"^[a-z0-9_]+$")
     name: str
@@ -30,6 +37,7 @@ class SkillDefinition(BaseModel):
     permissions: List[str] = []
     timeout: Optional[int] = None  # Execution timeout in seconds (optional)
     code: str
+    i18n: Dict[str, SkillTranslation] = Field(default_factory=dict)
 
     @field_validator("permissions")
     @classmethod
@@ -72,6 +80,8 @@ class SkillResponse(BaseModel):
     author_id: Optional[int]
     category: Optional[str]
     description: str
+    content_locale: str = "und"
+    i18n: Dict[str, SkillTranslation] = Field(default_factory=dict)
     tags: List[str]
     parameters: List[SkillParameter]
     dependencies: List[str]
@@ -97,6 +107,7 @@ class SkillExecutionResponse(BaseModel):
     success: bool
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+    error_code: Optional[str] = None
     execution_time_ms: int
 
 

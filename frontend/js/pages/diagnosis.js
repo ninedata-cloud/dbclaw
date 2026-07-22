@@ -105,15 +105,15 @@ const DiagnosisPage = {
             return options.initialSessionTitle;
         }
         if (options.initialReportId) {
-            return `巡检报告诊断 #${options.initialReportId}`;
+            return I18n.t('pageCopy.diagnosis.inspectionReportDiagnosisValue', { value0: options.initialReportId });
         }
         if (options.initialEventId) {
-            return `告警事件诊断 #${options.initialEventId}`;
+            return I18n.t('pageCopy.diagnosis.alarmEventDiagnosisValue', { value0: options.initialEventId });
         }
         if (options.initialAlertId) {
-            return `告警诊断 #${options.initialAlertId}`;
+            return I18n.t('pageCopy.diagnosis.alarmDiagnosisValue', { value0: options.initialAlertId });
         }
-        return '新建会话';
+        return I18n.t('pageCopy.diagnosis.newSession');
     },
 
     _stripMarkdownText(value) {
@@ -141,46 +141,46 @@ const DiagnosisPage = {
         const linkedReport = context.linked_report;
 
         if (datasourceName || datasourceType) {
-            lines.push(`数据源：${[datasourceName, datasourceType].filter(Boolean).join(' / ')}`);
+            lines.push(I18n.t('pageCopy.diagnosis.datasourceValue', { value0: [datasourceName, datasourceType].filter(Boolean).join(' / ') }));
         }
         if (triggerType) {
-            lines.push(`触发类型：${this._compactPromptText(triggerType, 120)}`);
+            lines.push(I18n.t('pageCopy.diagnosis.triggerTypeValue', { value0: this._compactPromptText(triggerType, 120) }));
         }
         if (context.case_summary) {
-            lines.push(`案例摘要：${this._compactPromptText(context.case_summary, 220)}`);
+            lines.push(I18n.t('pageCopy.diagnosis.caseSummaryValue', { value0: this._compactPromptText(context.case_summary, 220) }));
         }
         if (context.diagnosis_summary) {
-            lines.push(`诊断摘要：${this._compactPromptText(context.diagnosis_summary, 260)}`);
+            lines.push(I18n.t('pageCopy.diagnosis.diagnosisSummaryValue', { value0: this._compactPromptText(context.diagnosis_summary, 260) }));
         }
         if (context.root_cause) {
-            lines.push(`根因：${this._compactPromptText(context.root_cause, 260)}`);
+            lines.push(I18n.t('pageCopy.diagnosis.rootCauseLabel', { value0: this._compactPromptText(context.root_cause, 260) }));
         }
         if (context.recommended_action) {
-            lines.push(`建议：${this._compactPromptText(context.recommended_action, 260)}`);
+            lines.push(I18n.t('pageCopy.diagnosis.recommendationsLabel', { value0: this._compactPromptText(context.recommended_action, 260) }));
         }
         if (linkedReport?.report_id) {
-            lines.push(`关联报告：#${linkedReport.report_id} ${this._compactPromptText(linkedReport.title || '', 120)}`.trim());
+            lines.push(I18n.t('pageCopy.diagnosis.linkedReportLabel', { value0: linkedReport.report_id, value1: this._compactPromptText(linkedReport.title || '', 120) }).trim());
         }
         return lines.filter(Boolean).join('\n');
     },
 
     _buildReportContextBlock(reportId, report = {}) {
-        const lines = [`关联巡检报告 #${reportId}`];
+        const lines = [I18n.t('pageCopy.diagnosis.inspectionReportValue', { value0: reportId })];
         if (report.title) {
-            lines.push(`标题：${this._compactPromptText(report.title, 160)}`);
+            lines.push(I18n.t('pageCopy.diagnosis.titleValue', { value0: this._compactPromptText(report.title, 160) }));
         }
         if (report.trigger_type) {
-            lines.push(`触发类型：${this._compactPromptText(report.trigger_type, 120)}`);
+            lines.push(I18n.t('pageCopy.diagnosis.triggerTypeValue', { value0: this._compactPromptText(report.trigger_type, 120) }));
         }
         if (report.status) {
-            lines.push(`状态：${this._compactPromptText(report.status, 80)}`);
+            lines.push(I18n.t('pageCopy.diagnosis.statusValue', { value0: this._compactPromptText(report.status, 80) }));
         }
         if (report.trigger_reason) {
-            lines.push(`触发原因：${this._compactPromptText(report.trigger_reason, 220)}`);
+            lines.push(I18n.t('pageCopy.diagnosis.triggerReasonValue', { value0: this._compactPromptText(report.trigger_reason, 220) }));
         }
         const reportSummary = this._compactPromptText(report.content_md, 320);
         if (reportSummary) {
-            lines.push(`报告摘要：${reportSummary}`);
+            lines.push(I18n.t('pageCopy.diagnosis.reportSummaryLabel', { value0: reportSummary }));
         }
         return lines.join('\n');
     },
@@ -201,7 +201,7 @@ const DiagnosisPage = {
         if (Number.isFinite(options.initialEventId)) {
             try {
                 const eventContext = await API.getAlertEventContext(options.initialEventId);
-                const block = this._buildDiagnosisContextBlock(`关联告警事件 #${options.initialEventId}`, eventContext);
+                const block = this._buildDiagnosisContextBlock(I18n.t('pageCopy.diagnosis.alarmValue', { value0: options.initialEventId }), eventContext);
                 if (block) contextBlocks.push(block);
             } catch (error) {
                 console.warn('Failed to load alert event context:', error);
@@ -212,11 +212,11 @@ const DiagnosisPage = {
             let contextBlock = '';
             try {
                 const alertContext = await API.getAlertContext(options.initialAlertId);
-                contextBlock = this._buildDiagnosisContextBlock(`关联告警 #${options.initialAlertId}`, alertContext);
+                contextBlock = this._buildDiagnosisContextBlock(I18n.t('pageCopy.diagnosis.alarmValue2', { value0: options.initialAlertId }), alertContext);
             } catch (error) {
                 try {
                     const eventContext = await API.getAlertEventContext(options.initialAlertId);
-                    contextBlock = this._buildDiagnosisContextBlock(`关联告警事件 #${options.initialAlertId}`, eventContext);
+                    contextBlock = this._buildDiagnosisContextBlock(I18n.t('pageCopy.diagnosis.alarmValue', { value0: options.initialAlertId }), eventContext);
                 } catch (eventError) {
                     console.warn('Failed to load alert context:', error, eventError);
                 }
@@ -241,13 +241,13 @@ const DiagnosisPage = {
         }
 
         const contextText = contextBlocks.join('\n\n');
-        const contextHeading = '系统补充上下文：';
+        const contextHeading = I18n.t('pageCopy.diagnosis.systemSupplementaryContext');
         if (options.initialAsk) {
             if (!String(options.initialAsk).includes(contextHeading)) {
                 options.initialAsk = `${options.initialAsk}\n\n${contextHeading}\n${contextText}`;
             }
         } else {
-            options.initialAsk = `请基于以下上下文进行诊断分析，并给出处置建议。\n\n${contextHeading}\n${contextText}`;
+            options.initialAsk = I18n.t('pageCopy.diagnosis.contextDiagnosisAnalysisDisposalRecommendationsValueValue', { value0: contextHeading, value1: contextText });
         }
     },
 
@@ -295,7 +295,7 @@ const DiagnosisPage = {
             sidebar.style.width = '40px';
             sidebar.style.minWidth = '40px';
             btn.innerHTML = '<i data-lucide="panel-left-open"></i>';
-            btn.title = '显示会话列表';
+            btn.title = I18n.t('pageCopy.diagnosis.showConversationList');
             if (header) {
                 header.style.justifyContent = 'center';
             }
@@ -306,7 +306,7 @@ const DiagnosisPage = {
             sidebar.style.width = '280px';
             sidebar.style.minWidth = '280px';
             btn.innerHTML = '<i data-lucide="panel-left-close"></i>';
-            btn.title = '隐藏会话列表';
+            btn.title = I18n.t('pageCopy.diagnosis.hideSessionList');
             if (header) {
                 header.style.justifyContent = 'space-between';
             }
@@ -335,27 +335,27 @@ const DiagnosisPage = {
         const { isHostContext, displayName } = this._getWelcomeContextMeta();
 
         if (isHostContext) {
-            const hostReference = displayName ? `主机 ${displayName}` : '当前主机';
+            const hostReference = displayName ? I18n.t('pageCopy.diagnosis.hostValue', { value0: displayName }) : I18n.t('pageCopy.diagnosis.currentHost');
             return [
                 {
                     icon: 'activity',
-                    label: '运行总览',
-                    prompt: `请结合 ${hostReference} 的当前状态，给我一个主机运行健康总览，说明 CPU、内存、磁盘、网络和进程层面的整体情况、主要风险与优先排查项。`
+                    label: I18n.t('pageCopy.diagnosis.runOverview'),
+                    prompt: I18n.t('pageCopy.diagnosis.hostHealthPrompt', { value0: hostReference })
                 },
                 {
                     icon: 'gauge',
-                    label: '性能诊断',
-                    prompt: `请从 CPU 负载、内存压力、磁盘 I/O、网络吞吐和关键进程资源占用几个角度，帮我分析 ${hostReference} 的性能风险。`
+                    label: I18n.t('pageCopy.diagnosis.performanceDiagnostics'),
+                    prompt: I18n.t('pageCopy.diagnosis.cpuMemoryDiskIONetworkAnalysis', { value0: hostReference })
                 },
                 {
                     icon: 'shield-alert',
-                    label: '异常排查',
-                    prompt: `请帮我识别 ${hostReference} 当前最值得关注的异常信号，并按严重程度排序给出处置建议。`
+                    label: I18n.t('pageCopy.diagnosis.anomalyTroubleshooting'),
+                    prompt: I18n.t('pageCopy.diagnosis.anomalyTriagePrompt', { value0: hostReference })
                 },
                 {
                     icon: 'sliders-horizontal',
-                    label: '配置检查',
-                    prompt: `请检查 ${hostReference} 的操作系统与运行环境配置，指出明显不合理项、潜在风险和优化建议。`
+                    label: I18n.t('pageCopy.diagnosis.configurationCheck'),
+                    prompt: I18n.t('pageCopy.diagnosis.environmentReviewPrompt', { value0: hostReference })
                 },
             ];
         }
@@ -363,23 +363,23 @@ const DiagnosisPage = {
         return [
             {
                 icon: 'activity',
-                label: '运行总览',
-                prompt: '请结合当前数据源给我一个数据库运行健康总览，说明整体状态、主要风险和优先排查项。'
+                label: I18n.t('pageCopy.diagnosis.runOverview'),
+                prompt: I18n.t('pageCopy.diagnosis.pleaseGiveMeAnOverviewOfThe')
             },
             {
                 icon: 'gauge',
-                label: '性能诊断',
-                prompt: '请从连接数、负载、慢 SQL、锁等待和缓存命中率几个角度，帮我分析当前性能风险。'
+                label: I18n.t('pageCopy.diagnosis.performanceDiagnostics'),
+                prompt: I18n.t('pageCopy.diagnosis.pleaseHelpMeAnalyzeTheCurrentPerformance')
             },
             {
                 icon: 'shield-alert',
-                label: '异常排查',
-                prompt: '请帮我识别当前实例最值得关注的异常信号，并按严重程度排序给出处置建议。'
+                label: I18n.t('pageCopy.diagnosis.anomalyTroubleshooting'),
+                prompt: I18n.t('pageCopy.diagnosis.pleaseHelpMeIdentifyTheMostNoteworthy')
             },
             {
                 icon: 'sliders-horizontal',
-                label: '参数检查',
-                prompt: '请检查当前实例的关键参数配置，指出明显不合理项和优化建议。'
+                label: I18n.t('pageCopy.diagnosis.parameterCheck'),
+                prompt: I18n.t('pageCopy.diagnosis.pleaseCheckTheKeyParameterConfigurationOf')
             },
         ];
     },
@@ -388,26 +388,16 @@ const DiagnosisPage = {
         const options = this._renderOptions || {};
         const isCompactEmbedded = Boolean(options.embedded);
         const { isHostContext, displayName } = this._getWelcomeContextMeta(options);
-        const welcomeTitle = isCompactEmbedded ? '开始 AI 诊断' : 'DBClaw AI';
+        const welcomeTitle = isCompactEmbedded ? I18n.t('pageCopy.diagnosis.startAiDiagnosis') : 'DBClaw AI';
         const embeddedDescription = isHostContext
-            ? `可直接提问，或先使用下面的快捷入口对${displayName ? `主机 ${displayName}` : '当前主机'}进行诊断。`
-            : '可直接提问，或先使用下面的快捷入口。';
+            ? I18n.t('pageCopy.diagnosis.youCanAskQuestionsDirectlyOrUse', { value0: displayName ? I18n.t('pageCopy.diagnosis.hostValue', { value0: displayName }) : I18n.t('pageCopy.diagnosis.currentHost') })
+            : I18n.t('pageCopy.diagnosis.youCanAskQuestionsDirectlyOrUse2');
         const pageDescription = isHostContext
-            ? '围绕主机的 CPU、内存、磁盘、网络、进程与系统配置，快速给出可落地的诊断建议。'
-            : '围绕实例状态、连接、慢 SQL、锁等待与关键参数，快速给出可落地的诊断建议。';
+            ? I18n.t('pageCopy.diagnosis.quicklyProvidePracticalDiagnosticSuggestionsAroundThe')
+            : I18n.t('pageCopy.diagnosis.quicklyProvidePracticalDiagnosticSuggestionsAroundInstance');
         const highlightPills = isHostContext
-            ? `
-                    <div class="diagnosis-welcome-pill"><i data-lucide="server"></i><span>主机运行概览</span></div>
-                    <div class="diagnosis-welcome-pill"><i data-lucide="cpu"></i><span>CPU 与内存分析</span></div>
-                    <div class="diagnosis-welcome-pill"><i data-lucide="hard-drive"></i><span>磁盘与网络排查</span></div>
-                    <div class="diagnosis-welcome-pill"><i data-lucide="settings-2"></i><span>系统与进程建议</span></div>
-                `
-            : `
-                    <div class="diagnosis-welcome-pill"><i data-lucide="database"></i><span>实例运行概览</span></div>
-                    <div class="diagnosis-welcome-pill"><i data-lucide="timer"></i><span>慢查询与等待分析</span></div>
-                    <div class="diagnosis-welcome-pill"><i data-lucide="network"></i><span>连接与会话画像</span></div>
-                    <div class="diagnosis-welcome-pill"><i data-lucide="settings-2"></i><span>参数与容量建议</span></div>
-                `;
+            ? I18n.t('pageCopy.diagnosis.hostCpuMemoryanalysisDiskNetworkSystem')
+            : I18n.t('pageCopy.diagnosis.instanceSlowQueryWaitinganalysisConnectionSession');
         const quickAsks = isCompactEmbedded
             ? this._getWelcomeQuickAsks().slice(0, 3)
             : this._getWelcomeQuickAsks();
@@ -445,7 +435,7 @@ const DiagnosisPage = {
                     <div class="diagnosis-welcome-actions">
                         ${quickAskHtml}
                     </div>
-                    <div class="diagnosis-welcome-footnote">${isCompactEmbedded ? '下方输入问题即可开始。' : '从上面的快捷入口开始，或直接在下方输入你的问题。'}</div>
+                    <div class="diagnosis-welcome-footnote">${isCompactEmbedded ? I18n.t('pageCopy.diagnosis.enterYourQuestionBelowToGetStarted') : I18n.t('pageCopy.diagnosis.getStartedWithTheQuickEntryAbove')}</div>
                 </section>
             </div>
         `;
@@ -555,7 +545,7 @@ const DiagnosisPage = {
             this.datasourceSelector = new DatasourceSelector({
                 container: datasourceContainer,
                 allowEmpty: true,
-                emptyText: '选择数据源...',
+                emptyText: I18n.t('pageCopy.diagnosis.selectDatasource'),
                 placeholder: I18n.t('placeholders.selectDatasource'),
                 showStatus: true,
                 showDetails: true,
@@ -577,7 +567,7 @@ const DiagnosisPage = {
         // Model selector
         const modelSelect = DOM.el('select', { className: 'form-select', style: { minWidth: '150px', maxWidth: '200px', flex: '0 1 auto' } });
         this._modelSelectEl = modelSelect;
-        modelSelect.appendChild(DOM.el('option', { value: '', textContent: '默认模型' }));
+        modelSelect.appendChild(DOM.el('option', { value: '', textContent: I18n.t('pageCopy.diagnosis.defaultModel') }));
 
         try {
             const models = await API.getAIModels();
@@ -608,8 +598,8 @@ const DiagnosisPage = {
         if (!options.hideToolSafetyButton) {
             const toolSafetyBtn = DOM.el('button', {
                 className: 'btn btn-sm btn-secondary',
-                innerHTML: '<i data-lucide="shield"></i> Skill 授权',
-                title: '配置 AI 可调用的 skill 分组',
+                innerHTML: I18n.t('pageCopy.diagnosis.skillAuthorize'),
+                title: I18n.t('pageCopy.diagnosis.configureSkillGroupsThatCanBeCalled'),
                 onClick: () => this._showSkillAuthorizationModal()
             });
             headerActions.appendChild(toolSafetyBtn);
@@ -617,8 +607,8 @@ const DiagnosisPage = {
         if (!options.hideClearSessionButton) {
             const clearSessionBtn = DOM.el('button', {
                 className: 'btn btn-sm btn-secondary',
-                innerHTML: '<i data-lucide="eraser"></i> 清除会话',
-                title: '清除当前会话',
+                innerHTML: I18n.t('pageCopy.diagnosis.clearSession'),
+                title: I18n.t('pageCopy.diagnosis.clearCurrentSession'),
                 onClick: () => this._clearSession()
             });
             headerActions.appendChild(clearSessionBtn);
@@ -645,13 +635,13 @@ const DiagnosisPage = {
             if (!options.hideEmbeddedTitle) {
                 embeddedToolbar.appendChild(DOM.el('div', {
                     className: 'instance-embedded-title',
-                    textContent: options.embeddedTitle || 'AI 对话诊断'
+                    textContent: options.embeddedTitle || I18n.t('pageCopy.diagnosis.aiDiagnosis')
                 }));
             }
             embeddedToolbar.appendChild(headerActions);
             content.appendChild(embeddedToolbar);
         } else {
-            Header.render('AI 诊断', headerActions);
+            Header.render(I18n.t('pageCopy.diagnosis.aiDiagnosis2'), headerActions);
         }
         const layout = DOM.el('div', {
             style: options.embedded
@@ -691,7 +681,7 @@ const DiagnosisPage = {
         const newSessionBtn = DOM.el('button', {
             className: 'btn-icon-only',
             innerHTML: '<i data-lucide="plus"></i>',
-            title: '新建会话',
+            title: I18n.t('pageCopy.diagnosis.newSession'),
             style: { flex: '1' },
             onClick: () => this._createSession()
         });
@@ -701,7 +691,7 @@ const DiagnosisPage = {
             className: 'btn-icon-only',
             id: 'sidebar-toggle-btn',
             innerHTML: '<i data-lucide="panel-left-close"></i>',
-            title: '隐藏会话列表',
+            title: I18n.t('pageCopy.diagnosis.hideSessionList'),
             onClick: () => this._toggleSidebar()
         });
 
@@ -758,7 +748,7 @@ const DiagnosisPage = {
 
             }
         });
-        disclaimer.textContent = '内容由AI生成，仅供参考';
+        disclaimer.textContent = I18n.t('pageCopy.diagnosis.contentIsGeneratedByAiAndIs');
         chatMain.appendChild(disclaimer);
 
         chatContainer.appendChild(chatMain);
@@ -956,7 +946,7 @@ const DiagnosisPage = {
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap'
                     },
-                    textContent: s.title.substring(0, 40) || '会话 ' + s.id
+                    textContent: s.title.substring(0, 40) || I18n.t('pageCopy.diagnosis.session') + s.id
                 });
 
                 const deleteBtn = DOM.el('button', {
@@ -1016,7 +1006,7 @@ const DiagnosisPage = {
                 await this._switchSession(sessions[0].id);
             }
         } catch (e) {
-            Toast.error('加载失败 sessions');
+            Toast.error(e.message || I18n.t('common.requestFailed'));
         }
     },
 
@@ -1027,7 +1017,7 @@ const DiagnosisPage = {
             const session = await API.createChatSession({
                 datasource_id: conn?.id || null,
                 host_id: this._renderOptions?.fixedHostId || null,
-                title: this._renderOptions?.initialSessionTitle || '新建会话',
+                title: this._renderOptions?.initialSessionTitle || I18n.t('pageCopy.diagnosis.newSession'),
                 ai_model_id: this.selectedModelId,
                 skill_authorizations: null  // 不保存授权配置到数据库
             });
@@ -1152,7 +1142,7 @@ const DiagnosisPage = {
             this._queueInitialAskIfNeeded(sessionId, messages);
         } catch (e) {
             console.error('Failed to load messages:', e);
-            Toast.error('加载失败 session messages: ' + e.message);
+            Toast.error(e.message || I18n.t('common.requestFailed'));
             // Show empty state on error
             const container = DOM.$('#chat-messages');
             if (container) {
@@ -1197,7 +1187,7 @@ const DiagnosisPage = {
             });
 
             if (event && event.code === 1008) {
-                Toast.error('Session expired. Please log in again.');
+                Toast.error(I18n.t('auth.sessionExpired'));
                 setTimeout(() => {
                     Store.set('currentUser', null);
                     window.location.hash = 'login';
@@ -1326,13 +1316,13 @@ const DiagnosisPage = {
             const usageRate = totalTokens / contextWindow;
             if (usageRate >= 0.95) {
                 warningLevel = 'critical';
-                warningText = '上下文已接近上限，后续对话很可能失败，建议立即新建会话';
+                warningText = I18n.t('pageCopy.diagnosis.theContextIsCloseToTheUpper');
             } else if (usageRate >= 0.85) {
                 warningLevel = 'danger';
-                warningText = '上下文已非常接近上限，建议缩小问题范围或新建会话';
+                warningText = I18n.t('pageCopy.diagnosis.theContextIsVeryCloseToThe');
             } else if (usageRate >= 0.7) {
                 warningLevel = 'warning';
-                warningText = '上下文使用量较高，建议减少追问轮次或缩小查询范围';
+                warningText = I18n.t('pageCopy.diagnosis.theUsageOfContextIsHighIt');
             }
         }
 
@@ -1377,10 +1367,10 @@ const DiagnosisPage = {
         if (state.thinking_phase || state.thinking_message) {
             ChatWidget.showThinkingIndicator(
                 state.thinking_phase || 'llm_thinking',
-                state.thinking_message || 'AI 正在生成中...'
+                state.thinking_message || I18n.t('pageCopy.diagnosis.aiGenerating')
             );
         } else if (!hasRenderedContent && state.status !== 'awaiting_approval') {
-            ChatWidget.showThinkingIndicator('llm_thinking', 'AI 正在生成中...');
+            ChatWidget.showThinkingIndicator('llm_thinking', I18n.t('pageCopy.diagnosis.aiGenerating'));
         } else {
             ChatWidget.hideThinkingIndicator();
         }
@@ -1393,7 +1383,7 @@ const DiagnosisPage = {
                 console.log('[WS] calling showThinkingIndicator', data.phase, data.message);
                 this._rememberResumeState({
                     thinking_phase: data.phase || 'llm_thinking',
-                    thinking_message: data.message || '正在思考分析...',
+                    thinking_message: data.message || I18n.t('pageCopy.diagnosis.thinkingAndAnalyzing'),
                     run_id: data.run_id || this._pendingResumeState?.run_id || null,
                 });
                 ChatWidget.showThinkingIndicator(data.phase, data.message);
@@ -1402,7 +1392,7 @@ const DiagnosisPage = {
                 console.log('[WS] calling updateThinkingIndicator', data.phase, data.message);
                 this._rememberResumeState({
                     thinking_phase: data.phase || 'llm_thinking',
-                    thinking_message: data.message || '正在思考分析...',
+                    thinking_message: data.message || I18n.t('pageCopy.diagnosis.thinkingAndAnalyzing'),
                     run_id: data.run_id || this._pendingResumeState?.run_id || null,
                 });
                 // If indicator doesn't exist yet (no thinking_start was sent), create it first
@@ -1424,7 +1414,7 @@ const DiagnosisPage = {
             case 'plan_step_status':
                 if (data.status === 'running') {
                     // Reuse thinking indicator to show current tool execution status
-                    const msg = `${I18n.translateLegacyText('正在执行')} ${data.tool_name}...`;
+                    const msg = `${I18n.t('pageCopy.diagnosis.executing')} ${data.tool_name}...`;
                     this._rememberResumeState({
                         thinking_phase: 'tool_execution',
                         thinking_message: msg,
@@ -1549,7 +1539,7 @@ const DiagnosisPage = {
             case 'confirmation_resolved':
                 ChatWidget.updateApprovalState(data.approval_id, {
                     status: data.action === 'approved' ? 'running' : 'failed',
-                    summary: data.action === 'approved' ? '已批准，正在执行...' : '用户已拒绝执行',
+                    summary: data.action === 'approved' ? I18n.t('pageCopy.diagnosis.approvedExecuting') : I18n.t('pageCopy.diagnosis.userHasRefusedExecution'),
                     metadata: {
                         approval_status: data.action === 'approved' ? 'approving' : 'rejected',
                     },
@@ -1575,7 +1565,7 @@ const DiagnosisPage = {
                 this._pendingResumeState = {
                     content: data.content || '',
                     thinking_phase: data.thinking_phase || null,
-                    thinking_message: data.thinking_message || data.message || 'AI 正在生成中...',
+                    thinking_message: data.thinking_message || data.message || I18n.t('pageCopy.diagnosis.aiGenerating'),
                     render_segments: data.render_segments || [],
                     run_id: data.run_id || null,
                     status: data.status || 'partial',
@@ -1613,28 +1603,9 @@ const DiagnosisPage = {
         });
 
         const riskColor = data.risk_level === 'destructive' ? 'var(--accent-red)' : '#d29922';
-        const riskLabel = data.risk_level === 'destructive' ? '危险操作' : '高风险操作';
+        const riskLabel = data.risk_level === 'destructive' ? I18n.t('pageCopy.diagnosis.dangerousOperation') : I18n.t('pageCopy.diagnosis.highRiskOperations');
 
-        card.innerHTML = `
-            <div class="chat-avatar" style="background:${riskColor};color:#fff;">!</div>
-            <div class="chat-bubble" style="border:1px solid ${riskColor};border-radius:8px;padding:12px;">
-                <div style="font-weight:600;color:${riskColor};margin-bottom:8px;">${riskLabel}：需要您的确认</div>
-                <div style="margin-bottom:8px;">
-                    <strong>技能：</strong><code>${ChatWidget._escapeHtml(data.tool_name)}</code>
-                </div>
-                ${data.risk_reason ? `<div style="margin-bottom:8px;color:var(--text-secondary);">${ChatWidget._escapeHtml(data.risk_reason)}</div>` : ''}
-                <div style="display:flex;gap:8px;margin-top:12px;">
-                    <button class="btn btn-sm" style="background:var(--accent-green);color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;"
-                        onclick="DiagnosisPage._resolveApproval('${data.approval_id}', 'approved')">
-                        批准执行
-                    </button>
-                    <button class="btn btn-sm" style="background:var(--accent-red);color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;"
-                        onclick="DiagnosisPage._resolveApproval('${data.approval_id}', 'rejected')">
-                        拒绝
-                    </button>
-                </div>
-            </div>
-        `;
+        card.innerHTML = I18n.t('pageCopy.diagnosis.skillApprovalPrompt', { value0: riskColor, value1: riskColor, value2: riskColor, value3: riskLabel, value4: ChatWidget._escapeHtml(data.tool_name), value5: data.risk_reason ? `<div style="margin-bottom:8px;color:var(--text-secondary);">${ChatWidget._escapeHtml(data.risk_reason)}</div>` : '', value6: data.approval_id, value7: data.approval_id });
         messages.appendChild(card);
         ChatWidget._maybeAutoScroll();
     },
@@ -1656,7 +1627,7 @@ const DiagnosisPage = {
         }
         ChatWidget.updateApprovalState(approvalId, {
             status: action === 'approved' ? 'running' : 'failed',
-            summary: action === 'approved' ? '已批准，正在执行...' : '用户已拒绝执行',
+            summary: action === 'approved' ? I18n.t('pageCopy.diagnosis.approvedExecuting') : I18n.t('pageCopy.diagnosis.userHasRefusedExecution'),
             metadata: {
                 approval_status: action === 'approved' ? 'approving' : 'rejected',
             },
@@ -1673,7 +1644,7 @@ const DiagnosisPage = {
                 comment: null,
             });
             if (card) {
-                const statusText = action === 'approved' ? '已批准，正在执行...' : '已拒绝';
+                const statusText = action === 'approved' ? I18n.t('pageCopy.diagnosis.approvedExecuting') : I18n.t('pageCopy.diagnosis.rejected');
                 const statusColor = action === 'approved' ? 'var(--accent-green)' : 'var(--accent-red)';
                 const buttonsDiv = card.querySelector('div[style*="display:flex"]');
                 if (buttonsDiv) {
@@ -1684,7 +1655,7 @@ const DiagnosisPage = {
                 // 后端会通过 WebSocket 继续把 tool/result/content 续写到当前 assistant 消息中
             }
         } catch (e) {
-            Toast.error('操作失败: ' + e.message);
+            Toast.error(e.message || I18n.t('common.requestFailed'));
             // Re-enable buttons on error
             if (card) {
                 const buttons = card.querySelectorAll('button');
@@ -1692,7 +1663,7 @@ const DiagnosisPage = {
             }
             ChatWidget.updateApprovalState(approvalId, {
                 status: 'waiting_approval',
-                summary: '技能仍在等待确认',
+                summary: I18n.t('pageCopy.diagnosis.skillStillAwaitingConfirmation'),
                 metadata: {
                     approval_status: 'pending',
                 },
@@ -1706,11 +1677,11 @@ const DiagnosisPage = {
             return;
         }
         Modal.show({
-            title: '清空当前会话',
-            content: '将删除当前会话中的所有消息，此操作不可撤销。',
+            title: I18n.t('pageCopy.diagnosis.clearCurrentSession2'),
+            content: I18n.t("pageCopy.diagnosis._clearSessionContent"),
             buttons: [
-                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
-                { text: '确认清空', variant: 'danger', onClick: async () => {
+                { text: I18n.t('pageCopy.diagnosis.cancel'), variant: 'secondary', onClick: () => Modal.hide() },
+                { text: I18n.t('pageCopy.diagnosis.confirmClearing'), variant: 'danger', onClick: async () => {
                     Modal.hide();
                     try {
                         await API.clearSessionMessages(this.currentSessionId);
@@ -1722,7 +1693,7 @@ const DiagnosisPage = {
                         this._renderWelcomeState(container);
                         ChatWidget.resetScrollState();
                         await this._loadSessions();
-                        Toast.success('Session cleared');
+                        Toast.success(I18n.t('chat.sessionCleared'));
                     } catch (e) {
                         Toast.error(I18n.t('chat.clearSessionFailed', { message: e.message }));
                     }
@@ -1737,7 +1708,7 @@ const DiagnosisPage = {
         }
         this._clearSessionStreaming(this.currentSessionId);
         ChatWidget.finishAssistantMessage();
-        Toast.info('已停止生成');
+        Toast.info(I18n.t('chat.generationStopped'));
     },
 
     async _deleteSession() {
@@ -1748,17 +1719,19 @@ const DiagnosisPage = {
         const sessions = Store.get('chatSessions') || [];
         const session = sessions.find(s => s.id === this.currentSessionId);
         Modal.show({
-            title: '删除会话',
-            content: `确认删除会话 "${session?.title || '会话 ' + this.currentSessionId}" 吗？`,
+            title: I18n.t('pageCopy.diagnosis.deleteSession'),
+            content: I18n.t('pageCopy.diagnosis._deleteSessionContent', {
+                value0: session?.title || I18n.t('pageCopy.diagnosis._deleteSessionContent2') + this.currentSessionId
+            }),
             buttons: [
-                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
-                { text: '删除', variant: 'danger', onClick: async () => {
+                { text: I18n.t('pageCopy.diagnosis.cancel'), variant: 'secondary', onClick: () => Modal.hide() },
+                { text: I18n.t('pageCopy.diagnosis.delete'), variant: 'danger', onClick: async () => {
                     Modal.hide();
                     try {
                         await API.deleteChatSession(this.currentSessionId);
                         this.currentSessionId = null;
                         await this._loadSessions();
-                        Toast.success('Session deleted');
+                        Toast.success(I18n.t('chat.sessionDeleted'));
                     } catch (e) {
                         Toast.error(I18n.t('chat.deleteSessionFailed', { message: e.message }));
                     }
@@ -1771,11 +1744,13 @@ const DiagnosisPage = {
         const sessions = Store.get('chatSessions') || [];
         const session = sessions.find(s => s.id === sessionId);
         Modal.show({
-            title: '删除会话',
-            content: `确认删除会话 "${session?.title || '会话 ' + sessionId}" 吗？`,
+            title: I18n.t('pageCopy.diagnosis.deleteSession'),
+            content: I18n.t('pageCopy.diagnosis._deleteSessionByIdContent', {
+                value0: session?.title || I18n.t('pageCopy.diagnosis._deleteSessionByIdContent2') + sessionId
+            }),
             buttons: [
-                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
-                { text: '删除', variant: 'danger', onClick: async () => {
+                { text: I18n.t('pageCopy.diagnosis.cancel'), variant: 'secondary', onClick: () => Modal.hide() },
+                { text: I18n.t('pageCopy.diagnosis.delete'), variant: 'danger', onClick: async () => {
                     Modal.hide();
                     try {
                         await API.deleteChatSession(sessionId);
@@ -1783,7 +1758,7 @@ const DiagnosisPage = {
                             this.currentSessionId = null;
                         }
                         await this._loadSessions();
-                        Toast.success('Session deleted');
+                        Toast.success(I18n.t('chat.sessionDeleted'));
                     } catch (e) {
                         Toast.error(I18n.t('chat.deleteSessionFailed', { message: e.message }));
                     }

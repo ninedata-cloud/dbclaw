@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
+from backend.i18n.errors import ApiError
 from backend.dependencies import get_current_user
 from backend.models.integration import Integration
 from backend.models.integration_bot_binding import IntegrationBotBinding
@@ -40,7 +41,7 @@ def _mask_sensitive_params(params: dict | None) -> dict:
 async def _get_or_create_binding(db: AsyncSession, code: str) -> IntegrationBotBinding:
     metadata = SUPPORTED_BOT_BINDINGS.get(code)
     if not metadata:
-        raise HTTPException(status_code=404, detail="Bot binding 不存在")
+        raise ApiError(404, "resource.not_found")
 
     integration_result = await db.execute(
         select(Integration).where(
@@ -51,7 +52,7 @@ async def _get_or_create_binding(db: AsyncSession, code: str) -> IntegrationBotB
     )
     integration = integration_result.scalar_one_or_none()
     if not integration:
-        raise HTTPException(status_code=404, detail=f"{code} 对应的 Integration 不存在或未启用")
+        raise ApiError(404, "integration.not_found", {"code": code})
 
     binding_result = await db.execute(select(IntegrationBotBinding).where(IntegrationBotBinding.code == code))
     binding = binding_result.scalar_one_or_none()
@@ -84,7 +85,7 @@ async def list_integration_bots(
     for code in SUPPORTED_BOT_BINDINGS:
         try:
             binding = await _get_or_create_binding(db, code)
-        except HTTPException:
+        except ApiError:
             continue
         response = IntegrationBotBindingResponse.model_validate(binding)
         response.params = _mask_sensitive_params(response.params)
@@ -100,7 +101,7 @@ async def update_integration_bot(
     current_user: User = Depends(get_current_user),
 ):
     if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="需要管理员权限")
+        raise ApiError(403, "auth.admin_required")
 
     binding = await _get_or_create_binding(db, code)
 

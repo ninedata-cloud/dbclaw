@@ -18,10 +18,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import async_session
 from backend.models.scheduled_task import ScheduledTask, ScheduledTaskRun
+from backend.models.user import User
 from backend.models.soft_delete import alive_filter, alive_select, get_alive_by_id
+from backend.i18n.locale import DEFAULT_LOCALE, DEFAULT_TIMEZONE, normalize_locale, resolve_background_preferences
 from backend.schemas.scheduled_task import ScheduledTaskCreate, ScheduledTaskUpdate
 from backend.services.integration_service import IntegrationService
-from backend.utils.datetime_helper import format_local_datetime, now
+from backend.utils.datetime_helper import format_in_timezone, now
 
 logger = logging.getLogger(__name__)
 
@@ -93,20 +95,32 @@ def _truncate_text(value: Any, max_chars: int = 1500) -> str:
     return text[:max_chars] + "\n... 内容过长，已截断 ..."
 
 
-def _format_datetime(value: datetime | None) -> str:
+def _format_datetime(value: datetime | None, timezone: str = DEFAULT_TIMEZONE) -> str:
     if not value:
         return "-"
-    return format_local_datetime(value)
+    return format_in_timezone(value, timezone)
 
 
-def _status_label(status: str | None) -> str:
-    return {
-        "success": "成功",
-        "failed": "失败",
-        "skipped": "跳过",
-        "running": "运行中",
-        "pending": "等待中",
-    }.get(status or "", status or "-")
+def _status_label(status: str | None, locale: str = DEFAULT_LOCALE) -> str:
+    labels = {
+        "zh-CN": {"success": "成功", "failed": "失败", "skipped": "跳过", "running": "运行中", "pending": "等待中"},
+        "en-US": {"success": "Succeeded", "failed": "Failed", "skipped": "Skipped", "running": "Running", "pending": "Pending"},
+    }
+    return labels[normalize_locale(locale) or DEFAULT_LOCALE].get(status or "", status or "-")
+
+
+_NOTIFICATION_COPY = {
+    "zh-CN": {
+        "title": "定时任务执行{status}：{name}", "task": "任务", "status": "状态", "source": "触发来源",
+        "scheduler": "调度器", "manual": "手动执行", "start": "开始时间", "finish": "结束时间",
+        "duration": "耗时", "error": "错误", "result": "返回结果", "alert_type": "定时任务执行",
+    },
+    "en-US": {
+        "title": "Scheduled task {status}: {name}", "task": "Task", "status": "Status", "source": "Trigger source",
+        "scheduler": "Scheduler", "manual": "Manual", "start": "Started at", "finish": "Finished at",
+        "duration": "Duration", "error": "Error", "result": "Result", "alert_type": "Scheduled task execution",
+    },
+}
 
 
 def _should_send_run_notification(policy: str | None, status: str | None) -> bool:
@@ -519,25 +533,33 @@ class ScheduledTaskService:
         return serialized
 
     @staticmethod
-    def _build_notification_payload(task: ScheduledTask, run: ScheduledTaskRun) -> Dict[str, Any]:
-        status_text = _status_label(run.status)
+    def _build_notification_payload(
+        task: ScheduledTask,
+        run: ScheduledTaskRun,
+        locale: str = DEFAULT_LOCALE,
+        timezone: str = DEFAULT_TIMEZONE,
+    ) -> Dict[str, Any]:
+        locale = normalize_locale(locale) or DEFAULT_LOCALE
+        copy = _NOTIFICATION_COPY[locale]
+        separator = "：" if locale == "zh-CN" else ": "
+        status_text = _status_label(run.status, locale)
         severity = "info" if run.status == "success" else "warning"
-        title = f"定时任务执行{status_text}：{task.name}"
+        title = copy["title"].format(status=status_text, name=task.name)
         truncated_stdout = _truncate_text(run.stdout, 1200) if run.stdout else ""
         truncated_stderr = _truncate_text(run.stderr, 1200) if run.stderr else ""
 
         lines = [
-            f"任务：{task.name}",
-            f"状态：{status_text}",
-            f"触发来源：{'调度器' if run.trigger_source == 'scheduler' else '手动执行'}",
-            f"开始时间：{_format_datetime(run.started_at)}",
-            f"结束时间：{_format_datetime(run.finished_at)}",
-            f"耗时：{run.duration_ms if run.duration_ms is not None else '-'} ms",
+            f"{copy['task']}{separator}{task.name}",
+            f"{copy['status']}{separator}{status_text}",
+            f"{copy['source']}{separator}{copy['scheduler'] if run.trigger_source == 'scheduler' else copy['manual']}",
+            f"{copy['start']}{separator}{_format_datetime(run.started_at, timezone)}",
+            f"{copy['finish']}{separator}{_format_datetime(run.finished_at, timezone)}",
+            f"{copy['duration']}{separator}{run.duration_ms if run.duration_ms is not None else '-'} ms",
         ]
         if run.error_message:
-            lines.append(f"错误：{_truncate_text(run.error_message, 800)}")
+            lines.append(f"{copy['error']}{separator}{_truncate_text(run.error_message, 800)}")
         if run.result:
-            lines.append("返回结果：")
+            lines.append(f"{copy['result']}{separator.rstrip()}")
             lines.append(_truncate_text(json.dumps(run.result, ensure_ascii=False, indent=2), 1200))
         if run.stdout:
             lines.append("stdout：")
@@ -563,7 +585,7 @@ class ScheduledTaskService:
             "content": "\n".join(lines),
             "severity": severity,
             "source": "scheduled_task",
-            "alert_type": "定时任务执行",
+            "alert_type": copy["alert_type"],
             "datasource_name": task.name,
             "alert_id": run.id,
             "task_id": task.id,
@@ -572,8 +594,8 @@ class ScheduledTaskService:
             "status": run.status,
             "status_text": status_text,
             "trigger_source": run.trigger_source,
-            "started_at": _format_datetime(run.started_at),
-            "finished_at": _format_datetime(run.finished_at),
+            "started_at": _format_datetime(run.started_at, timezone),
+            "finished_at": _format_datetime(run.finished_at, timezone),
             "duration_ms": run.duration_ms,
             "error_message": run.error_message,
             "result": run.result,
@@ -581,7 +603,9 @@ class ScheduledTaskService:
             "stderr": truncated_stderr,
             "execution_log": execution_log,
             "trigger_reason": trigger_reason,
-            "timestamp": _format_datetime(run.finished_at or now()),
+            "timestamp": _format_datetime(run.finished_at or now(), timezone),
+            "locale": locale,
+            "timezone": timezone,
         }
 
     @staticmethod
@@ -594,7 +618,15 @@ class ScheduledTaskService:
         from backend.models.integration import Integration, IntegrationExecutionLog
         from backend.services.integration_executor import IntegrationExecutor
 
-        payload = ScheduledTaskService._build_notification_payload(task, run)
+        owner = None
+        if task.created_by_id:
+            owner = await db.get(User, task.created_by_id)
+        locale, timezone = await resolve_background_preferences(
+            db,
+            locale=getattr(owner, "locale", None),
+            timezone=getattr(owner, "timezone", None),
+        )
+        payload = ScheduledTaskService._build_notification_payload(task, run, locale, timezone)
 
         for target in targets:
             if not isinstance(target, dict) or not target.get("enabled", True):

@@ -106,3 +106,23 @@ code: |
               "error": f"Unexpected error: {str(e)}",
               "url": url
           }
+
+i18n:
+  zh-CN:
+    name: 读取网页内容
+    description: 执行“读取网页内容”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      url: URL。
+      max_chars: max chars。
+      wait_for: wait for。
+    permission_descriptions:
+      access_external_api: 允许访问外部 API
+  en-US:
+    name: Fetch Webpage Content
+    description: Fetch and extract text content from a web page URL using a headless browser. Supports JavaScript-rendered pages (SPAs) like Feishu, Notion, etc. Useful for reading documentation, error messages, release notes, or any web-based reference material.
+    parameter_descriptions:
+      url: The full URL of the web page to fetch (must start with http:// or https://)
+      max_chars: Maximum number of characters to return from the page content
+      wait_for: Wait condition before extracting content (networkidle, domcontentloaded, load)
+    permission_descriptions:
+      access_external_api: Access external APIs

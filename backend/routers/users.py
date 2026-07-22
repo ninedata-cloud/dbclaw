@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from typing import List
@@ -16,6 +16,7 @@ from backend.utils.security import hash_password
 from backend.dependencies import get_current_admin
 from backend.services.session_service import SessionService
 from backend.i18n.errors import ApiError
+from backend.i18n.locale import message_payload
 
 router = APIRouter(prefix="/api/users", tags=["users"], dependencies=[Depends(get_current_admin)])
 
@@ -38,6 +39,8 @@ async def create_user(data: UserCreate, db: AsyncSession = Depends(get_db)):
         display_name=data.display_name,
         email=data.email,
         phone=data.phone,
+        locale=data.locale,
+        timezone=data.timezone,
         is_admin=data.is_admin,
     )
     db.add(user)
@@ -78,7 +81,7 @@ async def delete_user(
     user.session_version += 1
     await SessionService.revoke_user_session(db, user.id, "user_deleted")
     await db.commit()
-    return {"message": "User deleted"}
+    return message_payload("auth.user_deleted.success")
 
 
 @router.post("/{user_id}/reset-password")
@@ -99,7 +102,7 @@ async def reset_password(
     user.session_version += 1
     await SessionService.revoke_user_session(db, user.id, "password_reset")
     await db.commit()
-    return {"message": "Password reset successfully"}
+    return message_payload("auth.password_reset.success")
 
 
 @router.post("/{user_id}/toggle-status")
@@ -121,7 +124,10 @@ async def toggle_status(
         await SessionService.revoke_user_session(db, user.id, "user_disabled")
     await db.commit()
     await db.refresh(user)
-    return {"message": f"User {'enabled' if user.is_active else 'disabled'}", "is_active": user.is_active}
+    return message_payload(
+        "auth.user_enabled.success" if user.is_active else "auth.user_disabled.success",
+        is_active=user.is_active,
+    )
 
 
 @router.get("/{user_id}/login-logs", response_model=List[LoginLogResponse])

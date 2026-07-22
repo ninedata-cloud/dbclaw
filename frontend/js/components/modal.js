@@ -15,7 +15,6 @@ const Modal = {
         onHide = null,
         closeOnOverlayClick = false,
     }) {
-        title = I18n.translateLegacyText(title);
         const overlay = DOM.$('#modal-overlay');
         const container = DOM.$('#modal-container');
 
@@ -63,7 +62,7 @@ const Modal = {
             buttons.forEach(btn => {
                 const button = DOM.el('button', {
                     className: `btn btn-${btn.variant || 'secondary'}`,
-                    textContent: I18n.translateLegacyText(btn.text),
+                    textContent: btn.text,
                     onClick: async (event) => {
                         if (button.dataset.modalBusy === '1') {
                             return;

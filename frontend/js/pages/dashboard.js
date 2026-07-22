@@ -31,7 +31,21 @@ const DashboardPage = {
         const diff = Math.max(0, (Date.now() - new Date(iso)) / 1000);
         if (diff < 60) return I18n.formatRelativeTime(-Math.round(diff), 'second', { numeric: 'always' });
         if (diff < 3600) return I18n.formatRelativeTime(-Math.round(diff / 60), 'minute', { numeric: 'always' });
-        return I18n.formatRelativeTime(-Math.round(diff / 3600), 'hour', { numeric: 'always' });
+        if (diff < 86400) return I18n.formatRelativeTime(-Math.round(diff / 3600), 'hour', { numeric: 'always' });
+        if (diff < 2592000) return I18n.formatRelativeTime(-Math.round(diff / 86400), 'day', { numeric: 'always' });
+        if (diff < 31536000) return I18n.formatRelativeTime(-Math.round(diff / 2592000), 'month', { numeric: 'always' });
+        return I18n.formatRelativeTime(-Math.round(diff / 31536000), 'year', { numeric: 'always' });
+    },
+
+    _formatAlertTitle(alert) {
+        if (typeof AlertsPage !== 'undefined' && typeof AlertsPage.formatAlertTitle === 'function') {
+            return AlertsPage.formatAlertTitle(alert);
+        }
+        const title = String(alert?.title || '').trim();
+        if (/^(?:Database connection failed|\u6570\u636e\u5e93\u8fde\u63a5\u5931\u8d25)$/i.test(title)) {
+            return I18n.t('alerts.titles.connectionFailure');
+        }
+        return title || '-';
     },
 
     _dbDotClass(type) {
@@ -53,7 +67,7 @@ const DashboardPage = {
         if (Array.isArray(health.violations) && health.violations.some(item => item?.type === 'connection_failure')) {
             return true;
         }
-        return String(health.message || '').includes('连接失败');
+        return String(health.message || '').includes(I18n.t('pageCopy.dashboard.connectionFailed'));
     },
 
     openAlertFromDashboard(alertId) {
@@ -96,7 +110,7 @@ const DashboardPage = {
             const metrics = { CPU: 'cpu', '\u5185\u5b58': 'memory', '\u78c1\u76d8': 'disk' };
             const localizedIssues = reason.split('\uff1b').map(issue => {
                 const match = issue.match(/^(CPU|\u5185\u5b58|\u78c1\u76d8)\u4f7f\u7528\u7387(\u8fc7\u9ad8|\u8f83\u9ad8)\s*\(([^)]+)\)$/);
-                if (!match) return I18n.translateLegacyText(issue);
+                if (!match) return issue;
                 return I18n.t(
                     match[2] === '\u8fc7\u9ad8' ? 'dashboard.hostReasons.metricTooHigh' : 'dashboard.hostReasons.metricHigh',
                     { metric: I18n.t(`dashboard.hostReasons.${metrics[match[1]]}`), value: match[3] }
@@ -245,12 +259,13 @@ const DashboardPage = {
                 : `<div class="alert-list">${alerts.map(a => {
                     const ds = this._datasources.find(d => d.id === a.datasource_id);
                     const dsName = ds ? (ds.name || ds.host || `#${a.datasource_id}`) : `#${a.datasource_id}`;
+                    const alertTitle = this._formatAlertTitle(a);
                     return `
                     <div class="alert-list-item" onclick="DashboardPage.openAlertFromDashboard(${a.id})" style="cursor:pointer;">
                         <div class="alert-severity-bar ${a.severity}"></div>
                         <div class="alert-content">
-                            <div class="alert-title">${a.title}</div>
-                            <div class="alert-meta"><span class="alert-ds-tag">${dsName}</span><span class="alert-time">${this._relTime(a.created_at)}</span></div>
+                            <div class="alert-title">${Utils.escapeHtml(alertTitle)}</div>
+                            <div class="alert-meta"><span class="alert-ds-tag">${Utils.escapeHtml(dsName)}</span><span class="alert-time">${this._relTime(a.created_at)}</span></div>
                         </div>
                     </div>`;
                 }).join('')}</div>`;

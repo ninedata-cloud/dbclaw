@@ -16,20 +16,11 @@ const SystemConfigsPage = {
 
     _buildHeaderActions(categories) {
         const filtersContainer = DOM.el('div', { className: 'dashboard-filters' });
-        filtersContainer.innerHTML = `
-            <input type="text" id="search-input" class="filter-input" placeholder="${I18n.t('placeholders.searchParams')}" style="min-width:180px;">
-            <select id="category-filter" class="filter-select">
-                <option value="">所有分类</option>
-                ${categories.map(cat => `<option value="${cat}">${cat}</option>`).join('')}
-            </select>
-            <button id="btn-search" class="btn btn-primary">
-                <i data-lucide="search"></i> 检索
-            </button>
-        `;
+        filtersContainer.innerHTML = I18n.t('pageCopy.systemConfigs.allCategoriesValueSearch', { value0: I18n.t('placeholders.searchParams'), value1: categories.map(cat => `<option value="${cat}">${cat}</option>`).join('') });
 
         const addBtn = DOM.el('button', {
             className: 'btn btn-secondary',
-            innerHTML: '<i data-lucide="plus"></i> 添加参数'
+            innerHTML: I18n.t('pageCopy.systemConfigs.addParameter')
         });
         addBtn.addEventListener('click', () => this.showAddModal());
 
@@ -56,41 +47,15 @@ const SystemConfigsPage = {
             this.filteredConfigs = [...this.configs];
             this.applySort();
 
-            Header.render('系统参数配置', this._buildHeaderActions(this.getCategories()));
+            Header.render(I18n.t('pageCopy.systemConfigs.systemParameters'), this._buildHeaderActions(this.getCategories()));
 
-            content.innerHTML = `
-                <div class="system-configs-page">
-                    <div class="configs-table-container">
-                        <table class="configs-table">
-                            <thead>
-                                <tr>
-                                    ${this.renderSortableHeader('key', '参数名')}
-                                    ${this.renderSortableHeader('value', '参数值')}
-                                    ${this.renderSortableHeader('value_type', '类型')}
-                                    ${this.renderSortableHeader('category', '分类')}
-                                    ${this.renderSortableHeader('description', '描述')}
-                                    <th>操作</th>
-                                </tr>
-                            </thead>
-                            <tbody id="configs-tbody">
-                                ${this.renderConfigRows()}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            `;
+            content.innerHTML = I18n.t('pageCopy.systemConfigs.configurationPage', { value0: this.renderSortableHeader('key', I18n.t('pageCopy.systemConfigs.key')), value1: this.renderSortableHeader('value', I18n.t('pageCopy.systemConfigs.parameterValueColumn')), value2: this.renderSortableHeader('value_type', I18n.t('pageCopy.systemConfigs.type')), value3: this.renderSortableHeader('category', I18n.t('pageCopy.systemConfigs.category')), value4: this.renderSortableHeader('description', I18n.t('pageCopy.systemConfigs.description')), value5: this.renderConfigRows() });
 
             DOM.createIcons();
         } catch (error) {
             console.error('Error loading configurations:', error);
-            Toast.error('加载配置失败: ' + error.message);
-            content.innerHTML = `
-                <div class="error-state">
-                    <h3>加载配置失败</h3>
-                    <p>${error.message}</p>
-                    <button class="btn btn-primary" onclick="SystemConfigsPage.loadConfigs()">重试</button>
-                </div>
-            `;
+            Toast.error(error.message || I18n.t('common.requestFailed'));
+            content.innerHTML = I18n.t('pageCopy.systemConfigs.couldNotLoadConfigurationsValueRetry', { value0: error.message });
         }
     },
 
@@ -167,56 +132,18 @@ const SystemConfigsPage = {
     renderTable() {
         const table = DOM.$('.configs-table');
         if (!table) return;
-        table.innerHTML = `
-            <thead>
-                <tr>
-                    ${this.renderSortableHeader('key', '参数名')}
-                    ${this.renderSortableHeader('value', '参数值')}
-                    ${this.renderSortableHeader('value_type', '类型')}
-                    ${this.renderSortableHeader('category', '分类')}
-                    ${this.renderSortableHeader('description', '描述')}
-                    <th>操作</th>
-                </tr>
-            </thead>
-            <tbody id="configs-tbody">
-                ${this.renderConfigRows()}
-            </tbody>
-        `;
+        table.innerHTML = I18n.t('pageCopy.systemConfigs.configurationTable', { value0: this.renderSortableHeader('key', I18n.t('pageCopy.systemConfigs.key')), value1: this.renderSortableHeader('value', I18n.t('pageCopy.systemConfigs.parameterValueColumn')), value2: this.renderSortableHeader('value_type', I18n.t('pageCopy.systemConfigs.type')), value3: this.renderSortableHeader('category', I18n.t('pageCopy.systemConfigs.category')), value4: this.renderSortableHeader('description', I18n.t('pageCopy.systemConfigs.description')), value5: this.renderConfigRows() });
         DOM.createIcons();
     },
 
     renderConfigRows() {
         if (this.filteredConfigs.length === 0) {
-            return '<tr><td colspan="6" class="empty-state">暂无配置参数</td></tr>';
+            return I18n.t('pageCopy.systemConfigs.noConfigurationParameters');
         }
 
-        return this.filteredConfigs.map(config => `
-            <tr>
-                <td><code>${config.key}</code></td>
-                <td class="config-value">
-                    ${config.is_encrypted
-                        ? `<span class="encrypted-value-cell" data-raw="${this._escapeAttr(config.value)}">
-                               <span class="encrypted-mask"><i data-lucide="lock" style="width:13px;height:13px;vertical-align:middle;margin-right:4px;"></i>${this._maskValue(config.value)}</span>
-                               <button class="btn-copy-secret" onclick="SystemConfigsPage.copySecret(this)" title="复制原始值">
-                                   <i data-lucide="copy"></i>
-                               </button>
-                           </span>`
-                        : this.formatValue(config.value, config.value_type)
-                    }
-                </td>
-                <td><span class="badge badge-type">${config.value_type}</span></td>
-                <td>${config.category || '-'}</td>
-                <td>${Utils.escapeHtml(this._localizedDescription(config) || '-')}</td>
-                <td class="actions">
-                    <button class="btn btn-sm" onclick="SystemConfigsPage.showEditModal(${config.id})" title="编辑">
-                        <i data-lucide="edit"></i>
-                    </button>
-                    <button class="btn btn-sm btn-danger" onclick="SystemConfigsPage.deleteConfig(${config.id})" title="删除">
-                        <i data-lucide="trash-2"></i>
-                    </button>
-                </td>
-            </tr>
-        `).join('');
+        return this.filteredConfigs.map(config => I18n.t('pageCopy.systemConfigs.configurationRow', { value0: config.key, value1: config.is_encrypted
+                        ? I18n.t('pageCopy.systemConfigs.encryptedValue', { value0: this._escapeAttr(config.value), value1: this._maskValue(config.value) })
+                        : this.formatValue(config.value, config.value_type), value2: config.value_type, value3: config.category || '-', value4: Utils.escapeHtml(this._localizedDescription(config) || '-'), value5: config.id, value6: config.id })).join('');
     },
 
     _localizedDescription(config) {
@@ -282,57 +209,33 @@ const SystemConfigsPage = {
 
     showConfigModal(config) {
         const isEdit = this.editingId !== null;
-        const title = isEdit ? '编辑参数' : '添加参数';
+        const title = isEdit ? I18n.t('pageCopy.systemConfigs.editParameter') : I18n.t('pageCopy.systemConfigs.addParameter2');
         const isEncrypted = config.is_encrypted || false;
 
         Modal.show({
             title: title,
-            content: `
-                <form id="config-form" class="config-form">
-                    <div class="form-group">
-                        <label for="config-key">参数名 *</label>
-                        <input type="text" id="config-key" value="${config.key}"
-                               ${isEdit ? 'readonly' : ''} required>
-                    </div>
-                    <div class="form-group">
-                        <label for="config-value-type">类型 *</label>
-                        <select id="config-value-type" onchange="SystemConfigsPage.onTypeChange()" required>
-                            <option value="string" ${config.value_type === 'string' ? 'selected' : ''}>字符串</option>
-                            <option value="integer" ${config.value_type === 'integer' ? 'selected' : ''}>整数</option>
-                            <option value="float" ${config.value_type === 'float' ? 'selected' : ''}>浮点数</option>
-                            <option value="boolean" ${config.value_type === 'boolean' ? 'selected' : ''}>布尔值</option>
-                            <option value="json" ${config.value_type === 'json' ? 'selected' : ''}>JSON</option>
-                        </select>
-                    </div>
-                    <div class="form-group" id="value-input-container">
-                        ${this.renderValueInput(config.value, config.value_type, isEncrypted && isEdit)}
-                    </div>
-                    <div class="form-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="config-is-encrypted" ${isEncrypted ? 'checked' : ''}>
-                            <i data-lucide="lock" style="width:14px;height:14px;"></i>
-                            加密存储（适用于 API Key、密码等敏感信息）
-                        </label>
-                    </div>
-                    <div class="form-group">
-                        <label for="config-category">分类</label>
-                        <input type="text" id="config-category" value="${config.category || ''}"
-                               placeholder="${I18n.t('placeholders.configCategories')}">
-                    </div>
-                    <div class="form-group">
-                        <label for="config-description">描述</label>
-                        <textarea id="config-description" rows="3">${config.description || ''}</textarea>
-                    </div>
-                </form>
-            `,
+            content: I18n.t('pageCopy.systemConfigs.configForm', {
+                key: this._escapeAttr(config.key || ''),
+                readonly: isEdit ? 'readonly' : '',
+                stringSelected: config.value_type === 'string' ? 'selected' : '',
+                integerSelected: config.value_type === 'integer' ? 'selected' : '',
+                floatSelected: config.value_type === 'float' ? 'selected' : '',
+                booleanSelected: config.value_type === 'boolean' ? 'selected' : '',
+                jsonSelected: config.value_type === 'json' ? 'selected' : '',
+                valueInput: this.renderValueInput(config.value, config.value_type, isEncrypted && isEdit),
+                encryptedChecked: isEncrypted ? 'checked' : '',
+                category: this._escapeAttr(config.category || ''),
+                categoryPlaceholder: I18n.t('placeholders.configCategories'),
+                description: Utils.escapeHtml(config.description || '')
+            }),
             buttons: [
                 {
-                    text: '取消',
+                    text: I18n.t('pageCopy.systemConfigs.cancel'),
                     variant: 'secondary',
                     onClick: () => Modal.hide()
                 },
                 {
-                    text: '保存',
+                    text: I18n.t('pageCopy.systemConfigs.save'),
                     variant: 'primary',
                     onClick: () => this.saveConfig()
                 }
@@ -344,39 +247,18 @@ const SystemConfigsPage = {
         const placeholder = isEncryptedEdit ? I18n.t('placeholders.keepOriginal') : '';
         switch (type) {
             case 'string':
-                return `
-                    <label for="config-value">参数值 *</label>
-                    <input type="text" id="config-value" value="${isEncryptedEdit ? '' : (value || '')}" placeholder="${placeholder}" ${isEncryptedEdit ? '' : 'required'}>
-                `;
+                return I18n.t('pageCopy.systemConfigs.stringValueInput', { value0: isEncryptedEdit ? '' : (value || ''), value1: placeholder, value2: isEncryptedEdit ? '' : 'required' });
             case 'integer':
-                return `
-                    <label for="config-value">参数值 *</label>
-                    <input type="number" id="config-value" value="${isEncryptedEdit ? '' : (value || '')}" step="1" placeholder="${placeholder}" ${isEncryptedEdit ? '' : 'required'}>
-                `;
+                return I18n.t('pageCopy.systemConfigs.integerValueInput', { value0: isEncryptedEdit ? '' : (value || ''), value1: placeholder, value2: isEncryptedEdit ? '' : 'required' });
             case 'float':
-                return `
-                    <label for="config-value">参数值 *</label>
-                    <input type="number" id="config-value" value="${isEncryptedEdit ? '' : (value || '')}" step="0.01" placeholder="${placeholder}" ${isEncryptedEdit ? '' : 'required'}>
-                `;
+                return I18n.t('pageCopy.systemConfigs.floatValueInput', { value0: isEncryptedEdit ? '' : (value || ''), value1: placeholder, value2: isEncryptedEdit ? '' : 'required' });
             case 'boolean':
                 const checked = value === 'true' || value === '1' || value === 'yes';
-                return `
-                    <label>
-                        <input type="checkbox" id="config-value" ${checked ? 'checked' : ''}>
-                        参数值
-                    </label>
-                `;
+                return I18n.t('pageCopy.systemConfigs.booleanValueInput', { value0: checked ? 'checked' : '' });
             case 'json':
-                return `
-                    <label for="config-value">参数值 (JSON) *</label>
-                    <textarea id="config-value" rows="6" placeholder="${placeholder}" ${isEncryptedEdit ? '' : 'required'}>${isEncryptedEdit ? '' : (value || '')}</textarea>
-                    <small class="form-hint">请输入有效的 JSON 格式</small>
-                `;
+                return I18n.t('pageCopy.systemConfigs.parameterValueJsonValueEnterValidJson', { value0: placeholder, value1: isEncryptedEdit ? '' : 'required', value2: isEncryptedEdit ? '' : (value || '') });
             default:
-                return `
-                    <label for="config-value">参数值 *</label>
-                    <input type="text" id="config-value" value="${isEncryptedEdit ? '' : (value || '')}" placeholder="${placeholder}" ${isEncryptedEdit ? '' : 'required'}>
-                `;
+                return I18n.t('pageCopy.systemConfigs.stringValueInput', { value0: isEncryptedEdit ? '' : (value || ''), value1: placeholder, value2: isEncryptedEdit ? '' : 'required' });
         }
     },
 
@@ -403,11 +285,11 @@ const SystemConfigsPage = {
 
         // For new configs, value is required; for encrypted edits, empty means keep existing
         if (!key) {
-            Toast.error('请填写必填字段');
+            Toast.error(I18n.t('pageCopy.systemConfigs.requiredFields'));
             return;
         }
         if (!this.editingId && !value) {
-            Toast.error('请填写必填字段');
+            Toast.error(I18n.t('pageCopy.systemConfigs.requiredFields'));
             return;
         }
 
@@ -416,7 +298,7 @@ const SystemConfigsPage = {
             try {
                 JSON.parse(value);
             } catch (e) {
-                Toast.error('JSON 格式无效');
+                Toast.error(I18n.t('pageCopy.systemConfigs.invalidJson'));
                 return;
             }
         }
@@ -436,16 +318,16 @@ const SystemConfigsPage = {
         try {
             if (this.editingId) {
                 await API.put(`/api/system-configs/${this.editingId}`, data);
-                Toast.success('参数更新成功');
+                Toast.success(I18n.t('pageCopy.systemConfigs.parameterUpdated'));
             } else {
                 await API.post('/api/system-configs', data);
-                Toast.success('参数添加成功');
+                Toast.success(I18n.t('pageCopy.systemConfigs.parameterAdded'));
             }
             Modal.hide();
             this.loadConfigs();
         } catch (error) {
             console.error('Error saving config:', error);
-            Toast.error('保存失败: ' + error.message);
+            Toast.error(I18n.t('pageCopy.systemConfigs.saveFailed', { message: error.message }));
         }
     },
 
@@ -453,17 +335,17 @@ const SystemConfigsPage = {
         const config = this.configs.find(c => c.id === id);
         if (!config) return;
 
-        if (!confirm(`确定要删除参数 "${config.key}" 吗？`)) {
+        if (!confirm(I18n.t('pageCopy.systemConfigs.areYouSureYouWantToDelete', { value0: config.key }))) {
             return;
         }
 
         try {
             await API.delete(`/api/system-configs/${id}`);
-            Toast.success('参数删除成功');
+            Toast.success(I18n.t('pageCopy.systemConfigs.parameterDeleted'));
             this.loadConfigs();
         } catch (error) {
             console.error('Error deleting config:', error);
-            Toast.error('删除失败: ' + error.message);
+            Toast.error(I18n.t('pageCopy.systemConfigs.deleteFailed', { message: error.message }));
         }
     }
 };

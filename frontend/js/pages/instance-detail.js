@@ -39,7 +39,7 @@ const InstanceDetailPage = {
         this.currentRoute = this._parseRoute(routeParam);
         this.sidebarListScrollTop = this._loadInstanceListScrollState();
 
-        Header.render(this._t('实例详情'));
+        Header.render(I18n.t('pageCopy.instanceDetail.instanceDetails'));
         const content = DOM.$('#page-content');
         content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
@@ -58,9 +58,9 @@ const InstanceDetailPage = {
                 content.innerHTML = `
                     <div class="empty-state">
                         <i data-lucide="database"></i>
-                        <h3>${this._t('暂无实例')}</h3>
-                        <p>${this._t('请先创建数据源，然后再进入实例详情工作台。')}</p>
-                        <button class="btn btn-primary mt-16" onclick="Router.navigate('datasources')">${this._t('前往数据源管理')}</button>
+                        <h3>${I18n.t('pageCopy.instanceDetail.noExamplesYet')}</h3>
+                        <p>${I18n.t('pageCopy.instanceDetail.pleaseCreateADatasourceBeforeEnteringThe')}</p>
+                        <button class="btn btn-primary mt-16" onclick="Router.navigate('datasources')">${I18n.t('pageCopy.instanceDetail.goToDatasourceManagement')}</button>
                     </div>
                 `;
                 DOM.createIcons();
@@ -78,15 +78,15 @@ const InstanceDetailPage = {
                     <aside id="instance-detail-sidebar" class="instance-detail-sidebar">
                         <div class="instance-sidebar-header">
                             <div class="instance-sidebar-header-text">
-                                <div class="instance-sidebar-title">${this._t('实例列表')}</div>
-                                <div class="instance-sidebar-subtitle">${this._t('单实例诊断与优化工作台')}</div>
+                                <div class="instance-sidebar-title">${I18n.t('pageCopy.instanceDetail.instanceList')}</div>
+                                <div class="instance-sidebar-subtitle">${I18n.t('pageCopy.instanceDetail.singleInstanceDiagnosisAndOptimizationWorkbench')}</div>
                             </div>
                             <button
                                 id="instance-sidebar-toggle"
                                 class="instance-sidebar-toggle"
                                 type="button"
-                                title="${this._t(this.sidebarCollapsed ? '展开实例列表' : '收起实例列表')}"
-                                aria-label="${this._t(this.sidebarCollapsed ? '展开实例列表' : '收起实例列表')}"
+                                title="${this._t(this.sidebarCollapsed ? I18n.t('pageCopy.instanceDetail.expandInstanceList') : I18n.t('pageCopy.instanceDetail.collapseInstanceList'))}"
+                                aria-label="${this._t(this.sidebarCollapsed ? I18n.t('pageCopy.instanceDetail.expandInstanceList') : I18n.t('pageCopy.instanceDetail.collapseInstanceList'))}"
                             >
                                 <i data-lucide="${this.sidebarCollapsed ? 'panel-left-open' : 'panel-left-close'}"></i>
                             </button>
@@ -121,11 +121,11 @@ const InstanceDetailPage = {
             content.innerHTML = `
                 <div class="empty-state">
                     <i data-lucide="alert-circle"></i>
-                    <h3>${this._t('实例详情加载失败')}</h3>
-                    <p>${Utils.escapeHtml(error.message || this._t('未知错误'))}</p>
+                    <h3>${I18n.t('pageCopy.instanceDetail.failedToLoadInstanceDetails')}</h3>
+                    <p>${Utils.escapeHtml(error.message || I18n.t('pageCopy.instanceDetail.unknownError'))}</p>
                 </div>
             `;
-            Header.render(this._t('实例详情'));
+            Header.render(I18n.t('pageCopy.instanceDetail.instanceDetails'));
             DOM.createIcons();
         }
 
@@ -307,8 +307,8 @@ const InstanceDetailPage = {
             layout.classList.toggle('sidebar-collapsed', this.sidebarCollapsed);
         }
         if (toggleButton) {
-            toggleButton.title = this._t(this.sidebarCollapsed ? '展开实例列表' : '收起实例列表');
-            toggleButton.setAttribute('aria-label', this._t(this.sidebarCollapsed ? '展开实例列表' : '收起实例列表'));
+            toggleButton.title = this._t(this.sidebarCollapsed ? I18n.t('pageCopy.instanceDetail.expandInstanceList') : I18n.t('pageCopy.instanceDetail.collapseInstanceList'));
+            toggleButton.setAttribute('aria-label', this._t(this.sidebarCollapsed ? I18n.t('pageCopy.instanceDetail.expandInstanceList') : I18n.t('pageCopy.instanceDetail.collapseInstanceList')));
             toggleButton.innerHTML = `<i data-lucide="${this.sidebarCollapsed ? 'panel-left-open' : 'panel-left-close'}"></i>`;
         }
         DOM.createIcons();
@@ -380,7 +380,7 @@ const InstanceDetailPage = {
         listEl.innerHTML = '';
         if (filtered.length === 0) {
             this._saveInstanceListScrollState(0);
-            listEl.innerHTML = `<div class="instance-list-empty">${this._t('没有匹配的实例')}</div>`;
+            listEl.innerHTML = `<div class="instance-list-empty">${I18n.t('pageCopy.instanceDetail.noMatchingInstance')}</div>`;
             return;
         }
 
@@ -470,7 +470,7 @@ const InstanceDetailPage = {
     _renderPageHeader() {
         const datasource = this.currentSummary?.datasource || this.currentInstance;
         if (!datasource) {
-            Header.render(this._t('实例详情'));
+            Header.render(I18n.t('pageCopy.instanceDetail.instanceDetails'));
             return;
         }
         const health = this.currentSummary?.health || {};
@@ -494,7 +494,7 @@ const InstanceDetailPage = {
                 </div>
             `
         });
-        Header.render(this._t('实例详情'), headerInfo);
+        Header.render(I18n.t('pageCopy.instanceDetail.instanceDetails'), headerInfo);
         DOM.createIcons();
     },
 
@@ -512,16 +512,16 @@ const InstanceDetailPage = {
         if (!nav) return;
 
         const tabs = [
-            { id: 'config', label: this._t('实例基本信息') },
-            { id: 'monitor', label: this._t('性能监控') },
-            { id: 'traffic', label: this._t('流量拓扑') },
-            { id: 'sessions', label: this._t('实时会话') },
-            { id: 'ai', label: this._t('AI 对话诊断') },
-            { id: 'sqlConsole', label: this._t('SQL 窗口') },
+            { id: 'config', label: I18n.t('pageCopy.instanceDetail.basicInformation') },
+            { id: 'monitor', label: I18n.t('pageCopy.instanceDetail.performanceMonitoring') },
+            { id: 'traffic', label: I18n.t('pageCopy.instanceDetail.trafficTopology') },
+            { id: 'sessions', label: I18n.t('pageCopy.instanceDetail.realTimeSessions') },
+            { id: 'ai', label: I18n.t('pageCopy.instanceDetail.aiDiagnosis') },
+            { id: 'sqlConsole', label: I18n.t('pageCopy.instanceDetail.sqlWindow') },
             { id: 'topSql', label: 'TOP SQL' },
-            { id: 'alerts', label: this._t('告警管理') },
-            { id: 'inspections', label: this._t('巡检管理') },
-            { id: 'parameters', label: this._t('实例参数配置') },
+            { id: 'alerts', label: I18n.t('pageCopy.instanceDetail.alertManagement') },
+            { id: 'inspections', label: I18n.t('pageCopy.instanceDetail.inspectionManagement') },
+            { id: 'parameters', label: I18n.t('pageCopy.instanceDetail.instanceParameters') },
         ];
 
         nav.innerHTML = tabs.map(tab => `
@@ -656,10 +656,10 @@ const InstanceDetailPage = {
         const datasource = summary.datasource || this.currentInstance;
         const health = summary.health || {};
         const inspection = summary.inspection || {};
-        const metricTime = summary.metric_collected_at ? Format.datetime(summary.metric_collected_at) : this._t('暂无');
+        const metricTime = summary.metric_collected_at ? Format.datetime(summary.metric_collected_at) : I18n.t('pageCopy.instanceDetail.noneYet');
         const silenceText = datasource.silence_until
-            ? `${this._t('静默至')} ${Format.datetime(datasource.silence_until)}`
-            : this._t('未静默');
+            ? `${I18n.t('pageCopy.instanceDetail.silencedUntil')} ${Format.datetime(datasource.silence_until)}`
+            : I18n.t('pageCopy.instanceDetail.notSilenced');
         const silenced = Boolean(datasource.silence_until);
 
         container.innerHTML = `
@@ -679,29 +679,29 @@ const InstanceDetailPage = {
                                 </div>
                             </div>
                             <div class="instance-summary-actions">
-                                <button class="btn btn-secondary btn-sm" id="instance-test-btn"><i data-lucide="plug"></i> ${this._t('测试连接')}</button>
-                                <button class="btn btn-secondary btn-sm" id="instance-refresh-btn"><i data-lucide="refresh-cw"></i> ${this._t('刷新指标')}</button>
-                                <button class="btn btn-primary btn-sm" id="instance-trigger-inspection-btn"><i data-lucide="zap"></i> ${this._t('触发巡检')}</button>
-                                <button class="btn btn-${silenced ? 'danger' : 'secondary'} btn-sm" id="instance-silence-btn"><i data-lucide="${silenced ? 'bell-ring' : 'bell-off'}"></i> ${this._t(silenced ? '取消静默' : '告警静默')}</button>
+                                <button class="btn btn-secondary btn-sm" id="instance-test-btn"><i data-lucide="plug"></i> ${I18n.t('pageCopy.instanceDetail.testConnection')}</button>
+                                <button class="btn btn-secondary btn-sm" id="instance-refresh-btn"><i data-lucide="refresh-cw"></i> ${I18n.t('pageCopy.instanceDetail.refreshMetrics')}</button>
+                                <button class="btn btn-primary btn-sm" id="instance-trigger-inspection-btn"><i data-lucide="zap"></i> ${I18n.t('pageCopy.instanceDetail.triggerInspection')}</button>
+                                <button class="btn btn-${silenced ? 'danger' : 'secondary'} btn-sm" id="instance-silence-btn"><i data-lucide="${silenced ? 'bell-ring' : 'bell-off'}"></i> ${this._t(silenced ? I18n.t('pageCopy.instanceDetail.cancelsilence') : I18n.t('pageCopy.instanceDetail.alertSilence'))}</button>
                             </div>
                         </div>
                         <div class="instance-summary-grid">
-                            ${this._summaryMetric(this._t('连接状态'), this._connectionStatusLabel(datasource.connection_status), datasource.connection_error || health.message || '')}
-                            ${this._summaryMetric(this._t('最近指标时间'), metricTime, '')}
-                            ${this._summaryMetric(this._t('当前告警事件'), String(summary.active_alert_event_count || 0), this._t('点击查看告警管理'), 'alerts')}
-                            ${this._summaryMetric(this._t('当前告警条数'), String(summary.active_alert_count || 0), '')}
-                            ${this._summaryMetric(this._t('下次巡检时间'), inspection.next_scheduled_at ? Format.datetime(inspection.next_scheduled_at) : this._t('未配置'), '')}
-                            ${this._summaryMetric(this._t('告警静默'), silenceText, datasource.silence_reason || '')}
+                            ${this._summaryMetric(I18n.t('pageCopy.instanceDetail.connectionStatus'), this._connectionStatusLabel(datasource.connection_status), datasource.connection_error || health.message || '')}
+                            ${this._summaryMetric(I18n.t('pageCopy.instanceDetail.latestMetric'), metricTime, '')}
+                            ${this._summaryMetric(I18n.t('pageCopy.instanceDetail.activeAlertEvents'), String(summary.active_alert_event_count || 0), I18n.t('pageCopy.instanceDetail.viewAlertManagement'), 'alerts')}
+                            ${this._summaryMetric(I18n.t('pageCopy.instanceDetail.activeAlerts'), String(summary.active_alert_count || 0), '')}
+                            ${this._summaryMetric(I18n.t('pageCopy.instanceDetail.nextInspection'), inspection.next_scheduled_at ? Format.datetime(inspection.next_scheduled_at) : I18n.t('pageCopy.instanceDetail.notConfigured'), '')}
+                            ${this._summaryMetric(I18n.t('pageCopy.instanceDetail.alertSilence'), silenceText, datasource.silence_reason || '')}
                         </div>
                     </div>
                 </section>
                 <div class="instance-config-grid">
                     <section class="instance-panel">
-                        <h3>${this._t('接入配置')}</h3>
+                        <h3>${I18n.t('pageCopy.instanceDetail.connectionSettings')}</h3>
                         <div id="instance-config-overview"></div>
                     </section>
                     <section class="instance-panel">
-                        <h3>${this._t('监控与巡检')}</h3>
+                        <h3>${I18n.t('pageCopy.instanceDetail.monitoringAndInspection')}</h3>
                         <div id="instance-config-monitoring"></div>
                     </section>
                 </div>
@@ -714,27 +714,27 @@ const InstanceDetailPage = {
 
         if (overview) {
             overview.innerHTML = `
-                ${this._configField(this._t('名称'), datasource.name)}
-                ${this._configField(this._t('数据库类型'), this._getDbTypeLabel(datasource.db_type))}
-                ${this._configField(this._t('主机'), `${datasource.host}:${datasource.port}`)}
-                ${this._configField(this._t('数据库'), datasource.database || '-')}
-                ${this._configField(this._t('用户名'), datasource.username || '-')}
-                ${this._configField(this._t('主机关联'), datasource.host_id ? `Host #${datasource.host_id}` : this._t('未配置'))}
-                ${this._configField(this._t('标签'), (datasource.tags || []).join(', ') || '-')}
-                ${this._configField(this._t('备注'), datasource.remark || '-')}
-                ${this._configField(this._t('连接检测时间'), datasource.connection_checked_at ? Format.datetime(datasource.connection_checked_at) : this._t('暂无'))}
+                ${this._configField(I18n.t('pageCopy.instanceDetail.name'), datasource.name)}
+                ${this._configField(I18n.t('pageCopy.instanceDetail.databaseType'), this._getDbTypeLabel(datasource.db_type))}
+                ${this._configField(I18n.t('pageCopy.instanceDetail.host'), `${datasource.host}:${datasource.port}`)}
+                ${this._configField(I18n.t('pageCopy.instanceDetail.database'), datasource.database || '-')}
+                ${this._configField(I18n.t('pageCopy.instanceDetail.username'), datasource.username || '-')}
+                ${this._configField(I18n.t('pageCopy.instanceDetail.hostAssociation'), datasource.host_id ? `Host #${datasource.host_id}` : I18n.t('pageCopy.instanceDetail.notConfigured'))}
+                ${this._configField(I18n.t('pageCopy.instanceDetail.tags'), (datasource.tags || []).join(', ') || '-')}
+                ${this._configField(I18n.t('pageCopy.instanceDetail.notes'), datasource.remark || '-')}
+                ${this._configField(I18n.t('pageCopy.instanceDetail.connectionCheckTime'), datasource.connection_checked_at ? Format.datetime(datasource.connection_checked_at) : I18n.t('pageCopy.instanceDetail.noneYet'))}
             `;
         }
 
         if (monitoring) {
             monitoring.innerHTML = `
-                ${this._configField(this._t('监控源'), datasource.metric_source || 'system')}
-                ${this._configField(this._t('外部实例 ID'), datasource.external_instance_id || '-')}
-                ${this._configField(this._t('启用巡检'), I18n.t(inspectionConfig?.enabled ? 'common.yes' : 'common.no'))}
-                ${this._configField(this._t('巡检周期'), inspectionConfig?.schedule_interval ? `${inspectionConfig.schedule_interval} ${this._t('秒')}` : '-')}
-                ${this._configField(this._t('AI 分析'), this._t(inspectionConfig?.use_ai_analysis === false ? '关闭' : '开启'))}
-                ${this._configField(this._t('下次巡检时间'), inspectionConfig?.next_scheduled_at ? Format.datetime(inspectionConfig.next_scheduled_at) : this._t('未配置'))}
-                ${this._configField(this._t('阈值规则'), inspectionConfig?.threshold_rules ? `<pre class="instance-inline-pre">${this._escapeHtml(JSON.stringify(inspectionConfig.threshold_rules, null, 2))}</pre>` : this._t('未配置'), true)}
+                ${this._configField(I18n.t('pageCopy.instanceDetail.metricSource'), datasource.metric_source || 'system')}
+                ${this._configField(I18n.t('pageCopy.instanceDetail.externalInstanceId'), datasource.external_instance_id || '-')}
+                ${this._configField(I18n.t('pageCopy.instanceDetail.inspectionEnabled'), I18n.t(inspectionConfig?.enabled ? 'common.yes' : 'common.no'))}
+                ${this._configField(I18n.t('pageCopy.instanceDetail.inspectionCycle'), inspectionConfig?.schedule_interval ? `${inspectionConfig.schedule_interval} ${I18n.t('pageCopy.instanceDetail.seconds')}` : '-')}
+                ${this._configField(I18n.t('pageCopy.instanceDetail.aiAnalysis'), this._t(inspectionConfig?.use_ai_analysis === false ? I18n.t('pageCopy.instanceDetail.close') : I18n.t('pageCopy.instanceDetail.enabled')))}
+                ${this._configField(I18n.t('pageCopy.instanceDetail.nextInspection'), inspectionConfig?.next_scheduled_at ? Format.datetime(inspectionConfig.next_scheduled_at) : I18n.t('pageCopy.instanceDetail.notConfigured'))}
+                ${this._configField(I18n.t('pageCopy.instanceDetail.thresholdRules'), inspectionConfig?.threshold_rules ? `<pre class="instance-inline-pre">${this._escapeHtml(JSON.stringify(inspectionConfig.threshold_rules, null, 2))}</pre>` : I18n.t('pageCopy.instanceDetail.notConfigured'), true)}
             `;
         }
 
@@ -762,8 +762,8 @@ const InstanceDetailPage = {
                 </div>
                 <section class="instance-panel">
                     <div class="instance-panel-header">
-                        <h3>${this._t('实例参数配置')}</h3>
-                        <div class="instance-panel-subtitle">${this._t('只读展示数据库实例当前参数')}</div>
+                        <h3>${I18n.t('pageCopy.instanceDetail.instanceParameters')}</h3>
+                        <div class="instance-panel-subtitle">${I18n.t('pageCopy.instanceDetail.readOnlyDisplayOfTheCurrentParameters')}</div>
                     </div>
                     <div id="instance-config-variables"></div>
                 </section>
@@ -799,7 +799,7 @@ const InstanceDetailPage = {
         const sorted = [...filtered].sort((left, right) => this._compareVariables(left, right));
 
         if (sorted.length === 0) {
-            container.innerHTML = `<div class="empty-state">${this._t('没有匹配的参数')}</div>`;
+            container.innerHTML = `<div class="empty-state">${I18n.t('pageCopy.instanceDetail.noMatchingParameters')}</div>`;
             return;
         }
 
@@ -808,10 +808,10 @@ const InstanceDetailPage = {
                 <table class="data-table instance-variables-table">
                     <thead>
                         <tr>
-                            <th class="sortable" data-sort-field="key">${this._t('参数名')} <span class="sort-icon">${this._sortIcon('key', this.configSort)}</span></th>
-                            <th class="sortable" data-sort-field="category">${this._t('分类')} <span class="sort-icon">${this._sortIcon('category', this.configSort)}</span></th>
-                            <th class="sortable" data-sort-field="value">${this._t('参数值')} <span class="sort-icon">${this._sortIcon('value', this.configSort)}</span></th>
-                            <th>${this._t('操作')}</th>
+                            <th class="sortable" data-sort-field="key">${I18n.t('pageCopy.instanceDetail.key')} <span class="sort-icon">${this._sortIcon('key', this.configSort)}</span></th>
+                            <th class="sortable" data-sort-field="category">${I18n.t('pageCopy.instanceDetail.category')} <span class="sort-icon">${this._sortIcon('category', this.configSort)}</span></th>
+                            <th class="sortable" data-sort-field="value">${I18n.t('pageCopy.instanceDetail.parameterValueColumn')} <span class="sort-icon">${this._sortIcon('value', this.configSort)}</span></th>
+                            <th>${I18n.t('pageCopy.instanceDetail.actions')}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -821,7 +821,7 @@ const InstanceDetailPage = {
                                 <td><span class="badge badge-secondary">${this._escapeHtml(item.category || 'general')}</span></td>
                                 <td class="instance-variable-value">${this._escapeHtml(item.value)}</td>
                                 <td>
-                                    <button class="btn btn-sm btn-secondary" data-copy-value="${this._escapeAttr(item.value)}">${this._t('复制')}</button>
+                                    <button class="btn btn-sm btn-secondary" data-copy-value="${this._escapeAttr(item.value)}">${I18n.t('pageCopy.instanceDetail.copy')}</button>
                                 </td>
                             </tr>
                         `).join('')}
@@ -841,9 +841,9 @@ const InstanceDetailPage = {
             button.addEventListener('click', async () => {
                 try {
                     await navigator.clipboard.writeText(button.dataset.copyValue || '');
-                    Toast.success(this._t('参数值已复制'));
+                    Toast.success(I18n.t('pageCopy.instanceDetail.parameterValueCopied'));
                 } catch (error) {
-                    Toast.error(this._t('复制失败'));
+                    Toast.error(this._t(I18n.t('pageCopy.instanceDetail.copyFailed')));
                 }
             });
         });
@@ -865,12 +865,12 @@ const InstanceDetailPage = {
                     <input id="instance-session-search" class="filter-input" type="text" placeholder="${I18n.t('placeholders.searchSessions')}">
                     <input id="instance-session-user" class="filter-input" type="text" placeholder="${I18n.t('placeholders.filterUser')}">
                     <select id="instance-session-status" class="filter-select">
-                        <option value="all">${this._t('全部状态')}</option>
-                        <option value="active">${this._t('活跃 / 执行中')}</option>
-                        <option value="idle">${this._t('空闲')}</option>
+                        <option value="all">${I18n.t('pageCopy.instanceDetail.allStatuses')}</option>
+                        <option value="active">${I18n.t('pageCopy.instanceDetail.activeExecuting')}</option>
+                        <option value="idle">${I18n.t('pageCopy.instanceDetail.free')}</option>
                         <option value="sleep">Sleep / sleeping</option>
                     </select>
-                    <button class="btn btn-secondary" id="instance-session-refresh">${this._t('刷新')}</button>
+                    <button class="btn btn-secondary" id="instance-session-refresh">${I18n.t('pageCopy.instanceDetail.refresh')}</button>
                 </div>
                 <div id="instance-session-meta" class="instance-session-meta"></div>
                 <div id="instance-session-table"></div>
@@ -925,7 +925,7 @@ const InstanceDetailPage = {
             }
 
             if (sorted.length === 0) {
-                tableContainer.innerHTML = `<div class="empty-state">${this._t('当前没有匹配的会话')}</div>`;
+                tableContainer.innerHTML = `<div class="empty-state">${I18n.t('pageCopy.instanceDetail.thereAreCurrentlyNoMatchingSessions')}</div>`;
                 return;
             }
 
@@ -934,15 +934,15 @@ const InstanceDetailPage = {
                     <table class="data-table instance-sessions-table">
                         <thead>
                             <tr>
-                                <th class="sortable" data-session-sort="session_id">${this._t('会话 ID')} <span class="sort-icon">${this._sortIcon('session_id', this.sessionSort)}</span></th>
-                                <th class="sortable" data-session-sort="user">${this._t('用户')} <span class="sort-icon">${this._sortIcon('user', this.sessionSort)}</span></th>
-                                <th class="sortable" data-session-sort="database">${this._t('数据库')} <span class="sort-icon">${this._sortIcon('database', this.sessionSort)}</span></th>
-                                <th class="sortable" data-session-sort="client">${this._t('客户端')} <span class="sort-icon">${this._sortIcon('client', this.sessionSort)}</span></th>
-                                <th class="sortable" data-session-sort="status">${this._t('状态')} <span class="sort-icon">${this._sortIcon('status', this.sessionSort)}</span></th>
-                                <th class="sortable" data-session-sort="duration_seconds">${this._t('持续时间')} <span class="sort-icon">${this._sortIcon('duration_seconds', this.sessionSort)}</span></th>
-                                <th class="sortable" data-session-sort="wait_event">${this._t('等待事件')} <span class="sort-icon">${this._sortIcon('wait_event', this.sessionSort)}</span></th>
+                                <th class="sortable" data-session-sort="session_id">${I18n.t('pageCopy.instanceDetail.sessionId')} <span class="sort-icon">${this._sortIcon('session_id', this.sessionSort)}</span></th>
+                                <th class="sortable" data-session-sort="user">${I18n.t('pageCopy.instanceDetail.user')} <span class="sort-icon">${this._sortIcon('user', this.sessionSort)}</span></th>
+                                <th class="sortable" data-session-sort="database">${I18n.t('pageCopy.instanceDetail.database')} <span class="sort-icon">${this._sortIcon('database', this.sessionSort)}</span></th>
+                                <th class="sortable" data-session-sort="client">${I18n.t('pageCopy.instanceDetail.client')} <span class="sort-icon">${this._sortIcon('client', this.sessionSort)}</span></th>
+                                <th class="sortable" data-session-sort="status">${I18n.t('pageCopy.instanceDetail.status')} <span class="sort-icon">${this._sortIcon('status', this.sessionSort)}</span></th>
+                                <th class="sortable" data-session-sort="duration_seconds">${I18n.t('pageCopy.instanceDetail.duration')} <span class="sort-icon">${this._sortIcon('duration_seconds', this.sessionSort)}</span></th>
+                                <th class="sortable" data-session-sort="wait_event">${I18n.t('pageCopy.instanceDetail.waitEvent')} <span class="sort-icon">${this._sortIcon('wait_event', this.sessionSort)}</span></th>
                                 <th class="sortable" data-session-sort="sql_text">SQL <span class="sort-icon">${this._sortIcon('sql_text', this.sessionSort)}</span></th>
-                                <th>${this._t('操作')}</th>
+                                <th>${I18n.t('pageCopy.instanceDetail.actions')}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -958,13 +958,13 @@ const InstanceDetailPage = {
                                     <td class="instance-variable-value">${this._escapeHtml((item.sql_text || '-').slice(0, 120))}</td>
                                     <td>
                                         <div class="instance-inline-actions instance-inline-actions-compact">
-                                            <button class="btn-icon instance-action-icon" type="button" title="${this._t('查看 SQL')}" aria-label="${this._t('查看 SQL')}" data-view-sql="${this._escapeAttr(item.sql_text || '')}">
+                                            <button class="btn-icon instance-action-icon" type="button" title="${I18n.t('pageCopy.instanceDetail.viewSql')}" aria-label="${I18n.t('pageCopy.instanceDetail.viewSql')}" data-view-sql="${this._escapeAttr(item.sql_text || '')}">
                                                 <i data-lucide="file-text"></i>
                                             </button>
-                                            <button class="btn-icon instance-action-icon" type="button" title="${this._t('AI 分析')}" aria-label="${this._t('AI 分析')}" data-analyze-session="${this._escapeAttr(item.session_id)}">
+                                            <button class="btn-icon instance-action-icon" type="button" title="${I18n.t('pageCopy.instanceDetail.aiAnalysis')}" aria-label="${I18n.t('pageCopy.instanceDetail.aiAnalysis')}" data-analyze-session="${this._escapeAttr(item.session_id)}">
                                                 <i data-lucide="sparkles"></i>
                                             </button>
-                                            ${item.can_terminate ? `<button class="btn-icon instance-action-icon danger" type="button" title="${this._t('终止会话')}" aria-label="${this._t('终止会话')}" data-terminate-session="${this._escapeAttr(item.session_id)}"><i data-lucide="octagon-x"></i></button>` : ''}
+                                            ${item.can_terminate ? `<button class="btn-icon instance-action-icon danger" type="button" title="${I18n.t('pageCopy.instanceDetail.terminateSession')}" aria-label="${I18n.t('pageCopy.instanceDetail.terminateSession')}" data-terminate-session="${this._escapeAttr(item.session_id)}"><i data-lucide="octagon-x"></i></button>` : ''}
                                         </div>
                                     </td>
                                 </tr>
@@ -984,9 +984,9 @@ const InstanceDetailPage = {
             tableContainer.querySelectorAll('[data-view-sql]').forEach(button => {
                 button.addEventListener('click', () => {
                     Modal.show({
-                        title: this._t('会话 SQL'),
-                        content: `<pre class="instance-inline-pre">${this._escapeHtml(button.dataset.viewSql || this._t('无 SQL 文本'))}</pre>`,
-                        buttons: [{ text: this._t('关闭'), variant: 'secondary', onClick: () => Modal.hide() }]
+                        title: I18n.t('pageCopy.instanceDetail.sessionSql'),
+                        content: `<pre class="instance-inline-pre">${this._escapeHtml(button.dataset.viewSql || I18n.t('pageCopy.instanceDetail.noSqlText'))}</pre>`,
+                        buttons: [{ text: I18n.t('pageCopy.instanceDetail.close'), variant: 'secondary', onClick: () => Modal.hide() }]
                     });
                 });
             });
@@ -1018,7 +1018,7 @@ const InstanceDetailPage = {
         const durationSeconds = this._resolveSessionAnalysisNumber(session?.duration_seconds, raw.TIME);
         const waitEvent = this._resolveSessionAnalysisValue(session?.wait_event, raw.STATE);
         const sqlSourceText = this._resolveSessionAnalysisValue(session?.sql_text, raw.INFO);
-        const sqlText = this._truncateSessionAnalysisBlock(sqlSourceText, 3200) || '无 SQL 文本';
+        const sqlText = this._truncateSessionAnalysisBlock(sqlSourceText, 3200) || I18n.t('pageCopy.instanceDetail.noSqlText');
         const extraRawText = this._buildSessionAnalysisRawExtra(raw, {
             ID: sessionId,
             USER: sessionUser,
@@ -1030,7 +1030,7 @@ const InstanceDetailPage = {
             INFO: sqlSourceText,
         });
         const durationText = durationSeconds != null
-            ? `${durationSeconds} 秒（${Format.uptime(durationSeconds)}）`
+            ? I18n.t('pageCopy.instanceDetail.durationWithUptime', { value0: durationSeconds, value1: Format.uptime(durationSeconds) })
             : '-';
         const hostText = datasource.host
             ? `${datasource.host}:${datasource.port || '-'}`
@@ -1041,48 +1041,48 @@ const InstanceDetailPage = {
         const datasourceDatabaseText = this._formatSessionAnalysisValue(datasource.database);
         const sessionDatabaseText = this._formatSessionAnalysisValue(sessionDatabase);
         const sessionSummaryParts = [
-            `会话 ID ${this._formatSessionAnalysisValue(sessionId)}`,
-            `用户 ${this._formatSessionAnalysisValue(sessionUser)}`,
-            `客户端 ${this._formatSessionAnalysisValue(sessionClient)}`,
+            I18n.t('pageCopy.instanceDetail.sessionIdValue', { value0: this._formatSessionAnalysisValue(sessionId) }),
+            I18n.t('pageCopy.instanceDetail.userValue', { value0: this._formatSessionAnalysisValue(sessionUser) }),
+            I18n.t('pageCopy.instanceDetail.clientValue', { value0: this._formatSessionAnalysisValue(sessionClient) }),
         ];
         const sessionStateParts = [
-            `状态 ${this._formatSessionAnalysisValue(sessionStatus)}`,
-            `等待事件 ${this._formatSessionAnalysisValue(waitEvent)}`,
-            `持续时间 ${durationText}`,
+            I18n.t('pageCopy.instanceDetail.statusValue', { value0: this._formatSessionAnalysisValue(sessionStatus) }),
+            I18n.t('pageCopy.instanceDetail.waitEventValue', { value0: this._formatSessionAnalysisValue(waitEvent) }),
+            I18n.t('pageCopy.instanceDetail.durationValue', { value0: durationText }),
         ];
 
         return this._t([
-            '请你作为资深数据库运维专家，针对下面这个数据库实例中的实时会话做诊断分析，并支持后续多轮追问。',
+            I18n.t('pageCopy.instanceDetail.asASeniorDatabaseOperationAndMaintenance'),
             '',
-            '【分析目标】',
-            '请判断当前会话是否异常、风险等级如何，并给出下一步排查和处置建议。',
+            I18n.t('pageCopy.instanceDetail.analysisTarget'),
+            I18n.t('pageCopy.instanceDetail.pleaseDetermineWhetherTheCurrentSessionIs'),
             '',
-            '【实例信息】',
-            `- 实例名称：${this._formatSessionAnalysisValue(datasource.name)}`,
-            `- 数据库类型：${this._formatSessionAnalysisValue(this._getDbTypeLabel(datasource.db_type) || datasource.db_type)}`,
-            `- 主机：${hostText}`,
-            `- 数据库：${datasourceDatabaseText}`,
-            versionText !== '-' ? `- 版本：${versionText}` : null,
+            I18n.t('pageCopy.instanceDetail.instanceInformation'),
+            I18n.t('pageCopy.instanceDetail.instanceNameValue', { value0: this._formatSessionAnalysisValue(datasource.name) }),
+            I18n.t('pageCopy.instanceDetail.databaseTypeValue', { value0: this._formatSessionAnalysisValue(this._getDbTypeLabel(datasource.db_type) || datasource.db_type) }),
+            I18n.t('pageCopy.instanceDetail.hostValue', { value0: hostText }),
+            I18n.t('pageCopy.instanceDetail.databaseValue', { value0: datasourceDatabaseText }),
+            versionText !== '-' ? I18n.t('pageCopy.instanceDetail.versionValue', { value0: versionText }) : null,
             '',
-            '【会话信息】',
+            I18n.t('pageCopy.instanceDetail.sessionInformation'),
             `- ${sessionSummaryParts.join('，')}`,
             sessionDatabaseText !== '-' && sessionDatabaseText !== datasourceDatabaseText
-                ? `- 会话数据库：${sessionDatabaseText}`
+                ? I18n.t('pageCopy.instanceDetail.sessionDatabaseValue', { value0: sessionDatabaseText })
                 : null,
             `- ${sessionStateParts.join('，')}`,
             '',
-            '【SQL 文本】',
+            I18n.t('pageCopy.instanceDetail.sqlText'),
             sqlText,
             extraRawText ? '' : null,
-            extraRawText ? '【补充字段】' : null,
+            extraRawText ? I18n.t('pageCopy.instanceDetail.supplementaryFields') : null,
             extraRawText || null,
             '',
-            '【输出要求】',
-            '1. 当前会话状态与现象判断',
-            '2. 主要风险点或异常信号',
-            '3. 最可能的根因分析',
-            '4. 建议的排查步骤和处置建议',
-            '5. 如果信息不足，请明确指出下一步建议补充哪些信息',
+            I18n.t('pageCopy.instanceDetail.outputRequirements'),
+            I18n.t('pageCopy.instanceDetail.sessionAssessmentRequirement'),
+            I18n.t('pageCopy.instanceDetail.sessionRiskRequirement'),
+            I18n.t('pageCopy.instanceDetail.sessionRootCauseRequirement'),
+            I18n.t('pageCopy.instanceDetail.sessionResolutionRequirement'),
+            I18n.t('pageCopy.instanceDetail.sessionMissingInfoRequirement'),
         ].filter(Boolean).join('\n'));
     },
 
@@ -1142,12 +1142,12 @@ const InstanceDetailPage = {
         const text = String(value ?? '').trim();
         if (!text) return '';
         if (text.length <= maxLength) return text;
-        return `${text.slice(0, maxLength).trimEnd()}\n${this._t('...（已截断）')}`;
+        return `${text.slice(0, maxLength).trimEnd()}\n${I18n.t('pageCopy.instanceDetail.truncated')}`;
     },
 
     async _openSessionAiAnalysis(session) {
         if (!session) {
-            Toast.warning(this._t('未找到要分析的会话'));
+            Toast.warning(I18n.t('pageCopy.instanceDetail.noSessionFoundToAnalyze'));
             return;
         }
 
@@ -1166,7 +1166,7 @@ const InstanceDetailPage = {
 
         let dialogCleanup = null;
         const title = I18n.t('instanceDetail.sessionAiTitle', {
-            name: datasource.name || this._t('实例'),
+            name: datasource.name || I18n.t('pageCopy.instanceDetail.instance'),
             sessionId: session.session_id || '-',
         });
 
@@ -1215,8 +1215,8 @@ const InstanceDetailPage = {
             content.innerHTML = `
                 <div class="empty-state" style="padding:40px;">
                     <i data-lucide="alert-circle"></i>
-                    <h3>${this._t('会话 AI 分析打开失败')}</h3>
-                    <p>${this._escapeHtml(error.message || this._t('未知错误'))}</p>
+                    <h3>${I18n.t('pageCopy.instanceDetail.conversationalAiAnalysisFailedToOpen')}</h3>
+                    <p>${this._escapeHtml(error.message || I18n.t('pageCopy.instanceDetail.unknownError'))}</p>
                 </div>
             `;
             DOM.createIcons();
@@ -1310,14 +1310,14 @@ const InstanceDetailPage = {
 
     async _terminateSession(datasourceId, sessionId) {
         Modal.show({
-            title: this._t('终止会话'),
+            title: I18n.t('pageCopy.instanceDetail.terminateSession'),
             content: I18n.t('instanceDetail.terminateConfirm', {
                 sessionId: `<strong>${this._escapeHtml(sessionId)}</strong>`,
             }),
             buttons: [
-                { text: this._t('取消'), variant: 'secondary', onClick: () => Modal.hide() },
+                { text: I18n.t('pageCopy.instanceDetail.cancel'), variant: 'secondary', onClick: () => Modal.hide() },
                 {
-                    text: this._t('确认终止'),
+                    text: I18n.t('pageCopy.instanceDetail.confirmTermination'),
                     variant: 'danger',
                     onClick: async () => {
                         try {
@@ -1327,7 +1327,7 @@ const InstanceDetailPage = {
                             await this._loadSessionsTable(datasourceId);
                         } catch (error) {
                             Toast.error(I18n.t('instanceDetail.terminateFailed', {
-                                message: error.message || this._t('未知错误'),
+                                message: error.message || I18n.t('pageCopy.instanceDetail.unknownError'),
                             }));
                         }
                     }
@@ -1345,7 +1345,7 @@ const InstanceDetailPage = {
                     : '';
                 Toast.success(I18n.t('instanceDetail.connectionSucceeded', { version: versionDisplay }).trim());
             } else {
-                Toast.error(result.message || this._t('连接失败'));
+                Toast.error(result.message || this._t(I18n.t('pageCopy.instanceDetail.connectionFailed')));
             }
             await this._refreshSummary();
             if (this.currentTab === 'config') {
@@ -1362,7 +1362,7 @@ const InstanceDetailPage = {
 
         if (refreshBtn) {
             refreshBtn.disabled = true;
-            refreshBtn.innerHTML = `<span class="spinner" style="display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;"></span>${this._t('采集中...')}`;
+            refreshBtn.innerHTML = `<span class="spinner" style="display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;"></span>${I18n.t('pageCopy.instanceDetail.collecting')}`;
         }
         Toast.info(I18n.t('instanceDetail.refreshStarted'));
 
@@ -1373,13 +1373,13 @@ const InstanceDetailPage = {
             if (this.currentTab === 'monitor' || this.currentTab === 'config') {
                 await this._renderCurrentTab();
             }
-            Toast.success(this._t('指标刷新完成'));
+            Toast.success(I18n.t('pageCopy.instanceDetail.indicatorRefreshCompleted'));
         } catch (error) {
             Toast.error(I18n.t('instanceDetail.refreshFailed', { message: error.message }));
         } finally {
             if (refreshBtn) {
                 refreshBtn.disabled = false;
-                refreshBtn.innerHTML = originalHtml || `<i data-lucide="refresh-cw"></i> ${this._t('刷新指标')}`;
+                refreshBtn.innerHTML = originalHtml || `<i data-lucide="refresh-cw"></i> ${I18n.t('pageCopy.instanceDetail.refreshMetrics')}`;
                 DOM.createIcons();
             }
         }
@@ -1388,7 +1388,7 @@ const InstanceDetailPage = {
     _showTriggerInspectionModal() {
         const datasource = this.currentSummary?.datasource || this.currentInstance || {};
         Modal.show({
-            title: this._t('确认触发巡检'),
+            title: I18n.t('pageCopy.instanceDetail.confirmTriggerInspection'),
             content: `
                 <div class="form-group" style="margin-bottom:0;">
                     <div style="font-size:14px;line-height:1.8;color:var(--text-primary);">
@@ -1400,9 +1400,9 @@ const InstanceDetailPage = {
                 </div>
             `,
             buttons: [
-                { text: this._t('取消'), variant: 'secondary', onClick: () => Modal.hide() },
+                { text: I18n.t('pageCopy.instanceDetail.cancel'), variant: 'secondary', onClick: () => Modal.hide() },
                 {
-                    text: this._t('确认触发'),
+                    text: I18n.t('pageCopy.instanceDetail.confirmTrigger'),
                     variant: 'primary',
                     onClick: async () => {
                         await this._handleTriggerInspection();
@@ -1415,15 +1415,15 @@ const InstanceDetailPage = {
     async _handleTriggerInspection() {
         const datasourceId = this.currentInstance?.id;
         if (!datasourceId) {
-            Toast.error(this._t('当前实例不存在，无法触发巡检'));
+            Toast.error(this._t(I18n.t('pageCopy.instanceDetail.theCurrentInstanceDoesNotExistAnd')));
             return;
         }
 
         const confirmButton = Array.from(document.querySelectorAll('#modal-container .modal-footer .btn'))
-            .find((button) => button.textContent?.includes(this._t('确认触发')));
+            .find((button) => button.textContent?.includes(I18n.t('pageCopy.instanceDetail.confirmTrigger')));
         if (confirmButton) {
             confirmButton.disabled = true;
-            confirmButton.textContent = this._t('启动中...');
+            confirmButton.textContent = I18n.t('pageCopy.instanceDetail.starting');
         }
 
         try {
@@ -1440,7 +1440,7 @@ const InstanceDetailPage = {
         } catch (error) {
             if (confirmButton) {
                 confirmButton.disabled = false;
-                confirmButton.textContent = this._t('确认触发');
+                confirmButton.textContent = I18n.t('pageCopy.instanceDetail.confirmTrigger');
             }
             Toast.error(I18n.t('instanceDetail.triggerFailed', { message: error.message }));
         }
@@ -1448,33 +1448,33 @@ const InstanceDetailPage = {
 
     _showSilenceModal() {
         Modal.show({
-            title: this._t('设置告警静默'),
+            title: I18n.t('pageCopy.instanceDetail.silenceAlerts'),
             content: `
                 <div class="form-group">
-                    <label for="instance-silence-hours">${this._t('静默时长（小时）')}</label>
+                    <label for="instance-silence-hours">${I18n.t('alerts.silence.durationLabel')}</label>
                     <input id="instance-silence-hours" class="form-input" type="number" min="0.5" max="240" step="0.5" value="1">
                 </div>
                 <div class="form-group">
-                    <label for="instance-silence-reason">${this._t('静默原因')}</label>
+                    <label for="instance-silence-reason">${I18n.t('alerts.silence.reasonLabel')}</label>
                     <textarea id="instance-silence-reason" class="form-input" rows="3" placeholder="${I18n.t('placeholders.instanceSilenceReason')}"></textarea>
                 </div>
             `,
             buttons: [
-                { text: this._t('取消'), variant: 'secondary', onClick: () => Modal.hide() },
+                { text: I18n.t('pageCopy.instanceDetail.cancel'), variant: 'secondary', onClick: () => Modal.hide() },
                 {
-                    text: this._t('开始静默'),
+                    text: I18n.t('pageCopy.instanceDetail.startSilence'),
                     variant: 'primary',
                     onClick: async () => {
                         const hours = parseFloat(DOM.$('#instance-silence-hours')?.value || '0');
                         const reason = DOM.$('#instance-silence-reason')?.value?.trim() || null;
                         if (!Number.isFinite(hours) || hours < 0.5 || hours > 240) {
-                            Toast.error(this._t('静默时长必须在 0.5 到 240 小时之间'));
+                            Toast.error(this._t(I18n.t('pageCopy.instanceDetail.quietDurationMustBeBetween05')));
                             return;
                         }
                         try {
                             await API.setDatasourceSilence(this.currentInstance.id, { hours, reason });
                             Modal.hide();
-                            Toast.success(this._t('已设置告警静默'));
+                            Toast.success(I18n.t('pageCopy.instanceDetail.alertSilenceEnabled'));
                             await this._refreshSummary();
                             if (this.currentTab === 'config') {
                                 await this._renderCurrentTab();
@@ -1491,7 +1491,7 @@ const InstanceDetailPage = {
     async _handleCancelSilence() {
         try {
             await API.cancelDatasourceSilence(this.currentInstance.id);
-            Toast.success(this._t('已取消告警静默'));
+            Toast.success(I18n.t('pageCopy.instanceDetail.alarmSilenceHasBeenCanceled'));
             await this._refreshSummary();
             if (this.currentTab === 'config') {
                 await this._renderCurrentTab();
@@ -1522,28 +1522,28 @@ const InstanceDetailPage = {
         if (Array.isArray(health.violations) && health.violations.some(item => item?.type === 'connection_failure')) {
             return true;
         }
-        return String(health.message || '').includes('连接失败');
+        return String(health.message || '').includes(I18n.t('pageCopy.instanceDetail.connectionFailed'));
     },
 
     _healthStatusLabel(health) {
-        if (this._isConnectionFailureHealth(health)) return this._t('连接失败');
+        if (this._isConnectionFailureHealth(health)) return I18n.t('pageCopy.instanceDetail.connectionFailed');
         const map = {
-            healthy: this._t('健康'),
-            warning: this._t('警告'),
-            critical: this._t('异常'),
-            unknown: this._t('未知')
+            healthy: I18n.t('pageCopy.instanceDetail.healthy'),
+            warning: I18n.t('pageCopy.instanceDetail.warning'),
+            critical: I18n.t('pageCopy.instanceDetail.abnormal'),
+            unknown: I18n.t('pageCopy.instanceDetail.unknown')
         };
-        return map[health?.status] || this._t('未知');
+        return map[health?.status] || I18n.t('pageCopy.instanceDetail.unknown');
     },
 
     _connectionStatusLabel(status) {
         const map = {
-            normal: this._t('正常'),
-            warning: this._t('警告'),
-            failed: this._t('连接失败'),
-            unknown: this._t('未知')
+            normal: I18n.t('pageCopy.instanceDetail.healthy2'),
+            warning: I18n.t('pageCopy.instanceDetail.warning'),
+            failed: I18n.t('pageCopy.instanceDetail.connectionFailed'),
+            unknown: I18n.t('pageCopy.instanceDetail.unknown')
         };
-        return map[status] || this._t(status || '未知');
+        return map[status] || this._t(status || I18n.t('pageCopy.instanceDetail.unknown'));
     },
 
     _mergeDatasourceHealth(datasource, health) {
@@ -1639,7 +1639,7 @@ const InstanceDetailPage = {
     },
 
     _t(value) {
-        return I18n.translateLegacyText(String(value ?? ''));
+        return String(value ?? '');
     },
 
     _escapeHtml(value) {
@@ -1659,9 +1659,9 @@ const InstanceDetailPage = {
                 container.innerHTML = `
                     <div class="empty-state">
                         <i data-lucide="database"></i>
-                        <h3>${this._t('暂无 TOP SQL 数据')}</h3>
-                        <p>${this._t('当前数据库可能未启用 SQL 统计功能，或暂无 SQL 执行记录。')}</p>
-                        <p class="text-muted mt-8">${this._t('MySQL 需启用 performance_schema，PostgreSQL/openGauss 需安装 pg_stat_statements 扩展。')}</p>
+                        <h3>${I18n.t('pageCopy.instanceDetail.noTopSqlDataYet')}</h3>
+                        <p>${I18n.t('pageCopy.instanceDetail.theCurrentDatabaseMayNotHaveThe')}</p>
+                        <p class="text-muted mt-8">${I18n.t('pageCopy.instanceDetail.mysqlPerformanceSchemaNeedsToBeEnabled')}</p>
                     </div>
                 `;
                 DOM.createIcons();
@@ -1684,8 +1684,8 @@ const InstanceDetailPage = {
             container.innerHTML = `
                 <div class="empty-state">
                     <i data-lucide="alert-circle"></i>
-                    <h3>${this._t('加载失败')}</h3>
-                    <p>${this._escapeHtml(I18n.t('instanceDetail.loadTopSqlFailed', { message: error.message || this._t('未知错误') }))}</p>
+                    <h3>${I18n.t('pageCopy.instanceDetail.loadFailed')}</h3>
+                    <p>${this._escapeHtml(I18n.t('instanceDetail.loadTopSqlFailed', { message: error.message || I18n.t('pageCopy.instanceDetail.unknownError') }))}</p>
                 </div>
             `;
             DOM.createIcons();
@@ -1698,7 +1698,7 @@ const InstanceDetailPage = {
         container.innerHTML = `
             <div class="top-sql-container">
                 <div class="top-sql-header">
-                    <h3>${this._t('TOP SQL 分析')}</h3>
+                    <h3>${I18n.t('pageCopy.instanceDetail.topSqlAnalysis')}</h3>
                     <div class="top-sql-controls">
                         <div class="search-box">
                             <i data-lucide="search"></i>
@@ -1716,36 +1716,36 @@ const InstanceDetailPage = {
                     <table class="data-table top-sql-table">
                         <thead>
                             <tr>
-                                <th style="width: 60px;">${this._t('序号')}</th>
+                                <th style="width: 60px;">${I18n.t('pageCopy.instanceDetail.serialNumber')}</th>
                                 <th style="width: 140px;" data-sort="sql_id" data-label="SQL ID">
                                     SQL ID ${this._getSortIcon('sql_id')}
                                 </th>
-                                <th style="min-width: 300px;" data-sort="sql_text" data-label="${this._t('SQL 文本')}">
-                                    ${this._t('SQL 文本')} ${this._getSortIcon('sql_text')}
+                                <th style="min-width: 300px;" data-sort="sql_text" data-label="${I18n.t('pageCopy.instanceDetail.sqlText2')}">
+                                    ${I18n.t('pageCopy.instanceDetail.sqlText2')} ${this._getSortIcon('sql_text')}
                                 </th>
-                                <th style="width: 100px;" data-sort="exec_count" data-label="${this._t('执行次数')}">
-                                    ${this._t('执行次数')} ${this._getSortIcon('exec_count')}
+                                <th style="width: 100px;" data-sort="exec_count" data-label="${I18n.t('pageCopy.instanceDetail.executionCount')}">
+                                    ${I18n.t('pageCopy.instanceDetail.executionCount')} ${this._getSortIcon('exec_count')}
                                 </th>
-                                <th style="width: 130px;" data-sort="total_time_sec" data-label="${this._t('总执行时间(s)')}">
-                                    ${this._t('总执行时间(s)')} ${this._getSortIcon('total_time_sec')}
+                                <th style="width: 130px;" data-sort="total_time_sec" data-label="${I18n.t('pageCopy.instanceDetail.totalExecutionTimeS')}">
+                                    ${I18n.t('pageCopy.instanceDetail.totalExecutionTimeS')} ${this._getSortIcon('total_time_sec')}
                                 </th>
-                                <th style="width: 120px;" data-sort="total_rows_scanned" data-label="${this._t('总扫描行数')}">
-                                    ${this._t('总扫描行数')} ${this._getSortIcon('total_rows_scanned')}
+                                <th style="width: 120px;" data-sort="total_rows_scanned" data-label="${I18n.t('pageCopy.instanceDetail.totalRowsScanned')}">
+                                    ${I18n.t('pageCopy.instanceDetail.totalRowsScanned')} ${this._getSortIcon('total_rows_scanned')}
                                 </th>
-                                <th style="width: 130px;" data-sort="total_wait_time_sec" data-label="${this._t('总等待时间(s)')}">
-                                    ${this._t('总等待时间(s)')} ${this._getSortIcon('total_wait_time_sec')}
+                                <th style="width: 130px;" data-sort="total_wait_time_sec" data-label="${I18n.t('pageCopy.instanceDetail.totalWaitingTimeS')}">
+                                    ${I18n.t('pageCopy.instanceDetail.totalWaitingTimeS')} ${this._getSortIcon('total_wait_time_sec')}
                                 </th>
-                                <th style="width: 130px;" data-sort="avg_time_sec" data-label="${this._t('平均执行时间(s)')}">
-                                    ${this._t('平均执行时间(s)')} ${this._getSortIcon('avg_time_sec')}
+                                <th style="width: 130px;" data-sort="avg_time_sec" data-label="${I18n.t('pageCopy.instanceDetail.averageExecutionTimeS')}">
+                                    ${I18n.t('pageCopy.instanceDetail.averageExecutionTimeS')} ${this._getSortIcon('avg_time_sec')}
                                 </th>
-                                <th style="width: 120px;" data-sort="avg_rows_scanned" data-label="${this._t('平均扫描行数')}">
-                                    ${this._t('平均扫描行数')} ${this._getSortIcon('avg_rows_scanned')}
+                                <th style="width: 120px;" data-sort="avg_rows_scanned" data-label="${I18n.t('pageCopy.instanceDetail.averageRowsScanned')}">
+                                    ${I18n.t('pageCopy.instanceDetail.averageRowsScanned')} ${this._getSortIcon('avg_rows_scanned')}
                                 </th>
-                                <th style="width: 130px;" data-sort="avg_wait_time_sec" data-label="${this._t('平均等待时间(s)')}">
-                                    ${this._t('平均等待时间(s)')} ${this._getSortIcon('avg_wait_time_sec')}
+                                <th style="width: 130px;" data-sort="avg_wait_time_sec" data-label="${I18n.t('pageCopy.instanceDetail.averageWaitingTimeS')}">
+                                    ${I18n.t('pageCopy.instanceDetail.averageWaitingTimeS')} ${this._getSortIcon('avg_wait_time_sec')}
                                 </th>
-                                <th style="width: 160px;" data-sort="last_exec_time" data-label="${this._t('最后执行时间')}">
-                                    ${this._t('最后执行时间')} ${this._getSortIcon('last_exec_time')}
+                                <th style="width: 160px;" data-sort="last_exec_time" data-label="${I18n.t('pageCopy.instanceDetail.lastRun')}">
+                                    ${I18n.t('pageCopy.instanceDetail.lastRun')} ${this._getSortIcon('last_exec_time')}
                                 </th>
                             </tr>
                         </thead>
@@ -1946,53 +1946,53 @@ const InstanceDetailPage = {
             <div class="drawer-overlay"></div>
             <div class="drawer-content">
                 <div class="drawer-header">
-                    <h3>${this._t('SQL 详情')}</h3>
-                    <button class="btn-icon" id="closeTopSqlDrawer" title="${this._t('关闭')}" aria-label="${this._t('关闭')}">
+                    <h3>${I18n.t('pageCopy.instanceDetail.sqlDetails')}</h3>
+                    <button class="btn-icon" id="closeTopSqlDrawer" title="${I18n.t('pageCopy.instanceDetail.close')}" aria-label="${I18n.t('pageCopy.instanceDetail.close')}">
                         <i data-lucide="x"></i>
                     </button>
                 </div>
                 <div class="drawer-body">
                     <div class="sql-detail-section">
-                        <h4>${this._t('SQL 文本')}</h4>
+                        <h4>${I18n.t('pageCopy.instanceDetail.sqlText2')}</h4>
                         <pre class="sql-code">${this._escapeHtml(sql.sql_text || '-')}</pre>
                     </div>
                     <div class="sql-detail-section">
-                        <h4>${this._t('执行统计')}</h4>
+                        <h4>${I18n.t('pageCopy.instanceDetail.executionStatistics')}</h4>
                         <div class="sql-stats-grid">
                             <div class="stat-item">
                                 <label>SQL ID</label>
                                 <span class="text-monospace">${this._escapeHtml(sql.sql_id || '-')}</span>
                             </div>
                             <div class="stat-item">
-                                <label>${this._t('执行次数')}</label>
+                                <label>${I18n.t('pageCopy.instanceDetail.executionCount')}</label>
                                 <span>${Format.number(sql.exec_count || 0)}</span>
                             </div>
                             <div class="stat-item">
-                                <label>${this._t('总执行时间')}</label>
-                                <span>${Format.number(sql.total_time_sec || 0, 6)} ${this._t('秒')}</span>
+                                <label>${I18n.t('pageCopy.instanceDetail.totalExecutionTime')}</label>
+                                <span>${Format.number(sql.total_time_sec || 0, 6)} ${I18n.t('pageCopy.instanceDetail.seconds')}</span>
                             </div>
                             <div class="stat-item">
-                                <label>${this._t('平均执行时间')}</label>
-                                <span>${Format.number(sql.avg_time_sec || 0, 6)} ${this._t('秒')}</span>
+                                <label>${I18n.t('pageCopy.instanceDetail.averageExecutionTime')}</label>
+                                <span>${Format.number(sql.avg_time_sec || 0, 6)} ${I18n.t('pageCopy.instanceDetail.seconds')}</span>
                             </div>
                             <div class="stat-item">
-                                <label>${this._t('总扫描行数')}</label>
+                                <label>${I18n.t('pageCopy.instanceDetail.totalRowsScanned')}</label>
                                 <span>${Format.number(sql.total_rows_scanned || 0)}</span>
                             </div>
                             <div class="stat-item">
-                                <label>${this._t('平均扫描行数')}</label>
+                                <label>${I18n.t('pageCopy.instanceDetail.averageRowsScanned')}</label>
                                 <span>${Format.number(sql.avg_rows_scanned || 0, 2)}</span>
                             </div>
                             <div class="stat-item">
-                                <label>${this._t('总等待时间')}</label>
-                                <span>${Format.number(sql.total_wait_time_sec || 0, 6)} ${this._t('秒')}</span>
+                                <label>${I18n.t('pageCopy.instanceDetail.totalWaitingTime')}</label>
+                                <span>${Format.number(sql.total_wait_time_sec || 0, 6)} ${I18n.t('pageCopy.instanceDetail.seconds')}</span>
                             </div>
                             <div class="stat-item">
-                                <label>${this._t('平均等待时间')}</label>
-                                <span>${Format.number(sql.avg_wait_time_sec || 0, 6)} ${this._t('秒')}</span>
+                                <label>${I18n.t('pageCopy.instanceDetail.averageWaitingTime')}</label>
+                                <span>${Format.number(sql.avg_wait_time_sec || 0, 6)} ${I18n.t('pageCopy.instanceDetail.seconds')}</span>
                             </div>
                             <div class="stat-item">
-                                <label>${this._t('最后执行时间')}</label>
+                                <label>${I18n.t('pageCopy.instanceDetail.lastRun')}</label>
                                 <span>${sql.last_exec_time ? Format.datetime(sql.last_exec_time) : '-'}</span>
                             </div>
                         </div>
@@ -2000,19 +2000,19 @@ const InstanceDetailPage = {
                     <div class="sql-detail-actions">
                         <button class="btn btn-secondary" id="viewExplainPlan">
                             <i data-lucide="git-branch"></i>
-                            ${this._t('查看执行计划')}
+                            ${I18n.t('pageCopy.instanceDetail.viewExecutionPlan')}
                         </button>
                         <button class="btn btn-primary" id="aiDiagnoseTopSql">
                             <i data-lucide="sparkles"></i>
-                            ${this._t('AI 诊断分析')}
+                            ${I18n.t('pageCopy.instanceDetail.aiDiagnosisAnalysis')}
                         </button>
                     </div>
                     <div id="explainPlanResult" class="sql-detail-section" style="display: none;">
-                        <h4>${this._t('执行计划')}</h4>
+                        <h4>${I18n.t('pageCopy.instanceDetail.executionPlan')}</h4>
                         <div id="explainPlanContent"></div>
                     </div>
                     <div id="aiDiagnosisResult" class="sql-detail-section" style="display: none;">
-                        <h4>${this._t('AI 诊断结果')}</h4>
+                        <h4>${I18n.t('pageCopy.instanceDetail.aiDiagnosisResults')}</h4>
                         <div id="aiDiagnosisContent"></div>
                     </div>
                 </div>
@@ -2044,7 +2044,7 @@ const InstanceDetailPage = {
         if (!resultDiv || !contentDiv) return;
 
         resultDiv.style.display = 'block';
-        contentDiv.innerHTML = `<div class="loading-spinner"><i data-lucide="loader"></i> ${this._t('正在获取执行计划...')}</div>`;
+        contentDiv.innerHTML = `<div class="loading-spinner"><i data-lucide="loader"></i> ${I18n.t('pageCopy.instanceDetail.gettingExecutionPlan')}</div>`;
         DOM.createIcons();
 
         try {
@@ -2060,7 +2060,7 @@ const InstanceDetailPage = {
                     contentDiv.innerHTML = `<pre class="explain-plan">${this._escapeHtml(JSON.stringify(plan, null, 2))}</pre>`;
                 }
             } else {
-                contentDiv.innerHTML = `<div class="error-message">${this._t('无法获取执行计划')}</div>`;
+                contentDiv.innerHTML = `<div class="error-message">${I18n.t('pageCopy.instanceDetail.unableToObtainExecutionPlan')}</div>`;
             }
         } catch (error) {
             console.error('Failed to get explain plan:', error);
@@ -2070,7 +2070,7 @@ const InstanceDetailPage = {
 
     _renderExplainTable(planRows) {
         if (!planRows || planRows.length === 0) {
-            return `<div class="empty-state">${this._t('无执行计划数据')}</div>`;
+            return `<div class="empty-state">${I18n.t('pageCopy.instanceDetail.noExecutionPlanData')}</div>`;
         }
 
         // 过滤掉不需要展示的字段
@@ -2107,7 +2107,7 @@ const InstanceDetailPage = {
 
     async _aiDiagnoseTopSql(sql) {
         if (!sql) {
-            Toast.warning(this._t('未找到要分析的 SQL'));
+            Toast.warning(I18n.t('pageCopy.instanceDetail.sqlToParseNotFound'));
             return;
         }
 
@@ -2122,7 +2122,7 @@ const InstanceDetailPage = {
 
         const datasource = this.currentInstance;
         if (!datasource) {
-            Toast.error(this._t('无法获取数据源信息'));
+            Toast.error(this._t(I18n.t('pageCopy.instanceDetail.unableToObtainDatasourceInformation')));
             return;
         }
 
@@ -2132,7 +2132,7 @@ const InstanceDetailPage = {
         let dialogCleanup = null;
         const sqlPreview = sql.sql_text?.substring(0, 50) || 'SQL';
         const title = I18n.t('instanceDetail.sqlAiTitle', {
-            name: datasource.name || this._t('实例'),
+            name: datasource.name || I18n.t('pageCopy.instanceDetail.instance'),
             sql: `${sqlPreview}${sql.sql_text?.length > 50 ? '...' : ''}`,
         });
 
@@ -2181,8 +2181,8 @@ const InstanceDetailPage = {
             content.innerHTML = `
                 <div class="empty-state" style="padding:40px;">
                     <i data-lucide="alert-circle"></i>
-                    <h3>${this._t('SQL AI 诊断打开失败')}</h3>
-                    <p>${this._escapeHtml(error.message || this._t('未知错误'))}</p>
+                    <h3>${I18n.t('pageCopy.instanceDetail.sqlAiCouldNotOpenDiagnosis')}</h3>
+                    <p>${this._escapeHtml(error.message || I18n.t('pageCopy.instanceDetail.unknownError'))}</p>
                 </div>
             `;
             DOM.createIcons();
@@ -2202,44 +2202,44 @@ const InstanceDetailPage = {
         const sqlText = this._truncateSessionAnalysisBlock(sql.sql_text || '', 2400);
 
         const statsParts = [];
-        if (sql.exec_count != null) statsParts.push(`执行次数 ${sql.exec_count}`);
-        if (sql.avg_time_sec != null) statsParts.push(`平均耗时 ${sql.avg_time_sec} 秒`);
-        if (sql.total_time_sec != null) statsParts.push(`总耗时 ${sql.total_time_sec} 秒`);
+        if (sql.exec_count != null) statsParts.push(I18n.t('pageCopy.instanceDetail.executionCountValue', { value0: sql.exec_count }));
+        if (sql.avg_time_sec != null) statsParts.push(I18n.t('pageCopy.instanceDetail.elapsedValue', { value0: sql.avg_time_sec }));
+        if (sql.total_time_sec != null) statsParts.push(I18n.t('pageCopy.instanceDetail.elapsedValue2', { value0: sql.total_time_sec }));
 
         const scanParts = [];
-        if (sql.avg_rows_scanned != null) scanParts.push(`平均扫描 ${sql.avg_rows_scanned} 行`);
-        if (sql.total_rows_scanned != null) scanParts.push(`总扫描 ${sql.total_rows_scanned} 行`);
+        if (sql.avg_rows_scanned != null) scanParts.push(I18n.t('pageCopy.instanceDetail.averageRowsScannedValue', { value0: sql.avg_rows_scanned }));
+        if (sql.total_rows_scanned != null) scanParts.push(I18n.t('pageCopy.instanceDetail.totalRowsScannedValue', { value0: sql.total_rows_scanned }));
 
         const waitParts = [];
-        if (sql.total_wait_time_sec != null) waitParts.push(`总等待时间 ${sql.total_wait_time_sec} 秒`);
+        if (sql.total_wait_time_sec != null) waitParts.push(I18n.t('pageCopy.instanceDetail.totalWaitingTimeValue', { value0: sql.total_wait_time_sec }));
 
         return this._t([
-            '请你作为资深数据库运维专家，针对下面这个 SQL 语句的性能问题做诊断分析，并支持后续多轮追问。',
+            I18n.t('pageCopy.instanceDetail.asASeniorDatabaseOperationAndMaintenance2'),
             '',
-            '【分析目标】',
-            '请判断该 SQL 是否存在性能问题、风险等级如何，并给出优化建议。',
+            I18n.t('pageCopy.instanceDetail.analysisTarget'),
+            I18n.t('pageCopy.instanceDetail.pleaseDetermineWhetherThereArePerformanceProblems'),
             '',
-            '【实例信息】',
-            `- 实例名称：${this._formatSessionAnalysisValue(datasource.name)}`,
-            `- 数据库类型：${this._formatSessionAnalysisValue(this._getDbTypeLabel(datasource.db_type) || datasource.db_type)}`,
-            `- 主机：${hostText}`,
-            `- 数据库：${datasourceDatabaseText}`,
-            versionText !== '-' ? `- 版本：${versionText}` : null,
+            I18n.t('pageCopy.instanceDetail.instanceInformation'),
+            I18n.t('pageCopy.instanceDetail.instanceNameValue', { value0: this._formatSessionAnalysisValue(datasource.name) }),
+            I18n.t('pageCopy.instanceDetail.databaseTypeValue', { value0: this._formatSessionAnalysisValue(this._getDbTypeLabel(datasource.db_type) || datasource.db_type) }),
+            I18n.t('pageCopy.instanceDetail.hostValue', { value0: hostText }),
+            I18n.t('pageCopy.instanceDetail.databaseValue', { value0: datasourceDatabaseText }),
+            versionText !== '-' ? I18n.t('pageCopy.instanceDetail.versionValue', { value0: versionText }) : null,
             '',
-            '【SQL 统计信息】',
+            I18n.t('pageCopy.instanceDetail.sqlStatistics'),
             statsParts.length > 0 ? `- ${statsParts.join('，')}` : null,
             scanParts.length > 0 ? `- ${scanParts.join('，')}` : null,
             waitParts.length > 0 ? `- ${waitParts.join('，')}` : null,
             '',
-            '【SQL 文本】',
+            I18n.t('pageCopy.instanceDetail.sqlText'),
             sqlText,
             '',
-            '【输出要求】',
-            '1. SQL 性能状态判断（是否存在性能问题）',
-            '2. 主要性能瓶颈或风险点',
-            '3. 可能的根因分析',
-            '4. 具体的优化建议（索引、改写、配置等）',
-            '5. 如果信息不足，请明确指出需要补充哪些信息（如执行计划、表结构等）',
+            I18n.t('pageCopy.instanceDetail.outputRequirements'),
+            I18n.t('pageCopy.instanceDetail.sqlAssessmentRequirement'),
+            I18n.t('pageCopy.instanceDetail.sqlBottleneckRequirement'),
+            I18n.t('pageCopy.instanceDetail.sqlRootCauseRequirement'),
+            I18n.t('pageCopy.instanceDetail.sqlOptimizationRequirement'),
+            I18n.t('pageCopy.instanceDetail.sqlMissingInfoRequirement'),
         ].filter(Boolean).join('\n'));
     },
 
@@ -2256,7 +2256,7 @@ const InstanceDetailPage = {
     },
 
     _simplifyVersion(fullVersion, dbType) {
-        if (!fullVersion) return { short: this._t('未知版本'), full: '', details: '' };
+        if (!fullVersion) return { short: I18n.t('pageCopy.instanceDetail.unknownVersion'), full: '', details: '' };
 
         const patterns = {
             'postgresql': /PostgreSQL\s+([\d.]+)/i,

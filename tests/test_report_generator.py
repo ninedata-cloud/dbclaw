@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from backend.models.report import Report
-from backend.services.report_generator import ReportGenerator
+from backend.services.report_generator import ReportGenerator, _report_trigger_label
 
 
 class _ScalarResult:
@@ -13,6 +13,19 @@ class _ScalarResult:
 
     def scalar_one_or_none(self):
         return self._value
+
+
+@pytest.mark.parametrize(
+    ("trigger_type", "locale", "expected"),
+    [
+        ("baseline", "zh-CN", "基线"),
+        ("baseline", "en-US", "Baseline"),
+        ("connection_failure", "zh-CN", "连接失败"),
+        ("connection_failure", "en-US", "Connection Failure"),
+    ],
+)
+def test_report_trigger_labels_are_localized(trigger_type, locale, expected):
+    assert _report_trigger_label(trigger_type, locale) == expected
 
 
 @pytest.mark.service

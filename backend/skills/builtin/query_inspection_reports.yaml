@@ -128,3 +128,25 @@ code: |
               "limit": limit
           }
       }
+
+i18n:
+  zh-CN:
+    name: 查询巡检报告
+    description: 执行“查询巡检报告”操作，返回用于诊断和运维分析的结构化结果。
+    parameter_descriptions:
+      datasource_id: 数据源 ID。
+      report_id: 报告 ID。
+      trigger_type: trigger type。
+      status: 状态。
+      limit: 返回条数上限。
+    permission_descriptions: {}
+  en-US:
+    name: Query Inspection Reports
+    description: Query AI inspection report - list with filters or get detailed report content
+    parameter_descriptions:
+      datasource_id: Filter by datasource ID
+      report_id: Get specific report detail (if provided, returns full content)
+      trigger_type: Filter by trigger type
+      status: Filter by status
+      limit: Max records to return (default 20)
+    permission_descriptions: {}

@@ -6,32 +6,18 @@ const ScheduledTasksPage = {
 
     render() {
         const content = DOM.$('#page-content');
-        content.innerHTML = '<div class="loading">正在加载任务调度配置...</div>';
-        Header.render('任务调度管理', this._buildHeaderActions());
+        content.innerHTML = I18n.t('pageCopy.scheduledTasks.loadingTaskSchedulingConfiguration');
+        Header.render(I18n.t('pageCopy.scheduledTasks.taskScheduling'), this._buildHeaderActions());
         this.loadTasks();
     },
 
     _buildHeaderActions() {
         const filters = DOM.el('div', { className: 'dashboard-filters' });
-        filters.innerHTML = `
-            <input type="text" id="scheduled-task-keyword" class="filter-input" placeholder="${I18n.t('placeholders.searchTasks')}" style="min-width:180px;">
-            <select id="scheduled-task-enabled" class="filter-select">
-                <option value="">全部状态</option>
-                <option value="true">已启用</option>
-                <option value="false">已停用</option>
-            </select>
-            <select id="scheduled-task-last-status" class="filter-select">
-                <option value="">全部结果</option>
-                <option value="success">成功</option>
-                <option value="failed">失败</option>
-                <option value="skipped">跳过</option>
-                <option value="running">运行中</option>
-            </select>
-        `;
+        filters.innerHTML = I18n.t('pageCopy.scheduledTasks.allStatusesEnabledDisabledAllResultsSuccess', { value0: I18n.t('placeholders.searchTasks') });
 
         const addBtn = DOM.el('button', {
             className: 'btn btn-primary',
-            innerHTML: '<i data-lucide="plus"></i> 新建任务',
+            innerHTML: I18n.t('pageCopy.scheduledTasks.newTask'),
             onClick: () => this.showTaskModal()
         });
 
@@ -59,74 +45,20 @@ const ScheduledTasksPage = {
             if (lastStatus) params.last_status = lastStatus;
 
             this.tasks = await API.getScheduledTasks(Object.keys(params).length ? params : null);
-            content.innerHTML = `
-                <div class="scheduled-tasks-page">
-                    <div class="scheduled-task-table-card">
-                        <table class="scheduled-task-table">
-                            <thead>
-                                <tr>
-                                    <th>任务</th>
-                                    <th>调度</th>
-                                    <th>启用</th>
-                                    <th>上次运行</th>
-                                    <th>下次运行</th>
-                                    <th>最近结果</th>
-                                    <th>操作</th>
-                                </tr>
-                            </thead>
-                            <tbody>${this.renderRows()}</tbody>
-                        </table>
-                    </div>
-                </div>
-            `;
+            content.innerHTML = I18n.t('pageCopy.scheduledTasks.taskScheduleEnableLastRunNextRun', { value0: this.renderRows() });
             DOM.createIcons();
         } catch (error) {
             console.error('Failed to load scheduled tasks:', error);
-            Toast.error('加载任务失败: ' + error.message);
-            content.innerHTML = `
-                <div class="error-state">
-                    <h3>加载任务失败</h3>
-                    <p>${Utils.escapeHtml(error.message)}</p>
-                    <button class="btn btn-primary" onclick="ScheduledTasksPage.loadTasks()">重试</button>
-                </div>
-            `;
+            Toast.error(I18n.t('pageCopy.scheduledTasks.loadingTaskFailedValueRetry', { value0: Utils.escapeHtml(error.message) }));
+            content.innerHTML = I18n.t('pageCopy.scheduledTasks.loadingTaskFailedValueRetry', { value0: Utils.escapeHtml(error.message) });
         }
     },
 
     renderRows() {
         if (!this.tasks.length) {
-            return '<tr><td colspan="7" class="empty-state">暂无任务调度配置</td></tr>';
+            return I18n.t('pageCopy.scheduledTasks.noScheduledTasks');
         }
-        return this.tasks.map(task => `
-            <tr>
-                <td>
-                    <div class="scheduled-task-name">${Utils.escapeHtml(task.name)}</div>
-                    <div class="scheduled-task-desc">${Utils.escapeHtml(task.description || '暂无描述')}</div>
-                </td>
-                <td>${this.formatSchedule(task)}</td>
-                <td>${task.enabled ? '<span class="task-chip enabled">已启用</span>' : '<span class="task-chip disabled">已停用</span>'}</td>
-                <td>${this.formatDate(task.last_run_at)}</td>
-                <td>${this.formatDate(task.next_run_at)}</td>
-                <td>${this.renderStatus(task.last_status, task.last_error)}</td>
-                <td class="actions scheduled-task-actions">
-                    <button class="btn btn-sm" onclick="ScheduledTasksPage.runTask(${task.id})" title="立即执行">
-                        <i data-lucide="play"></i>
-                    </button>
-                    <button class="btn btn-sm" onclick="ScheduledTasksPage.showRuns(${task.id})" title="运行历史">
-                        <i data-lucide="history"></i>
-                    </button>
-                    <button class="btn btn-sm" onclick="ScheduledTasksPage.showTaskModal(${task.id})" title="编辑">
-                        <i data-lucide="edit"></i>
-                    </button>
-                    <button class="btn btn-sm" onclick="ScheduledTasksPage.toggleTask(${task.id})" title="${task.enabled ? '停用' : '启用'}">
-                        <i data-lucide="${task.enabled ? 'pause' : 'power'}"></i>
-                    </button>
-                    <button class="btn btn-sm btn-danger" onclick="ScheduledTasksPage.deleteTask(${task.id})" title="删除">
-                        <i data-lucide="trash-2"></i>
-                    </button>
-                </td>
-            </tr>
-        `).join('');
+        return this.tasks.map(task => I18n.t('pageCopy.scheduledTasks.taskRow', { value0: Utils.escapeHtml(task.name), value1: Utils.escapeHtml(task.description || I18n.t('pageCopy.scheduledTasks.noDescriptionYet')), value2: this.formatSchedule(task), value3: task.enabled ? I18n.t('pageCopy.scheduledTasks.enabled') : I18n.t('pageCopy.scheduledTasks.disabled'), value4: this.formatDate(task.last_run_at), value5: this.formatDate(task.next_run_at), value6: this.renderStatus(task.last_status, task.last_error), value7: task.id, value8: task.id, value9: task.id, value10: task.id, value11: task.enabled ? I18n.t('pageCopy.scheduledTasks.disabledLabel') : I18n.t('pageCopy.scheduledTasks.enable'), value12: task.enabled ? 'pause' : 'power', value13: task.id })).join('');
     },
 
     formatSchedule(task) {
@@ -134,19 +66,19 @@ const ScheduledTasksPage = {
         if (task.schedule_type === 'interval') {
             const seconds = Number(config.interval_seconds || 0);
             const expression = this.intervalSecondsToCronExpression(seconds || 60);
-            return `<span class="task-mono">cron: ${Utils.escapeHtml(expression)}</span> <span class="task-chip disabled">原间隔</span>`;
+            return I18n.t('pageCopy.scheduledTasks.cronValueOriginalInterval', { value0: Utils.escapeHtml(expression) });
         }
         if (config.preset === 'hourly') {
-            return `<span class="task-mono">每小时 ${String(config.minute ?? 0).padStart(2, '0')}分${String(config.second ?? 0).padStart(2, '0')}秒</span>`;
+            return I18n.t('pageCopy.scheduledTasks.hourlyValueValue', { value0: String(config.minute ?? 0).padStart(2, '0'), value1: String(config.second ?? 0).padStart(2, '0') });
         }
         if (config.preset === 'daily') {
-            return `<span class="task-mono">每天 ${Utils.escapeHtml(config.time || '00:00:00')}</span>`;
+            return I18n.t('pageCopy.scheduledTasks.everyDayValue', { value0: Utils.escapeHtml(config.time || '00:00:00') });
         }
         if (config.preset === 'weekly') {
-            return `<span class="task-mono">每周${this.weekdayLabel(config.day_of_week)} ${Utils.escapeHtml(config.time || '00:00:00')}</span>`;
+            return I18n.t('pageCopy.scheduledTasks.weeklyValueValue', { value0: this.weekdayLabel(config.day_of_week), value1: Utils.escapeHtml(config.time || '00:00:00') });
         }
         if (config.preset === 'monthly') {
-            return `<span class="task-mono">每月${config.day ?? 1}日 ${Utils.escapeHtml(config.time || '00:00:00')}</span>`;
+            return I18n.t('pageCopy.scheduledTasks.monthlyValueValue', { value0: config.day ?? 1, value1: Utils.escapeHtml(config.time || '00:00:00') });
         }
         const expression = (config.expression || '').trim() || '-';
         return `<span class="task-mono">cron: ${Utils.escapeHtml(expression)}</span>`;
@@ -177,7 +109,7 @@ const ScheduledTasksPage = {
 
     renderStatus(status, error) {
         if (!status) return '-';
-        const labels = { success: '成功', failed: '失败', skipped: '跳过', running: '运行中', pending: '等待中' };
+        const labels = { success: I18n.t('pageCopy.scheduledTasks.success'), failed: I18n.t('pageCopy.scheduledTasks.failed'), skipped: I18n.t('pageCopy.scheduledTasks.skip'), running: I18n.t('pageCopy.scheduledTasks.running'), pending: I18n.t('pageCopy.scheduledTasks.waiting') };
         const title = error ? ` title="${this.escapeAttr(error)}"` : '';
         return `<span class="task-chip ${status}"${title}>${labels[status] || status}</span>`;
     },
@@ -205,143 +137,25 @@ const ScheduledTasksPage = {
         ].join('\n');
 
         Modal.show({
-            title: isEdit ? '编辑任务' : '新建任务',
+            title: isEdit ? I18n.t('pageCopy.scheduledTasks.editTask') : I18n.t('pageCopy.scheduledTasks.newTask2'),
             size: 'xlarge',
             containerClassName: 'scheduled-task-editor-modal',
             bodyClassName: 'scheduled-task-modal-body',
-            content: `
-                <form id="scheduled-task-form" class="scheduled-task-form">
-                    <div class="scheduled-task-form-intro">
-                        <div>
-                            <span class="scheduled-task-eyebrow">${isEdit ? 'TASK CONFIGURATION' : 'NEW SCHEDULED TASK'}</span>
-                            <p>配置任务的基础信息、触发方式和执行脚本。脚本入口必须定义 <code>run(context)</code>。</p>
-                        </div>
-                    </div>
-
-                    <section class="scheduled-task-form-section">
-                        <div class="scheduled-task-section-heading">
-                            <h4>基础信息</h4>
-                            <p>名称用于列表识别，启用状态控制任务是否进入调度器。</p>
-                        </div>
-                        <div class="scheduled-task-form-grid scheduled-task-basic-grid">
-                            <div class="form-group scheduled-task-name-field">
-                                <label>任务名称 *</label>
-                                <input id="task-name" class="form-input" value="${this.escapeAttr(task?.name || '')}" required>
-                            </div>
-                            <div class="form-group scheduled-task-enabled-field">
-                                <label>启用状态</label>
-                                <label class="scheduled-task-checkbox scheduled-task-switch-card">
-                                    <input type="checkbox" id="task-enabled" ${task?.enabled === false ? '' : 'checked'}>
-                                    <span>启用任务</span>
-                                </label>
-                            </div>
-                            <div class="form-group">
-                                <label>超时时间（秒）</label>
-                                <input id="task-timeout" type="number" min="1" max="3600" class="form-input" value="${task?.timeout_seconds || 60}">
-                            </div>
-                            <div class="form-group scheduled-task-full">
-                                <label>任务描述</label>
-                                <textarea id="task-description" class="form-textarea scheduled-task-description-input" rows="2" placeholder="${I18n.t('scheduledTasks.descriptionPlaceholder')}">${Utils.escapeHtml(task?.description || '')}</textarea>
-                            </div>
-                        </div>
-                    </section>
-
-                    <section class="scheduled-task-form-section">
-                        <div class="scheduled-task-section-heading">
-                            <h4>Cron 调度</h4>
-                            <p>先选常用周期（底层均为 Cron）；最后一项可手写表达式。短周期请设置合理超时，避免任务堆积。</p>
-                        </div>
-                        <div class="scheduled-task-schedule-layout">
-                            <div id="task-cron-fields" class="scheduled-task-schedule-row">
-                                <div class="form-group scheduled-task-compact-field">
-                                    <label>执行周期 *</label>
-                                    <select id="task-cron-preset" class="form-select">
-                                        <option value="hourly" ${config.preset === 'hourly' ? 'selected' : ''}>每小时</option>
-                                        <option value="daily" ${config.preset === 'daily' ? 'selected' : ''}>每天</option>
-                                        <option value="weekly" ${config.preset === 'weekly' ? 'selected' : ''}>每周</option>
-                                        <option value="monthly" ${config.preset === 'monthly' ? 'selected' : ''}>每月</option>
-                                        <option value="custom" ${config.preset === 'custom' ? 'selected' : ''}>自定义 Cron 表达式</option>
-                                    </select>
-                                </div>
-                                <div id="task-cron-hourly-fields" class="form-group scheduled-task-compact-field">
-                                    <label>分钟 / 秒</label>
-                                    <div class="scheduled-task-inline-fields">
-                                        <input id="task-cron-hourly-minute" type="number" min="0" max="59" class="form-input" value="${config.minute}" title="${I18n.t('scheduledTasks.hourlyMinuteTitle')}">
-                                        <input id="task-cron-hourly-second" type="number" min="0" max="59" class="form-input" value="${config.second}" title="${I18n.t('scheduledTasks.minuteSecondTitle')}">
-                                    </div>
-                                </div>
-                                <div id="task-cron-time-fields" class="form-group scheduled-task-compact-field">
-                                    <label>时间 (HH:MM:SS)</label>
-                                    <input id="task-cron-time" class="form-input task-mono" value="${this.escapeAttr(config.time)}" placeholder="02:30:00">
-                                </div>
-                                <div id="task-cron-weekly-fields" class="form-group scheduled-task-compact-field">
-                                    <label>星期</label>
-                                    <select id="task-cron-weekday" class="form-select">
-                                        ${[0, 1, 2, 3, 4, 5, 6].map(day => `
-                                            <option value="${day}" ${Number(config.day_of_week) === day ? 'selected' : ''}>周${this.weekdayLabel(day)}</option>
-                                        `).join('')}
-                                    </select>
-                                </div>
-                                <div id="task-cron-monthly-fields" class="form-group scheduled-task-compact-field">
-                                    <label>每月几号</label>
-                                    <input id="task-cron-month-day" type="number" min="1" max="31" class="form-input" value="${config.day}">
-                                </div>
-                                <div id="task-cron-custom-fields" class="form-group scheduled-task-cron-field scheduled-task-full">
-                                    <label>Cron 表达式</label>
-                                    <input id="task-cron-expression" class="form-input task-mono" placeholder="0 */5 * * * *" value="${this.escapeAttr(config.expression)}">
-                                    <p class="form-hint">支持 5 段（分 时 日 月 周）或 6 段（秒 分 时 日 月 周）。</p>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    <section class="scheduled-task-form-section">
-                        <div class="scheduled-task-section-heading">
-                            <h4>结果通知</h4>
-                            <p>任务执行完成后，可复用外部集成管理中的出站通知模板发送结果。</p>
-                        </div>
-                        <div class="scheduled-task-notification-layout">
-                            <div class="form-group scheduled-task-policy-field">
-                                <label>发送策略</label>
-                                <select id="task-notification-policy" class="form-select">
-                                    ${[
-                                        ['never', '不发送'],
-                                        ['on_failure', '失败发送'],
-                                        ['on_success', '成功发送'],
-                                        ['always', '全部发送']
+            content: I18n.t("pageCopy.scheduledTasks.showTaskModalContent", { value0: isEdit ? 'TASK CONFIGURATION' : 'NEW SCHEDULED TASK', value1: this.escapeAttr(task?.name || ''), value2: task?.enabled === false ? '' : 'checked', value3: task?.timeout_seconds || 60, value4: I18n.t('scheduledTasks.descriptionPlaceholder'), value5: Utils.escapeHtml(task?.description || ''), value6: config.preset === 'hourly' ? 'selected' : '', value7: config.preset === 'daily' ? 'selected' : '', value8: config.preset === 'weekly' ? 'selected' : '', value9: config.preset === 'monthly' ? 'selected' : '', value10: config.preset === 'custom' ? 'selected' : '', value11: config.minute, value12: I18n.t('scheduledTasks.hourlyMinuteTitle'), value13: config.second, value14: I18n.t('scheduledTasks.minuteSecondTitle'), value15: this.escapeAttr(config.time), value16: [0, 1, 2, 3, 4, 5, 6].map(day => I18n.t('pageCopy.scheduledTasks.showTaskModalContent2', {
+                                            value0: day,
+                                            value1: Number(config.day_of_week) === day ? 'selected' : '',
+                                            value2: this.weekdayLabel(day)
+                                        })).join(''), value17: config.day, value18: this.escapeAttr(config.expression), value19: [
+                                        ['never', I18n.t('pageCopy.scheduledTasks.showTaskModalContent3')],
+                                        ['on_failure', I18n.t('pageCopy.scheduledTasks.showTaskModalContent4')],
+                                        ['on_success', I18n.t('pageCopy.scheduledTasks.showTaskModalContent5')],
+                                        ['always', I18n.t('pageCopy.scheduledTasks.showTaskModalContent6')]
                                     ].map(([value, label]) => `
                                         <option value="${value}" ${(task?.notification_policy || 'never') === value ? 'selected' : ''}>${label}</option>
-                                    `).join('')}
-                                </select>
-                            </div>
-                            <div id="scheduled-task-notification-targets" class="scheduled-task-notification-targets">
-                                <div class="scheduled-task-targets-header">
-                                    <div>
-                                        <strong>通知接口</strong>
-                                        <span>选择已启用的出站通知，并填写 webhook、email 等运行参数。</span>
-                                    </div>
-                                    <button type="button" class="btn btn-sm btn-secondary" onclick="ScheduledTasksPage.addNotificationTargetRow()">新增接口</button>
-                                </div>
-                                <div id="scheduled-task-target-list" class="scheduled-task-target-list"></div>
-                            </div>
-                        </div>
-                    </section>
-
-                    <section class="scheduled-task-form-section scheduled-task-execution-section">
-                        <div class="scheduled-task-section-heading">
-                            <h4>执行内容</h4>
-                            <p>脚本区域保留更宽空间，便于阅读和编辑多行代码。需要动态数据时可通过 <code>context</code> 读取系统配置或数据库会话。</p>
-                        </div>
-                        <div class="form-group scheduled-task-script-panel">
-                            <label>Python 脚本 *</label>
-                            <textarea id="task-script-code" class="form-textarea task-mono scheduled-task-code" rows="16" spellcheck="false" required>${Utils.escapeHtml(code)}</textarea>
-                        </div>
-                    </section>
-                </form>
-            `,
+                                    `).join(''), value20: Utils.escapeHtml(code) }),
             buttons: [
-                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
-                { text: isEdit ? '保存' : '创建', variant: 'primary', onClick: () => this.saveTask(task?.id || null) }
+                { text: I18n.t('pageCopy.scheduledTasks.cancel'), variant: 'secondary', onClick: () => Modal.hide() },
+                { text: isEdit ? I18n.t('pageCopy.scheduledTasks.save') : I18n.t('pageCopy.scheduledTasks.create'), variant: 'primary', onClick: () => this.saveTask(task?.id || null) }
             ]
         });
         this.updateCronPresetFieldsVisibility();
@@ -377,27 +191,7 @@ const ScheduledTasksPage = {
             return `<option value="${item.id}" ${selected}>${Utils.escapeHtml(item.name)}</option>`;
         }).join('');
 
-        wrapper.innerHTML = `
-            <div class="scheduled-task-target-top">
-                <div class="form-group">
-                    <label>出站通知</label>
-                    <select class="scheduled-task-target-integration form-select">
-                        <option value="">请选择</option>
-                        ${integrationOptions}
-                    </select>
-                </div>
-                <div class="scheduled-task-target-actions">
-                    <label class="scheduled-task-checkbox">
-                        <input type="checkbox" class="scheduled-task-target-enabled" ${target.enabled !== false ? 'checked' : ''}>
-                        <span>启用</span>
-                    </label>
-                    <button type="button" class="btn-icon scheduled-task-remove-target" title="${I18n.t('scheduledTasks.removeTarget')}" aria-label="${I18n.t('scheduledTasks.removeTarget')}">
-                        <i data-lucide="trash-2"></i>
-                    </button>
-                </div>
-            </div>
-            <div class="scheduled-task-target-params"></div>
-        `;
+        wrapper.innerHTML = I18n.t('pageCopy.scheduledTasks.outboundNotificationSelectValueEnable', { value0: integrationOptions, value1: target.enabled !== false ? 'checked' : '', value2: I18n.t('scheduledTasks.removeTarget'), value3: I18n.t('scheduledTasks.removeTarget') });
 
         wrapper.querySelector('.scheduled-task-target-integration')?.addEventListener('change', () => {
             this.renderNotificationTargetParams(wrapper, {});
@@ -424,15 +218,15 @@ const ScheduledTasksPage = {
         if (!integration) {
             container.innerHTML = this.notificationIntegrations.length
                 ? ''
-                : '<div class="scheduled-task-target-empty">暂无可用出站通知，请先在外部集成管理中启用出站通知模板。</div>';
+                : I18n.t('pageCopy.scheduledTasks.thereAreNoOutboundNotificationsAvailableYet');
             return;
         }
         if (!integration.config_schema?.properties) {
-            container.innerHTML = '<div class="scheduled-task-target-empty">此出站通知不需要额外参数。</div>';
+            container.innerHTML = I18n.t('pageCopy.scheduledTasks.noAdditionalParametersAreRequiredForThis');
             return;
         }
 
-        let html = '<div class="scheduled-task-target-param-title">接口参数</div>';
+        let html = I18n.t('pageCopy.scheduledTasks.interfaceParameters');
         for (const [key, prop] of Object.entries(integration.config_schema.properties)) {
             const required = integration.config_schema.required?.includes(key) ? '<span class="scheduled-task-param-required">*</span>' : '';
             const isPassword = prop.format === 'password';
@@ -440,7 +234,7 @@ const ScheduledTasksPage = {
             const value = isPassword ? '' : (currentValue || prop.default || '');
             const placeholder = isPassword && currentValue
                 ? I18n.t('placeholders.configuredKeep')
-                : I18n.translateLegacyText(prop.description || '');
+                : (prop.description || '');
             html += `
                 <div class="scheduled-task-target-param-row">
                     <label>${Utils.escapeHtml(prop.title || key)}${required}</label>
@@ -542,7 +336,7 @@ const ScheduledTasksPage = {
     },
 
     weekdayLabel(day) {
-        return ['一', '二', '三', '四', '五', '六', '日'][Number(day) || 0] || '一';
+        return [I18n.t('pageCopy.scheduledTasks.mondayShort'), I18n.t('pageCopy.scheduledTasks.tuesdayShort'), I18n.t('pageCopy.scheduledTasks.wednesdayShort'), I18n.t('pageCopy.scheduledTasks.thursdayShort'), I18n.t('pageCopy.scheduledTasks.fridayShort'), I18n.t('pageCopy.scheduledTasks.saturdayShort'), I18n.t('pageCopy.scheduledTasks.sundayShort')][Number(day) || 0] || I18n.t('pageCopy.scheduledTasks.mondayShort');
     },
 
     updateNotificationFieldsVisibility() {
@@ -586,7 +380,7 @@ const ScheduledTasksPage = {
         }).filter(target => Number.isFinite(target.integration_id));
 
         if (notificationPolicy !== 'never' && notificationTargets.length === 0) {
-            throw new Error('请选择至少一个通知接口');
+            throw new Error(I18n.t('pageCopy.scheduledTasks.pleaseSelectAtLeastOneNotificationInterface'));
         }
 
         return {
@@ -633,26 +427,26 @@ const ScheduledTasksPage = {
             };
         }
         const expression = (DOM.$('#task-cron-expression')?.value || '').trim();
-        if (!expression) throw new Error('自定义模式下 Cron 表达式不能为空');
+        if (!expression) throw new Error(I18n.t('pageCopy.scheduledTasks.cronExpressionCannotBeEmptyInCustom'));
         return { expression };
     },
 
     getIntegrationName(integrationId) {
         const integration = this.notificationIntegrations.find(item => item.id === integrationId);
-        return integration ? integration.name : `通知接口 ${integrationId || ''}`.trim();
+        return integration ? integration.name : I18n.t('pageCopy.scheduledTasks.notificationEndpointValue', { value0: integrationId || '' }).trim();
     },
 
     async saveTask(taskId) {
         try {
             const data = this.collectFormData();
-            if (!data.name) throw new Error('任务名称不能为空');
-            if (!data.script_code.trim()) throw new Error('Python 脚本不能为空');
+            if (!data.name) throw new Error(I18n.t('pageCopy.scheduledTasks.taskNameCannotBeEmpty'));
+            if (!data.script_code.trim()) throw new Error(I18n.t('pageCopy.scheduledTasks.pythonScriptCannotBeEmpty'));
             if (taskId) {
                 await API.updateScheduledTask(taskId, data);
-                Toast.success('任务已更新');
+                Toast.success(I18n.t('pageCopy.scheduledTasks.taskUpdated'));
             } else {
                 await API.createScheduledTask(data);
-                Toast.success('任务已创建');
+                Toast.success(I18n.t('pageCopy.scheduledTasks.taskHasBeenCreated'));
             }
             Modal.hide();
             await this.loadTasks();
@@ -667,38 +461,38 @@ const ScheduledTasksPage = {
         if (!task) return;
         try {
             await API.updateScheduledTask(taskId, { enabled: !task.enabled });
-            Toast.success(task.enabled ? '任务已停用' : '任务已启用');
+            Toast.success(task.enabled ? I18n.t('pageCopy.scheduledTasks.taskIsDeactivated') : I18n.t('pageCopy.scheduledTasks.taskIsEnabled'));
             await this.loadTasks();
         } catch (error) {
-            Toast.error('更新任务状态失败: ' + error.message);
+            Toast.error(error.message || I18n.t('common.requestFailed'));
         }
     },
 
     async runTask(taskId) {
         const task = this.tasks.find(item => item.id === taskId);
         const taskName = task?.name || `#${taskId}`;
-        if (!confirm(`确认立即手工执行任务「${taskName}」吗？`)) return;
+        if (!confirm(I18n.t('pageCopy.scheduledTasks.confirmToExecuteTheTaskManuallyImmediately', { value0: taskName }))) return;
 
         try {
             const run = await API.runScheduledTask(taskId);
-            Toast.success(run.status === 'success' ? '任务执行成功' : `任务执行完成：${run.status}`);
+            Toast.success(run.status === 'success' ? I18n.t('pageCopy.scheduledTasks.taskExecutionSuccessful') : I18n.t('pageCopy.scheduledTasks.taskExecutionCompletedValue', { value0: run.status }));
             await this.loadTasks();
             this.showRunDetail(run);
         } catch (error) {
-            Toast.error('执行任务失败: ' + error.message);
+            Toast.error(error.message || I18n.t('common.requestFailed'));
         }
     },
 
     async deleteTask(taskId) {
         const task = this.tasks.find(item => item.id === taskId);
         if (!task) return;
-        if (!confirm(`确定删除任务「${task.name}」吗？运行历史将保留。`)) return;
+        if (!confirm(I18n.t('pageCopy.scheduledTasks.confirmToDeleteTaskValueRunHistory', { value0: task.name }))) return;
         try {
             await API.deleteScheduledTask(taskId);
-            Toast.success('任务已删除');
+            Toast.success(I18n.t('pageCopy.scheduledTasks.taskDeleted'));
             await this.loadTasks();
         } catch (error) {
-            Toast.error('删除任务失败: ' + error.message);
+            Toast.error(error.message || I18n.t('common.requestFailed'));
         }
     },
 
@@ -707,45 +501,27 @@ const ScheduledTasksPage = {
         try {
             const runs = await API.getScheduledTaskRuns(taskId, { limit: 100 });
             Modal.show({
-                title: `运行历史 - ${task ? task.name : taskId}`,
+                title: I18n.t('pageCopy.scheduledTasks.operationHistoryValue', { value0: task ? task.name : taskId }),
                 size: 'xlarge',
                 bodyClassName: 'scheduled-task-modal-body',
-                content: `
-                    <div class="scheduled-task-runs">
-                        <table class="scheduled-task-table">
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>触发来源</th>
-                                    <th>状态</th>
-                                    <th>开始时间</th>
-                                    <th>耗时</th>
-                                    <th>操作</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${runs.length ? runs.map(run => `
-                                    <tr>
-                                        <td>${run.id}</td>
-                                        <td>${run.trigger_source === 'scheduler' ? '调度器' : '手动'}</td>
-                                        <td>${this.renderStatus(run.status, run.error_message)}</td>
-                                        <td>${this.formatDate(run.started_at || run.created_at)}</td>
-                                        <td>${run.duration_ms === null || run.duration_ms === undefined ? '-' : Format.duration(run.duration_ms)}</td>
-                                        <td>
-                                            <button class="btn btn-sm" onclick="ScheduledTasksPage.loadRunDetail(${run.id})">
-                                                <i data-lucide="file-text"></i> 详情
-                                            </button>
-                                        </td>
-                                    </tr>
-                                `).join('') : '<tr><td colspan="6" class="empty-state">暂无运行记录</td></tr>'}
-                            </tbody>
-                        </table>
-                    </div>
-                `,
-                buttons: [{ text: '关闭', variant: 'secondary', onClick: () => Modal.hide() }]
+                content: I18n.t('pageCopy.scheduledTasks.showRunsContent', {
+                    value0: runs.length
+                        ? runs.map(run => I18n.t('pageCopy.scheduledTasks.showRunsContent2', {
+                            value0: run.id,
+                            value1: I18n.t(run.trigger_source === 'scheduler'
+                                ? 'pageCopy.scheduledTasks.showRunsContent3'
+                                : 'pageCopy.scheduledTasks.showRunsContent4'),
+                            value2: this.renderStatus(run.status, run.error_message),
+                            value3: this.formatDate(run.started_at || run.created_at),
+                            value4: run.duration_ms === null || run.duration_ms === undefined ? '-' : Format.duration(run.duration_ms),
+                            value5: run.id
+                        })).join('')
+                        : I18n.t('pageCopy.scheduledTasks.showRunsContent5')
+                }),
+                buttons: [{ text: I18n.t('pageCopy.scheduledTasks.close'), variant: 'secondary', onClick: () => Modal.hide() }]
             });
         } catch (error) {
-            Toast.error('加载运行历史失败: ' + error.message);
+            Toast.error(I18n.t('pageCopy.scheduledTasks.loadHistoryFailed', { message: error.message }));
         }
     },
 
@@ -754,33 +530,28 @@ const ScheduledTasksPage = {
             const run = await API.getScheduledTaskRun(runId);
             this.showRunDetail(run);
         } catch (error) {
-            Toast.error('加载运行详情失败: ' + error.message);
+            Toast.error(I18n.t('pageCopy.scheduledTasks.loadDetailFailed', { message: error.message }));
         }
     },
 
     showRunDetail(run) {
         Modal.show({
-            title: `运行详情 #${run.id}`,
+            title: I18n.t('pageCopy.scheduledTasks.runDetailsValue', { value0: run.id }),
             size: 'xlarge',
             bodyClassName: 'scheduled-task-modal-body',
-            content: `
-                <div class="scheduled-task-run-detail">
-                    <div class="scheduled-task-run-meta">
-                        <span>${this.renderStatus(run.status, run.error_message)}</span>
-                        <span>触发：${run.trigger_source === 'scheduler' ? '调度器' : '手动'}</span>
-                        <span>开始：${this.formatDate(run.started_at || run.created_at)}</span>
-                        <span>耗时：${run.duration_ms === null || run.duration_ms === undefined ? '-' : Format.duration(run.duration_ms)}</span>
-                    </div>
-                    ${run.error_message ? `<div class="scheduled-task-error">${Utils.escapeHtml(run.error_message)}</div>` : ''}
-                    <h4>返回结果</h4>
-                    <pre>${Utils.escapeHtml(JSON.stringify(run.result || {}, null, 2))}</pre>
-                    <h4>stdout</h4>
-                    <pre>${Utils.escapeHtml(run.stdout || '')}</pre>
-                    <h4>stderr</h4>
-                    <pre>${Utils.escapeHtml(run.stderr || '')}</pre>
-                </div>
-            `,
-            buttons: [{ text: '关闭', variant: 'secondary', onClick: () => Modal.hide() }]
+            content: I18n.t('pageCopy.scheduledTasks.showRunDetailContent', {
+                value0: this.renderStatus(run.status, run.error_message),
+                value1: I18n.t(run.trigger_source === 'scheduler'
+                    ? 'pageCopy.scheduledTasks.showRunDetailContent2'
+                    : 'pageCopy.scheduledTasks.showRunDetailContent3'),
+                value2: this.formatDate(run.started_at || run.created_at),
+                value3: run.duration_ms === null || run.duration_ms === undefined ? '-' : Format.duration(run.duration_ms),
+                value4: run.error_message ? `<div class="scheduled-task-error">${Utils.escapeHtml(run.error_message)}</div>` : '',
+                value5: Utils.escapeHtml(JSON.stringify(run.result || {}, null, 2)),
+                value6: Utils.escapeHtml(run.stdout || ''),
+                value7: Utils.escapeHtml(run.stderr || '')
+            }),
+            buttons: [{ text: I18n.t('pageCopy.scheduledTasks.close'), variant: 'secondary', onClick: () => Modal.hide() }]
         });
     },
 
