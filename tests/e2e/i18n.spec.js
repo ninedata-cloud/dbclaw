@@ -461,10 +461,10 @@ test('populated management pages localize interpolated counts and statuses', asy
                 api_key_masked: 'sk-***', is_default: true
             }] });
         }
-        if (url.pathname === '/api/skills/categories') return route.fulfill({ json: { categories: ['diagnostics'] } });
+        if (url.pathname === '/api/skills/categories') return route.fulfill({ json: { categories: ['通用诊断', '平台操作'] } });
         if (url.pathname === '/api/skills') {
             return route.fulfill({ json: [{
-                id: 'health_check', name: 'Health check', description: 'Checks datasource health', category: 'diagnostics',
+                id: 'health_check', name: 'Health check', description: 'Checks datasource health', category: '通用诊断',
                 version: '1.0.0', tags: ['health'], permissions: ['read_datasource'], parameters: [], code: 'return {}',
                 is_builtin: true, is_enabled: true
             }] });
@@ -491,7 +491,26 @@ test('populated management pages localize interpolated counts and statuses', asy
     await page.evaluate(() => Router.navigate('skills'));
     await expect(page.locator('#page-content')).toContainText('Built-in');
     await expect(page.locator('#page-content')).toContainText('View');
+    await expect(page.locator('#page-content')).toContainText('General Diagnostics');
+    await expect(page.locator('#category-filter')).toContainText('Platform Operations');
     await expectNoChineseUi(page, '#page-content', 'skills');
+
+    await page.evaluate(() => {
+        DiagnosisPage.skillAuthorizationCatalog = {
+            groups: [{
+                id: 'platform_operations', label: '平台操作',
+                description: '允许 AI 调用平台操作类 skill。', warning_level: 'medium', enabled_by_default: false,
+                items: [{ id: 'list_documents', kind: 'tool', description: '浏览内置诊断文档目录。' }]
+            }]
+        };
+        DiagnosisPage.skillAuthorizations = null;
+        DiagnosisPage._showSkillAuthorizationModal();
+    });
+    await expect(page.locator('#modal-container')).toContainText('Skill Authorization');
+    await expect(page.locator('#modal-container')).toContainText('Platform Operations');
+    await expect(page.locator('#modal-container')).toContainText('Built-in list_documents');
+    await expectNoChineseUi(page, '#modal-container', 'skill authorization');
+    await page.evaluate(() => Modal.hide());
 
     await page.evaluate(async () => {
         I18n.setLocale('zh-CN', { persist: false });

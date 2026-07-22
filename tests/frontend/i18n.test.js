@@ -135,6 +135,10 @@ test('runtime uses Chinese by default and persists explicit locale', () => {
     assert.equal(I18n.translateLegacyText('3 天 4 小时'), '3 day 4 hours');
     assert.equal(I18n.translateLegacyText('已选择 3 项'), 'Selected 3 item');
     assert.equal(I18n.translateLegacyText('例如：https://api.example.com'), 'For example: https://api.example.com');
+    assert.equal(I18n.skillCategory('通用诊断'), 'General Diagnostics');
+    assert.equal(I18n.skillCategory('平台操作'), 'Platform Operations');
+    assert.equal(I18n.skillCategory('OceanBase MySQL'), 'OceanBase MySQL');
+    assert.equal(I18n.skillCategory('user-defined-category'), 'user-defined-category');
 });
 
 test('unsupported locales safely fall back to Chinese', () => {

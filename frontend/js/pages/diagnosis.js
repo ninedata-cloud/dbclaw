@@ -795,7 +795,7 @@ const DiagnosisPage = {
     _showSkillAuthorizationModal() {
         const groups = this.skillAuthorizationCatalog?.groups || [];
         if (groups.length === 0) {
-            Toast.info('暂无可配置的 Skill 授权分组');
+            Toast.info(I18n.t('skillAuthorization.emptyGroups'));
             return;
         }
 
@@ -805,31 +805,44 @@ const DiagnosisPage = {
             medium: 'var(--accent-blue)',
             high: 'var(--accent-red)',
         };
+        const localizedGroupIds = new Set(['platform_operations', 'high_privilege_operations', 'knowledge_retrieval']);
+        const localizedItemIds = new Set(['list_documents', 'read_document']);
 
         const renderGroup = (group) => {
             const isEnabled = currentAuthorizations[group.id] !== false;
-            const itemBadges = (group.items || []).map(item => `
+            const groupLabel = localizedGroupIds.has(group.id)
+                ? I18n.t(`skillAuthorization.groups.${group.id}.label`)
+                : String(group.label || group.id || '');
+            const groupDescription = localizedGroupIds.has(group.id)
+                ? I18n.t(`skillAuthorization.groups.${group.id}.description`)
+                : String(group.description || '');
+            const itemBadges = (group.items || []).map(item => {
+                const description = localizedItemIds.has(item.id)
+                    ? I18n.t(`skillAuthorization.items.${item.id}.description`)
+                    : String(item.description || item.id || '');
+                return `
                 <span
-                    title="${Utils.escapeHtml(String(item.description || item.id || '')).replace(/"/g, '&quot;')}"
+                    title="${Utils.escapeHtml(description).replace(/"/g, '&quot;')}"
                     style="display:inline-flex;align-items:center;padding:3px 7px;border-radius:999px;background:rgba(255,255,255,0.06);border:1px solid var(--border-color);font-size:11px;color:var(--text-secondary);"
                 >
-                    ${item.kind === 'tool' ? '内置 ' : ''}${Utils.escapeHtml(String(item.id || ''))}
+                    ${item.kind === 'tool' ? `${I18n.t('skillAuthorization.builtIn')} ` : ''}${Utils.escapeHtml(String(item.id || ''))}
                 </span>
-            `).join('');
+            `;
+            }).join('');
 
             return `
                 <label style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:10px;cursor:pointer;background:var(--bg-secondary);margin-bottom:10px;border-left:3px solid ${borderColorByLevel[group.warning_level] || 'var(--accent-blue)'};">
                     <input type="checkbox" class="skill-auth-toggle" data-group-id="${group.id}" ${isEnabled ? 'checked' : ''} style="margin-top:4px;">
                     <div style="flex:1;min-width:0;">
                         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px;">
-                            <div style="font-weight:600;font-size:14px;color:var(--text-primary);">${Utils.escapeHtml(String(group.label || ''))}</div>
+                            <div style="font-weight:600;font-size:14px;color:var(--text-primary);">${Utils.escapeHtml(groupLabel)}</div>
                             <span class="badge ${isEnabled ? 'badge-success' : 'badge-danger'}" id="skill-auth-badge-${group.id}">
-                                ${isEnabled ? '已允许' : '已禁止'}
+                                ${I18n.t(isEnabled ? 'skillAuthorization.allowed' : 'skillAuthorization.denied')}
                             </span>
                         </div>
-                        <div style="font-size:12px;line-height:1.5;color:var(--text-secondary);">${Utils.escapeHtml(String(group.description || ''))}</div>
+                        <div style="font-size:12px;line-height:1.5;color:var(--text-secondary);">${Utils.escapeHtml(groupDescription)}</div>
                         <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:5px;max-height:112px;overflow:auto;">
-                            ${itemBadges || '<span style="font-size:12px;color:var(--text-muted);">当前暂无可展示项</span>'}
+                            ${itemBadges || `<span style="font-size:12px;color:var(--text-muted);">${I18n.t('skillAuthorization.emptyItems')}</span>`}
                         </div>
                     </div>
                 </label>
@@ -837,19 +850,19 @@ const DiagnosisPage = {
         };
 
         Modal.show({
-            title: 'Skill 授权',
+            title: I18n.t('skillAuthorization.title'),
             width: 'min(1120px, 94vw)',
             content: `
                 <p style="margin-bottom:12px;font-size:12px;color:var(--text-secondary);line-height:1.6;">
-                    控制 AI 在诊断过程中是否允许调用特定分类下的 skill。修改后立即对当前会话生效，但刷新页面或切换会话后将恢复默认配置。
+                    ${I18n.t('skillAuthorization.help')}
                 </p>
                 <div id="skill-authorization-list">
                     ${groups.map(group => renderGroup(group)).join('')}
                 </div>
             `,
             buttons: [
-                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
-                { text: '应用授权', variant: 'primary', onClick: () => this._applySkillAuthorizations() }
+                { text: I18n.t('common.cancel'), variant: 'secondary', onClick: () => Modal.hide() },
+                { text: I18n.t('skillAuthorization.apply'), variant: 'primary', onClick: () => this._applySkillAuthorizations() }
             ]
         });
 
@@ -859,7 +872,7 @@ const DiagnosisPage = {
                 const badge = document.getElementById(`skill-auth-badge-${cb.dataset.groupId}`);
                 if (badge) {
                     badge.className = `badge ${cb.checked ? 'badge-success' : 'badge-danger'}`;
-                    badge.textContent = cb.checked ? '已允许' : '已禁止';
+                    badge.textContent = I18n.t(cb.checked ? 'skillAuthorization.allowed' : 'skillAuthorization.denied');
                 }
             });
         });
@@ -873,7 +886,7 @@ const DiagnosisPage = {
         });
         this.skillAuthorizations = nextAuthorizations;
         Modal.hide();
-        Toast.success('Skill 授权已更新，当前会话立即生效。刷新页面或切换会话后将恢复默认配置。');
+        Toast.success(I18n.t('skillAuthorization.updated'));
     },
 
     async _loadSessions() {

@@ -43,7 +43,7 @@ const SkillsPage = {
             </div>
             <select id=\"category-filter\" class=\"filter-select\" onchange=\"SkillsPage.filterSkills()\">
                 <option value=\"\">全部分类</option>
-                ${this._categories.map(cat => `<option value=\"${cat}\">${cat}</option>`).join('')}
+                ${this._categories.map(cat => `<option value=\"${cat}\">${I18n.skillCategory(cat)}</option>`).join('')}
             </select>
             <label class=\"filter-checkbox\">
                 <input type=\"checkbox\" id=\"builtin-filter\" onchange=\"SkillsPage.filterSkills()\"> 仅内置
@@ -89,7 +89,7 @@ const SkillsPage = {
                 <div class="skill-card-body">
                     <p class="skill-description">${skill.description}</p>
                     <div class="skill-meta">
-                        <span class="skill-category">${skill.category || 'general'}</span>
+                        <span class="skill-category">${I18n.skillCategory(skill.category)}</span>
                         <span class="skill-version">v${skill.version}</span>
                     </div>
                     <div class="skill-tags">
@@ -186,7 +186,7 @@ const SkillsPage = {
                     <div class="skill-details">
                         <p><strong>ID:</strong> ${skill.id}</p>
                         <p><strong>版本:</strong> ${skill.version}</p>
-                        <p><strong>分类:</strong> ${skill.category || 'N/A'}</p>
+                        <p><strong>分类:</strong> ${skill.category ? I18n.skillCategory(skill.category) : 'N/A'}</p>
                         <p><strong>${this._t('description')}:</strong> ${skill.description}</p>
 
                         <h4>${this._t('parameters')}:</h4>

@@ -441,7 +441,29 @@
             codeHint: 'Python async function code', create: 'Create skill', cancel: 'Cancel', paramsMustArray: 'Parameters must be an array',
             invalidParameters: 'Invalid parameters JSON: {message}', created: 'Skill created successfully', createFailed: 'Could not create skill: {message}',
             editTitle: 'Edit skill: {name}', immutableId: 'ID cannot be changed', commaSeparated: 'comma-separated',
-            saveChanges: 'Save changes', updated: 'Skill updated successfully', updateFailed: 'Could not update skill: {message}'
+            saveChanges: 'Save changes', updated: 'Skill updated successfully', updateFailed: 'Could not update skill: {message}',
+            categories: {
+                generalDiagnostics: 'General Diagnostics', platformOperations: 'Platform Operations', knowledgeRetrieval: 'Knowledge Retrieval',
+                privilegedOperations: 'Privileged Operations', mysql: 'MySQL', oceanbaseMysql: 'OceanBase MySQL',
+                postgresql: 'PostgreSQL', sqlServer: 'SQL Server', oracle: 'Oracle', openGauss: 'openGauss',
+                sapHana: 'SAP HANA', monitoring: 'Monitoring', inspection: 'Inspection', notification: 'Notifications',
+                query: 'Queries', custom: 'Custom'
+            }
+        },
+        skillAuthorization: {
+            title: 'Skill Authorization', emptyGroups: 'No configurable skill authorization groups are available', builtIn: 'Built-in',
+            allowed: 'Allowed', denied: 'Denied', emptyItems: 'No items to display', apply: 'Apply authorization',
+            help: 'Control which skill categories the AI may call during diagnosis. Changes take effect immediately for the current session and reset after a refresh or session switch.',
+            updated: 'Skill authorization updated for the current session. It will reset after a refresh or session switch.',
+            groups: {
+                platform_operations: { label: 'Platform Operations', description: 'Allow the AI to manage platform resources such as datasources, hosts, skills, and alert settings.' },
+                high_privilege_operations: { label: 'Privileged Operations', description: 'Allow the AI to perform high-risk changes such as arbitrary SQL or operating-system commands.' },
+                knowledge_retrieval: { label: 'Knowledge Retrieval', description: 'Allow the AI to use knowledge-retrieval skills and built-in diagnostic document tools.' }
+            },
+            items: {
+                list_documents: { description: 'Browse the built-in diagnostic document catalog.' },
+                read_document: { description: 'Read the full content of a built-in diagnostic document.' }
+            }
         },
         inspection: { listMeta: '{total} reports · Page {page}' },
         configDescriptions: {

@@ -438,7 +438,29 @@
             codeHint: 'Python 异步函数代码', create: '创建技能', cancel: '取消', paramsMustArray: '参数必须是数组',
             invalidParameters: '参数 JSON 无效：{message}', created: '技能创建成功', createFailed: '创建技能失败：{message}',
             editTitle: '编辑技能：{name}', immutableId: 'ID 不可修改', commaSeparated: '用逗号分隔',
-            saveChanges: '保存更改', updated: '技能更新成功', updateFailed: '更新技能失败：{message}'
+            saveChanges: '保存更改', updated: '技能更新成功', updateFailed: '更新技能失败：{message}',
+            categories: {
+                generalDiagnostics: '通用诊断', platformOperations: '平台操作', knowledgeRetrieval: '知识检索',
+                privilegedOperations: '高权限操作', mysql: 'MySQL', oceanbaseMysql: 'OceanBase MySQL',
+                postgresql: 'PostgreSQL', sqlServer: 'SQL Server', oracle: 'Oracle', openGauss: 'openGauss',
+                sapHana: 'SAP HANA', monitoring: '监控', inspection: '巡检', notification: '通知',
+                query: '查询', custom: '自定义'
+            }
+        },
+        skillAuthorization: {
+            title: 'Skill 授权', emptyGroups: '暂无可配置的 Skill 授权分组', builtIn: '内置',
+            allowed: '已允许', denied: '已禁止', emptyItems: '当前暂无可展示项', apply: '应用授权',
+            help: '控制 AI 在诊断过程中是否允许调用特定分类下的 skill。修改后立即对当前会话生效，但刷新页面或切换会话后将恢复默认配置。',
+            updated: 'Skill 授权已更新，当前会话立即生效。刷新页面或切换会话后将恢复默认配置。',
+            groups: {
+                platform_operations: { label: '平台操作', description: '允许 AI 调用平台操作类 skill，例如数据源管理、主机管理、技能管理、告警配置等。' },
+                high_privilege_operations: { label: '高权限操作', description: '允许 AI 调用高危变更类 skill，例如任意 SQL、任意 OS 命令等。' },
+                knowledge_retrieval: { label: '知识检索', description: '允许 AI 调用知识检索类 skill，以及内置诊断文档检索工具。' }
+            },
+            items: {
+                list_documents: { description: '浏览内置诊断文档目录。' },
+                read_document: { description: '读取内置诊断文档的详细内容。' }
+            }
         },
         inspection: { listMeta: '共 {total} 条报告，当前第 {page} 页' },
         configDescriptions: {
