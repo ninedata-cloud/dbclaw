@@ -13,6 +13,7 @@ class User(SoftDeleteMixin, Base):
     display_name = Column(String(100), nullable=True)
     email = Column(String(255), nullable=True)
     phone = Column(String(50), nullable=True)
+    locale = Column(String(10), nullable=False, default="zh-CN", server_default="zh-CN")
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
     session_version = Column(Integer, nullable=False, default=1)

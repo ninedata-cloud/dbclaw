@@ -1,63 +1,65 @@
 # DBClaw
 
+[简体中文](README.md) | [English](README_EN.md)
+
 ![License](https://img.shields.io/badge/license-MIT-yellow.svg)
 ![Python](https://img.shields.io/badge/python-3.10%2B-green.svg)
 ![FastAPI](https://img.shields.io/badge/backend-FastAPI-009688.svg)
 ![Frontend](https://img.shields.io/badge/frontend-Vanilla%20JS-ffb300.svg)
 ![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
 
-NineData DBClaw（数据库智能卫士）是一款 AI 原生的面向数据库智能诊断开源产品。提供了多种数据库的 AI 智能诊断、监控告警、自动巡检等功能，支持飞书、钉钉、微信等多种平台接入，帮助 DBA、SRE 等技术团队更快发现问题、定位根因并沉淀运维经验。
+NineData DBClaw is an open-source, AI-native database diagnostics platform. It provides AI-powered diagnostics, monitoring and alerting, automated inspections, and other capabilities for multiple database systems. It also integrates with platforms such as Feishu, DingTalk, and WeChat, helping DBAs, SREs, and other technical teams identify problems, locate root causes, and retain operational knowledge more efficiently.
 
+## Product Screenshots
 
-## 产品界面
+![Database performance monitoring](docs/img/db_monitor.jpg)
 
-![数据库性能监控](docs/img/db_monitor.jpg)
+![AI-powered diagnostics](docs/img/db_ai_diagnosis.jpg)
 
-![AI 智能诊断](docs/img/db_ai_diagnosis.jpg)
+## Key Features
 
-## 主要特性
-- AI 智能诊断：基于 AI 大模型、意图识别、上下文构建和技能系统提供对话式诊断。
-- 可扩展技能系统：通过 YAML 定义诊断技能，内置多类数据库运维技能，并可作为 AI Agent 工具调用。
-- 数据源与主机告警、监控、诊断一体化，更全面的发现问题根因。
-- 知识增强：支持文档知识接入，为 AI 分析和排障过程补充上下文。
-- 云数据库集成：支持阿里云、腾讯云、华为云RDS数据库监控指标接入。
-- 主流及时通信软件对接：支持飞书、钉钉、企业微信 webhook 告警对接。
-- 机器人对话：支持飞书、钉钉、微信机器人对接。
-- 多数据库统一纳管：支持 MySQL、PostgreSQL、Oracle、SQL Server、openGauss、OceanBase MySQL 和 SAP HANA。
-- 主动监控与实时看板：持续采集数据库指标，并可通过 SSH 关联主机指标。
-- 告警与通知分发：支持阈值告警、AI 判警、事件追踪、自动恢复、Webhook、邮件、钉钉、飞书和企业微信通知。
-- 自动巡检：支持定时巡检、事件触发巡检、规则检查和结构化巡检报告。
-- 任务调度管理：支持按 Cron 或固定间隔创建任务，统一管理启停、手动执行、运行历史和失败通知。
+- AI-powered diagnostics: Provides conversational diagnostics through large language models, intent recognition, context construction, and a skill system.
+- Extensible skill system: Defines diagnostic skills in YAML, includes built-in database operations skills, and exposes skills as tools for AI agents.
+- Unified alerting, monitoring, and diagnostics for data sources and hosts, enabling more comprehensive root-cause analysis.
+- Knowledge augmentation: Supports document-based knowledge sources to enrich the context available during AI analysis and troubleshooting.
+- Cloud database integration: Supports database monitoring metrics from Alibaba Cloud, Tencent Cloud, and Huawei Cloud RDS.
+- Integration with popular instant-messaging platforms: Supports webhook alerts for Feishu, DingTalk, and WeCom.
+- Chatbots: Supports Feishu, DingTalk, and WeChat bots.
+- Unified management for multiple databases: Supports MySQL, PostgreSQL, Oracle, SQL Server, openGauss, OceanBase MySQL, and SAP HANA.
+- Proactive monitoring and real-time dashboards: Continuously collects database metrics and can associate them with host metrics over SSH.
+- Alerting and notification delivery: Supports threshold alerts, AI-assisted alert evaluation, event tracking, automatic recovery, webhooks, email, DingTalk, Feishu, and WeCom notifications.
+- Automated inspections: Supports scheduled inspections, event-triggered inspections, rule checks, and structured inspection reports.
+- Task scheduling: Supports Cron-based and fixed-interval tasks, with centralized controls for activation, manual execution, execution history, and failure notifications.
 
+## Quick Start
 
+### One-Command Docker Installation
 
-## 快速开始
-### Docker 一键安装
 ```bash
-# 使用 dockerhub 中央仓库
+# Use Docker Hub
 docker run -itd -p 9939:9939 --name dbclaw ninedata/dbclaw:latest
 
-# 使用华为云仓库
+# Use Huawei Cloud Container Registry
 docker run -itd -p 9939:9939 --name dbclaw swr.cn-east-3.myhuaweicloud.com/ninedata/dbclaw:latest
-
 ```
 
-### 源码安装
-### 环境要求
+### Install from Source
+
+#### Requirements
 
 - Python 3.10+
-- PostgreSQL 13+（推荐安装 **TimescaleDB** 扩展以优化监控指标时序存储；连接串仍为 `postgresql+asyncpg://...`）
-- Linux 或 macOS 开发环境
-- AI 大模型服务
+- PostgreSQL 13+ (the **TimescaleDB** extension is recommended to optimize time-series storage for monitoring metrics; the connection string remains `postgresql+asyncpg://...`)
+- A Linux or macOS development environment
+- Access to a large language model service
 
-### 1. 获取代码
+#### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/ninedata-community/dbclaw.git
 cd dbclaw
 ```
 
-### 2. 安装依赖
+#### 2. Install Dependencies
 
 ```bash
 python -m venv .venv
@@ -66,13 +68,13 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 3. 准备配置
+#### 3. Prepare the Configuration
 
 ```bash
 cp .env.example .env
 ```
 
-至少需要为本地开发确认这些配置：
+At a minimum, verify the following settings for local development:
 
 ```env
 APP_HOST=0.0.0.0
@@ -83,49 +85,49 @@ PUBLIC_SHARE_SECRET_KEY=replace-with-random-public-share-secret
 INITIAL_ADMIN_PASSWORD=admin1234
 ```
 
-生成 `ENCRYPTION_KEY`：
+Generate an `ENCRYPTION_KEY`:
 
 ```bash
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
-生产环境请使用强随机值替换 `PUBLIC_SHARE_SECRET_KEY` 和默认管理员密码。
+In production, replace `PUBLIC_SHARE_SECRET_KEY` and the default administrator password with strong random values.
 
-### 4. 启动服务
+#### 4. Start the Service
 
 ```bash
 python run.py
 ```
 
-启动后访问：
+After startup, open:
 
-- Web 控制台：`http://127.0.0.1:9939`
-- 默认管理员：`admin`
-- 默认密码：`admin1234`，可通过 `INITIAL_ADMIN_PASSWORD` 覆盖
+- Web console: `http://127.0.0.1:9939`
+- Default administrator: `admin`
+- Default password: `admin1234` (override it with `INITIAL_ADMIN_PASSWORD`)
 
-首次登录后，建议先进入“AI 大模型管理”添加至少一个可用模型。未配置模型时，监控、巡检、数据源管理等基础能力仍可使用，但 AI 对话和 AI 诊断能力不可用。
+After signing in for the first time, we recommend adding at least one available model under **AI Model Management**. Core features such as monitoring, inspections, and data source management remain available without a configured model, but AI chat and AI diagnostics will be unavailable.
 
-## 任务调度管理
+## Task Scheduling
 
-DBClaw 提供统一的任务调度能力，用于执行周期性运维任务，例如巡检触发、指标同步、通知分发或自定义自动化流程。
+DBClaw provides unified task scheduling for recurring operational work, such as triggering inspections, synchronizing metrics, delivering notifications, and running custom automation workflows.
 
-操作入口：
+Navigation:
 
 ```text
-左侧导航 -> 任务调度管理
+Left navigation -> Task Scheduling
 ```
 
-主要能力包括：
+Key capabilities include:
 
-- 新建任务：支持按 Cron 表达式或固定间隔（秒）配置执行计划。
-- 状态管理：支持启用、停用任务，避免维护窗口期间误触发。
-- 立即执行：支持手动触发单个任务，快速验证任务配置是否生效。
-- 运行历史：查看每次运行的开始时间、结束时间、执行状态和错误信息。
-- 失败通知：可按任务配置通知集成渠道，在任务异常时及时告警。
+- Create tasks: Configure schedules with Cron expressions or fixed intervals in seconds.
+- Manage status: Enable or disable tasks to prevent unintended execution during maintenance windows.
+- Run immediately: Manually trigger an individual task to quickly verify its configuration.
+- Execution history: Review the start time, end time, status, and error details for each run.
+- Failure notifications: Configure notification integrations for each task to receive alerts when execution fails.
 
-## Docker 自己 Build 单容器部署
+## Build and Deploy a Single Docker Container
 
-项目提供单容器镜像，容器内包含 PostgreSQL、FastAPI 服务和静态前端。首次启动时，如果未显式提供运行密钥和数据库参数，容器会自动生成并持久化到 `/app/data/bootstrap/runtime.env`。
+The project provides a single-container image that includes PostgreSQL, the FastAPI service, and the static frontend. On first startup, if runtime keys and database settings are not explicitly provided, the container generates them automatically and persists them to `/app/data/bootstrap/runtime.env`.
 
 ```bash
 docker build -t dbclaw:latest .
@@ -139,7 +141,7 @@ docker run -d \
   dbclaw:latest
 ```
 
-发布指定版本镜像时可注入构建信息：
+To publish an image for a specific version, pass build metadata:
 
 ```bash
 docker build \
@@ -149,42 +151,58 @@ docker build \
   -t dbclaw:1.0.0 .
 ```
 
-持久化目录：
+Persistent directories:
 
-- `/var/lib/postgresql/data`：容器内 PostgreSQL 数据
-- `/app/data`：应用运行数据、日志和自动生成配置
-- `/app/uploads`：上传附件
+- `/var/lib/postgresql/data`: PostgreSQL data inside the container
+- `/app/data`: Application runtime data, logs, and auto-generated configuration
+- `/app/uploads`: Uploaded attachments
 
-## 配置说明
+## Configuration
 
-常用环境变量：
+Common environment variables:
 
-- `APP_HOST` / `APP_PORT`：服务监听地址和端口，默认 `0.0.0.0:9939`
-- `DATABASE_URL`：PostgreSQL 元数据库连接串（若使用 TimescaleDB，仍为同一连接串）
-- `TIMESCALE_*`：可选。控制是否启用 Timescale 迁移、扩展缺失是否中止启动、chunk 间隔、压缩与指标保留周期等，详见 `.env.example`
-- `ENCRYPTION_KEY`：数据库密码等敏感信息的 Fernet 加密密钥
-- `PUBLIC_SHARE_SECRET_KEY`：公开分享链接签名密钥
-- `INITIAL_ADMIN_PASSWORD`：初始管理员密码，默认 `admin1234`
-- `METRIC_INTERVAL`：首次启动时的指标采集周期，默认 `60` 秒
+- `APP_HOST` / `APP_PORT`: Service listen address and port; defaults to `0.0.0.0:9939`
+- `DATABASE_URL`: PostgreSQL metadata database connection string (the same connection string is used with TimescaleDB)
+- `TIMESCALE_*`: Optional settings that control Timescale migrations, whether startup should stop if the extension is unavailable, chunk intervals, compression, metric retention, and more. See `.env.example` for details.
+- `ENCRYPTION_KEY`: Fernet encryption key for database passwords and other sensitive values
+- `PUBLIC_SHARE_SECRET_KEY`: Signing key for public share links
+- `INITIAL_ADMIN_PASSWORD`: Initial administrator password; defaults to `admin1234`
+- `METRIC_INTERVAL`: Metric collection interval on first startup; defaults to `60` seconds
 
-AI 模型配置优先在 Web 控制台的“AI 大模型管理”中维护。`OPENAI_*` 环境变量仅作为兜底兼容配置。
+AI model settings should preferably be managed through **AI Model Management** in the web console. The `OPENAI_*` environment variables are retained only as fallback compatibility settings.
 
-### 元数据库与 TimescaleDB
+### Metadata Database and TimescaleDB
 
-DBClaw 将数据源与主机监控快照写入 `datasource_metric`、`host_metric` 等表。使用 **TimescaleDB**（PostgreSQL 上的扩展）可为这些时序数据启用按时间分区（hypertable）、chunk 级压缩与可选的数据保留策略。
+DBClaw writes data source and host monitoring snapshots to tables such as `datasource_metric` and `host_metric`. Using **TimescaleDB**, an extension for PostgreSQL, enables time-based partitioning (hypertables), chunk-level compression, and optional data retention policies for this time-series data.
 
-- **Docker 单容器镜像**：镜像内已安装 TimescaleDB，并在 PostgreSQL 启动参数中加载 `shared_preload_libraries=timescaledb`；首次初始化数据库时会执行 `CREATE EXTENSION IF NOT EXISTS timescaledb`。
-- **自建 PostgreSQL**：请安装与主版本匹配的 TimescaleDB，在 `postgresql.conf` 或启动命令中设置 `shared_preload_libraries = 'timescaledb'` 后重启，再以超级用户（或具备权限的角色）在目标库执行 `CREATE EXTENSION timescaledb;`。若暂时不安装扩展，可将 `TIMESCALE_REQUIRE_EXTENSION=false`（默认），应用会在日志中提示并跳过 hypertable 步骤，仍以普通 PostgreSQL 运行。
-- **升级已有实例**：启动时的迁移脚本会在需要时将上述表的主键调整为 `(id, collected_at)` 并创建 hypertable；表很大时主键调整可能带来短暂锁表，请在低峰操作并做好备份。
-- **指标自动删除**：仅当显式设置 `TIMESCALE_RETENTION_INTERVAL`（PostgreSQL `interval` 文本，如 `90 days`）时才会添加保留策略；留空则不按时间自动删除历史指标。
+- **Single-container Docker image**: TimescaleDB is preinstalled, and PostgreSQL starts with `shared_preload_libraries=timescaledb`. During initial database setup, the container runs `CREATE EXTENSION IF NOT EXISTS timescaledb`.
+- **Self-managed PostgreSQL**: Install the TimescaleDB version that matches your PostgreSQL major version, set `shared_preload_libraries = 'timescaledb'` in `postgresql.conf` or the startup command, restart PostgreSQL, and then run `CREATE EXTENSION timescaledb;` in the target database as a superuser or another authorized role. If you do not want to install the extension yet, leave `TIMESCALE_REQUIRE_EXTENSION=false` (the default). The application will log a notice, skip the hypertable step, and continue using standard PostgreSQL.
+- **Upgrading an existing instance**: During startup, migrations adjust the primary keys of these tables to `(id, collected_at)` when required and create hypertables. On large tables, altering the primary key may briefly lock the table. Perform the upgrade during off-peak hours and create a backup first.
+- **Automatic metric deletion**: A retention policy is added only when `TIMESCALE_RETENTION_INTERVAL` is explicitly set to a PostgreSQL `interval` value such as `90 days`. If it is empty, historical metrics are not deleted automatically based on age.
 
-## 健康检查
+## Console Languages
 
-- `GET /health`：基础健康检查
+The web console supports Simplified Chinese (`zh-CN`) and English (`en-US`). A first-time visit defaults to Simplified Chinese. Before login, the selection is stored in the browser's `localStorage`; after login, it is saved to the account through `PUT /api/auth/me/locale` and applies to subsequent sessions and other devices. Switching languages preserves the current URL and login state. If an editor or form contains unsaved changes, the console asks for confirmation first.
 
-## 开发
+Console API requests include `X-DBClaw-Locale`. The server selects the response language in the following order: request header, account preference, `Accept-Language`, then Simplified Chinese. It also returns `Content-Language`. Error responses retain the backward-compatible `detail` field while providing a stable error code and interpolation parameters:
 
-常用命令：
+```json
+{
+  "detail": "Datasource not found",
+  "error_code": "datasource.not_found",
+  "params": { "datasource_id": 12 }
+}
+```
+
+AI chat passes the account language to the model as the target output language. Manually triggered inspection reports use the current account language as well, while scheduled and alert-triggered reports default to Simplified Chinese. AI alert decisions follow the language of the natural-language alert rule. SQL, commands, identifiers, user input, vendor-specific technical details, and quoted source text are not forcibly translated. Notifications, public shares, and exports retain the language in which they were generated.
+
+## Health Check
+
+- `GET /health`: Basic health check
+
+## Development
+
+Common commands:
 
 ```bash
 python -m venv .venv
@@ -194,7 +212,7 @@ cp .env.example .env
 python run.py
 ```
 
-运行测试：
+Run tests:
 
 ```bash
 python -m pytest
@@ -202,49 +220,55 @@ python -m pytest -m unit
 python -m pytest -m service
 python -m pytest -m api
 python -m pytest --cov=backend --cov-report=term-missing
+npm install
+npm run test:i18n
+npx playwright install chromium
+npm run test:e2e
 ```
 
-添加数据库诊断能力时，通常在 `backend/skills/builtin/` 中新增技能 YAML，并为技能声明参数、权限和异步执行逻辑。更多项目约定可参考 `AGENTS.md` 和 `CLAUDE.md`。
+`test:i18n` validates the Chinese and English dictionary keys, interpolation placeholders, and English translations. The Playwright tests cover first visits, account preferences, protection for unsaved changes, and bilingual rendering across key console routes. Node.js and Playwright are not required in production.
 
-## 安全建议
+To add database diagnostic capabilities, you will usually create a skill YAML file under `backend/skills/builtin/` and declare the skill's parameters, permissions, and asynchronous execution logic. See `AGENTS.md` and `CLAUDE.md` for additional project conventions.
 
-- 部署后立即修改默认管理员密码。
-- 生产环境必须使用强随机 `ENCRYPTION_KEY` 和 `PUBLIC_SHARE_SECRET_KEY`。
-- 使用 HTTPS 或反向代理保护管理入口。
-- 限制元数据库、数据库实例和 SSH 主机的网络访问范围。
-- 定期备份 PostgreSQL 元数据库和 `/app/data`、`/app/uploads`。
-- 对可编程适配器和自定义技能保持审计，它们可能访问敏感运维资源。
+## Security Recommendations
 
-## 技术架构
+- Change the default administrator password immediately after deployment.
+- Use strong random values for `ENCRYPTION_KEY` and `PUBLIC_SHARE_SECRET_KEY` in production.
+- Protect the management endpoint with HTTPS or a reverse proxy.
+- Restrict network access to the metadata database, managed database instances, and SSH hosts.
+- Regularly back up the PostgreSQL metadata database, `/app/data`, and `/app/uploads`.
+- Audit programmable adapters and custom skills because they may access sensitive operational resources.
 
-DBClaw 采用轻量、易部署的架构：
+## Technical Architecture
 
-- 后端：Python
-- 前端：JavaScript SPA
-- 数据库：PostgreSQL
-- AI大模型：兼容OpenAI、Anthropic 大模型通用接口，支持DeepSeek、Qwen、MiniMax、GLM、Kimi、GPT、Claude 等主流大模型
-- 部署方式：本地 Python 运行或 Docker 单容器运行
+DBClaw uses a lightweight architecture designed for easy deployment:
 
-核心目录：
+- Backend: Python
+- Frontend: JavaScript SPA
+- Database: PostgreSQL
+- Large language models: Compatible with general OpenAI and Anthropic APIs, with support for popular models including DeepSeek, Qwen, MiniMax, GLM, Kimi, GPT, and Claude
+- Deployment: Run locally with Python or in a single Docker container
+
+Core directories:
 
 ```text
-backend/     FastAPI 后端、路由、服务、模型、技能系统
-frontend/    原生 JavaScript 前端页面、组件和静态资源
-docs/        产品、设计和实施文档
-docker/      单容器启动脚本与 supervisor 配置
-tests/       pytest 测试用例
-run.py       本地启动入口
+backend/     FastAPI backend, routes, services, models, and skill system
+frontend/    Vanilla JavaScript frontend pages, components, and static assets
+docs/        Product, design, and implementation documentation
+docker/      Single-container startup scripts and supervisor configuration
+tests/       pytest test cases
+run.py       Local startup entry point
 ```
 
-## 文档
+## Documentation
 
-- [更新日志](CHANGELOG.md)
-- [贡献指南](CONTRIBUTING.md)
-- [数据库 Schema](docs/DATABASE_SCHEMA.md)
+- [Changelog](CHANGELOG.md)
+- [Contributing Guide](CONTRIBUTING.md)
+- [Database Schema](docs/DATABASE_SCHEMA.md)
 
-## 贡献
+## Contributing
 
-欢迎提交 Issue、功能建议、文档改进和代码补丁。参与贡献前，请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
+Issues, feature suggestions, documentation improvements, and code contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before contributing.
 
 ## License
 

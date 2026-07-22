@@ -28,7 +28,10 @@ const API = {
 
     async request(url, options = {}) {
         const defaultOpts = {
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'X-DBClaw-Locale': window.I18n ? I18n.getLocale() : 'zh-CN'
+            },
             credentials: 'same-origin',
         };
         const merged = { ...defaultOpts, ...options };
@@ -70,6 +73,8 @@ const API = {
 
                 const requestError = new Error(errorMessage);
                 requestError.status = response.status;
+                requestError.errorCode = err.error_code || null;
+                requestError.params = err.params || {};
                 throw requestError;
             }
             const contentType = response.headers.get('content-type');
@@ -93,6 +98,7 @@ const API = {
         const response = await fetch(url, {
             method: 'POST',
             credentials: 'same-origin',
+            headers: { 'X-DBClaw-Locale': window.I18n ? I18n.getLocale() : 'zh-CN' },
             body: formData
         });
         if (!response.ok) {
@@ -130,6 +136,7 @@ const API = {
     login(username, password) { return this.post('/api/auth/login', { username, password }); },
     getMe() { return this.get('/api/auth/me'); },
     updateMe(data) { return this.put('/api/auth/me', data); },
+    updateLocale(locale) { return this.put('/api/auth/me/locale', { locale }); },
     logout() { return this.post('/api/auth/logout', {}); },
     logoutAll() { return this.post('/api/auth/logout-all', {}); },
     changePassword(old_password, new_password) { return this.post('/api/auth/change-password', { old_password, new_password }); },

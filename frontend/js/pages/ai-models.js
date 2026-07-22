@@ -53,7 +53,7 @@ const AIModelsPage = {
             <div class="datasource-card-info">
                 <span><i data-lucide="cpu"></i> ${this._escapeHtml(model.model_name)}</span>
                 <span><i data-lucide="plug-zap"></i> ${this._escapeHtml(this._protocolLabel(model.protocol))}</span>
-                <span><i data-lucide="brain-cog"></i> 推理强度：${this._escapeHtml(this._reasoningEffortLabel(model.reasoning_effort))}</span>
+                <span><i data-lucide="brain-cog"></i> ${I18n.t('aiModels.reasoningEffort', { value: this._escapeHtml(this._reasoningEffortLabel(model.reasoning_effort)) })}</span>
                 <span><i data-lucide="database"></i> ${model.context_window ? `${String(Number(model.context_window))} tokens` : '未配置上下文上限'}</span>
                 <span><i data-lucide="link"></i> ${this._escapeHtml(model.base_url)}</span>
                 <span><i data-lucide="key-round"></i> ${this._escapeHtml(model.api_key_masked)}</span>
@@ -118,9 +118,9 @@ const AIModelsPage = {
                     <option value="high" ${model?.reasoning_effort === 'high' ? 'selected' : ''}>高</option>
                 </select>
             </div>
-            <div class="form-group"><label>上下文上限（tokens）</label><input type="number" min="1" step="1" class="form-input" name="context_window" placeholder="例如 200000" value="${this._escapeAttr(model?.context_window || '')}"></div>
+            <div class="form-group"><label>上下文上限（tokens）</label><input type="number" min="1" step="1" class="form-input" name="context_window" placeholder="${I18n.t('placeholders.contextWindow')}" value="${this._escapeAttr(model?.context_window || '')}"></div>
             <div class="form-group"><label>基础 URL</label><input type="text" class="form-input" name="base_url" required placeholder="https://api.anthropic.com" value="${this._escapeAttr(model?.base_url || '')}"></div>
-            <div class="form-group"><label>API 密钥</label><input type="password" class="form-input" name="api_key" ${isEdit ? '' : 'required'} placeholder="${isEdit ? '留空保持不变' : 'sk-ant-...'}"></div>
+            <div class="form-group"><label>API 密钥</label><input type="password" class="form-input" name="api_key" ${isEdit ? '' : 'required'} placeholder="${isEdit ? I18n.t('placeholders.keepApiKey') : 'sk-ant-...'}"></div>
             <div class="text-muted text-sm">选择 Anthropic 原生协议时，请填写 Anthropic Messages API 对应的 Base URL 与模型名。</div>
         `;
 
@@ -135,15 +135,15 @@ const AIModelsPage = {
                 protocolEl.value = 'anthropic';
                 baseUrlEl.placeholder = 'https://api.anthropic.com';
                 modelNameEl.placeholder = 'claude-opus-4-6';
-                if (!isEdit || !apiKeyEl.placeholder) apiKeyEl.placeholder = isEdit ? '留空保持不变' : 'sk-ant-...';
+                if (!isEdit || !apiKeyEl.placeholder) apiKeyEl.placeholder = isEdit ? I18n.t('placeholders.keepApiKey') : 'sk-ant-...';
             } else if (protocolEl.value === 'anthropic') {
                 baseUrlEl.placeholder = 'https://api.anthropic.com';
                 modelNameEl.placeholder = 'claude-opus-4-6';
-                if (!isEdit || !apiKeyEl.placeholder) apiKeyEl.placeholder = isEdit ? '留空保持不变' : 'sk-ant-...';
+                if (!isEdit || !apiKeyEl.placeholder) apiKeyEl.placeholder = isEdit ? I18n.t('placeholders.keepApiKey') : 'sk-ant-...';
             } else {
                 baseUrlEl.placeholder = 'https://api.openai.com/v1';
                 modelNameEl.placeholder = 'gpt-4o';
-                if (!isEdit || !apiKeyEl.placeholder) apiKeyEl.placeholder = isEdit ? '留空保持不变' : 'sk-...';
+                if (!isEdit || !apiKeyEl.placeholder) apiKeyEl.placeholder = isEdit ? I18n.t('placeholders.keepApiKey') : 'sk-...';
             }
         };
 
@@ -208,7 +208,7 @@ const AIModelsPage = {
             <div class="test-chat-messages" style="height: 320px; overflow-y: auto; border: 1px solid var(--border-color, #2a3441); border-radius: 10px; padding: 12px; background: var(--panel-bg, rgba(255,255,255,0.02)); display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px;"></div>
             <div class="form-group" style="margin-bottom: 0;">
                 <label>测试消息</label>
-                <textarea class="form-input test-chat-input" rows="4" placeholder="例如：你好，请用一句话介绍你自己"></textarea>
+                <textarea class="form-input test-chat-input" rows="4" placeholder="${I18n.t('placeholders.modelTestMessage')}"></textarea>
             </div>
             <div class="text-muted text-sm" style="margin-top: 8px;">用于快速验证当前已保存模型是否可正常对话。</div>
         `;
@@ -359,11 +359,11 @@ const AIModelsPage = {
 
     _reasoningEffortLabel(reasoningEffort) {
         const labels = {
-            low: '低',
-            medium: '中',
-            high: '高',
+            low: I18n.t('status.low'),
+            medium: I18n.t('status.medium'),
+            high: I18n.t('status.high'),
         };
-        return labels[reasoningEffort] || '默认';
+        return labels[reasoningEffort] || I18n.translateLegacyText('默认');
     },
 
     _escapeHtml(value) {

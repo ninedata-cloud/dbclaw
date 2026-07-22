@@ -2,9 +2,13 @@
 const SkillsPage = {
     _categories: [],
 
+    _t(key, params = {}) {
+        return I18n.t(`skills.${key}`, params);
+    },
+
     async render() {
         const content = DOM.$('#page-content');
-        content.innerHTML = '<div class="loading">Loading skills...</div>';
+        content.innerHTML = `<div class="loading">${this._t('loading')}</div>`;
 
         try {
             const [skills, categoriesRes] = await Promise.all([
@@ -19,9 +23,9 @@ const SkillsPage = {
             console.error('Error loading skills:', error);
             content.innerHTML = `
                 <div class="error-state">
-                    <h3>Error loading skills</h3>
+                    <h3>${this._t('loadError')}</h3>
                     <p>${error.message}</p>
-                    <button class="btn btn-primary" onclick="SkillsPage.render()">Retry</button>
+                    <button class="btn btn-primary" onclick="SkillsPage.render()">${this._t('retry')}</button>
                 </div>
             `;
         }
@@ -33,7 +37,7 @@ const SkillsPage = {
             <div style=\"position:relative;display:flex;align-items:center;\">
                 <i data-lucide=\"search\" style=\"position:absolute;left:8px;width:14px;height:14px;color:var(--text-secondary);pointer-events:none;z-index:1;\"></i>
                 <input type=\"text\" id=\"search-input\" class=\"filter-input\"
-                       placeholder=\"搜索名称、标签、描述...\"
+                       placeholder=\"${I18n.t('placeholders.searchSkills')}\"
                        style=\"padding-left:28px;min-width:200px;\"
                        onkeyup=\"SkillsPage.handleSearch(event)\">
             </div>
@@ -74,7 +78,7 @@ const SkillsPage = {
 
     renderSkillCard(skill) {
         const statusClass = skill.is_enabled ? 'enabled' : 'disabled';
-        const builtinBadge = skill.is_builtin ? '<span class="badge badge-builtin">Built-in</span>' : '';
+        const builtinBadge = skill.is_builtin ? `<span class="badge badge-builtin">${this._t('builtIn')}</span>` : '';
 
         return `
             <div class="skill-card ${statusClass}" data-skill-id="${skill.id}">
@@ -97,22 +101,22 @@ const SkillsPage = {
                 </div>
                 <div class="skill-card-actions">
                     <button class="btn btn-sm" onclick="SkillsPage.viewSkill('${skill.id}')">
-                        <i data-lucide="eye"></i> View
+                        <i data-lucide="eye"></i> ${this._t('view')}
                     </button>
                     <button class="btn btn-sm" onclick="SkillsPage.testSkill('${skill.id}')">
-                        <i data-lucide="play"></i> Test
+                        <i data-lucide="play"></i> ${this._t('test')}
                     </button>
                     ${!skill.is_builtin ? `
                         <button class="btn btn-sm" onclick="SkillsPage.editSkill('${skill.id}')">
-                            <i data-lucide="edit"></i> Edit
+                            <i data-lucide="edit"></i> ${this._t('edit')}
                         </button>
                     ` : ''}
                     <button class="btn btn-sm" onclick="SkillsPage.exportSkill('${skill.id}')">
-                        <i data-lucide="download"></i> Export
+                        <i data-lucide="download"></i> ${this._t('export')}
                     </button>
                     ${!skill.is_builtin ? `
                         <button class="btn btn-sm btn-danger" onclick="SkillsPage.deleteSkill('${skill.id}')">
-                            <i data-lucide="trash"></i> Delete
+                            <i data-lucide="trash"></i> ${this._t('delete')}
                         </button>
                     ` : ''}
                     <label class="toggle-switch">
@@ -141,7 +145,7 @@ const SkillsPage = {
                 skills.map(skill => SkillsPage.renderSkillCard(skill)).join('');
             DOM.createIcons();
         } catch (error) {
-            Toast.error('Failed to filter skills');
+            Toast.error(this._t('filterFailed'));
         }
     },
 
@@ -168,7 +172,7 @@ const SkillsPage = {
                 skills.map(skill => SkillsPage.renderSkillCard(skill)).join('');
             DOM.createIcons();
         } catch (error) {
-            Toast.error('Search failed');
+            Toast.error(this._t('searchFailed'));
         }
     },
 
@@ -183,28 +187,28 @@ const SkillsPage = {
                         <p><strong>ID:</strong> ${skill.id}</p>
                         <p><strong>版本:</strong> ${skill.version}</p>
                         <p><strong>分类:</strong> ${skill.category || 'N/A'}</p>
-                        <p><strong>Description:</strong> ${skill.description}</p>
+                        <p><strong>${this._t('description')}:</strong> ${skill.description}</p>
 
-                        <h4>Parameters:</h4>
+                        <h4>${this._t('parameters')}:</h4>
                         <ul>
                             ${skill.parameters.map(p => `
-                                <li><strong>${p.name}</strong> (${p.type}${p.required ? ', required' : ''}): ${p.description}</li>
+                                <li><strong>${p.name}</strong> (${p.type}${p.required ? `, ${this._t('required')}` : ''}): ${p.description}</li>
                             `).join('')}
                         </ul>
 
-                        <h4>Permissions:</h4>
+                        <h4>${this._t('permissions')}:</h4>
                         <ul>
                             ${skill.permissions.map(p => `<li>${p}</li>`).join('')}
                         </ul>
 
-                        <h4>Code:</h4>
+                        <h4>${this._t('code')}:</h4>
                         <pre><code>${skill.code}</code></pre>
                     </div>
                 `,
                 size: 'large'
             });
         } catch (error) {
-            Toast.error('加载失败 skill details');
+            Toast.error(this._t('loadDetailsFailed'));
         }
     },
 
@@ -219,7 +223,7 @@ const SkillsPage = {
                 datasources = await API.get('/api/datasources');
                 knowledgeBases = await API.get('/api/knowledge-bases');
             } catch (e) {
-                console.error('加载数据源失败/KBs:', e);
+                console.error('Failed to load datasources or knowledge bases:', e);
             }
 
             // Generate input fields based on parameter type
@@ -235,7 +239,7 @@ const SkillsPage = {
                         <div class="form-group">
                             <label>${p.name} ${p.required ? '*' : ''}</label>
                             <select id="param-${p.name}" class="form-control" style="min-width: 400px;">
-                                <option value="">-- Select Datasource --</option>
+                                <option value="">-- ${this._t('selectDatasource')} --</option>
                                 ${options}
                             </select>
                             <small class="form-text">${p.description}</small>
@@ -253,7 +257,7 @@ const SkillsPage = {
                             <select id="param-${p.name}" class="form-control" multiple style="height: 100px;">
                                 ${options}
                             </select>
-                            <small class="form-text">${p.description} (Hold Ctrl/Cmd to select multiple)</small>
+                            <small class="form-text">${p.description} (${this._t('multiSelectHint')})</small>
                         </div>
                     `;
                 }
@@ -263,7 +267,7 @@ const SkillsPage = {
                         <div class="form-group">
                             <label>${p.name} ${p.required ? '*' : ''}</label>
                             <select id="param-${p.name}" class="form-control">
-                                <option value="">-- Select --</option>
+                                <option value="">-- ${this._t('select')} --</option>
                                 <option value="true">true</option>
                                 <option value="false">false</option>
                             </select>
@@ -274,7 +278,7 @@ const SkillsPage = {
                 // Default text input for other types
                 else {
                     const placeholder = p.type === 'array' || p.type === 'object'
-                        ? `${p.description} (JSON format)`
+                        ? `${p.description} (${this._t('jsonFormat')})`
                         : p.description;
                     inputHtml = `
                         <div class="form-group">
@@ -289,11 +293,11 @@ const SkillsPage = {
             }));
 
             Modal.show({
-                title: `Test ${skill.name}`,
+                title: this._t('testTitle', { name: skill.name }),
                 content: `
                     <form id="test-skill-form">
                         ${paramInputs.join('')}
-                        <button type="submit" class="btn btn-primary">Execute</button>
+                        <button type="submit" class="btn btn-primary">${this._t('execute')}</button>
                     </form>
                     <div id="test-result" style="margin-top: 20px;"></div>
                 `,
@@ -325,7 +329,7 @@ const SkillsPage = {
                                 try {
                                     params[p.name] = JSON.parse(value);
                                 } catch (e) {
-                                    Toast.error(`Invalid JSON for parameter ${p.name}`);
+                                    Toast.error(this._t('invalidJson', { name: p.name }));
                                     throw e;
                                 }
                             } else {
@@ -336,7 +340,7 @@ const SkillsPage = {
                 });
 
                 const resultDiv = document.getElementById('test-result');
-                resultDiv.innerHTML = '<p>Executing...</p>';
+                resultDiv.innerHTML = `<p>${this._t('executing')}</p>`;
 
                 try {
                     const result = await API.post(`/api/skills/${skillId}/test`, {
@@ -345,15 +349,15 @@ const SkillsPage = {
                     });
 
                     resultDiv.innerHTML = `
-                        <h4>Result:</h4>
+                        <h4>${this._t('result')}:</h4>
                         <pre><code>${JSON.stringify(result, null, 2)}</code></pre>
                     `;
                 } catch (error) {
-                    resultDiv.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+                    resultDiv.innerHTML = `<p class="error">${I18n.translateLegacyText('错误')}: ${error.message}</p>`;
                 }
             });
         } catch (error) {
-            Toast.error('加载失败 skill');
+            Toast.error(this._t('loadFailed'));
         }
     },
 
@@ -364,34 +368,34 @@ const SkillsPage = {
     async toggleSkill(skillId, enabled) {
         try {
             await API.put(`/api/skills/${skillId}`, { is_enabled: enabled });
-            Toast.success(`Skill ${enabled ? 'enabled' : 'disabled'}`);
+            Toast.success(this._t(enabled ? 'enabled' : 'disabled'));
         } catch (error) {
-            Toast.error('Failed to toggle skill');
+            Toast.error(this._t('toggleFailed'));
         }
     },
 
     async deleteSkill(skillId) {
-        if (!confirm('确认操作 you want to delete this skill?')) return;
+        if (!confirm(this._t('deleteConfirm'))) return;
 
         try {
             await API.delete(`/api/skills/${skillId}`);
-            Toast.success('Skill deleted');
+            Toast.success(this._t('deleted'));
             this.loadSkills();
         } catch (error) {
-            Toast.error('Failed to delete skill');
+            Toast.error(this._t('deleteFailed'));
         }
     },
 
     async importSkill() {
         Modal.show({
-            title: 'Import Skill',
+            title: this._t('importTitle'),
             content: `
                 <form id="import-skill-form">
                     <div class="form-group">
-                        <label>YAML File</label>
+                        <label>${this._t('yamlFile')}</label>
                         <input type="file" id="skill-file" accept=".yaml,.yml" required>
                     </div>
-                    <button type="submit" class="btn btn-primary">Import</button>
+                    <button type="submit" class="btn btn-primary">${this._t('import')}</button>
                 </form>
             `
         });
@@ -412,65 +416,65 @@ const SkillsPage = {
 
                 if (!response.ok) {
                     const err = await response.json().catch(() => ({ detail: response.statusText }));
-                    throw new Error(err.detail || 'Import failed');
+                    throw new Error(err.detail || this._t('importFailed', { message: response.statusText }));
                 }
 
-                Toast.success('Skill imported successfully');
+                Toast.success(this._t('imported'));
                 Modal.hide();
                 SkillsPage.loadSkills();
             } catch (error) {
-                Toast.error('Failed to import skill: ' + error.message);
+                Toast.error(this._t('importFailed', { message: error.message }));
             }
         });
     },
 
     async createSkill() {
         Modal.show({
-            title: 'Create New Skill',
+            title: this._t('createTitle'),
             content: `
                 <form id="create-skill-form">
                     <div class="form-group">
-                        <label>Skill ID *</label>
+                        <label>${this._t('skillId')} *</label>
                         <input type="text" id="skill-id" class="form-control"
                                pattern="[a-z0-9_]+"
-                               placeholder="e.g., my_custom_skill" required>
-                        <small class="form-text">Lowercase letters, numbers, and underscores only</small>
+                               placeholder="${I18n.t('placeholders.skillId')}" required>
+                        <small class="form-text">${this._t('idHint')}</small>
                     </div>
 
                     <div class="form-group">
-                        <label>Name *</label>
+                        <label>${this._t('name')} *</label>
                         <input type="text" id="skill-name" class="form-control"
-                               placeholder="e.g., My Custom Skill" required>
+                               placeholder="${I18n.t('placeholders.skillName')}" required>
                     </div>
 
                     <div class="form-group">
-                        <label>Version *</label>
+                        <label>${this._t('version')} *</label>
                         <input type="text" id="skill-version" class="form-control"
                                pattern="\\d+\\.\\d+\\.\\d+"
-                               placeholder="e.g., 1.0.0" value="1.0.0" required>
-                        <small class="form-text">Semantic versioning (major.minor.patch)</small>
+                               placeholder="${I18n.t('placeholders.version')}" value="1.0.0" required>
+                        <small class="form-text">${this._t('versionHint')}</small>
                     </div>
 
                     <div class="form-group">
-                        <label>Category</label>
+                        <label>${this._t('category')}</label>
                         <input type="text" id="skill-category" class="form-control"
-                               placeholder="e.g., diagnostics, monitoring">
+                               placeholder="${I18n.t('placeholders.categories')}">
                     </div>
 
                     <div class="form-group">
-                        <label>Description *</label>
+                        <label>${this._t('description')} *</label>
                         <textarea id="skill-description" class="form-control" rows="3"
-                                  placeholder="Describe what this skill does" required></textarea>
+                                  placeholder="${this._t('describePlaceholder')}" required></textarea>
                     </div>
 
                     <div class="form-group">
-                        <label>Tags</label>
+                        <label>${this._t('tags')}</label>
                         <input type="text" id="skill-tags" class="form-control"
-                               placeholder="e.g., mysql, performance, slow-query (comma-separated)">
+                               placeholder="${I18n.t('skills.tagsPlaceholder')}">
                     </div>
 
                     <div class="form-group">
-                        <label>Permissions</label>
+                        <label>${this._t('permissions')}</label>
                         <div id="permissions-checkboxes" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
                             <label><input type="checkbox" value="execute_query"> execute_query</label>
                             <label><input type="checkbox" value="execute_command"> execute_command</label>
@@ -486,29 +490,29 @@ const SkillsPage = {
                     </div>
 
                     <div class="form-group">
-                        <label>Timeout (seconds)</label>
+                        <label>${this._t('timeout')}</label>
                         <input type="number" id="skill-timeout" class="form-control"
-                               min="1" max="300" placeholder="Default: 30">
-                        <small class="form-text">Maximum execution time (1-300 seconds)</small>
+                               min="1" max="300" placeholder="${this._t('defaultSeconds')}">
+                        <small class="form-text">${this._t('timeoutHint')}</small>
                     </div>
 
                     <div class="form-group">
-                        <label>Parameters (JSON)</label>
+                        <label>${this._t('parametersJson')}</label>
                         <textarea id="skill-parameters" class="form-control" rows="6"
                                   placeholder='[{"name": "param1", "type": "string", "required": true, "description": "Parameter description"}]'>[]</textarea>
-                        <small class="form-text">Array of parameter definitions</small>
+                        <small class="form-text">${this._t('parametersHint')}</small>
                     </div>
 
                     <div class="form-group">
-                        <label>Code *</label>
+                        <label>${this._t('code')} *</label>
                         <textarea id="skill-code" class="form-control" rows="12"
                                   placeholder="async def execute(context, params):\n    # Your code here\n    return {'result': 'success'}" required></textarea>
-                        <small class="form-text">Python async function code</small>
+                        <small class="form-text">${this._t('codeHint')}</small>
                     </div>
 
                     <div style="display: flex; gap: 10px; margin-top: 20px;">
-                        <button type="submit" class="btn btn-primary">Create Skill</button>
-                        <button type="button" class="btn btn-secondary" onclick="Modal.hide()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">${this._t('create')}</button>
+                        <button type="button" class="btn btn-secondary" onclick="Modal.hide()">${this._t('cancel')}</button>
                     </div>
                 </form>
             `,
@@ -540,10 +544,10 @@ const SkillsPage = {
                     try {
                         parameters = JSON.parse(parametersInput);
                         if (!Array.isArray(parameters)) {
-                            throw new Error('Parameters must be an array');
+                            throw new Error(this._t('paramsMustArray'));
                         }
                     } catch (e) {
-                        Toast.error('Invalid parameters JSON: ' + e.message);
+                        Toast.error(this._t('invalidParameters', { message: e.message }));
                         return;
                     }
                 }
@@ -572,11 +576,11 @@ const SkillsPage = {
                     is_enabled: true
                 });
 
-                Toast.success('Skill created successfully');
+                Toast.success(this._t('created'));
                 Modal.hide();
                 SkillsPage.loadSkills();
             } catch (error) {
-                Toast.error('Failed to create skill: ' + error.message);
+                Toast.error(this._t('createFailed', { message: error.message }));
             }
         });
     },
@@ -586,54 +590,54 @@ const SkillsPage = {
             const skill = await API.get(`/api/skills/${skillId}`);
 
             Modal.show({
-                title: `Edit Skill: ${skill.name}`,
+                title: this._t('editTitle', { name: skill.name }),
                 content: `
                     <form id="edit-skill-form">
                         <div class="form-group">
-                            <label>Skill ID</label>
+                            <label>${this._t('skillId')}</label>
                             <input type="text" class="form-control" value="${skill.id}" disabled>
-                            <small class="form-text">ID cannot be changed</small>
+                            <small class="form-text">${this._t('immutableId')}</small>
                         </div>
 
                         <div class="form-group">
-                            <label>Name *</label>
+                            <label>${this._t('name')} *</label>
                             <input type="text" id="edit-skill-name" class="form-control"
                                    value="${skill.name}" required>
                         </div>
 
                         <div class="form-group">
-                            <label>Description *</label>
+                            <label>${this._t('description')} *</label>
                             <textarea id="edit-skill-description" class="form-control" rows="3" required>${skill.description}</textarea>
                         </div>
 
                         <div class="form-group">
-                            <label>Tags</label>
+                            <label>${this._t('tags')}</label>
                             <input type="text" id="edit-skill-tags" class="form-control"
                                    value="${(skill.tags || []).join(', ')}"
-                                   placeholder="comma-separated">
+                                   placeholder="${this._t('commaSeparated')}">
                         </div>
 
                         <div class="form-group">
-                            <label>Parameters (JSON)</label>
+                            <label>${this._t('parametersJson')}</label>
                             <textarea id="edit-skill-parameters" class="form-control" rows="6">${JSON.stringify(skill.parameters || [], null, 2)}</textarea>
-                            <small class="form-text">Array of parameter definitions</small>
+                            <small class="form-text">${this._t('parametersHint')}</small>
                         </div>
 
                         <div class="form-group">
-                            <label>Code *</label>
+                            <label>${this._t('code')} *</label>
                             <textarea id="edit-skill-code" class="form-control" rows="12" required>${skill.code}</textarea>
                         </div>
 
                         <div class="form-group">
                             <label>
                                 <input type="checkbox" id="edit-skill-enabled" ${skill.is_enabled ? 'checked' : ''}>
-                                Enabled
+                                ${I18n.t('common.enabled')}
                             </label>
                         </div>
 
                         <div style="display: flex; gap: 10px; margin-top: 20px;">
-                            <button type="submit" class="btn btn-primary">Save Changes</button>
-                            <button type="button" class="btn btn-secondary" onclick="Modal.hide()">Cancel</button>
+                            <button type="submit" class="btn btn-primary">${this._t('saveChanges')}</button>
+                            <button type="button" class="btn btn-secondary" onclick="Modal.hide()">${this._t('cancel')}</button>
                         </div>
                     </form>
                 `,
@@ -656,10 +660,10 @@ const SkillsPage = {
                         try {
                             parameters = JSON.parse(parametersInput);
                             if (!Array.isArray(parameters)) {
-                                throw new Error('Parameters must be an array');
+                                throw new Error(this._t('paramsMustArray'));
                             }
                         } catch (e) {
-                            Toast.error('Invalid parameters JSON: ' + e.message);
+                            Toast.error(this._t('invalidParameters', { message: e.message }));
                             return;
                         }
                     }
@@ -673,15 +677,15 @@ const SkillsPage = {
                         is_enabled
                     });
 
-                    Toast.success('Skill updated successfully');
+                    Toast.success(this._t('updated'));
                     Modal.hide();
                     SkillsPage.loadSkills();
                 } catch (error) {
-                    Toast.error('Failed to update skill: ' + error.message);
+                    Toast.error(this._t('updateFailed', { message: error.message }));
                 }
             });
         } catch (error) {
-            Toast.error('Failed to load skill: ' + error.message);
+            Toast.error(this._t('loadFailed') + ': ' + error.message);
         }
     }
 };

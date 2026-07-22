@@ -21,6 +21,7 @@ from backend.models.soft_delete import alive_filter, alive_select
 from backend.services.knowledge_router import build_knowledge_context
 from backend.utils.json_sanitizer import sanitize_for_json
 from backend.utils.datetime_helper import now as local_now
+from backend.i18n.locale import DEFAULT_LOCALE, normalize_locale, translate
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +135,7 @@ def append_markdown_render_segment(
     return segments
 
 
-def _parse_tool_result_summary(result: Any) -> tuple[str, str]:
+def _parse_tool_result_summary(result: Any, locale: str | None = None) -> tuple[str, str]:
     parsed = result
     if isinstance(result, str):
         try:
@@ -144,8 +145,9 @@ def _parse_tool_result_summary(result: Any) -> tuple[str, str]:
 
     is_error = isinstance(parsed, dict) and (parsed.get("success") is False or parsed.get("error"))
     status = "failed" if is_error else "completed"
-    fallback = "执行失败" if is_error else "执行完成"
-    summary = _summarize_value(parsed) or fallback
+    is_english = (normalize_locale(locale) or DEFAULT_LOCALE) == "en-US"
+    fallback = ("Execution failed" if is_error else "Execution completed") if is_english else ("执行失败" if is_error else "执行完成")
+    summary = _summarize_value(parsed, locale) or fallback
     return status, summary
 
 
@@ -215,9 +217,12 @@ def upsert_tool_render_segment(
 def apply_render_segments_event(
     render_segments: list[dict[str, Any]] | None,
     event: dict[str, Any],
+    locale: str | None = None,
 ) -> list[dict[str, Any]]:
     segments = clone_render_segments(render_segments)
     event_type = event.get("type")
+    response_locale = normalize_locale(locale or event.get("locale")) or DEFAULT_LOCALE
+    is_english = response_locale == "en-US"
 
     if event_type == "content":
         return append_markdown_render_segment(segments, event.get("content"))
@@ -229,7 +234,7 @@ def apply_render_segments_event(
             tool_name=event.get("tool_name"),
             status="running",
             args=event.get("tool_args"),
-            summary="已发起调用，等待返回结果",
+            summary="Call started; waiting for the result" if is_english else "已发起调用，等待返回结果",
             metadata=_build_tool_segment_metadata(
                 action_run_id=event.get("action_run_id"),
                 action_title=event.get("action_title"),
@@ -238,7 +243,7 @@ def apply_render_segments_event(
         )
 
     if event_type == "tool_result":
-        inferred_status, inferred_summary = _parse_tool_result_summary(event.get("result"))
+        inferred_status, inferred_summary = _parse_tool_result_summary(event.get("result"), response_locale)
         return upsert_tool_render_segment(
             segments,
             tool_call_id=event.get("tool_call_id"),
@@ -280,11 +285,11 @@ def apply_render_segments_event(
         if action == "approved":
             status = "running"
             approval_status = "approved"
-            summary = "已批准，正在执行..."
+            summary = "Approved; running..." if is_english else "已批准，正在执行..."
         elif action == "rejected":
             status = "failed"
             approval_status = "rejected"
-            summary = "用户已拒绝执行"
+            summary = "Execution rejected by the user" if is_english else "用户已拒绝执行"
         else:
             status = None
             approval_status = action or None
@@ -421,14 +426,18 @@ async def _emit(event: dict[str, Any], on_event: EventCallback = None):
             pass  # WebSocket may be disconnected; task continues in background
 
 
-def _summarize_value(value: Any) -> str:
+def _summarize_value(value: Any, locale: str | None = None) -> str:
     if value is None:
         return ""
     if isinstance(value, str):
         stripped = value.strip()
         return stripped[:240]
     if isinstance(value, list):
-        return f"返回 {len(value)} 条记录"
+        return (
+            f"Returned {len(value)} records"
+            if (normalize_locale(locale) or DEFAULT_LOCALE) == "en-US"
+            else f"返回 {len(value)} 条记录"
+        )
     if isinstance(value, dict):
         if value.get("error"):
             return str(value["error"])[:240]
@@ -438,16 +447,25 @@ def _summarize_value(value: Any) -> str:
         for key, item in list(value.items())[:3]:
             rendered = item if isinstance(item, (str, int, float, bool)) else json.dumps(item, ensure_ascii=False)[:60]
             parts.append(f"{key}={rendered}")
-        return "，".join(parts)[:240]
+        separator = ", " if (normalize_locale(locale) or DEFAULT_LOCALE) == "en-US" else "，"
+        return separator.join(parts)[:240]
     return str(value)[:240]
 
 
-def _build_diagnosis_event_payload(event_type: str, event: dict[str, Any]) -> dict[str, Any]:
+def _build_diagnosis_event_payload(
+    event_type: str,
+    event: dict[str, Any],
+    locale: str | None = None,
+) -> dict[str, Any]:
     if event_type == "tool_call":
         return {
             "tool_name": event.get("tool_name"),
             "tool_call_id": event.get("tool_call_id"),
-            "summary": f"调用 {event.get('tool_name')}",
+            "summary": (
+                f"Called {event.get('tool_name')}"
+                if (normalize_locale(locale) or DEFAULT_LOCALE) == "en-US"
+                else f"调用 {event.get('tool_name')}"
+            ),
         }
     if event_type == "tool_result":
         raw_result = event.get("result")
@@ -462,7 +480,7 @@ def _build_diagnosis_event_payload(event_type: str, event: dict[str, Any]) -> di
             "tool_call_id": event.get("tool_call_id"),
             "execution_time_ms": event.get("execution_time_ms"),
             "skill_execution_id": event.get("skill_execution_id"),
-            "summary": _summarize_value(parsed),
+            "summary": _summarize_value(parsed, locale),
             "success": not (isinstance(parsed, dict) and parsed.get("error")),
         }
     if event_type == "plan_step_status":
@@ -666,6 +684,7 @@ async def _store_approval_request(
     skill_authorizations,
     user_id: int | None,
     history_window_hours: int | None,
+    locale: str | None,
 ) -> None:
     approval_id = event["approval_id"]
     pending_approvals.setdefault(session_id, {})[approval_id] = {
@@ -682,6 +701,7 @@ async def _store_approval_request(
         "skill_authorizations": skill_authorizations,
         "user_id": user_id,
         "history_window_hours": history_window_hours,
+        "locale": normalize_locale(locale),
         "risk_level": event.get("risk_level", "high"),
         "risk_reason": event.get("risk_reason"),
         "suppressible": event.get("suppressible", False),
@@ -704,6 +724,7 @@ async def _store_approval_request(
             "summary": event.get("summary"),
             "plan_markdown": event.get("plan_markdown"),
             "history_window_hours": history_window_hours,
+            "locale": normalize_locale(locale),
             "risk_level": event.get("risk_level", "high"),
             "risk_reason": event.get("risk_reason"),
             "suppressible": event.get("suppressible", False),
@@ -771,6 +792,7 @@ async def _load_pending_approval_from_db(
         ),
         "user_id": user_id,
         "history_window_hours": data.get("history_window_hours"),
+        "locale": normalize_locale(data.get("locale")),
         "risk_level": data.get("risk_level", "high"),
         "risk_reason": data.get("risk_reason"),
         "suppressible": data.get("suppressible", False),
@@ -820,7 +842,8 @@ def _extract_section_lines(content: str, heading_keywords: list[str]) -> list[st
                 break
             continue
         is_heading = line.lstrip().startswith("#") or plain.endswith("：") or plain.endswith(":")
-        if any(keyword in plain for keyword in heading_keywords) and is_heading:
+        normalized_plain = plain.casefold()
+        if any(keyword.casefold() in normalized_plain for keyword in heading_keywords) and is_heading:
             in_section = True
             continue
         if in_section and is_heading and captured:
@@ -837,6 +860,7 @@ async def _upsert_diagnosis_conclusion(
     user_id: int | None,
     run_id: str | None,
     content: str,
+    locale: str | None = None,
 ) -> dict[str, Any] | None:
     plain = _strip_markdown_text(content)
     if not plain:
@@ -851,10 +875,22 @@ async def _upsert_diagnosis_conclusion(
         return None
 
     summary = plain[:220]
-    findings = _extract_section_lines(content, ["问题判断", "结论", "诊断结论", "根因", "现象"])
-    action_items = _extract_section_lines(content, ["建议动作", "建议", "处理建议", "行动建议", "下一步"])
-    evidence_lines = _extract_section_lines(content, ["关键证据", "证据", "依据"])
-    risk_lines = _extract_section_lines(content, ["风险提示", "风险", "注意事项"])
+    findings = _extract_section_lines(
+        content,
+        ["问题判断", "结论", "诊断结论", "根因", "现象", "conclusion", "diagnostic conclusion", "root cause", "findings"],
+    )
+    action_items = _extract_section_lines(
+        content,
+        ["建议动作", "建议", "处理建议", "行动建议", "下一步", "recommended actions", "recommendations", "next steps", "actions"],
+    )
+    evidence_lines = _extract_section_lines(
+        content,
+        ["关键证据", "证据", "依据", "key evidence", "evidence"],
+    )
+    risk_lines = _extract_section_lines(
+        content,
+        ["风险提示", "风险", "注意事项", "risk notes", "risks", "cautions"],
+    )
 
     evidence_refs = [{"type": "text", "detail": line} for line in evidence_lines[:10]]
     if risk_lines:
@@ -883,7 +919,11 @@ async def _upsert_diagnosis_conclusion(
             seen_refs.add(key)
             knowledge_refs.append({
                 "document_id": payload.get("document_id"),
-                "title": payload.get("citation") or payload.get("title") or payload.get("document_title") or "未命名文档",
+                "title": payload.get("citation") or payload.get("title") or payload.get("document_title") or (
+                    "Untitled document"
+                    if (normalize_locale(locale) or DEFAULT_LOCALE) == "en-US"
+                    else "未命名文档"
+                ),
                 "reason": payload.get("reason"),
                 "scope": payload.get("scope"),
                 "document_kind": payload.get("document_kind"),
@@ -1068,6 +1108,7 @@ async def process_stream_events(
     run_id: str | None = None,
     skip_approval: bool = False,
     history_window_hours: int | None = None,
+    locale: str | None = None,
 ) -> tuple[str, dict[str, int], bool]:
     usage_totals = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
     paused_for_approval = False
@@ -1116,6 +1157,7 @@ async def process_stream_events(
                 skill_authorizations=skill_authorizations,
                 system_prompt_override=system_prompt_override,
                 skip_approval=skip_approval,
+                locale=locale,
             ):
                 event_type = event.get("type")
                 if event_type in TRACKED_DIAGNOSIS_EVENTS:
@@ -1126,21 +1168,21 @@ async def process_stream_events(
                         run_id=run_id,
                         sequence_no=sequence_no,
                         event_type=event_type,
-                        payload=_build_diagnosis_event_payload(event_type, event),
+                        payload=_build_diagnosis_event_payload(event_type, event, locale),
                         step_id=event.get("step_id") or event.get("tool_call_id"),
                     )
 
                 if event_type == "content":
                     full_response += event["content"]
-                    render_segments = apply_render_segments_event(render_segments, event)
+                    render_segments = apply_render_segments_event(render_segments, event, locale)
                     await _emit({
                         "type": "content",
                         "content": event["content"],
                         "run_id": run_id,
                     }, on_event)
                 elif event_type == "tool_call":
-                    event_with_run = {**event, "run_id": run_id}
-                    render_segments = apply_render_segments_event(render_segments, event_with_run)
+                    event_with_run = {**event, "run_id": run_id, "locale": normalize_locale(locale)}
+                    render_segments = apply_render_segments_event(render_segments, event_with_run, locale)
                     await _store_tool_call(db, session_id, event_with_run)
                     await _emit({
                         "type": "tool_call",
@@ -1148,10 +1190,11 @@ async def process_stream_events(
                         "tool_args": event["tool_args"],
                         "tool_call_id": event.get("tool_call_id"),
                         "run_id": run_id,
+                        "locale": normalize_locale(locale),
                     }, on_event)
                 elif event_type == "tool_result":
-                    event_with_run = {**event, "run_id": run_id}
-                    render_segments = apply_render_segments_event(render_segments, event_with_run)
+                    event_with_run = {**event, "run_id": run_id, "locale": normalize_locale(locale)}
+                    render_segments = apply_render_segments_event(render_segments, event_with_run, locale)
                     await _store_tool_result(db, session_id, event_with_run)
                     await _emit({
                         "type": "tool_result",
@@ -1165,11 +1208,12 @@ async def process_stream_events(
                         "phase": event.get("phase"),
                         "visualization": event.get("visualization"),
                         "run_id": run_id,
+                        "locale": normalize_locale(locale),
                     }, on_event)
                 elif event_type == "approval_request":
                     paused_for_approval = True
-                    event_with_run = {**event, "run_id": run_id}
-                    render_segments = apply_render_segments_event(render_segments, event_with_run)
+                    event_with_run = {**event, "run_id": run_id, "locale": normalize_locale(locale)}
+                    render_segments = apply_render_segments_event(render_segments, event_with_run, locale)
                     await _persist_current_assistant(ASSISTANT_STATUS_AWAITING_APPROVAL)
                     await _store_approval_request(
                         db,
@@ -1183,6 +1227,7 @@ async def process_stream_events(
                         skill_authorizations,
                         user_id,
                         history_window_hours,
+                        locale,
                     )
                     await _emit(event_with_run, on_event)
                 elif event_type == "usage":
@@ -1219,8 +1264,9 @@ async def process_stream_events(
                     }, on_event)
     except TimeoutError:
         logger.error(f"Conversation stream timed out for session {session_id}")
+        response_locale = normalize_locale(locale) or DEFAULT_LOCALE
         if full_response:
-            timeout_note = "\n\n[会话超时，以上为部分结果]"
+            timeout_note = "\n\n" + translate(response_locale, "ai.session.partial_timeout")
             full_response += timeout_note
             render_segments = apply_render_segments_event(
                 render_segments,
@@ -1229,12 +1275,19 @@ async def process_stream_events(
             await _emit({"type": "content", "content": timeout_note, "run_id": run_id}, on_event)
         terminal_status = ASSISTANT_STATUS_PARTIAL
         await _persist_current_assistant(ASSISTANT_STATUS_PARTIAL)
-        await _emit({"type": "error", "content": "AI 会话超时（600秒），请稍后重试或简化问题。", "run_id": run_id}, on_event)
+        await _emit({
+            "type": "error",
+            "content": translate(response_locale, "ai.session.timeout", {"seconds": 600}),
+            "run_id": run_id,
+        }, on_event)
         await _emit({"type": "done", "run_id": run_id}, on_event)
     except asyncio.CancelledError:
         logger.info(f"Conversation stream cancelled for session {session_id}")
         if full_response:
-            cancel_note = "\n\n[用户已停止生成]"
+            cancel_note = "\n\n" + translate(
+                normalize_locale(locale) or DEFAULT_LOCALE,
+                "ai.session.cancelled",
+            )
             full_response += cancel_note
             render_segments = apply_render_segments_event(
                 render_segments,
@@ -1264,6 +1317,7 @@ async def process_stream_events(
                 user_id=user_id,
                 run_id=run_id,
                 content=full_response,
+                locale=locale,
             )
             if conclusion_payload:
                 sequence_no += 1
@@ -1273,7 +1327,7 @@ async def process_stream_events(
                     run_id=run_id,
                     sequence_no=sequence_no,
                     event_type="diagnosis_conclusion",
-                    payload=_build_diagnosis_event_payload("diagnosis_conclusion", conclusion_payload),
+                    payload=_build_diagnosis_event_payload("diagnosis_conclusion", conclusion_payload, locale),
                 )
                 await _emit({"type": "diagnosis_conclusion", **conclusion_payload}, on_event)
 
@@ -1407,6 +1461,7 @@ async def continue_conversation_after_tool(
     on_event: EventCallback = None,
     run_id: str | None = None,
     history_window_hours: int | None = None,
+    locale: str | None = None,
 ) -> tuple[str, dict[str, int], bool]:
     all_msgs = await load_session_messages_for_llm(
         db,
@@ -1428,6 +1483,7 @@ async def continue_conversation_after_tool(
         on_event=on_event,
         run_id=run_id or f"resume_{local_now().strftime('%Y%m%d%H%M%S')}_{session_id}",
         history_window_hours=history_window_hours,
+        locale=locale,
     )
 
 
@@ -1441,6 +1497,7 @@ async def resolve_pending_approval(
     user_id: int | None,
     pending_approvals: PendingApprovalsStore,
     on_event: EventCallback = None,
+    locale: str | None = None,
 ) -> dict[str, Any]:
     session_pending = pending_approvals.get(session_id, {})
     pending = session_pending.get(approval_id)
@@ -1456,7 +1513,12 @@ async def resolve_pending_approval(
             session_pending[approval_id] = pending
 
     if not pending or pending.get("user_id") != user_id:
-        raise ValueError("确认请求不存在或已失效")
+        raise ValueError(
+            translate(
+                normalize_locale(locale) or DEFAULT_LOCALE,
+                "ai.approval.not_found",
+            )
+        )
 
     response_msg = ChatMessage(
         session_id=session_id,
@@ -1486,6 +1548,7 @@ async def resolve_pending_approval(
         "recommendation_id": pending.get("recommendation_id"),
         "action_title": pending.get("action_title"),
         "phase": pending.get("phase"),
+        "locale": pending.get("locale"),
     }
     await _apply_assistant_event_to_run(
         db,
@@ -1515,7 +1578,11 @@ async def resolve_pending_approval(
                 tool_name=pending.get("tool_name"),
                 status="failed",
                 args=pending.get("tool_args"),
-                summary="用户已拒绝执行",
+                summary=(
+                    "Execution rejected by the user"
+                    if pending.get("locale") == "en-US"
+                    else "用户已拒绝执行"
+                ),
                 metadata=_build_tool_segment_metadata(
                     approval_id=approval_id,
                     approval_status="rejected",
@@ -1547,6 +1614,7 @@ async def resolve_pending_approval(
         "recommendation_id": pending.get("recommendation_id"),
         "action_title": pending.get("action_title"),
         "phase": pending.get("phase"),
+        "locale": pending.get("locale"),
     }
     await _store_tool_call(db, session_id, tool_call_event)
     await _apply_assistant_event_to_run(
@@ -1577,6 +1645,7 @@ async def resolve_pending_approval(
         "action_title": pending.get("action_title"),
         "phase": pending.get("phase"),
         "visualization": visualization,
+        "locale": pending.get("locale"),
     }
     await _store_tool_result(db, session_id, tool_result_event)
     await _apply_assistant_event_to_run(
@@ -1603,5 +1672,6 @@ async def resolve_pending_approval(
         on_event=on_event,
         run_id=pending.get("run_id"),
         history_window_hours=pending.get("history_window_hours"),
+        locale=pending.get("locale"),
     )
     return {"approval_id": approval_id, "status": "approved", "pending": pending}

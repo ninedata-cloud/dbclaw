@@ -36,12 +36,12 @@ const DatasourceForm = {
 
         form.innerHTML = `
             <div class="form-group">
-                <label>数据源名称</label>
-                <input type="text" class="form-input" name="name" value="${this._escapeHtml(datasource?.name || '')}" required placeholder="我的数据库">
+                <label>${I18n.t('datasourceForm.name')}</label>
+                <input type="text" class="form-input" name="name" value="${this._escapeHtml(datasource?.name || '')}" required placeholder="${I18n.t('datasourceForm.namePlaceholder')}">
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label>数据库类型</label>
+                    <label>${I18n.t('datasourceForm.databaseType')}</label>
                     <select class="form-select" name="db_type" required>
                         <option value="mysql" ${datasource?.db_type === 'mysql' ? 'selected' : ''}>MySQL</option>
                         <option value="postgresql" ${datasource?.db_type === 'postgresql' ? 'selected' : ''}>PostgreSQL</option>
@@ -54,80 +54,80 @@ const DatasourceForm = {
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>端口</label>
+                    <label>${I18n.t('datasourceForm.port')}</label>
                     <input type="number" class="form-input" name="port" value="${this._escapeHtml(String(datasource?.port || this._defaultPort('mysql')))}" required>
                 </div>
             </div>
             <div class="form-group">
-                <label>主机地址</label>
+                <label>${I18n.t('datasourceForm.host')}</label>
                 <input type="text" class="form-input" name="host" value="${this._escapeHtml(datasource?.host || '')}" required placeholder="127.0.0.1">
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label>用户名</label>
+                    <label>${I18n.t('datasourceForm.username')}</label>
                     <input type="text" class="form-input" name="username" value="${this._escapeHtml(datasource?.username || '')}" placeholder="root">
                 </div>
                 <div class="form-group">
-                    <label>密码</label>
-                    <input type="password" class="form-input" name="password" value="" placeholder="${isEdit ? '(保持不变)' : ''}">
+                    <label>${I18n.t('datasourceForm.password')}</label>
+                    <input type="password" class="form-input" name="password" value="" placeholder="${isEdit ? I18n.t('datasourceForm.keepPassword') : ''}">
                 </div>
             </div>
             <div class="form-group">
-                <label>数据库名</label>
+                <label>${I18n.t('datasourceForm.database')}</label>
                 <input type="text" class="form-input" name="database" value="${this._escapeHtml(datasource?.database || '')}" placeholder="mydb">
             </div>
             <div class="form-group">
-                <label>标签</label>
-                <input type="text" class="form-input" name="tags" value="${this._escapeHtml((datasource?.tags || []).join(', '))}" placeholder="例如：生产, 会员, 核心系统">
-                <small class="text-muted">多个标签请用逗号分隔</small>
+                <label>${I18n.t('datasourceForm.tags')}</label>
+                <input type="text" class="form-input" name="tags" value="${this._escapeHtml((datasource?.tags || []).join(', '))}" placeholder="${I18n.t('datasourceForm.tagsPlaceholder')}">
+                <small class="text-muted">${I18n.t('datasourceForm.tagsHint')}</small>
             </div>
             <div class="form-group">
-                <label>备注</label>
-                <textarea class="form-input" name="remark" rows="2" placeholder="可选备注信息，如业务背景、特殊配置等">${this._escapeHtml(datasource?.remark || '')}</textarea>
-                <small class="text-muted">AI 诊断时会自动附带此备注</small>
+                <label>${I18n.t('datasourceForm.remark')}</label>
+                <textarea class="form-input" name="remark" rows="2" placeholder="${I18n.t('datasourceForm.remarkPlaceholder')}">${this._escapeHtml(datasource?.remark || '')}</textarea>
+                <small class="text-muted">${I18n.t('datasourceForm.remarkHint')}</small>
             </div>
             <div class="form-group" id="oracle-conn-mode-group" style="display: ${datasource?.db_type === 'oracle' ? 'block' : 'none'};">
-                <label>连接模式</label>
+                <label>${I18n.t('datasourceForm.connectionMode')}</label>
                 <select class="form-select" name="oracle_conn_mode">
-                    <option value="default" ${this._getExtraParam(datasource, 'oracle_conn_mode', 'default') === 'default' ? 'selected' : ''}>默认</option>
+                    <option value="default" ${this._getExtraParam(datasource, 'oracle_conn_mode', 'default') === 'default' ? 'selected' : ''}>${I18n.t('datasourceForm.defaultMode')}</option>
                     <option value="sysdba" ${this._getExtraParam(datasource, 'oracle_conn_mode', 'default') === 'sysdba' ? 'selected' : ''}>SYSDBA</option>
                     <option value="sysoper" ${this._getExtraParam(datasource, 'oracle_conn_mode', 'default') === 'sysoper' ? 'selected' : ''}>SYSOPER</option>
                 </select>
-                <small class="text-muted">以 SYSDBA/SYSOPER 身份连接（需要对应权限）</small>
+                <small class="text-muted">${I18n.t('datasourceForm.oracleModeHint')}</small>
             </div>
             <div class="form-group">
-                <label>关联主机（可选）</label>
+                <label>${I18n.t('datasourceForm.relatedHost')}</label>
                 <select class="form-select" name="host_id">
-                    <option value="">无</option>
+                    <option value="">${I18n.t('common.none')}</option>
                 </select>
             </div>
             <div class="form-group">
-                <label>监控数据来源</label>
+                <label>${I18n.t('datasourceForm.monitoringSource')}</label>
                 <select class="form-select" name="metric_source" id="metric-source-select" required>
-                    <option value="system" ${!datasource || datasource?.metric_source === 'system' ? 'selected' : ''}>系统采集（直连数据库）</option>
-                    <option value="integration" ${datasource?.metric_source === 'integration' ? 'selected' : ''}>集成采集（外部集成系统）</option>
+                    <option value="system" ${!datasource || datasource?.metric_source === 'system' ? 'selected' : ''}>${I18n.t('datasourceForm.directCollection')}</option>
+                    <option value="integration" ${datasource?.metric_source === 'integration' ? 'selected' : ''}>${I18n.t('datasourceForm.integrationCollection')}</option>
                 </select>
-                <small class="text-muted">选择监控数据的采集方式</small>
+                <small class="text-muted">${I18n.t('datasourceForm.monitoringSourceHint')}</small>
             </div>
             <div id="integration-config-section" style="display: ${datasource?.metric_source === 'integration' ? 'block' : 'none'};">
                 <div class="form-group">
-                    <label>入站集成</label>
+                    <label>${I18n.t('datasourceForm.inboundIntegration')}</label>
                     <select class="form-select" id="inbound-integration-select">
-                        <option value="">加载中...</option>
+                        <option value="">${I18n.t('common.loading')}</option>
                     </select>
-                    <small class="text-muted">选择 inbound_metric 类型的集成，用于拉取外部监控指标</small>
+                    <small class="text-muted">${I18n.t('datasourceForm.inboundIntegrationHint')}</small>
                 </div>
                 <div class="form-group">
-                    <label id="external-instance-id-label">外部实例 ID</label>
+                    <label id="external-instance-id-label">${I18n.t('datasourceForm.externalId')}</label>
                     <input
                         type="text"
                         class="form-input"
                         name="external_instance_id"
                         id="external-instance-id-input"
                         value="${datasource?.external_instance_id || ''}"
-                        placeholder="例如：云厂商或外部监控系统中的实例 ID"
+                        placeholder="${I18n.t('datasourceForm.externalIdPlaceholder')}"
                     >
-                    <small class="text-muted" id="external-instance-id-help">外部监控系统中的实例标识。华为云/阿里云 RDS 场景通常必填。</small>
+                    <small class="text-muted" id="external-instance-id-help">${I18n.t('datasourceForm.initialExternalIdHelp')}</small>
                 </div>
                 <div id="inbound-params-container"></div>
             </div>
@@ -165,7 +165,7 @@ const DatasourceForm = {
 
             const currentId = inboundSource.integration_id ? String(inboundSource.integration_id) : '';
             select.innerHTML = `
-                <option value="">请选择</option>
+                <option value="">${I18n.t('datasourceForm.select')}</option>
                 ${inboundIntegrations.map(item => `
                     <option value="${item.id}" ${String(item.id) === currentId ? 'selected' : ''}>${item.name}</option>
                 `).join('')}
@@ -198,7 +198,7 @@ const DatasourceForm = {
                 }
 
                 let html = `
-                    <div style="font-weight:600;margin-bottom:8px;">采集参数</div>
+                    <div style="font-weight:600;margin-bottom:8px;">${I18n.t('datasourceForm.collectionParams')}</div>
                     <div class="text-muted" style="margin-bottom:12px;">${this._getInboundParamIntro(integration)}</div>
                 `;
                 for (const [key, prop] of Object.entries(integration.config_schema.properties)) {
@@ -209,7 +209,7 @@ const DatasourceForm = {
                     html += `
                         <div class="form-group">
                             <label>${prop.title || key} ${required ? '*' : ''}</label>
-                            <input type="${type}" class="form-input inbound-param" data-key="${key}" data-format="${prop.format || ''}" value="${value}" placeholder="${prop.description || ''}">
+                            <input type="${type}" class="form-input inbound-param" data-key="${key}" data-format="${prop.format || ''}" value="${value}" placeholder="${this._escapeHtml(I18n.translateLegacyText(prop.description || ''))}">
                         </div>
                     `;
                 }
@@ -229,7 +229,7 @@ const DatasourceForm = {
 
         const submitBtn = DOM.el('button', {
             className: 'btn btn-primary',
-            textContent: isEdit ? '更新' : '创建',
+            textContent: isEdit ? I18n.t('datasourceForm.update') : I18n.t('datasourceForm.create'),
             type: 'button',
             onClick: () => form.requestSubmit()
         });
@@ -258,13 +258,13 @@ const DatasourceForm = {
             } else if (data.metric_source === 'integration') {
                 const integrationId = form.querySelector('#inbound-integration-select')?.value;
                 if (!integrationId) {
-                    Toast.error('使用集成采集时，必须选择入站集成');
+                    Toast.error(I18n.t('datasourceForm.integrationRequired'));
                     return;
                 }
 
                 const selectedIntegration = this._getInboundIntegration(inboundIntegrations, integrationId);
                 if (this._integrationRequiresExternalInstanceId(selectedIntegration) && !data.external_instance_id) {
-                    Toast.error('当前集成必须填写外部实例 ID');
+                    Toast.error(I18n.t('datasourceForm.externalIdRequired'));
                     return;
                 }
 
@@ -290,10 +290,10 @@ const DatasourceForm = {
             try {
                 if (isEdit) {
                     await API.updateDatasource(datasource.id, data);
-                    Toast.success('数据源已更新');
+                    Toast.success(I18n.t('datasourceForm.updated'));
                 } else {
                     await API.createDatasource(data);
-                    Toast.success('数据源已创建');
+                    Toast.success(I18n.t('datasourceForm.created'));
                 }
                 Modal.hide();
                 if (onSave) onSave();
@@ -305,14 +305,14 @@ const DatasourceForm = {
         const footer = DOM.el('div');
         footer.appendChild(DOM.el('button', {
             className: 'btn btn-secondary',
-            textContent: '取消',
+            textContent: I18n.t('datasourceForm.cancel'),
             type: 'button',
             onClick: () => Modal.hide()
         }));
 
         footer.appendChild(DOM.el('button', {
             className: 'btn btn-secondary',
-            innerHTML: '<i data-lucide="plug"></i> 测试连接',
+            innerHTML: `<i data-lucide="plug"></i> ${I18n.t('datasourceForm.testConnection')}`,
             type: 'button',
             onClick: async (e) => {
                 const btn = e.currentTarget;
@@ -341,12 +341,12 @@ const DatasourceForm = {
                     }
 
                     const result = await API.testDatasourceConnection(data);
-                    if (result.success) Toast.success(`连接成功! ${result.version || ''}`);
-                    else Toast.error(`连接失败: ${result.message}`);
+                    if (result.success) Toast.success(I18n.t('datasourceForm.connectionSuccess', { version: result.version || '' }));
+                    else Toast.error(I18n.t('datasourceForm.connectionFailed', { message: result.message }));
                 } catch (err) {
-                    Toast.error('测试失败: ' + err.message);
+                    Toast.error(I18n.t('datasourceForm.testFailed', { message: err.message }));
                 } finally {
-                    btn.innerHTML = '<i data-lucide="plug"></i> 测试连接';
+                    btn.innerHTML = `<i data-lucide="plug"></i> ${I18n.t('datasourceForm.testConnection')}`;
                     btn.disabled = false;
                     DOM.createIcons();
                 }
@@ -356,7 +356,7 @@ const DatasourceForm = {
         footer.appendChild(submitBtn);
 
         Modal.show({
-            title: isEdit ? '编辑数据源' : '新建数据源',
+            title: isEdit ? I18n.t('datasourceForm.editTitle') : I18n.t('datasourceForm.createTitle'),
             content: form,
             footer: footer,
             closeOnOverlayClick: false,
@@ -384,53 +384,53 @@ const DatasourceForm = {
     _getExternalInstanceFieldMeta(integration) {
         if (integration?.integration_id === 'builtin_huaweicloud_rds') {
             return {
-                label: '华为云 RDS 实例 ID *',
-                placeholder: '例如：8ad0f7d4c0f74f7e9c0f4d8f3b1e2a6din01',
-                help: '这里填写华为云 RDS 的实例 ID。region_id 用于定位 CES/IAM 接口；AK/SK 固定从系统参数读取，无需在数据源里填写。',
+                label: I18n.t('datasourceForm.huaweiId'),
+                placeholder: I18n.t('datasourceForm.huaweiIdPlaceholder'),
+                help: I18n.t('datasourceForm.huaweiIdHelp'),
                 required: true,
             };
         }
 
         if (integration?.integration_id === 'builtin_aliyun_rds') {
             return {
-                label: '阿里云 RDS 实例 ID *',
-                placeholder: '例如：rm-uf6wjk5xxxxxxx',
-                help: '这里填写阿里云 RDS 的实例 ID。AccessKey 可留空并从系统配置读取。',
+                label: I18n.t('datasourceForm.aliyunId'),
+                placeholder: I18n.t('datasourceForm.aliyunIdPlaceholder'),
+                help: I18n.t('datasourceForm.aliyunIdHelp'),
                 required: true,
             };
         }
 
         if (integration?.integration_id === 'builtin_tencentcloud_rds') {
             return {
-                label: '腾讯云实例 ID *',
-                placeholder: 'MySQL 示例：cdb-xxx；PostgreSQL/SQL Server 示例：postgres-xxx / mssql-xxx；TDSQL-C 示例：cynosdbmysql-ins-xxx',
-                help: '这里填写腾讯云监控维度里的实例标识。MySQL/TDSQL-C 通常使用 InstanceId，PostgreSQL/SQL Server 使用 resourceId；SecretId/SecretKey 固定从系统参数读取，下方只需配置 region_id 等运行参数。',
+                label: I18n.t('datasourceForm.tencentId'),
+                placeholder: I18n.t('datasourceForm.tencentIdPlaceholder'),
+                help: I18n.t('datasourceForm.tencentIdHelp'),
                 required: true,
             };
         }
 
         return {
-            label: '外部实例 ID',
-            placeholder: '例如：云厂商或外部监控系统中的实例 ID',
-            help: '外部监控系统中的实例标识。是否必填取决于所选入站集成。',
+            label: I18n.t('datasourceForm.externalId'),
+            placeholder: I18n.t('datasourceForm.externalIdPlaceholder'),
+            help: I18n.t('datasourceForm.externalIdHelp'),
             required: false,
         };
     },
 
     _getInboundParamIntro(integration) {
         if (integration?.integration_id === 'builtin_huaweicloud_rds') {
-            return '以下参数用于调用华为云 CES/IAM API，不是数据库连接信息。区域 ID 仍需填写，因为接口端点不能仅靠实例 ID 自动推断；AK/SK 固定从系统参数读取。';
+            return I18n.t('datasourceForm.huaweiParams');
         }
 
         if (integration?.integration_id === 'builtin_aliyun_rds') {
-            return '以下参数用于调用阿里云 RDS API，不是数据库连接信息。';
+            return I18n.t('datasourceForm.aliyunParams');
         }
 
         if (integration?.integration_id === 'builtin_tencentcloud_rds') {
-            return '以下参数用于调用腾讯云监控 API，不是数据库连接信息。SecretId/SecretKey 固定从系统参数读取，这里只需填写 region_id；推荐使用 ap-guangzhou 这类标准地域，也兼容 gz/1 这类监控文档里的地域简写；MySQL 如需采集只读/代理节点，可额外填写 mysql_instance_type。';
+            return I18n.t('datasourceForm.tencentParams');
         }
 
-        return '以下参数用于调用外部监控集成，不是数据库连接信息。';
+        return I18n.t('datasourceForm.genericParams');
     },
 
     _getExtraParam(datasource, key, defaultValue) {

@@ -37,7 +37,7 @@ async def test_check_initial_admin_password_passes_when_db_password_differs(mock
     result = await startup_self_check._check_initial_admin_password(settings)
 
     assert result.status == "pass"
-    assert "不一致" in result.summary
+    assert "does not match" in result.summary
 
 
 @pytest.mark.unit
@@ -53,4 +53,4 @@ async def test_check_initial_admin_password_passes_when_admin_absent(mocker):
     result = await startup_self_check._check_initial_admin_password(settings)
 
     assert result.status == "pass"
-    assert "未检测到管理员账号" in result.summary
+    assert "No administrator account" in result.summary

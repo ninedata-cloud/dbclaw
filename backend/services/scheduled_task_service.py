@@ -464,7 +464,7 @@ class ScheduledTaskService:
             task.last_error = None
         except asyncio.TimeoutError:
             finished = now()
-            message = f"执行超时（超过 {task.timeout_seconds} 秒）"
+            message = f"Execution timed out after {task.timeout_seconds} seconds"
             stderr_buffer.write(message)
             run.status = "failed"
             run.stdout = _truncate_log(stdout_buffer.getvalue())
@@ -488,7 +488,7 @@ class ScheduledTaskService:
             task.last_run_at = finished
             task.last_status = "failed"
             task.last_error = str(exc)
-            logger.error("定时任务执行失败 task_id=%s run_id=%s: %s", task.id, run.id, exc, exc_info=True)
+            logger.error("Scheduled task execution failed: task_id=%s run_id=%s: %s", task.id, run.id, exc, exc_info=True)
         finally:
             if acquired:
                 semaphore.release()
@@ -606,7 +606,7 @@ class ScheduledTaskService:
             try:
                 integration = await get_alive_by_id(db, Integration, int(integration_id))
                 if not integration or not integration.is_enabled or integration.integration_type != "outbound_notification":
-                    logger.warning("定时任务通知目标不可用 task_id=%s run_id=%s integration_id=%s", task.id, run.id, integration_id)
+                    logger.warning("Scheduled task notification target is unavailable: task_id=%s run_id=%s integration_id=%s", task.id, run.id, integration_id)
                     continue
 
                 params = target.get("params") or {}
@@ -617,7 +617,7 @@ class ScheduledTaskService:
                 missing_params = [key for key in required_params if not params.get(key)]
 
                 if missing_params:
-                    error_message = f"Integration 缺少必填参数: {', '.join(missing_params)}"
+                    error_message = f"Integration is missing required parameters: {', '.join(missing_params)}"
                     db.add(IntegrationExecutionLog(
                         integration_id=integration.id,
                         target_type="scheduled_task_notification",
@@ -654,7 +654,7 @@ class ScheduledTaskService:
                 ))
                 await db.commit()
             except Exception as exc:
-                logger.error("定时任务结果通知发送失败 task_id=%s run_id=%s: %s", task.id, run.id, exc, exc_info=True)
+                logger.error("Failed to send scheduled task result notification: task_id=%s run_id=%s: %s", task.id, run.id, exc, exc_info=True)
                 try:
                     db.add(IntegrationExecutionLog(
                         integration_id=int(integration_id),
@@ -671,7 +671,7 @@ class ScheduledTaskService:
                     ))
                     await db.commit()
                 except Exception:
-                    logger.error("写入定时任务通知失败日志失败 task_id=%s run_id=%s", task.id, run.id, exc_info=True)
+                    logger.error("Failed to record scheduled task notification failure: task_id=%s run_id=%s", task.id, run.id, exc_info=True)
 
     @staticmethod
     async def _run_script(

@@ -122,7 +122,7 @@ async def create_weixin_login_qrcode(
     try:
         resp = await weixin_service.get_bot_qrcode(api_base=api_base)
     except Exception as exc:
-        logger.exception("获取微信登录二维码失败")
+        logger.exception("Failed to get the Weixin login QR code")
         params["login_status"] = "error"
         params["last_error"] = f"{type(exc).__name__}: {str(exc)}"
         binding.params = params
@@ -145,10 +145,10 @@ async def create_weixin_login_qrcode(
             try:
                 qrcode_img_proxied = weixin_service.generate_qrcode_as_base64(qrcode_img)
             except ImportError as exc:
-                logger.error(f"生成二维码图片失败（缺少依赖）: {exc}")
+                logger.error(f"Failed to generate the QR code image because a dependency is missing: {exc}")
                 qrcode_img_proxied = None
             except Exception as exc:
-                logger.warning(f"生成二维码图片失败，将使用原始 URL: {exc}")
+                logger.warning(f"Failed to generate the QR code image; using the original URL: {exc}")
                 qrcode_img_proxied = qrcode_img
         else:
             qrcode_img_proxied = qrcode_img
@@ -189,7 +189,7 @@ async def poll_weixin_login_status(
         resp = await weixin_service.get_qrcode_status(qrcode, api_base=api_base)
     except httpx.ReadTimeout:
         # 长轮询超时 = 用户尚未扫码，这是正常状态，不算错误
-        logger.info("扫码状态轮询超时（用户尚未扫码）")
+        logger.info("QR code status polling timed out because the user has not scanned the code")
         return WeixinLoginStatusResponse(
             status="pending",
             bot_token=None,
@@ -197,7 +197,7 @@ async def poll_weixin_login_status(
             raw={"ret": -1, "message": "timeout"},
         )
     except Exception as exc:
-        logger.exception("查询微信扫码状态失败")
+        logger.exception("Failed to query the Weixin QR code status")
         params["login_status"] = "error"
         err_msg = f"{type(exc).__name__}: {str(exc)}" or str(type(exc).__name__)
         params["last_error"] = err_msg

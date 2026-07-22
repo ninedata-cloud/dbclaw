@@ -39,7 +39,7 @@ const InstanceDetailPage = {
         this.currentRoute = this._parseRoute(routeParam);
         this.sidebarListScrollTop = this._loadInstanceListScrollState();
 
-        Header.render('实例详情');
+        Header.render(this._t('实例详情'));
         const content = DOM.$('#page-content');
         content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
@@ -58,9 +58,9 @@ const InstanceDetailPage = {
                 content.innerHTML = `
                     <div class="empty-state">
                         <i data-lucide="database"></i>
-                        <h3>暂无实例</h3>
-                        <p>请先创建数据源，然后再进入实例详情工作台。</p>
-                        <button class="btn btn-primary mt-16" onclick="Router.navigate('datasources')">前往数据源管理</button>
+                        <h3>${this._t('暂无实例')}</h3>
+                        <p>${this._t('请先创建数据源，然后再进入实例详情工作台。')}</p>
+                        <button class="btn btn-primary mt-16" onclick="Router.navigate('datasources')">${this._t('前往数据源管理')}</button>
                     </div>
                 `;
                 DOM.createIcons();
@@ -78,21 +78,21 @@ const InstanceDetailPage = {
                     <aside id="instance-detail-sidebar" class="instance-detail-sidebar">
                         <div class="instance-sidebar-header">
                             <div class="instance-sidebar-header-text">
-                                <div class="instance-sidebar-title">实例列表</div>
-                                <div class="instance-sidebar-subtitle">单实例诊断与优化工作台</div>
+                                <div class="instance-sidebar-title">${this._t('实例列表')}</div>
+                                <div class="instance-sidebar-subtitle">${this._t('单实例诊断与优化工作台')}</div>
                             </div>
                             <button
                                 id="instance-sidebar-toggle"
                                 class="instance-sidebar-toggle"
                                 type="button"
-                                title="${this.sidebarCollapsed ? '展开实例列表' : '收起实例列表'}"
-                                aria-label="${this.sidebarCollapsed ? '展开实例列表' : '收起实例列表'}"
+                                title="${this._t(this.sidebarCollapsed ? '展开实例列表' : '收起实例列表')}"
+                                aria-label="${this._t(this.sidebarCollapsed ? '展开实例列表' : '收起实例列表')}"
                             >
                                 <i data-lucide="${this.sidebarCollapsed ? 'panel-left-open' : 'panel-left-close'}"></i>
                             </button>
                         </div>
                         <div class="instance-sidebar-search">
-                            <input id="instance-search-input" class="filter-input" type="text" placeholder="搜索名称 / 主机 / 数据库 / 标签">
+                            <input id="instance-search-input" class="filter-input" type="text" placeholder="${I18n.t('placeholders.searchInstances')}">
                         </div>
                         <div id="instance-list" class="instance-list"></div>
                     </aside>
@@ -121,11 +121,11 @@ const InstanceDetailPage = {
             content.innerHTML = `
                 <div class="empty-state">
                     <i data-lucide="alert-circle"></i>
-                    <h3>实例详情加载失败</h3>
-                    <p>${Utils.escapeHtml(error.message || '未知错误')}</p>
+                    <h3>${this._t('实例详情加载失败')}</h3>
+                    <p>${Utils.escapeHtml(error.message || this._t('未知错误'))}</p>
                 </div>
             `;
-            Header.render('实例详情');
+            Header.render(this._t('实例详情'));
             DOM.createIcons();
         }
 
@@ -307,8 +307,8 @@ const InstanceDetailPage = {
             layout.classList.toggle('sidebar-collapsed', this.sidebarCollapsed);
         }
         if (toggleButton) {
-            toggleButton.title = this.sidebarCollapsed ? '展开实例列表' : '收起实例列表';
-            toggleButton.setAttribute('aria-label', this.sidebarCollapsed ? '展开实例列表' : '收起实例列表');
+            toggleButton.title = this._t(this.sidebarCollapsed ? '展开实例列表' : '收起实例列表');
+            toggleButton.setAttribute('aria-label', this._t(this.sidebarCollapsed ? '展开实例列表' : '收起实例列表'));
             toggleButton.innerHTML = `<i data-lucide="${this.sidebarCollapsed ? 'panel-left-open' : 'panel-left-close'}"></i>`;
         }
         DOM.createIcons();
@@ -380,13 +380,13 @@ const InstanceDetailPage = {
         listEl.innerHTML = '';
         if (filtered.length === 0) {
             this._saveInstanceListScrollState(0);
-            listEl.innerHTML = '<div class="instance-list-empty">没有匹配的实例</div>';
+            listEl.innerHTML = `<div class="instance-list-empty">${this._t('没有匹配的实例')}</div>`;
             return;
         }
 
         let activeButton = null;
         Array.from(grouped.entries())
-            .sort(([, left], [, right]) => left.label.localeCompare(right.label))
+            .sort(([, left], [, right]) => left.label.localeCompare(right.label, I18n.getLocale()))
             .forEach(([groupKey, group]) => {
             const { label: typeLabel, items } = group;
             const collapsed = this._isInstanceGroupCollapsed(groupKey);
@@ -470,7 +470,7 @@ const InstanceDetailPage = {
     _renderPageHeader() {
         const datasource = this.currentSummary?.datasource || this.currentInstance;
         if (!datasource) {
-            Header.render('实例详情');
+            Header.render(this._t('实例详情'));
             return;
         }
         const health = this.currentSummary?.health || {};
@@ -494,7 +494,7 @@ const InstanceDetailPage = {
                 </div>
             `
         });
-        Header.render('实例详情', headerInfo);
+        Header.render(this._t('实例详情'), headerInfo);
         DOM.createIcons();
     },
 
@@ -512,16 +512,16 @@ const InstanceDetailPage = {
         if (!nav) return;
 
         const tabs = [
-            { id: 'config', label: '实例基本信息' },
-            { id: 'monitor', label: '性能监控' },
-            { id: 'traffic', label: '流量拓扑' },
-            { id: 'sessions', label: '实时会话' },
-            { id: 'ai', label: 'AI 对话诊断' },
-            { id: 'sqlConsole', label: 'SQL 窗口' },
+            { id: 'config', label: this._t('实例基本信息') },
+            { id: 'monitor', label: this._t('性能监控') },
+            { id: 'traffic', label: this._t('流量拓扑') },
+            { id: 'sessions', label: this._t('实时会话') },
+            { id: 'ai', label: this._t('AI 对话诊断') },
+            { id: 'sqlConsole', label: this._t('SQL 窗口') },
             { id: 'topSql', label: 'TOP SQL' },
-            { id: 'alerts', label: '告警管理' },
-            { id: 'inspections', label: '巡检管理' },
-            { id: 'parameters', label: '实例参数配置' },
+            { id: 'alerts', label: this._t('告警管理') },
+            { id: 'inspections', label: this._t('巡检管理') },
+            { id: 'parameters', label: this._t('实例参数配置') },
         ];
 
         nav.innerHTML = tabs.map(tab => `
@@ -656,8 +656,10 @@ const InstanceDetailPage = {
         const datasource = summary.datasource || this.currentInstance;
         const health = summary.health || {};
         const inspection = summary.inspection || {};
-        const metricTime = summary.metric_collected_at ? Format.datetime(summary.metric_collected_at) : '暂无';
-        const silenceText = datasource.silence_until ? `静默至 ${Format.datetime(datasource.silence_until)}` : '未静默';
+        const metricTime = summary.metric_collected_at ? Format.datetime(summary.metric_collected_at) : this._t('暂无');
+        const silenceText = datasource.silence_until
+            ? `${this._t('静默至')} ${Format.datetime(datasource.silence_until)}`
+            : this._t('未静默');
         const silenced = Boolean(datasource.silence_until);
 
         container.innerHTML = `
@@ -677,29 +679,29 @@ const InstanceDetailPage = {
                                 </div>
                             </div>
                             <div class="instance-summary-actions">
-                                <button class="btn btn-secondary btn-sm" id="instance-test-btn"><i data-lucide="plug"></i> 测试连接</button>
-                                <button class="btn btn-secondary btn-sm" id="instance-refresh-btn"><i data-lucide="refresh-cw"></i> 刷新指标</button>
-                                <button class="btn btn-primary btn-sm" id="instance-trigger-inspection-btn"><i data-lucide="zap"></i> 触发巡检</button>
-                                <button class="btn btn-${silenced ? 'danger' : 'secondary'} btn-sm" id="instance-silence-btn"><i data-lucide="${silenced ? 'bell-ring' : 'bell-off'}"></i> ${silenced ? '取消静默' : '告警静默'}</button>
+                                <button class="btn btn-secondary btn-sm" id="instance-test-btn"><i data-lucide="plug"></i> ${this._t('测试连接')}</button>
+                                <button class="btn btn-secondary btn-sm" id="instance-refresh-btn"><i data-lucide="refresh-cw"></i> ${this._t('刷新指标')}</button>
+                                <button class="btn btn-primary btn-sm" id="instance-trigger-inspection-btn"><i data-lucide="zap"></i> ${this._t('触发巡检')}</button>
+                                <button class="btn btn-${silenced ? 'danger' : 'secondary'} btn-sm" id="instance-silence-btn"><i data-lucide="${silenced ? 'bell-ring' : 'bell-off'}"></i> ${this._t(silenced ? '取消静默' : '告警静默')}</button>
                             </div>
                         </div>
                         <div class="instance-summary-grid">
-                            ${this._summaryMetric('连接状态', this._connectionStatusLabel(datasource.connection_status), datasource.connection_error || health.message || '')}
-                            ${this._summaryMetric('最近指标时间', metricTime, '')}
-                            ${this._summaryMetric('当前告警事件', String(summary.active_alert_event_count || 0), '点击查看告警管理', 'alerts')}
-                            ${this._summaryMetric('当前告警条数', String(summary.active_alert_count || 0), '')}
-                            ${this._summaryMetric('下次巡检时间', inspection.next_scheduled_at ? Format.datetime(inspection.next_scheduled_at) : '未配置', '')}
-                            ${this._summaryMetric('告警静默', silenceText, datasource.silence_reason || '')}
+                            ${this._summaryMetric(this._t('连接状态'), this._connectionStatusLabel(datasource.connection_status), datasource.connection_error || health.message || '')}
+                            ${this._summaryMetric(this._t('最近指标时间'), metricTime, '')}
+                            ${this._summaryMetric(this._t('当前告警事件'), String(summary.active_alert_event_count || 0), this._t('点击查看告警管理'), 'alerts')}
+                            ${this._summaryMetric(this._t('当前告警条数'), String(summary.active_alert_count || 0), '')}
+                            ${this._summaryMetric(this._t('下次巡检时间'), inspection.next_scheduled_at ? Format.datetime(inspection.next_scheduled_at) : this._t('未配置'), '')}
+                            ${this._summaryMetric(this._t('告警静默'), silenceText, datasource.silence_reason || '')}
                         </div>
                     </div>
                 </section>
                 <div class="instance-config-grid">
                     <section class="instance-panel">
-                        <h3>接入配置</h3>
+                        <h3>${this._t('接入配置')}</h3>
                         <div id="instance-config-overview"></div>
                     </section>
                     <section class="instance-panel">
-                        <h3>监控与巡检</h3>
+                        <h3>${this._t('监控与巡检')}</h3>
                         <div id="instance-config-monitoring"></div>
                     </section>
                 </div>
@@ -712,27 +714,27 @@ const InstanceDetailPage = {
 
         if (overview) {
             overview.innerHTML = `
-                ${this._configField('名称', datasource.name)}
-                ${this._configField('数据库类型', this._getDbTypeLabel(datasource.db_type))}
-                ${this._configField('主机', `${datasource.host}:${datasource.port}`)}
-                ${this._configField('数据库', datasource.database || '-')}
-                ${this._configField('用户名', datasource.username || '-')}
-                ${this._configField('主机关联', datasource.host_id ? `Host #${datasource.host_id}` : '未配置')}
-                ${this._configField('标签', (datasource.tags || []).join(', ') || '-')}
-                ${this._configField('备注', datasource.remark || '-')}
-                ${this._configField('连接检测时间', datasource.connection_checked_at ? Format.datetime(datasource.connection_checked_at) : '暂无')}
+                ${this._configField(this._t('名称'), datasource.name)}
+                ${this._configField(this._t('数据库类型'), this._getDbTypeLabel(datasource.db_type))}
+                ${this._configField(this._t('主机'), `${datasource.host}:${datasource.port}`)}
+                ${this._configField(this._t('数据库'), datasource.database || '-')}
+                ${this._configField(this._t('用户名'), datasource.username || '-')}
+                ${this._configField(this._t('主机关联'), datasource.host_id ? `Host #${datasource.host_id}` : this._t('未配置'))}
+                ${this._configField(this._t('标签'), (datasource.tags || []).join(', ') || '-')}
+                ${this._configField(this._t('备注'), datasource.remark || '-')}
+                ${this._configField(this._t('连接检测时间'), datasource.connection_checked_at ? Format.datetime(datasource.connection_checked_at) : this._t('暂无'))}
             `;
         }
 
         if (monitoring) {
             monitoring.innerHTML = `
-                ${this._configField('监控源', datasource.metric_source || 'system')}
-                ${this._configField('外部实例 ID', datasource.external_instance_id || '-')}
-                ${this._configField('启用巡检', inspectionConfig?.enabled ? '是' : '否')}
-                ${this._configField('巡检周期', inspectionConfig?.schedule_interval ? `${inspectionConfig.schedule_interval} 秒` : '-')}
-                ${this._configField('AI 分析', inspectionConfig?.use_ai_analysis === false ? '关闭' : '开启')}
-                ${this._configField('下次巡检时间', inspectionConfig?.next_scheduled_at ? Format.datetime(inspectionConfig.next_scheduled_at) : '未配置')}
-                ${this._configField('阈值规则', inspectionConfig?.threshold_rules ? `<pre class="instance-inline-pre">${this._escapeHtml(JSON.stringify(inspectionConfig.threshold_rules, null, 2))}</pre>` : '未配置', true)}
+                ${this._configField(this._t('监控源'), datasource.metric_source || 'system')}
+                ${this._configField(this._t('外部实例 ID'), datasource.external_instance_id || '-')}
+                ${this._configField(this._t('启用巡检'), I18n.t(inspectionConfig?.enabled ? 'common.yes' : 'common.no'))}
+                ${this._configField(this._t('巡检周期'), inspectionConfig?.schedule_interval ? `${inspectionConfig.schedule_interval} ${this._t('秒')}` : '-')}
+                ${this._configField(this._t('AI 分析'), this._t(inspectionConfig?.use_ai_analysis === false ? '关闭' : '开启'))}
+                ${this._configField(this._t('下次巡检时间'), inspectionConfig?.next_scheduled_at ? Format.datetime(inspectionConfig.next_scheduled_at) : this._t('未配置'))}
+                ${this._configField(this._t('阈值规则'), inspectionConfig?.threshold_rules ? `<pre class="instance-inline-pre">${this._escapeHtml(JSON.stringify(inspectionConfig.threshold_rules, null, 2))}</pre>` : this._t('未配置'), true)}
             `;
         }
 
@@ -756,12 +758,12 @@ const InstanceDetailPage = {
         container.innerHTML = `
             <div class="instance-config-page">
                 <div class="instance-config-toolbar">
-                    <input id="instance-config-search" class="filter-input" type="text" placeholder="搜索参数名 / 参数值 / 分类">
+                    <input id="instance-config-search" class="filter-input" type="text" placeholder="${I18n.t('placeholders.searchInstanceConfig')}">
                 </div>
                 <section class="instance-panel">
                     <div class="instance-panel-header">
-                        <h3>实例参数配置</h3>
-                        <div class="instance-panel-subtitle">只读展示数据库实例当前参数</div>
+                        <h3>${this._t('实例参数配置')}</h3>
+                        <div class="instance-panel-subtitle">${this._t('只读展示数据库实例当前参数')}</div>
                     </div>
                     <div id="instance-config-variables"></div>
                 </section>
@@ -797,7 +799,7 @@ const InstanceDetailPage = {
         const sorted = [...filtered].sort((left, right) => this._compareVariables(left, right));
 
         if (sorted.length === 0) {
-            container.innerHTML = '<div class="empty-state">没有匹配的参数</div>';
+            container.innerHTML = `<div class="empty-state">${this._t('没有匹配的参数')}</div>`;
             return;
         }
 
@@ -806,10 +808,10 @@ const InstanceDetailPage = {
                 <table class="data-table instance-variables-table">
                     <thead>
                         <tr>
-                            <th class="sortable" data-sort-field="key">参数名 <span class="sort-icon">${this._sortIcon('key', this.configSort)}</span></th>
-                            <th class="sortable" data-sort-field="category">分类 <span class="sort-icon">${this._sortIcon('category', this.configSort)}</span></th>
-                            <th class="sortable" data-sort-field="value">参数值 <span class="sort-icon">${this._sortIcon('value', this.configSort)}</span></th>
-                            <th>操作</th>
+                            <th class="sortable" data-sort-field="key">${this._t('参数名')} <span class="sort-icon">${this._sortIcon('key', this.configSort)}</span></th>
+                            <th class="sortable" data-sort-field="category">${this._t('分类')} <span class="sort-icon">${this._sortIcon('category', this.configSort)}</span></th>
+                            <th class="sortable" data-sort-field="value">${this._t('参数值')} <span class="sort-icon">${this._sortIcon('value', this.configSort)}</span></th>
+                            <th>${this._t('操作')}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -819,7 +821,7 @@ const InstanceDetailPage = {
                                 <td><span class="badge badge-secondary">${this._escapeHtml(item.category || 'general')}</span></td>
                                 <td class="instance-variable-value">${this._escapeHtml(item.value)}</td>
                                 <td>
-                                    <button class="btn btn-sm btn-secondary" data-copy-value="${this._escapeAttr(item.value)}">复制</button>
+                                    <button class="btn btn-sm btn-secondary" data-copy-value="${this._escapeAttr(item.value)}">${this._t('复制')}</button>
                                 </td>
                             </tr>
                         `).join('')}
@@ -839,9 +841,9 @@ const InstanceDetailPage = {
             button.addEventListener('click', async () => {
                 try {
                     await navigator.clipboard.writeText(button.dataset.copyValue || '');
-                    Toast.success('参数值已复制');
+                    Toast.success(this._t('参数值已复制'));
                 } catch (error) {
-                    Toast.error('复制失败');
+                    Toast.error(this._t('复制失败'));
                 }
             });
         });
@@ -860,15 +862,15 @@ const InstanceDetailPage = {
         container.innerHTML = `
             <div class="instance-sessions-page">
                 <div class="instance-sessions-toolbar">
-                    <input id="instance-session-search" class="filter-input" type="text" placeholder="搜索 SQL / 客户端">
-                    <input id="instance-session-user" class="filter-input" type="text" placeholder="筛选用户">
+                    <input id="instance-session-search" class="filter-input" type="text" placeholder="${I18n.t('placeholders.searchSessions')}">
+                    <input id="instance-session-user" class="filter-input" type="text" placeholder="${I18n.t('placeholders.filterUser')}">
                     <select id="instance-session-status" class="filter-select">
-                        <option value="all">全部状态</option>
-                        <option value="active">活跃 / 执行中</option>
-                        <option value="idle">空闲</option>
+                        <option value="all">${this._t('全部状态')}</option>
+                        <option value="active">${this._t('活跃 / 执行中')}</option>
+                        <option value="idle">${this._t('空闲')}</option>
                         <option value="sleep">Sleep / sleeping</option>
                     </select>
-                    <button class="btn btn-secondary" id="instance-session-refresh">刷新</button>
+                    <button class="btn btn-secondary" id="instance-session-refresh">${this._t('刷新')}</button>
                 </div>
                 <div id="instance-session-meta" class="instance-session-meta"></div>
                 <div id="instance-session-table"></div>
@@ -916,11 +918,14 @@ const InstanceDetailPage = {
             const sorted = [...filtered].sort((left, right) => this._compareSessions(left, right));
 
             if (meta) {
-                meta.textContent = `共 ${sorted.length} 个会话，最后刷新于 ${new Date().toLocaleTimeString()}`;
+                meta.textContent = I18n.t('instanceDetail.sessionMeta', {
+                    count: I18n.formatNumber(sorted.length),
+                    time: I18n.formatTime(new Date()),
+                });
             }
 
             if (sorted.length === 0) {
-                tableContainer.innerHTML = '<div class="empty-state">当前没有匹配的会话</div>';
+                tableContainer.innerHTML = `<div class="empty-state">${this._t('当前没有匹配的会话')}</div>`;
                 return;
             }
 
@@ -929,15 +934,15 @@ const InstanceDetailPage = {
                     <table class="data-table instance-sessions-table">
                         <thead>
                             <tr>
-                                <th class="sortable" data-session-sort="session_id">会话 ID <span class="sort-icon">${this._sortIcon('session_id', this.sessionSort)}</span></th>
-                                <th class="sortable" data-session-sort="user">用户 <span class="sort-icon">${this._sortIcon('user', this.sessionSort)}</span></th>
-                                <th class="sortable" data-session-sort="database">数据库 <span class="sort-icon">${this._sortIcon('database', this.sessionSort)}</span></th>
-                                <th class="sortable" data-session-sort="client">客户端 <span class="sort-icon">${this._sortIcon('client', this.sessionSort)}</span></th>
-                                <th class="sortable" data-session-sort="status">状态 <span class="sort-icon">${this._sortIcon('status', this.sessionSort)}</span></th>
-                                <th class="sortable" data-session-sort="duration_seconds">持续时间 <span class="sort-icon">${this._sortIcon('duration_seconds', this.sessionSort)}</span></th>
-                                <th class="sortable" data-session-sort="wait_event">等待事件 <span class="sort-icon">${this._sortIcon('wait_event', this.sessionSort)}</span></th>
+                                <th class="sortable" data-session-sort="session_id">${this._t('会话 ID')} <span class="sort-icon">${this._sortIcon('session_id', this.sessionSort)}</span></th>
+                                <th class="sortable" data-session-sort="user">${this._t('用户')} <span class="sort-icon">${this._sortIcon('user', this.sessionSort)}</span></th>
+                                <th class="sortable" data-session-sort="database">${this._t('数据库')} <span class="sort-icon">${this._sortIcon('database', this.sessionSort)}</span></th>
+                                <th class="sortable" data-session-sort="client">${this._t('客户端')} <span class="sort-icon">${this._sortIcon('client', this.sessionSort)}</span></th>
+                                <th class="sortable" data-session-sort="status">${this._t('状态')} <span class="sort-icon">${this._sortIcon('status', this.sessionSort)}</span></th>
+                                <th class="sortable" data-session-sort="duration_seconds">${this._t('持续时间')} <span class="sort-icon">${this._sortIcon('duration_seconds', this.sessionSort)}</span></th>
+                                <th class="sortable" data-session-sort="wait_event">${this._t('等待事件')} <span class="sort-icon">${this._sortIcon('wait_event', this.sessionSort)}</span></th>
                                 <th class="sortable" data-session-sort="sql_text">SQL <span class="sort-icon">${this._sortIcon('sql_text', this.sessionSort)}</span></th>
-                                <th>操作</th>
+                                <th>${this._t('操作')}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -947,19 +952,19 @@ const InstanceDetailPage = {
                                     <td>${this._escapeHtml(item.user || '-')}</td>
                                     <td>${this._escapeHtml(item.database || '-')}</td>
                                     <td>${this._escapeHtml(item.client || '-')}</td>
-                                    <td><span class="instance-session-status-badge status-${this._escapeHtml(this._sessionStatusTone(item.status))}">${this._escapeHtml(item.status || '-')}</span></td>
+                                    <td><span class="instance-session-status-badge status-${this._escapeHtml(this._sessionStatusTone(item.status))}">${this._escapeHtml(this._t(item.status || '-'))}</span></td>
                                     <td>${item.duration_seconds != null ? this._escapeHtml(Format.uptime(item.duration_seconds)) : '-'}</td>
                                     <td>${this._escapeHtml(item.wait_event || '-')}</td>
                                     <td class="instance-variable-value">${this._escapeHtml((item.sql_text || '-').slice(0, 120))}</td>
                                     <td>
                                         <div class="instance-inline-actions instance-inline-actions-compact">
-                                            <button class="btn-icon instance-action-icon" type="button" title="查看 SQL" aria-label="查看 SQL" data-view-sql="${this._escapeAttr(item.sql_text || '')}">
+                                            <button class="btn-icon instance-action-icon" type="button" title="${this._t('查看 SQL')}" aria-label="${this._t('查看 SQL')}" data-view-sql="${this._escapeAttr(item.sql_text || '')}">
                                                 <i data-lucide="file-text"></i>
                                             </button>
-                                            <button class="btn-icon instance-action-icon" type="button" title="AI 分析" aria-label="AI 分析" data-analyze-session="${this._escapeAttr(item.session_id)}">
+                                            <button class="btn-icon instance-action-icon" type="button" title="${this._t('AI 分析')}" aria-label="${this._t('AI 分析')}" data-analyze-session="${this._escapeAttr(item.session_id)}">
                                                 <i data-lucide="sparkles"></i>
                                             </button>
-                                            ${item.can_terminate ? `<button class="btn-icon instance-action-icon danger" type="button" title="终止会话" aria-label="终止会话" data-terminate-session="${this._escapeAttr(item.session_id)}"><i data-lucide="octagon-x"></i></button>` : ''}
+                                            ${item.can_terminate ? `<button class="btn-icon instance-action-icon danger" type="button" title="${this._t('终止会话')}" aria-label="${this._t('终止会话')}" data-terminate-session="${this._escapeAttr(item.session_id)}"><i data-lucide="octagon-x"></i></button>` : ''}
                                         </div>
                                     </td>
                                 </tr>
@@ -979,9 +984,9 @@ const InstanceDetailPage = {
             tableContainer.querySelectorAll('[data-view-sql]').forEach(button => {
                 button.addEventListener('click', () => {
                     Modal.show({
-                        title: '会话 SQL',
-                        content: `<pre class="instance-inline-pre">${this._escapeHtml(button.dataset.viewSql || '无 SQL 文本')}</pre>`,
-                        buttons: [{ text: '关闭', variant: 'secondary', onClick: () => Modal.hide() }]
+                        title: this._t('会话 SQL'),
+                        content: `<pre class="instance-inline-pre">${this._escapeHtml(button.dataset.viewSql || this._t('无 SQL 文本'))}</pre>`,
+                        buttons: [{ text: this._t('关闭'), variant: 'secondary', onClick: () => Modal.hide() }]
                     });
                 });
             });
@@ -998,7 +1003,7 @@ const InstanceDetailPage = {
             });
             DOM.createIcons();
         } catch (error) {
-            tableContainer.innerHTML = `<div class="empty-state">加载会话失败：${this._escapeHtml(error.message)}</div>`;
+            tableContainer.innerHTML = `<div class="empty-state">${this._escapeHtml(I18n.t('instanceDetail.loadSessionsFailed', { message: error.message }))}</div>`;
         }
     },
 
@@ -1046,7 +1051,7 @@ const InstanceDetailPage = {
             `持续时间 ${durationText}`,
         ];
 
-        return [
+        return this._t([
             '请你作为资深数据库运维专家，针对下面这个数据库实例中的实时会话做诊断分析，并支持后续多轮追问。',
             '',
             '【分析目标】',
@@ -1078,7 +1083,7 @@ const InstanceDetailPage = {
             '3. 最可能的根因分析',
             '4. 建议的排查步骤和处置建议',
             '5. 如果信息不足，请明确指出下一步建议补充哪些信息',
-        ].filter(Boolean).join('\n');
+        ].filter(Boolean).join('\n'));
     },
 
     _formatSessionAnalysisValue(value) {
@@ -1137,12 +1142,12 @@ const InstanceDetailPage = {
         const text = String(value ?? '').trim();
         if (!text) return '';
         if (text.length <= maxLength) return text;
-        return `${text.slice(0, maxLength).trimEnd()}\n...（已截断）`;
+        return `${text.slice(0, maxLength).trimEnd()}\n${this._t('...（已截断）')}`;
     },
 
     async _openSessionAiAnalysis(session) {
         if (!session) {
-            Toast.warning('未找到要分析的会话');
+            Toast.warning(this._t('未找到要分析的会话'));
             return;
         }
 
@@ -1160,7 +1165,10 @@ const InstanceDetailPage = {
         content.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
         let dialogCleanup = null;
-        const title = `会话 AI 分析 · ${datasource.name || '实例'} · Session ${session.session_id || '-'}`;
+        const title = I18n.t('instanceDetail.sessionAiTitle', {
+            name: datasource.name || this._t('实例'),
+            sessionId: session.session_id || '-',
+        });
 
         Modal.show({
             title,
@@ -1195,7 +1203,10 @@ const InstanceDetailPage = {
                 autoSendInitialAsk: true,
                 hideInitialAskMessage: true,
                 initialAsk: this._buildSessionAnalysisPrompt(session),
-                initialSessionTitle: `实例会话分析 ${datasource.name || datasource.id || ''} #${session.session_id || ''}`.trim(),
+                initialSessionTitle: I18n.t('instanceDetail.sessionAnalysisTitle', {
+                    name: datasource.name || datasource.id || '',
+                    sessionId: session.session_id || '',
+                }).trim(),
                 hideToolSafetyButton: true,
                 hideClearSessionButton: true,
             });
@@ -1204,8 +1215,8 @@ const InstanceDetailPage = {
             content.innerHTML = `
                 <div class="empty-state" style="padding:40px;">
                     <i data-lucide="alert-circle"></i>
-                    <h3>会话 AI 分析打开失败</h3>
-                    <p>${this._escapeHtml(error.message || '未知错误')}</p>
+                    <h3>${this._t('会话 AI 分析打开失败')}</h3>
+                    <p>${this._escapeHtml(error.message || this._t('未知错误'))}</p>
                 </div>
             `;
             DOM.createIcons();
@@ -1277,7 +1288,7 @@ const InstanceDetailPage = {
         if (typeof left === 'number' && typeof right === 'number') {
             return left - right;
         }
-        return String(left).localeCompare(String(right), 'zh-CN', { numeric: true, sensitivity: 'base' });
+        return String(left).localeCompare(String(right), I18n.getLocale(), { numeric: true, sensitivity: 'base' });
     },
 
     _sessionStatusRank(status) {
@@ -1299,21 +1310,25 @@ const InstanceDetailPage = {
 
     async _terminateSession(datasourceId, sessionId) {
         Modal.show({
-            title: '终止会话',
-            content: `确认终止会话 <strong>${this._escapeHtml(sessionId)}</strong> 吗？该操作会立即中断该会话。`,
+            title: this._t('终止会话'),
+            content: I18n.t('instanceDetail.terminateConfirm', {
+                sessionId: `<strong>${this._escapeHtml(sessionId)}</strong>`,
+            }),
             buttons: [
-                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
+                { text: this._t('取消'), variant: 'secondary', onClick: () => Modal.hide() },
                 {
-                    text: '确认终止',
+                    text: this._t('确认终止'),
                     variant: 'danger',
                     onClick: async () => {
                         try {
                             await API.terminateInstanceSession(datasourceId, sessionId);
                             Modal.hide();
-                            Toast.success(`会话 ${sessionId} 已终止`);
+                            Toast.success(I18n.t('instanceDetail.terminated', { sessionId }));
                             await this._loadSessionsTable(datasourceId);
                         } catch (error) {
-                            Toast.error(error.message || '终止会话失败');
+                            Toast.error(I18n.t('instanceDetail.terminateFailed', {
+                                message: error.message || this._t('未知错误'),
+                            }));
                         }
                     }
                 }
@@ -1328,16 +1343,16 @@ const InstanceDetailPage = {
                 const versionDisplay = result.version
                     ? `(${this._simplifyVersion(result.version, this.currentInstance.db_type).short})`
                     : '';
-                Toast.success(`连接成功 ${versionDisplay}`);
+                Toast.success(I18n.t('instanceDetail.connectionSucceeded', { version: versionDisplay }).trim());
             } else {
-                Toast.error(result.message || '连接失败');
+                Toast.error(result.message || this._t('连接失败'));
             }
             await this._refreshSummary();
             if (this.currentTab === 'config') {
                 await this._renderCurrentTab();
             }
         } catch (error) {
-            Toast.error(`测试连接失败: ${error.message}`);
+            Toast.error(I18n.t('instanceDetail.testConnectionFailed', { message: error.message }));
         }
     },
 
@@ -1347,9 +1362,9 @@ const InstanceDetailPage = {
 
         if (refreshBtn) {
             refreshBtn.disabled = true;
-            refreshBtn.innerHTML = '<span class="spinner" style="display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;"></span>采集中...';
+            refreshBtn.innerHTML = `<span class="spinner" style="display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;"></span>${this._t('采集中...')}`;
         }
-        Toast.info('已开始刷新指标，正在采集最新数据...');
+        Toast.info(I18n.t('instanceDetail.refreshStarted'));
 
         try {
             await API.refreshMetrics(this.currentInstance.id);
@@ -1358,13 +1373,13 @@ const InstanceDetailPage = {
             if (this.currentTab === 'monitor' || this.currentTab === 'config') {
                 await this._renderCurrentTab();
             }
-            Toast.success('指标刷新完成');
+            Toast.success(this._t('指标刷新完成'));
         } catch (error) {
-            Toast.error(`刷新指标失败: ${error.message}`);
+            Toast.error(I18n.t('instanceDetail.refreshFailed', { message: error.message }));
         } finally {
             if (refreshBtn) {
                 refreshBtn.disabled = false;
-                refreshBtn.innerHTML = originalHtml || '<i data-lucide="refresh-cw"></i> 刷新指标';
+                refreshBtn.innerHTML = originalHtml || `<i data-lucide="refresh-cw"></i> ${this._t('刷新指标')}`;
                 DOM.createIcons();
             }
         }
@@ -1373,21 +1388,21 @@ const InstanceDetailPage = {
     _showTriggerInspectionModal() {
         const datasource = this.currentSummary?.datasource || this.currentInstance || {};
         Modal.show({
-            title: '确认触发巡检',
+            title: this._t('确认触发巡检'),
             content: `
                 <div class="form-group" style="margin-bottom:0;">
                     <div style="font-size:14px;line-height:1.8;color:var(--text-primary);">
-                        将为实例 <strong>${this._escapeHtml(datasource.name || '-')}</strong> 立即创建一个人工巡检任务。
+                        ${I18n.t('instanceDetail.triggerPrompt', { name: `<strong>${this._escapeHtml(datasource.name || '-')}</strong>` })}
                     </div>
                     <div style="margin-top:10px;font-size:12px;line-height:1.7;color:var(--text-secondary);">
-                        巡检会立刻执行，并生成一份新的巡检报告。完成后会自动跳转到“巡检管理”查看结果。
+                        ${I18n.t('instanceDetail.triggerHelp')}
                     </div>
                 </div>
             `,
             buttons: [
-                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
+                { text: this._t('取消'), variant: 'secondary', onClick: () => Modal.hide() },
                 {
-                    text: '确认触发',
+                    text: this._t('确认触发'),
                     variant: 'primary',
                     onClick: async () => {
                         await this._handleTriggerInspection();
@@ -1400,21 +1415,23 @@ const InstanceDetailPage = {
     async _handleTriggerInspection() {
         const datasourceId = this.currentInstance?.id;
         if (!datasourceId) {
-            Toast.error('当前实例不存在，无法触发巡检');
+            Toast.error(this._t('当前实例不存在，无法触发巡检'));
             return;
         }
 
         const confirmButton = Array.from(document.querySelectorAll('#modal-container .modal-footer .btn'))
-            .find((button) => button.textContent?.includes('确认触发'));
+            .find((button) => button.textContent?.includes(this._t('确认触发')));
         if (confirmButton) {
             confirmButton.disabled = true;
-            confirmButton.textContent = '启动中...';
+            confirmButton.textContent = this._t('启动中...');
         }
 
         try {
             const result = await API.post(`/api/inspections/trigger/${datasourceId}`);
             Modal.hide();
-            Toast.success(`人工巡检任务已提交${result?.trigger_id ? ` #${result.trigger_id}` : ''}`);
+            Toast.success(I18n.t('instanceDetail.inspectionSubmitted', {
+                triggerId: result?.trigger_id ? ` #${result.trigger_id}` : '',
+            }));
             await this._refreshSummary();
             const nextUrl = this._buildUrl(datasourceId, 'inspections', {
                 report: result?.report_id || null,
@@ -1423,47 +1440,47 @@ const InstanceDetailPage = {
         } catch (error) {
             if (confirmButton) {
                 confirmButton.disabled = false;
-                confirmButton.textContent = '确认触发';
+                confirmButton.textContent = this._t('确认触发');
             }
-            Toast.error(`触发巡检失败: ${error.message}`);
+            Toast.error(I18n.t('instanceDetail.triggerFailed', { message: error.message }));
         }
     },
 
     _showSilenceModal() {
         Modal.show({
-            title: '设置告警静默',
+            title: this._t('设置告警静默'),
             content: `
                 <div class="form-group">
-                    <label for="instance-silence-hours">静默时长（小时）</label>
+                    <label for="instance-silence-hours">${this._t('静默时长（小时）')}</label>
                     <input id="instance-silence-hours" class="form-input" type="number" min="0.5" max="240" step="0.5" value="1">
                 </div>
                 <div class="form-group">
-                    <label for="instance-silence-reason">静默原因</label>
-                    <textarea id="instance-silence-reason" class="form-input" rows="3" placeholder="例如：计划变更窗口"></textarea>
+                    <label for="instance-silence-reason">${this._t('静默原因')}</label>
+                    <textarea id="instance-silence-reason" class="form-input" rows="3" placeholder="${I18n.t('placeholders.instanceSilenceReason')}"></textarea>
                 </div>
             `,
             buttons: [
-                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
+                { text: this._t('取消'), variant: 'secondary', onClick: () => Modal.hide() },
                 {
-                    text: '开始静默',
+                    text: this._t('开始静默'),
                     variant: 'primary',
                     onClick: async () => {
                         const hours = parseFloat(DOM.$('#instance-silence-hours')?.value || '0');
                         const reason = DOM.$('#instance-silence-reason')?.value?.trim() || null;
                         if (!Number.isFinite(hours) || hours < 0.5 || hours > 240) {
-                            Toast.error('静默时长必须在 0.5 到 240 小时之间');
+                            Toast.error(this._t('静默时长必须在 0.5 到 240 小时之间'));
                             return;
                         }
                         try {
                             await API.setDatasourceSilence(this.currentInstance.id, { hours, reason });
                             Modal.hide();
-                            Toast.success('已设置告警静默');
+                            Toast.success(this._t('已设置告警静默'));
                             await this._refreshSummary();
                             if (this.currentTab === 'config') {
                                 await this._renderCurrentTab();
                             }
                         } catch (error) {
-                            Toast.error(`设置静默失败: ${error.message}`);
+                            Toast.error(I18n.t('instanceDetail.silenceSetFailed', { message: error.message }));
                         }
                     }
                 }
@@ -1474,13 +1491,13 @@ const InstanceDetailPage = {
     async _handleCancelSilence() {
         try {
             await API.cancelDatasourceSilence(this.currentInstance.id);
-            Toast.success('已取消告警静默');
+            Toast.success(this._t('已取消告警静默'));
             await this._refreshSummary();
             if (this.currentTab === 'config') {
                 await this._renderCurrentTab();
             }
         } catch (error) {
-            Toast.error(`取消静默失败: ${error.message}`);
+            Toast.error(I18n.t('instanceDetail.silenceCancelFailed', { message: error.message }));
         }
     },
 
@@ -1509,24 +1526,24 @@ const InstanceDetailPage = {
     },
 
     _healthStatusLabel(health) {
-        if (this._isConnectionFailureHealth(health)) return '连接失败';
+        if (this._isConnectionFailureHealth(health)) return this._t('连接失败');
         const map = {
-            healthy: '健康',
-            warning: '警告',
-            critical: '异常',
-            unknown: '未知'
+            healthy: this._t('健康'),
+            warning: this._t('警告'),
+            critical: this._t('异常'),
+            unknown: this._t('未知')
         };
-        return map[health?.status] || '未知';
+        return map[health?.status] || this._t('未知');
     },
 
     _connectionStatusLabel(status) {
         const map = {
-            normal: '正常',
-            warning: '警告',
-            failed: '连接失败',
-            unknown: '未知'
+            normal: this._t('正常'),
+            warning: this._t('警告'),
+            failed: this._t('连接失败'),
+            unknown: this._t('未知')
         };
-        return map[status] || status || '未知';
+        return map[status] || this._t(status || '未知');
     },
 
     _mergeDatasourceHealth(datasource, health) {
@@ -1621,6 +1638,10 @@ const InstanceDetailPage = {
         return labels[dbType] || dbType || '-';
     },
 
+    _t(value) {
+        return I18n.translateLegacyText(String(value ?? ''));
+    },
+
     _escapeHtml(value) {
         return Utils.escapeHtml(String(value ?? ''));
     },
@@ -1638,9 +1659,9 @@ const InstanceDetailPage = {
                 container.innerHTML = `
                     <div class="empty-state">
                         <i data-lucide="database"></i>
-                        <h3>暂无 TOP SQL 数据</h3>
-                        <p>当前数据库可能未启用 SQL 统计功能，或暂无 SQL 执行记录。</p>
-                        <p class="text-muted mt-8">MySQL 需启用 performance_schema，PostgreSQL/openGauss 需安装 pg_stat_statements 扩展。</p>
+                        <h3>${this._t('暂无 TOP SQL 数据')}</h3>
+                        <p>${this._t('当前数据库可能未启用 SQL 统计功能，或暂无 SQL 执行记录。')}</p>
+                        <p class="text-muted mt-8">${this._t('MySQL 需启用 performance_schema，PostgreSQL/openGauss 需安装 pg_stat_statements 扩展。')}</p>
                     </div>
                 `;
                 DOM.createIcons();
@@ -1663,8 +1684,8 @@ const InstanceDetailPage = {
             container.innerHTML = `
                 <div class="empty-state">
                     <i data-lucide="alert-circle"></i>
-                    <h3>加载失败</h3>
-                    <p>${this._escapeHtml(error.message || '获取 TOP SQL 数据失败')}</p>
+                    <h3>${this._t('加载失败')}</h3>
+                    <p>${this._escapeHtml(I18n.t('instanceDetail.loadTopSqlFailed', { message: error.message || this._t('未知错误') }))}</p>
                 </div>
             `;
             DOM.createIcons();
@@ -1677,17 +1698,17 @@ const InstanceDetailPage = {
         container.innerHTML = `
             <div class="top-sql-container">
                 <div class="top-sql-header">
-                    <h3>TOP SQL 分析</h3>
+                    <h3>${this._t('TOP SQL 分析')}</h3>
                     <div class="top-sql-controls">
                         <div class="search-box">
                             <i data-lucide="search"></i>
                             <input type="text"
                                    id="topSqlFilter"
-                                   placeholder="搜索 SQL ID 或 SQL 文本..."
+                                   placeholder="${I18n.t('placeholders.searchSql')}"
                                    value="${this._escapeAttr(filterText)}">
                         </div>
                         <div class="top-sql-stats">
-                            <span class="badge badge-info">共 ${filteredData.length} 条</span>
+                            <span class="badge badge-info">${I18n.t('instanceDetail.topSqlCount', { count: I18n.formatNumber(filteredData.length) })}</span>
                         </div>
                     </div>
                 </div>
@@ -1695,36 +1716,36 @@ const InstanceDetailPage = {
                     <table class="data-table top-sql-table">
                         <thead>
                             <tr>
-                                <th style="width: 60px;">序号</th>
+                                <th style="width: 60px;">${this._t('序号')}</th>
                                 <th style="width: 140px;" data-sort="sql_id" data-label="SQL ID">
                                     SQL ID ${this._getSortIcon('sql_id')}
                                 </th>
-                                <th style="min-width: 300px;" data-sort="sql_text" data-label="SQL 文本">
-                                    SQL 文本 ${this._getSortIcon('sql_text')}
+                                <th style="min-width: 300px;" data-sort="sql_text" data-label="${this._t('SQL 文本')}">
+                                    ${this._t('SQL 文本')} ${this._getSortIcon('sql_text')}
                                 </th>
-                                <th style="width: 100px;" data-sort="exec_count" data-label="执行次数">
-                                    执行次数 ${this._getSortIcon('exec_count')}
+                                <th style="width: 100px;" data-sort="exec_count" data-label="${this._t('执行次数')}">
+                                    ${this._t('执行次数')} ${this._getSortIcon('exec_count')}
                                 </th>
-                                <th style="width: 130px;" data-sort="total_time_sec" data-label="总执行时间(s)">
-                                    总执行时间(s) ${this._getSortIcon('total_time_sec')}
+                                <th style="width: 130px;" data-sort="total_time_sec" data-label="${this._t('总执行时间(s)')}">
+                                    ${this._t('总执行时间(s)')} ${this._getSortIcon('total_time_sec')}
                                 </th>
-                                <th style="width: 120px;" data-sort="total_rows_scanned" data-label="总扫描行数">
-                                    总扫描行数 ${this._getSortIcon('total_rows_scanned')}
+                                <th style="width: 120px;" data-sort="total_rows_scanned" data-label="${this._t('总扫描行数')}">
+                                    ${this._t('总扫描行数')} ${this._getSortIcon('total_rows_scanned')}
                                 </th>
-                                <th style="width: 130px;" data-sort="total_wait_time_sec" data-label="总等待时间(s)">
-                                    总等待时间(s) ${this._getSortIcon('total_wait_time_sec')}
+                                <th style="width: 130px;" data-sort="total_wait_time_sec" data-label="${this._t('总等待时间(s)')}">
+                                    ${this._t('总等待时间(s)')} ${this._getSortIcon('total_wait_time_sec')}
                                 </th>
-                                <th style="width: 130px;" data-sort="avg_time_sec" data-label="平均执行时间(s)">
-                                    平均执行时间(s) ${this._getSortIcon('avg_time_sec')}
+                                <th style="width: 130px;" data-sort="avg_time_sec" data-label="${this._t('平均执行时间(s)')}">
+                                    ${this._t('平均执行时间(s)')} ${this._getSortIcon('avg_time_sec')}
                                 </th>
-                                <th style="width: 120px;" data-sort="avg_rows_scanned" data-label="平均扫描行数">
-                                    平均扫描行数 ${this._getSortIcon('avg_rows_scanned')}
+                                <th style="width: 120px;" data-sort="avg_rows_scanned" data-label="${this._t('平均扫描行数')}">
+                                    ${this._t('平均扫描行数')} ${this._getSortIcon('avg_rows_scanned')}
                                 </th>
-                                <th style="width: 130px;" data-sort="avg_wait_time_sec" data-label="平均等待时间(s)">
-                                    平均等待时间(s) ${this._getSortIcon('avg_wait_time_sec')}
+                                <th style="width: 130px;" data-sort="avg_wait_time_sec" data-label="${this._t('平均等待时间(s)')}">
+                                    ${this._t('平均等待时间(s)')} ${this._getSortIcon('avg_wait_time_sec')}
                                 </th>
-                                <th style="width: 160px;" data-sort="last_exec_time" data-label="最后执行时间">
-                                    最后执行时间 ${this._getSortIcon('last_exec_time')}
+                                <th style="width: 160px;" data-sort="last_exec_time" data-label="${this._t('最后执行时间')}">
+                                    ${this._t('最后执行时间')} ${this._getSortIcon('last_exec_time')}
                                 </th>
                             </tr>
                         </thead>
@@ -1830,7 +1851,7 @@ const InstanceDetailPage = {
         // 更新统计信息
         const statsDiv = container.querySelector('.top-sql-stats');
         if (statsDiv) {
-            statsDiv.innerHTML = `<span class="badge badge-info">共 ${filteredData.length} 条</span>`;
+            statsDiv.innerHTML = `<span class="badge badge-info">${I18n.t('instanceDetail.topSqlCount', { count: I18n.formatNumber(filteredData.length) })}</span>`;
         }
 
         // 更新表格内容
@@ -1907,8 +1928,8 @@ const InstanceDetailPage = {
             // 字符串比较
             if (typeof aVal === 'string') {
                 return sortDirection === 'asc'
-                    ? aVal.localeCompare(bVal)
-                    : bVal.localeCompare(aVal);
+                    ? aVal.localeCompare(bVal, I18n.getLocale())
+                    : bVal.localeCompare(aVal, I18n.getLocale());
             }
 
             // 数值比较
@@ -1925,53 +1946,53 @@ const InstanceDetailPage = {
             <div class="drawer-overlay"></div>
             <div class="drawer-content">
                 <div class="drawer-header">
-                    <h3>SQL 详情</h3>
-                    <button class="btn-icon" id="closeTopSqlDrawer">
+                    <h3>${this._t('SQL 详情')}</h3>
+                    <button class="btn-icon" id="closeTopSqlDrawer" title="${this._t('关闭')}" aria-label="${this._t('关闭')}">
                         <i data-lucide="x"></i>
                     </button>
                 </div>
                 <div class="drawer-body">
                     <div class="sql-detail-section">
-                        <h4>SQL 文本</h4>
+                        <h4>${this._t('SQL 文本')}</h4>
                         <pre class="sql-code">${this._escapeHtml(sql.sql_text || '-')}</pre>
                     </div>
                     <div class="sql-detail-section">
-                        <h4>执行统计</h4>
+                        <h4>${this._t('执行统计')}</h4>
                         <div class="sql-stats-grid">
                             <div class="stat-item">
                                 <label>SQL ID</label>
                                 <span class="text-monospace">${this._escapeHtml(sql.sql_id || '-')}</span>
                             </div>
                             <div class="stat-item">
-                                <label>执行次数</label>
+                                <label>${this._t('执行次数')}</label>
                                 <span>${Format.number(sql.exec_count || 0)}</span>
                             </div>
                             <div class="stat-item">
-                                <label>总执行时间</label>
-                                <span>${Format.number(sql.total_time_sec || 0, 6)} 秒</span>
+                                <label>${this._t('总执行时间')}</label>
+                                <span>${Format.number(sql.total_time_sec || 0, 6)} ${this._t('秒')}</span>
                             </div>
                             <div class="stat-item">
-                                <label>平均执行时间</label>
-                                <span>${Format.number(sql.avg_time_sec || 0, 6)} 秒</span>
+                                <label>${this._t('平均执行时间')}</label>
+                                <span>${Format.number(sql.avg_time_sec || 0, 6)} ${this._t('秒')}</span>
                             </div>
                             <div class="stat-item">
-                                <label>总扫描行数</label>
+                                <label>${this._t('总扫描行数')}</label>
                                 <span>${Format.number(sql.total_rows_scanned || 0)}</span>
                             </div>
                             <div class="stat-item">
-                                <label>平均扫描行数</label>
+                                <label>${this._t('平均扫描行数')}</label>
                                 <span>${Format.number(sql.avg_rows_scanned || 0, 2)}</span>
                             </div>
                             <div class="stat-item">
-                                <label>总等待时间</label>
-                                <span>${Format.number(sql.total_wait_time_sec || 0, 6)} 秒</span>
+                                <label>${this._t('总等待时间')}</label>
+                                <span>${Format.number(sql.total_wait_time_sec || 0, 6)} ${this._t('秒')}</span>
                             </div>
                             <div class="stat-item">
-                                <label>平均等待时间</label>
-                                <span>${Format.number(sql.avg_wait_time_sec || 0, 6)} 秒</span>
+                                <label>${this._t('平均等待时间')}</label>
+                                <span>${Format.number(sql.avg_wait_time_sec || 0, 6)} ${this._t('秒')}</span>
                             </div>
                             <div class="stat-item">
-                                <label>最后执行时间</label>
+                                <label>${this._t('最后执行时间')}</label>
                                 <span>${sql.last_exec_time ? Format.datetime(sql.last_exec_time) : '-'}</span>
                             </div>
                         </div>
@@ -1979,19 +2000,19 @@ const InstanceDetailPage = {
                     <div class="sql-detail-actions">
                         <button class="btn btn-secondary" id="viewExplainPlan">
                             <i data-lucide="git-branch"></i>
-                            查看执行计划
+                            ${this._t('查看执行计划')}
                         </button>
                         <button class="btn btn-primary" id="aiDiagnoseTopSql">
                             <i data-lucide="sparkles"></i>
-                            AI 诊断分析
+                            ${this._t('AI 诊断分析')}
                         </button>
                     </div>
                     <div id="explainPlanResult" class="sql-detail-section" style="display: none;">
-                        <h4>执行计划</h4>
+                        <h4>${this._t('执行计划')}</h4>
                         <div id="explainPlanContent"></div>
                     </div>
                     <div id="aiDiagnosisResult" class="sql-detail-section" style="display: none;">
-                        <h4>AI 诊断结果</h4>
+                        <h4>${this._t('AI 诊断结果')}</h4>
                         <div id="aiDiagnosisContent"></div>
                     </div>
                 </div>
@@ -2023,7 +2044,7 @@ const InstanceDetailPage = {
         if (!resultDiv || !contentDiv) return;
 
         resultDiv.style.display = 'block';
-        contentDiv.innerHTML = '<div class="loading-spinner"><i data-lucide="loader"></i> 正在获取执行计划...</div>';
+        contentDiv.innerHTML = `<div class="loading-spinner"><i data-lucide="loader"></i> ${this._t('正在获取执行计划...')}</div>`;
         DOM.createIcons();
 
         try {
@@ -2039,17 +2060,17 @@ const InstanceDetailPage = {
                     contentDiv.innerHTML = `<pre class="explain-plan">${this._escapeHtml(JSON.stringify(plan, null, 2))}</pre>`;
                 }
             } else {
-                contentDiv.innerHTML = '<div class="error-message">无法获取执行计划</div>';
+                contentDiv.innerHTML = `<div class="error-message">${this._t('无法获取执行计划')}</div>`;
             }
         } catch (error) {
             console.error('Failed to get explain plan:', error);
-            contentDiv.innerHTML = `<div class="error-message">获取执行计划失败: ${this._escapeHtml(error.message)}</div>`;
+            contentDiv.innerHTML = `<div class="error-message">${this._escapeHtml(I18n.t('instanceDetail.explainFailed', { message: error.message }))}</div>`;
         }
     },
 
     _renderExplainTable(planRows) {
         if (!planRows || planRows.length === 0) {
-            return '<div class="empty-state">无执行计划数据</div>';
+            return `<div class="empty-state">${this._t('无执行计划数据')}</div>`;
         }
 
         // 过滤掉不需要展示的字段
@@ -2086,7 +2107,7 @@ const InstanceDetailPage = {
 
     async _aiDiagnoseTopSql(sql) {
         if (!sql) {
-            Toast.warning('未找到要分析的 SQL');
+            Toast.warning(this._t('未找到要分析的 SQL'));
             return;
         }
 
@@ -2101,7 +2122,7 @@ const InstanceDetailPage = {
 
         const datasource = this.currentInstance;
         if (!datasource) {
-            Toast.error('无法获取数据源信息');
+            Toast.error(this._t('无法获取数据源信息'));
             return;
         }
 
@@ -2110,7 +2131,10 @@ const InstanceDetailPage = {
 
         let dialogCleanup = null;
         const sqlPreview = sql.sql_text?.substring(0, 50) || 'SQL';
-        const title = `SQL AI 诊断 · ${datasource.name || '实例'} · ${sqlPreview}${sql.sql_text?.length > 50 ? '...' : ''}`;
+        const title = I18n.t('instanceDetail.sqlAiTitle', {
+            name: datasource.name || this._t('实例'),
+            sql: `${sqlPreview}${sql.sql_text?.length > 50 ? '...' : ''}`,
+        });
 
         Modal.show({
             title,
@@ -2145,7 +2169,10 @@ const InstanceDetailPage = {
                 autoSendInitialAsk: true,
                 hideInitialAskMessage: true,
                 initialAsk: this._buildTopSqlDiagnosisPrompt(sql),
-                initialSessionTitle: `SQL 性能分析 ${datasource.name || datasource.id || ''} ${sqlPreview}`.trim(),
+                initialSessionTitle: I18n.t('instanceDetail.sqlAnalysisTitle', {
+                    name: datasource.name || datasource.id || '',
+                    sql: sqlPreview,
+                }).trim(),
                 hideToolSafetyButton: true,
                 hideClearSessionButton: true,
             });
@@ -2154,8 +2181,8 @@ const InstanceDetailPage = {
             content.innerHTML = `
                 <div class="empty-state" style="padding:40px;">
                     <i data-lucide="alert-circle"></i>
-                    <h3>SQL AI 诊断打开失败</h3>
-                    <p>${this._escapeHtml(error.message || '未知错误')}</p>
+                    <h3>${this._t('SQL AI 诊断打开失败')}</h3>
+                    <p>${this._escapeHtml(error.message || this._t('未知错误'))}</p>
                 </div>
             `;
             DOM.createIcons();
@@ -2186,7 +2213,7 @@ const InstanceDetailPage = {
         const waitParts = [];
         if (sql.total_wait_time_sec != null) waitParts.push(`总等待时间 ${sql.total_wait_time_sec} 秒`);
 
-        return [
+        return this._t([
             '请你作为资深数据库运维专家，针对下面这个 SQL 语句的性能问题做诊断分析，并支持后续多轮追问。',
             '',
             '【分析目标】',
@@ -2213,7 +2240,7 @@ const InstanceDetailPage = {
             '3. 可能的根因分析',
             '4. 具体的优化建议（索引、改写、配置等）',
             '5. 如果信息不足，请明确指出需要补充哪些信息（如执行计划、表结构等）',
-        ].filter(Boolean).join('\n');
+        ].filter(Boolean).join('\n'));
     },
 
     _formatAiResponse(text) {
@@ -2229,7 +2256,7 @@ const InstanceDetailPage = {
     },
 
     _simplifyVersion(fullVersion, dbType) {
-        if (!fullVersion) return { short: '未知版本', full: '', details: '' };
+        if (!fullVersion) return { short: this._t('未知版本'), full: '', details: '' };
 
         const patterns = {
             'postgresql': /PostgreSQL\s+([\d.]+)/i,

@@ -248,7 +248,7 @@ const InstanceTrafficPage = {
     _renderStatus() {
         if (!this.refs.status || !this.data) return;
         const modeLabel = this._rateModeLabel(this.data.rate_mode);
-        const updatedAt = this.data.captured_at ? new Date(this.data.captured_at).toLocaleTimeString() : '--';
+        const updatedAt = this.data.captured_at ? I18n.formatTime(this.data.captured_at) : '--';
         this.refs.status.textContent = `${this.data.rate_label} · ${modeLabel} · 上次刷新 ${updatedAt} · ${this.pollIntervalSeconds}s 自动轮询`;
     },
 
@@ -888,7 +888,7 @@ const InstanceTrafficPage = {
     _formatChartLabel(dateInput) {
         const date = new Date(dateInput);
         if (Number.isNaN(date.getTime())) return '';
-        return date.toLocaleTimeString([], {
+        return I18n.formatTime(date, {
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit',

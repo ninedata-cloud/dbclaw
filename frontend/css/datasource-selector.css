@@ -203,7 +203,7 @@
 }
 
 .datasource-selector-item-host::before {
-    content: '地址';
+    content: attr(data-label);
     font-size: 11px;
     color: var(--text-muted);
 }

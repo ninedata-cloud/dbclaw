@@ -202,9 +202,9 @@ class WeixinBotService:
         api_baseurl = str(params.get("api_baseurl") or params.get("gateway_url") or "").strip()
         bot_token = WeixinBotService._decrypt_bot_token(params)
         if not api_baseurl or not bot_token:
-            logger.warning("微信 Bot 未配置 api_baseurl 或 bot_token，跳过回复")
+            logger.warning("The Weixin bot is missing api_baseurl or bot_token; skipping reply")
             return {}
-        logger.debug(f"[微信发送] to={to_user_id[:30]}, context={context_token[:20]}")
+        logger.debug(f"[Weixin send] to={to_user_id[:30]}, context={context_token[:20]}")
         resp = await weixin_service.send_text_message(
             baseurl=api_baseurl,
             bot_token=bot_token,
@@ -212,7 +212,7 @@ class WeixinBotService:
             context_token=context_token,
             text=text,
         )
-        logger.debug(f"[微信发送] resp={resp}")
+        logger.debug(f"[Weixin send] resp={resp}")
         return resp
 
     @staticmethod
@@ -363,7 +363,7 @@ class WeixinBotService:
         reply_text = final_text or "已收到消息。"
         # outbound 的 to_user_id 应为消息发送者（用户），而非 bot 自己的 ID
         reply_to = sender_user_id if not group_id else receiver_user_id or sender_user_id
-        logger.debug(f"[微信回复] to={reply_to[:30]}, context={context_token[:20]}")
+        logger.debug(f"[Weixin reply] to={reply_to[:30]}, context={context_token[:20]}")
 
         resp = await WeixinBotService._send_text_reply(
             bot_binding,
@@ -374,7 +374,7 @@ class WeixinBotService:
         if resp:
             ret = resp.get("ret")
             if ret is not None and ret != 0:
-                logger.warning(f"[微信回复] 发送失败: ret={ret}")
+                logger.warning(f"[Weixin reply] Send failed: ret={ret}")
         # 发送后等待较长间隔，避免微信对连续 bot 消息的频率限制
         await asyncio.sleep(5)
 
@@ -385,7 +385,7 @@ class WeixinBotService:
         bot_token = WeixinBotService._decrypt_bot_token(params)
         qrcode_status = str(params.get("login_status") or "")
         logger.debug(
-            f"[微信轮询] api_baseurl={api_baseurl[:30] if api_baseurl else 'None'}, "
+            f"[Weixin polling] api_baseurl={api_baseurl[:30] if api_baseurl else 'None'}, "
             f"has_token={bool(bot_token)}, status={qrcode_status}"
         )
         if not api_baseurl or not bot_token or qrcode_status != "confirmed":
@@ -393,7 +393,7 @@ class WeixinBotService:
 
         timeout_seconds = int(params.get("receive_timeout_seconds") or 40)
         cursor = str(params.get("get_updates_buf") or "")
-        logger.debug(f"[微信轮询] 开始调用get_updates, cursor='{cursor[:20]}', token_len={len(bot_token)}")
+        logger.debug(f"[Weixin polling] Calling get_updates: cursor='{cursor[:20]}', token_len={len(bot_token)}")
         response = await weixin_service.get_updates(
             baseurl=api_baseurl,
             bot_token=bot_token,
@@ -402,14 +402,14 @@ class WeixinBotService:
         )
         msgs = response.get("msgs") or []
         new_cursor = str(response.get("get_updates_buf") or cursor)
-        logger.debug(f"[微信轮询] get_updates返回: msgs_count={len(msgs)}, cursor_changed={new_cursor != cursor}")
+        logger.debug(f"[Weixin polling] get_updates returned: msgs_count={len(msgs)}, cursor_changed={new_cursor != cursor}")
 
         for msg in msgs:
             # 入队而非直接处理，避免 AI 处理阻塞轮询
             await _MESSAGE_QUEUE.put((binding, msg))
 
         if msgs:
-            logger.info(f"[微信轮询] 收到 {len(msgs)} 条新消息，当前队列长度={_MESSAGE_QUEUE.qsize()}")
+            logger.info(f"[Weixin polling] Received {len(msgs)} new messages; queue_size={_MESSAGE_QUEUE.qsize()}")
 
         if new_cursor != cursor:
             params["get_updates_buf"] = new_cursor
@@ -417,7 +417,7 @@ class WeixinBotService:
             from sqlalchemy.orm.attributes import flag_modified
             flag_modified(binding, "params")
             await db.commit()
-            logger.debug("[微信轮询] cursor已更新并保存")
+            logger.debug("[Weixin polling] Cursor updated and saved")
             await db.commit()
 
 
@@ -440,7 +440,7 @@ async def _polling_loop() -> None:
                 finally:
                     _PROCESSING_BINDINGS.discard(binding.id)
         except Exception:
-            logger.exception("微信 Bot 轮询失败")
+            logger.exception("Weixin bot polling failed")
             await asyncio.sleep(5)
             continue
         await asyncio.sleep(1)
@@ -450,23 +450,23 @@ async def _consumer_loop() -> None:
     """消息消费者：从队列取消息，串行处理并回复。"""
     global _STOP_EVENT
     stop_event = _STOP_EVENT
-    logger.info("[微信消费者] 启动")
+    logger.info("[Weixin consumer] Started")
     while stop_event and not stop_event.is_set():
         try:
             binding, msg = await asyncio.wait_for(_MESSAGE_QUEUE.get(), timeout=5)
         except asyncio.TimeoutError:
             continue
         except Exception:
-            logger.exception("[微信消费者] 队列获取异常")
+            logger.exception("[Weixin consumer] Failed to read from the queue")
             continue
 
         text = str(msg.get("item_list", [{}])[0].get("text_item", {}).get("text") or msg.get("message_id", ""))
-        logger.debug(f"[微信消费者] 取到消息: text='{text}', queue_len={_MESSAGE_QUEUE.qsize()}")
+        logger.debug(f"[Weixin consumer] Dequeued message: text='{text}', queue_len={_MESSAGE_QUEUE.qsize()}")
         try:
             async with async_session() as db:
                 await WeixinBotService.handle_message(db, bot_binding=binding, message=msg)
         except Exception:
-            logger.exception("[微信消费者] 处理消息失败")
+            logger.exception("[Weixin consumer] Failed to process message")
 
 
 async def start_weixin_bot_poller() -> None:

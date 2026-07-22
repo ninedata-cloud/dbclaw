@@ -445,6 +445,11 @@ def _truncate_text(text: str, *, max_chars: int) -> str:
     return cleaned[: max_chars - 1].rstrip(" ，,；;。") + "…"
 
 
+def _prefers_english_output(text: str) -> bool:
+    cleaned = text or ""
+    return bool(re.search(r"[A-Za-z]", cleaned)) and not bool(re.search(r"[\u4e00-\u9fff]", cleaned))
+
+
 def _normalize_reason_clause_for_dedup(text: str) -> str:
     normalized = re.sub(r"\d{1,2}:\d{2}:\d{2}", "", text or "")
     normalized = re.sub(r"\d+(?:\.\d+)?", "#", normalized)
@@ -511,7 +516,9 @@ def _compress_alert_ai_reason(
     decision: str,
     severity: str,
     reason: str,
+    reference_text: str = "",
 ) -> str:
+    use_english = _prefers_english_output(reference_text or reason)
     clauses = []
     seen: set[str] = set()
     for raw_clause in _split_reason_clauses(reason):
@@ -528,6 +535,12 @@ def _compress_alert_ai_reason(
         fallback = _truncate_text(reason or "", max_chars=36)
         if fallback:
             return fallback
+        if use_english:
+            if decision == AI_DECISION_RECOVER:
+                return "Metrics returned to normal; recovery confirmed"
+            if decision == AI_DECISION_ALERT:
+                return f"Alert condition met; triggered a {severity} alert"
+            return "Evidence is insufficient; no alert triggered"
         if decision == AI_DECISION_RECOVER:
             return "指标恢复正常，判定恢复"
         if decision == AI_DECISION_ALERT:
@@ -535,6 +548,9 @@ def _compress_alert_ai_reason(
         return "当前证据不足，暂不告警"
 
     clauses = sorted(clauses, key=lambda item: (-_score_reason_clause(item), len(item)))
+    if use_english:
+        return _truncate_text(clauses[0], max_chars=180)
+
     selected = [clauses[0]]
     if len(clauses) > 1:
         first_has_action = bool(re.search(r"(触发|告警|恢复|暂不告警)", selected[0]))
@@ -556,7 +572,8 @@ def _compress_alert_ai_reason(
     return _truncate_text(compact, max_chars=48)
 
 
-def _compress_alert_ai_evidence(evidence: list[str]) -> list[str]:
+def _compress_alert_ai_evidence(evidence: list[str], reference_text: str = "") -> list[str]:
+    max_chars = 120 if _prefers_english_output(reference_text) else 24
     compact: list[str] = []
     seen: set[str] = set()
     for item in evidence or []:
@@ -568,7 +585,7 @@ def _compress_alert_ai_evidence(evidence: list[str]) -> list[str]:
             if not dedup_key or dedup_key in seen:
                 continue
             seen.add(dedup_key)
-            compact.append(_truncate_text(cleaned, max_chars=24))
+            compact.append(_truncate_text(cleaned, max_chars=max_chars))
             if len(compact) >= 2:
                 return compact
     return compact
@@ -1773,11 +1790,12 @@ def _build_alert_ai_messages(
         "feature_summary.sampling_interval_seconds 表示采样间隔秒数，recent_samples 按时间正序排列，可直接用于判断持续时间条件。"
         "当 recent_samples 已覆盖要求持续窗口且相关样本持续满足阈值时，不要因为没有额外的 duration 字段就判定证据不足。"
         "如果采样粒度明显粗于模板要求的持续时间，可以简短说明按当前样本判断，但不要展开分析过程。"
-        "reason 必须是一句简短中文结论，控制在 18 到 40 个字内，只保留结论和最核心依据。"
+        "reason 必须与 policy.rule_text 使用相同语言；无法识别规则语言时默认使用简体中文。"
+        "reason 只保留一句简短结论和最核心依据；中文控制在 18 到 40 个字，英文控制在 12 到 30 个单词。"
         "不要重复同一事实，不要列出多个时间点，不要输出模板解析说明，不要输出“模板中存在多个明确等级表达”之类元信息。"
-        "evidence 最多返回 2 条，每条不超过 18 个字。"
+        "evidence 必须与 reason 使用相同语言，最多返回 2 条；中文每条不超过 18 个字，英文每条不超过 16 个单词。"
         "如果 policy.severity_constraint_mode 为 explicit，则你必须返回与 policy.policy_severity_hint 完全一致的 severity。"
-        'JSON 格式必须是 {"decision":"alert|no_alert|recover","severity":"critical|high|medium|low","confidence":0.0,"reason":"简短中文说明","evidence":["证据1"],"trigger_inspection":true}'
+        'JSON 格式必须是 {"decision":"alert|no_alert|recover","severity":"critical|high|medium|low","confidence":0.0,"reason":"localized concise reason","evidence":["localized evidence"],"trigger_inspection":true}'
     )
     user_payload = {
         "policy": {
@@ -1947,8 +1965,12 @@ async def evaluate_alert_ai_policy(
         decision=judge_result.decision,
         severity=judge_result.severity,
         reason=judge_result.reason,
+        reference_text=binding.rule_text,
     )
-    judge_result.evidence = _compress_alert_ai_evidence(judge_result.evidence)
+    judge_result.evidence = _compress_alert_ai_evidence(
+        judge_result.evidence,
+        reference_text=binding.rule_text,
+    )
 
     log_entry = AlertAIEvaluationLog(
         datasource_id=datasource.id,

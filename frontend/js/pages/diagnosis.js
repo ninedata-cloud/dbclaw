@@ -556,7 +556,7 @@ const DiagnosisPage = {
                 container: datasourceContainer,
                 allowEmpty: true,
                 emptyText: '选择数据源...',
-                placeholder: '选择数据源',
+                placeholder: I18n.t('placeholders.selectDatasource'),
                 showStatus: true,
                 showDetails: true,
                 onLoad: () => {
@@ -1027,7 +1027,7 @@ const DiagnosisPage = {
             }
             return session;
         } catch (e) {
-            Toast.error('Failed to create session: ' + e.message);
+            Toast.error(I18n.t('chat.createSessionFailed', { message: e.message }));
             return null;
         }
     },
@@ -1138,7 +1138,7 @@ const DiagnosisPage = {
             this._applyPendingStreamResume();
             this._queueInitialAskIfNeeded(sessionId, messages);
         } catch (e) {
-            console.error('加载失败 messages:', e);
+            console.error('Failed to load messages:', e);
             Toast.error('加载失败 session messages: ' + e.message);
             // Show empty state on error
             const container = DOM.$('#chat-messages');
@@ -1216,7 +1216,7 @@ const DiagnosisPage = {
         if (!text && (!resolvedAttachments || resolvedAttachments.length === 0)) return;
         if (this._isSessionStreaming(this.currentSessionId)) return;
         if (!this.ws || !this.currentSessionId) {
-            Toast.warning('No active session');
+            Toast.warning(I18n.t('chat.noActiveSession'));
             return;
         }
 
@@ -1411,7 +1411,7 @@ const DiagnosisPage = {
             case 'plan_step_status':
                 if (data.status === 'running') {
                     // Reuse thinking indicator to show current tool execution status
-                    const msg = `正在执行 ${data.tool_name}...`;
+                    const msg = `${I18n.translateLegacyText('正在执行')} ${data.tool_name}...`;
                     this._rememberResumeState({
                         thinking_phase: 'tool_execution',
                         thinking_message: msg,
@@ -1689,7 +1689,7 @@ const DiagnosisPage = {
 
     async _clearSession() {
         if (!this.currentSessionId) {
-            Toast.warning('No active session');
+            Toast.warning(I18n.t('chat.noActiveSession'));
             return;
         }
         Modal.show({
@@ -1711,7 +1711,7 @@ const DiagnosisPage = {
                         await this._loadSessions();
                         Toast.success('Session cleared');
                     } catch (e) {
-                        Toast.error('Failed to clear session: ' + e.message);
+                        Toast.error(I18n.t('chat.clearSessionFailed', { message: e.message }));
                     }
                 } }
             ]
@@ -1729,7 +1729,7 @@ const DiagnosisPage = {
 
     async _deleteSession() {
         if (!this.currentSessionId) {
-            Toast.warning('No active session');
+            Toast.warning(I18n.t('chat.noActiveSession'));
             return;
         }
         const sessions = Store.get('chatSessions') || [];
@@ -1747,7 +1747,7 @@ const DiagnosisPage = {
                         await this._loadSessions();
                         Toast.success('Session deleted');
                     } catch (e) {
-                        Toast.error('Failed to delete session: ' + e.message);
+                        Toast.error(I18n.t('chat.deleteSessionFailed', { message: e.message }));
                     }
                 } }
             ]
@@ -1772,7 +1772,7 @@ const DiagnosisPage = {
                         await this._loadSessions();
                         Toast.success('Session deleted');
                     } catch (e) {
-                        Toast.error('Failed to delete session: ' + e.message);
+                        Toast.error(I18n.t('chat.deleteSessionFailed', { message: e.message }));
                     }
                 } }
             ]

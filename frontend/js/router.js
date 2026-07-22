@@ -16,7 +16,11 @@ const Router = {
         window.location.hash = path;
     },
 
-    async _handleRoute() {
+    async refreshCurrentRoute() {
+        await this._handleRoute(true);
+    },
+
+    async _handleRoute(forceRefresh = false) {
         const hash = window.location.hash.slice(1) || 'dashboard';
         const [pathPart, queryString = ''] = hash.split('?');
         const [page, ...params] = pathPart.split('/');
@@ -48,6 +52,7 @@ const Router = {
             this.currentCleanup();
             this.currentCleanup = null;
         }
+        if (window.DirtyState) DirtyState.clear();
 
         Store.set('currentPage', page);
 
@@ -59,7 +64,7 @@ const Router = {
             }
         } else {
             const content = DOM.$('#page-content');
-            content.innerHTML = `<div class="empty-state"><h3>Page not found</h3><p>The page "${Utils.escapeHtml(page)}" does not exist.</p></div>`;
+            content.innerHTML = `<div class="empty-state"><h3>${I18n.t('router.notFoundTitle')}</h3><p>${I18n.t('router.notFoundBody', { page: Utils.escapeHtml(page) })}</p></div>`;
         }
 
         // Update sidebar active state

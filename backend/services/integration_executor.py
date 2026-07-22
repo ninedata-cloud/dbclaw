@@ -74,7 +74,7 @@ class IntegrationContext:
                 return SimpleResponse(response.status, text_content, json_content, response.headers)
 
         except Exception as e:
-            self.logger.error(f"HTTP 请求失败: {str(e)}")
+            self.logger.error(f"HTTP request failed: {str(e)}")
             raise
 
     async def get_system_config(self, key: str) -> Optional[str]:
@@ -224,12 +224,12 @@ class IntegrationExecutor:
             return result
 
         except asyncio.TimeoutError:
-            error_msg = f"执行超时（超过 {self.EXECUTION_TIMEOUT} 秒）"
+            error_msg = f"Execution timed out after {self.EXECUTION_TIMEOUT} seconds"
             self.logger.error(error_msg)
             return {"success": False, "message": error_msg}
 
         except Exception as e:
-            error_msg = f"执行失败: {str(e)}"
+            error_msg = f"Execution failed: {str(e)}"
             self.logger.error(error_msg, exc_info=True)
             return {"success": False, "message": error_msg}
 
@@ -316,12 +316,12 @@ class IntegrationExecutor:
             return metrics
 
         except asyncio.TimeoutError:
-            error_msg = f"执行超时（超过 {self.EXECUTION_TIMEOUT} 秒）"
+            error_msg = f"Execution timed out after {self.EXECUTION_TIMEOUT} seconds"
             self.logger.error(error_msg)
             raise RuntimeError(error_msg)
 
         except Exception as e:
-            error_msg = f"执行失败: {str(e)}"
+            error_msg = f"Execution failed: {str(e)}"
             self.logger.error(error_msg, exc_info=True)
             raise
 

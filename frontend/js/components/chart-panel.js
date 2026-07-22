@@ -142,10 +142,10 @@ const ChartPanel = {
                 valueEl.textContent = chart._valueFormatter(value);
             } else if (Array.isArray(value)) {
                 valueEl.textContent = value.map(v =>
-                    typeof v === 'number' ? v.toLocaleString() : v
+                    typeof v === 'number' ? I18n.formatNumber(v) : v
                 ).join(' / ');
             } else {
-                valueEl.textContent = typeof value === 'number' ? value.toLocaleString() : value;
+                valueEl.textContent = typeof value === 'number' ? I18n.formatNumber(value) : value;
             }
         }
     },
@@ -171,7 +171,7 @@ const ChartPanel = {
             if (typeof chart._valueFormatter === 'function') {
                 valueEl.textContent = chart._valueFormatter(latestValue);
             } else {
-                valueEl.textContent = typeof latestValue === 'number' ? latestValue.toLocaleString() : latestValue;
+                valueEl.textContent = typeof latestValue === 'number' ? I18n.formatNumber(latestValue) : latestValue;
             }
         }
     },
@@ -202,7 +202,7 @@ const ChartPanel = {
                 valueEl.textContent = chart._valueFormatter(latestValues);
             } else {
                 valueEl.textContent = latestValues.map(v =>
-                    typeof v === 'number' ? v.toLocaleString() : v
+                    typeof v === 'number' ? I18n.formatNumber(v) : v
                 ).join(' / ');
             }
         }

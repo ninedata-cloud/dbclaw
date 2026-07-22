@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Literal, Optional
 from datetime import datetime
 from backend.schemas.base import TimestampSerializerMixin
 
@@ -15,6 +15,7 @@ class UserResponse(TimestampSerializerMixin, BaseModel):
     display_name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
+    locale: Literal["zh-CN", "en-US"] = "zh-CN"
     is_active: bool
     is_admin: bool
     created_at: Optional[datetime] = None
@@ -37,6 +38,10 @@ class CurrentUserUpdateRequest(BaseModel):
     display_name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
+
+
+class LocaleUpdateRequest(BaseModel):
+    locale: Literal["zh-CN", "en-US"]
 
 
 class UserCreate(BaseModel):

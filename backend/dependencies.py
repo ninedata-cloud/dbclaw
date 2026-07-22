@@ -7,6 +7,8 @@ from backend.database import get_db
 from backend.models.user import User
 from backend.models.soft_delete import alive_filter
 from backend.services.session_service import SessionService
+from backend.i18n.locale import apply_user_locale
+from backend.i18n.errors import ApiError
 
 
 async def get_current_user(
@@ -22,24 +24,25 @@ async def get_current_user(
         if user is None:
             await SessionService.revoke_session(db, session, "user_not_found")
             await db.commit()
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+            raise ApiError(status.HTTP_401_UNAUTHORIZED, "auth.user_not_found")
+        apply_user_locale(request, getattr(user, "locale", None))
         if not user.is_active:
             await SessionService.revoke_session(db, session, "user_disabled")
             await db.commit()
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
+            raise ApiError(status.HTTP_403_FORBIDDEN, "auth.account_disabled")
         if session.session_version != user.session_version:
             await SessionService.revoke_session(db, session, "session_version_mismatch")
             await db.commit()
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
+            raise ApiError(status.HTTP_401_UNAUTHORIZED, "auth.session_expired")
         if session.id and session.status == "active":
             await SessionService.touch_session(db, session)
             await db.commit()
         return user
 
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    raise ApiError(status.HTTP_401_UNAUTHORIZED, "auth.not_authenticated")
 
 
 async def get_current_admin(user: User = Depends(get_current_user)) -> User:
     if not user.is_admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin privileges required")
+        raise ApiError(status.HTTP_403_FORBIDDEN, "auth.admin_required")
     return user

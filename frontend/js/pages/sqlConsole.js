@@ -136,7 +136,7 @@ const SqlConsolePage = {
             this.datasourceSelector = new DatasourceSelector({
                 container: datasourceContainer,
                 allowEmpty: false,
-                placeholder: '选择数据源',
+                placeholder: I18n.t('placeholders.selectDatasource'),
                 showStatus: true,
                 showDetails: true,
                 onLoad: (loadedDatasources) => {

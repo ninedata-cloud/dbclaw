@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from backend.utils.security import hash_password
 from backend.dependencies import get_current_admin
 from backend.services.session_service import SessionService
+from backend.i18n.errors import ApiError
 
 router = APIRouter(prefix="/api/users", tags=["users"], dependencies=[Depends(get_current_admin)])
 
@@ -29,7 +30,7 @@ async def list_user(db: AsyncSession = Depends(get_db)):
 async def create_user(data: UserCreate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.username == data.username, alive_filter(User)))
     if result.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="用户名已存在")
+        raise ApiError(400, "auth.username_exists")
 
     user = User(
         username=data.username,
@@ -49,7 +50,7 @@ async def create_user(data: UserCreate, db: AsyncSession = Depends(get_db)):
 async def update_user(user_id: int, data: UserUpdate, db: AsyncSession = Depends(get_db)):
     user = await get_alive_by_id(db, User, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+        raise ApiError(404, "auth.user_not_found")
 
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
@@ -67,11 +68,11 @@ async def delete_user(
     current_admin: User = Depends(get_current_admin),
 ):
     if current_admin.id == user_id:
-        raise HTTPException(status_code=400, detail="不能删除自己")
+        raise ApiError(400, "auth.cannot_delete_self")
 
     user = await get_alive_by_id(db, User, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+        raise ApiError(404, "auth.user_not_found")
 
     user.soft_delete(current_admin.id)
     user.session_version += 1
@@ -89,9 +90,9 @@ async def reset_password(
 ):
     user = await get_alive_by_id(db, User, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+        raise ApiError(404, "auth.user_not_found")
     if user.username == "admin" and current_admin.id != user.id:
-        raise HTTPException(status_code=403, detail="admin 密码只能由本人修改")
+        raise ApiError(403, "auth.admin_password_self_only")
 
     user.password_hash = hash_password(data.new_password)
     user.password_changed_at = datetime.now(timezone.utc)
@@ -108,11 +109,11 @@ async def toggle_status(
     current_admin: User = Depends(get_current_admin),
 ):
     if current_admin.id == user_id:
-        raise HTTPException(status_code=400, detail="Cannot change your own status")
+        raise ApiError(400, "auth.cannot_change_own_status")
 
     user = await get_alive_by_id(db, User, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+        raise ApiError(404, "auth.user_not_found")
 
     user.is_active = not user.is_active
     if not user.is_active:

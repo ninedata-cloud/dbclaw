@@ -18,13 +18,13 @@ const HostTerminal = {
                 <div class="host-terminal-header">
                     <div class="host-terminal-title">
                         <i data-lucide="terminal"></i>
-                        终端会话
+                        ${I18n.t('hostDetail.terminalView.title')}
                     </div>
                     <div class="host-terminal-actions">
-                        <button class="btn btn-sm btn-secondary" id="terminal-clear" title="清屏">
+                        <button class="btn btn-sm btn-secondary" id="terminal-clear" title="${I18n.t('hostDetail.terminalView.clear')}" aria-label="${I18n.t('hostDetail.terminalView.clear')}">
                             <i data-lucide="trash-2"></i>
                         </button>
-                        <button class="btn btn-sm btn-secondary" id="terminal-reconnect" title="重新连接">
+                        <button class="btn btn-sm btn-secondary" id="terminal-reconnect" title="${I18n.t('hostDetail.terminalView.reconnect')}" aria-label="${I18n.t('hostDetail.terminalView.reconnect')}">
                             <i data-lucide="refresh-cw"></i>
                         </button>
                     </div>
@@ -123,7 +123,7 @@ const HostTerminal = {
         if (!this.term) return;
 
         // 显示连接提示
-        this.term.writeln('\x1b[1;32m正在连接到主机...\x1b[0m');
+        this.term.writeln(`\x1b[1;32m${I18n.t('hostDetail.terminalView.connecting')}\x1b[0m`);
 
         // 建立 WebSocket 连接
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -132,7 +132,7 @@ const HostTerminal = {
         this.ws = new WebSocket(wsUrl);
 
         this.ws.onopen = () => {
-            this.term.writeln('\x1b[1;32m连接成功！\x1b[0m\r\n');
+            this.term.writeln(`\x1b[1;32m${I18n.t('hostDetail.terminalView.connected')}\x1b[0m\r\n`);
 
             // 发送初始终端大小
             if (this.fitAddon) {
@@ -147,7 +147,7 @@ const HostTerminal = {
                 if (msg.type === 'output') {
                     this.term.write(msg.data);
                 } else if (msg.type === 'error') {
-                    this.term.writeln(`\r\n\x1b[1;31m错误: ${msg.message}\x1b[0m\r\n`);
+                    this.term.writeln(`\r\n\x1b[1;31m${I18n.t('hostDetail.terminalView.error', { message: msg.message })}\x1b[0m\r\n`);
                 }
             } catch (e) {
                 console.error('Failed to parse WebSocket message:', e);
@@ -156,11 +156,11 @@ const HostTerminal = {
 
         this.ws.onerror = (error) => {
             console.error('WebSocket error:', error);
-            this.term.writeln('\r\n\x1b[1;31m连接错误\x1b[0m\r\n');
+            this.term.writeln(`\r\n\x1b[1;31m${I18n.t('hostDetail.terminalView.connectionError')}\x1b[0m\r\n`);
         };
 
         this.ws.onclose = () => {
-            this.term.writeln('\r\n\x1b[1;33m连接已断开\x1b[0m\r\n');
+            this.term.writeln(`\r\n\x1b[1;33m${I18n.t('hostDetail.terminalView.disconnected')}\x1b[0m\r\n`);
         };
     },
 

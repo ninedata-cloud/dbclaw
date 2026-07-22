@@ -115,7 +115,7 @@ async def run(context):
     run = await ScheduledTaskService._execute_task(db, task, "manual")
 
     assert run.status == "failed"
-    assert "执行超时" in run.error_message
+    assert "Execution timed out" in run.error_message
     assert task.last_status == "failed"
 
 

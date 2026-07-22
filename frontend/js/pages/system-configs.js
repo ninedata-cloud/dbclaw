@@ -17,7 +17,7 @@ const SystemConfigsPage = {
     _buildHeaderActions(categories) {
         const filtersContainer = DOM.el('div', { className: 'dashboard-filters' });
         filtersContainer.innerHTML = `
-            <input type="text" id="search-input" class="filter-input" placeholder="搜索参数..." style="min-width:180px;">
+            <input type="text" id="search-input" class="filter-input" placeholder="${I18n.t('placeholders.searchParams')}" style="min-width:180px;">
             <select id="category-filter" class="filter-select">
                 <option value="">所有分类</option>
                 ${categories.map(cat => `<option value="${cat}">${cat}</option>`).join('')}
@@ -109,7 +109,7 @@ const SystemConfigsPage = {
         this.filteredConfigs = this.configs.filter(config => {
             const matchesSearch = !searchTerm || 
                 config.key.toLowerCase().includes(searchTerm) ||
-                (config.description && config.description.toLowerCase().includes(searchTerm));
+                (this._localizedDescription(config).toLowerCase().includes(searchTerm));
             const matchesCategory = !category || config.category === category;
             return matchesSearch && matchesCategory;
         });
@@ -154,7 +154,7 @@ const SystemConfigsPage = {
         this.filteredConfigs.sort((a, b) => {
             const left = this._getSortableValue(a, key);
             const right = this._getSortableValue(b, key);
-            return left.localeCompare(right, 'zh-Hans-CN', { numeric: true }) * multiplier;
+            return left.localeCompare(right, I18n.getLocale(), { numeric: true }) * multiplier;
         });
     },
 
@@ -206,7 +206,7 @@ const SystemConfigsPage = {
                 </td>
                 <td><span class="badge badge-type">${config.value_type}</span></td>
                 <td>${config.category || '-'}</td>
-                <td>${config.description || '-'}</td>
+                <td>${Utils.escapeHtml(this._localizedDescription(config) || '-')}</td>
                 <td class="actions">
                     <button class="btn btn-sm" onclick="SystemConfigsPage.showEditModal(${config.id})" title="编辑">
                         <i data-lucide="edit"></i>
@@ -217,6 +217,10 @@ const SystemConfigsPage = {
                 </td>
             </tr>
         `).join('');
+    },
+
+    _localizedDescription(config) {
+        return I18n.configDescription(config.key, config.description || '');
     },
 
     _maskValue(value) {
@@ -313,7 +317,7 @@ const SystemConfigsPage = {
                     <div class="form-group">
                         <label for="config-category">分类</label>
                         <input type="text" id="config-category" value="${config.category || ''}"
-                               placeholder="例如: external_api, system">
+                               placeholder="${I18n.t('placeholders.configCategories')}">
                     </div>
                     <div class="form-group">
                         <label for="config-description">描述</label>
@@ -337,7 +341,7 @@ const SystemConfigsPage = {
     },
 
     renderValueInput(value, type, isEncryptedEdit = false) {
-        const placeholder = isEncryptedEdit ? '留空则保持原值不变' : '';
+        const placeholder = isEncryptedEdit ? I18n.t('placeholders.keepOriginal') : '';
         switch (type) {
             case 'string':
                 return `

@@ -9,25 +9,103 @@ class IntegrationsPage {
         this.botBindings = [];
     }
 
+    _t(key, params = {}) {
+        return I18n.t(`integrations.${key}`, params);
+    }
+
+    _builtinKey(integrationId) {
+        return {
+            builtin_feishu_webhook: 'feishuWebhook',
+            builtin_dingtalk_webhook: 'dingtalkWebhook',
+            builtin_email: 'email',
+            builtin_generic_webhook: 'genericWebhook',
+            builtin_aliyun_rds: 'aliyunRds',
+            builtin_huaweicloud_rds: 'huaweiRds',
+            builtin_tencentcloud_rds: 'tencentRds',
+            builtin_feishu_bot: 'feishuBot',
+            builtin_dingtalk_bot: 'dingtalkBot',
+            builtin_weixin_bot: 'weixinBot',
+        }[integrationId] || null;
+    }
+
+    _enterpriseWechatKey(integration) {
+        if (!integration) return null;
+        // Integration `code` contains executable source, while binding `code`
+        // is its stable identifier. Never classify an integration by source text.
+        const identifier = String(integration.integration_id || integration.code || '').toLowerCase();
+        const name = String(integration.name || '');
+        const isEnterpriseWechat = /(?:wecom|wechat[_-]?work|wework|qyweixin|enterprise[_-]?wechat)/.test(identifier)
+            || /企业微信|企微/.test(name);
+        if (!isEnterpriseWechat) return null;
+        return integration.integration_type === 'bot' || /bot|机器人/.test(`${identifier} ${name}`)
+            ? 'enterpriseWechatBot'
+            : 'enterpriseWechatWebhook';
+    }
+
+    _knownIntegrationKey(integration) {
+        return this._builtinKey(integration?.integration_id) || this._enterpriseWechatKey(integration);
+    }
+
+    _displayName(integration) {
+        const knownKey = this._knownIntegrationKey(integration);
+        return knownKey ? this._t(`builtinNames.${knownKey}`) : (integration?.name || '');
+    }
+
     _displayDescription(integration) {
-        if (integration?.integration_id === 'builtin_aliyun_rds') {
-            return '从阿里云 RDS API 采集 MySQL、PostgreSQL、SQL Server 指标，AccessKey 从系统配置中读取';
+        const knownKey = this._knownIntegrationKey(integration);
+        return knownKey
+            ? this._t(`builtinDescriptions.${knownKey}`)
+            : (integration?.description || this._t('noDescription'));
+    }
+
+    _schemaPropertyText(integration, key, prop, field) {
+        const metadata = {
+            builtin_feishu_webhook: {
+                webhook_url: { description: 'feishuWebhook' },
+                secret: { title: 'secretOptional', description: 'feishuSecret' },
+            },
+            builtin_dingtalk_webhook: {
+                webhook_url: { description: 'dingtalkWebhook' },
+                secret: { title: 'secret', description: 'dingtalkSecret' },
+            },
+            builtin_email: {
+                to: { title: 'recipient', description: 'recipientHelp' },
+                cc: { title: 'ccOptional', description: 'ccHelp' },
+            },
+            builtin_generic_webhook: {
+                webhook_url: { description: 'targetWebhook' }, method: { title: 'httpMethod' },
+                auth_type: { title: 'authMethod' }, auth_token: { title: 'authTokenOptional' },
+            },
+            builtin_aliyun_rds: { region_id: { title: 'regionId', description: 'aliyunRegion' } },
+            builtin_huaweicloud_rds: {
+                region_id: { title: 'areaId', description: 'huaweiRegion' },
+                project_id: { title: 'projectIdOptional', description: 'projectHelp' },
+            },
+            builtin_tencentcloud_rds: {
+                region_id: { title: 'region', description: 'tencentRegion' },
+                mysql_instance_type: { title: 'mysqlInstanceType', description: 'mysqlInstanceHelp' },
+            },
+        };
+        const localeKey = metadata[integration?.integration_id]?.[key]?.[field];
+        if (localeKey) return this._t(`schemaFields.${localeKey}`);
+        const fallback = field === 'title' ? (prop.title || key) : (prop.description || '');
+        return I18n.translateLegacyText(fallback);
+    }
+
+    _localizedSchema(integration) {
+        const schema = JSON.parse(JSON.stringify(integration?.config_schema || {}));
+        for (const [key, prop] of Object.entries(schema.properties || {})) {
+            if (prop.title) prop.title = this._schemaPropertyText(integration, key, prop, 'title');
+            if (prop.description) prop.description = this._schemaPropertyText(integration, key, prop, 'description');
         }
-        if (integration?.integration_id === 'builtin_huaweicloud_rds') {
-            return '从华为云 CES API 采集 RDS 指标，AK/SK 从系统参数中读取';
-        }
-        if (integration?.integration_id === 'builtin_tencentcloud_rds') {
-            return '从腾讯云可观测平台采集 MySQL、PostgreSQL、SQL Server、TDSQL-C MySQL 指标，SecretId/SecretKey 从系统参数读取';
-        }
-        return integration?.description || '暂无描述';
+        return schema;
     }
 
     _renderIntegrationHint(integration) {
         if (integration?.integration_id === 'builtin_aliyun_rds') {
             return `
                 <div class="integration-modal-note">
-                    当前支持阿里云 RDS MySQL、PostgreSQL、SQL Server。
-                    测试前请确认数据源已配置 <code>external_instance_id</code>，并且数据库类型与阿里云实例引擎一致。
+                    ${this._t('hints.aliyun')}
                 </div>
             `;
         }
@@ -35,9 +113,7 @@ class IntegrationsPage {
         if (integration?.integration_id === 'builtin_huaweicloud_rds') {
             return `
                 <div class="integration-modal-note">
-                    测试前请确认数据源已配置 <code>external_instance_id</code>。
-                    其中 <code>region_id</code> 用于定位华为云 CES/IAM 接口端点，不能仅靠实例 ID 自动推断；
-                    <code>AK/SK</code> 固定从系统参数读取，测试时无需填写。
+                    ${this._t('hints.huawei')}
                 </div>
             `;
         }
@@ -45,10 +121,7 @@ class IntegrationsPage {
         if (integration?.integration_id === 'builtin_tencentcloud_rds') {
             return `
                 <div class="integration-modal-note">
-                    测试前请确认数据源已配置 <code>external_instance_id</code>，并且实例 ID 与数据库类型匹配：
-                    MySQL/TDSQL-C 使用实例 ID，PostgreSQL/SQL Server 通常使用监控维度里的 <code>resourceId</code>。
-                    <code>region_id</code> 建议填写标准地域（如 <code>ap-guangzhou</code>），也兼容腾讯云监控文档里的地域缩写/数字 ID（如 <code>gz</code> / <code>1</code>）。
-                    <code>SecretId</code>、<code>SecretKey</code> 固定从系统参数读取，无需在测试或数据源参数中填写。
+                    ${this._t('hints.tencent')}
                 </div>
             `;
         }
@@ -66,22 +139,18 @@ class IntegrationsPage {
         const codeNote = integration?.integration_id === 'builtin_feishu_bot'
             ? `
                 <div class="integration-modal-note">
-                    当前默认使用飞书长连接模式。
-                    直接修改代码顶部的 <code>APP_ID</code>、<code>APP_SECRET</code> 即可启用；
-                    <code>SIGNING_SECRET</code> 仅在保留公网事件回调模式时才需要。
+                    ${this._t('notes.feishu')}
                 </div>
             `
             : integration?.integration_id === 'builtin_dingtalk_bot'
                 ? `
                 <div class="integration-modal-note">
-                    当前默认使用钉钉 Stream Mode 长连接。
-                    请在系统参数中配置 <code>dingtalk_client_id</code>、<code>dingtalk_client_secret</code>；
-                    保存并重启后端后，机器人会自动建立长连接收消息。
+                    ${this._t('notes.dingtalk')}
                 </div>
             `
             : `
                 <div class="integration-modal-note integration-editor-note">
-                    代码区支持直接粘贴完整 Python 模板。入站指标需要实现 <code>fetch_metrics</code>，出站通知需要实现 <code>send_notification</code>。
+                    ${this._t('notes.generic')}
                 </div>
             `;
 
@@ -89,35 +158,35 @@ class IntegrationsPage {
             <form id="${formId}" class="integration-modal-form integration-editor-form">
                 <div class="integration-editor-meta">
                     <div class="form-group">
-                        <label>名称 *</label>
+                        <label>${this._t('name')}</label>
                         <input type="text" id="integration-name" class="form-input" value="${this.escapeHtml(integration?.name || '')}" required>
                     </div>
                     ${isEdit ? '' : `
                         <div class="form-group">
-                            <label>类型 *</label>
+                            <label>${this._t('type')}</label>
                             <select id="integration-type" class="form-select" required>
-                                <option value="">请选择</option>
-                                <option value="outbound_notification">出站通知</option>
-                                <option value="inbound_metric">入站指标</option>
-                                <option value="bot">机器人</option>
+                                <option value="">${this._t('select')}</option>
+                                <option value="outbound_notification">${this._t('typeOutbound')}</option>
+                                <option value="inbound_metric">${this._t('typeInbound')}</option>
+                                <option value="bot">${this._t('typeBot')}</option>
                             </select>
                         </div>
                     `}
                     <div class="form-group integration-editor-meta-full">
-                        <label>描述</label>
+                        <label>${this._t('description')}</label>
                         <textarea id="integration-description" class="form-textarea integration-editor-description">${this.escapeHtml(description)}</textarea>
                     </div>
                     ${isEdit ? '' : `
                         <div class="form-group">
-                            <label>分类 *</label>
+                            <label>${this._t('category')}</label>
                             <select id="integration-category" class="form-select" required>
-                                <option value="">请选择</option>
+                                <option value="">${this._t('select')}</option>
                                 <option value="webhook">Webhook</option>
                                 <option value="email">Email</option>
                                 <option value="sms">SMS</option>
-                                <option value="im">即时通讯</option>
-                                <option value="monitoring">监控系统</option>
-                                <option value="custom">自定义</option>
+                                <option value="im">${this._t('categoryIm')}</option>
+                                <option value="monitoring">${this._t('categoryMonitoringSystem')}</option>
+                                <option value="custom">${this._t('categoryCustom')}</option>
                             </select>
                         </div>
                     `}
@@ -125,7 +194,7 @@ class IntegrationsPage {
                         <div class="form-group integration-editor-toggle">
                             <label class="integration-checkbox-row">
                                 <input type="checkbox" id="integration-enabled" ${enabledChecked}>
-                                启用此集成
+                                ${this._t('enable')}
                             </label>
                         </div>
                     ` : ''}
@@ -135,8 +204,8 @@ class IntegrationsPage {
                     <section class="integration-editor-panel">
                         <div class="integration-editor-panel-header">
                             <div>
-                                <label>配置 Schema (JSON)</label>
-                                <p>定义测试和运行时参数。</p>
+                                <label>${this._t('schema')}</label>
+                                <p>${this._t('schemaHint')}</p>
                             </div>
                         </div>
                         <textarea
@@ -150,8 +219,8 @@ class IntegrationsPage {
                     <section class="integration-editor-panel integration-editor-panel-code">
                         <div class="integration-editor-panel-header">
                             <div>
-                                <label>代码 *</label>
-                                <p>建议直接在这里维护完整实现，方便查看和编辑。</p>
+                                <label>${this._t('code')}</label>
+                                <p>${this._t('codeHint')}</p>
                             </div>
                         </div>
                         ${codeNote}
@@ -171,13 +240,13 @@ class IntegrationsPage {
     _buildHeaderActions() {
         const loadBtn = DOM.el('button', {
             className: 'btn btn-secondary',
-            innerHTML: '<i data-lucide="refresh-cw"></i> 加载内置模板',
+            innerHTML: `<i data-lucide="refresh-cw"></i> ${this._t('loadBuiltins')}`,
             onClick: () => this.loadBuiltinTemplates()
         });
 
         const createBtn = DOM.el('button', {
             className: 'btn btn-primary',
-            innerHTML: '<i data-lucide="plus"></i> 创建集成',
+            innerHTML: `<i data-lucide="plus"></i> ${this._t('create')}`,
             onClick: () => this.showCreateIntegrationModal()
         });
 
@@ -187,52 +256,55 @@ class IntegrationsPage {
     _typeMeta(type) {
         const map = {
             outbound_notification: {
-                label: '出站通知',
-                description: '向外部系统发送告警、恢复和执行结果',
+                label: this._t('typeOutbound'),
+                description: this._t('typeOutboundDesc'),
             },
             inbound_metric: {
-                label: '入站指标',
-                description: '从外部平台采集指标并写入监控链路',
+                label: this._t('typeInbound'),
+                description: this._t('typeInboundDesc'),
             },
             bot: {
-                label: '机器人',
-                description: '通过 IM 机器人接收消息并触发自动化能力',
+                label: this._t('typeBot'),
+                description: this._t('typeBotDesc'),
             }
         };
         return map[type] || {
-            label: type || '未分类',
-            description: '自定义集成能力',
+            label: type || this._t('uncategorized'),
+            description: this._t('customCapability'),
         };
     }
 
     _categoryMeta(category) {
         const map = {
             webhook: { label: 'Webhook', icon: 'link-2' },
-            email: { label: '邮件', icon: 'mail' },
-            sms: { label: '短信', icon: 'smartphone' },
-            im: { label: '即时通讯', icon: 'messages-square' },
-            monitoring: { label: '监控', icon: 'activity' },
-            custom: { label: '自定义', icon: 'blocks' }
+            email: { label: this._t('categoryEmail'), icon: 'mail' },
+            sms: { label: this._t('categorySms'), icon: 'smartphone' },
+            im: { label: this._t('categoryIm'), icon: 'messages-square' },
+            monitoring: { label: this._t('categoryMonitoring'), icon: 'activity' },
+            custom: { label: this._t('categoryCustom'), icon: 'blocks' }
         };
-        return map[category] || { label: category || '其他', icon: 'plug-zap' };
+        return map[category] || { label: category || this._t('categoryOther'), icon: 'plug-zap' };
     }
 
     _bindingMeta(binding) {
+        if (this._enterpriseWechatKey({ ...binding, integration_type: 'bot' })) {
+            return { icon: 'message-circle-more', label: this._t('enterpriseWechatBot') };
+        }
         const map = {
-            weixin_bot: { icon: 'message-circle-more', label: '微信机器人' },
-            feishu_bot: { icon: 'send', label: '飞书机器人' },
-            dingtalk_bot: { icon: 'message-square-dot', label: '钉钉机器人' }
+            weixin_bot: { icon: 'message-circle-more', label: this._t('weixinBot') },
+            feishu_bot: { icon: 'send', label: this._t('feishuBot') },
+            dingtalk_bot: { icon: 'message-square-dot', label: this._t('dingtalkBot') }
         };
-        return map[binding?.code] || { icon: 'bot', label: binding?.name || '机器人' };
+        return map[binding?.code] || { icon: 'bot', label: binding?.name || this._t('typeBot') };
     }
 
     _bindingStatusMeta(status) {
         const map = {
-            not_ready: { label: '未配置', className: 'idle' },
-            pending: { label: '等待扫码', className: 'warning' },
-            configured: { label: '已配置', className: 'warning' },
-            confirmed: { label: '运行中', className: 'success' },
-            error: { label: '失败', className: 'danger' }
+            not_ready: { label: this._t('statusNotReady'), className: 'idle' },
+            pending: { label: this._t('statusPending'), className: 'warning' },
+            configured: { label: this._t('statusConfigured'), className: 'warning' },
+            confirmed: { label: this._t('statusRunning'), className: 'success' },
+            error: { label: this._t('statusFailed'), className: 'danger' }
         };
         return map[status] || map.not_ready;
     }
@@ -248,8 +320,8 @@ class IntegrationsPage {
 
     _integrationStatusMeta(enabled) {
         return enabled
-            ? { label: '已启用', className: 'success' }
-            : { label: '已禁用', className: 'muted' };
+            ? { label: this._t('statusEnabled'), className: 'success' }
+            : { label: this._t('statusDisabled'), className: 'muted' };
     }
 
     async init() {
@@ -259,7 +331,7 @@ class IntegrationsPage {
     }
 
     render() {
-        Header.render('外部集成管理', this._buildHeaderActions());
+        Header.render(this._t('title'), this._buildHeaderActions());
 
         const content = document.getElementById('page-content');
         content.innerHTML = `
@@ -285,7 +357,7 @@ class IntegrationsPage {
             this.integrations = response;
             this.renderIntegrations();
         } catch (error) {
-            Toast.error('加载集成失败: ' + error.message);
+            Toast.error(this._t('loadFailed', { message: error.message }));
         }
     }
 
@@ -298,8 +370,8 @@ class IntegrationsPage {
                     <div class="integrations-empty-icon">
                         <i data-lucide="package-search"></i>
                     </div>
-                    <h3>暂无集成</h3>
-                    <p>点击“加载内置模板”或“创建集成”开始使用</p>
+                    <h3>${this._t('emptyTitle')}</h3>
+                    <p>${this._t('emptyHint')}</p>
                 </div>
             `;
             DOM.createIcons();
@@ -307,9 +379,9 @@ class IntegrationsPage {
         }
 
         const groups = {
-            outbound_notification: { label: '出站通知', items: [] },
-            inbound_metric: { label: '入站指标', items: [] },
-            bot: { label: '机器人', items: [] }
+            outbound_notification: { items: [] },
+            inbound_metric: { items: [] },
+            bot: { items: [] }
         };
 
         this.integrations.forEach(integration => {
@@ -356,12 +428,12 @@ class IntegrationsPage {
             : null;
         const botBindingMeta = botBinding ? this._bindingMeta(botBinding) : null;
         const configureBotButton = isWeixinBot
-            ? `<button class="btn btn-sm btn-secondary integration-config-btn" onclick="integrationsPage.showWeixinBotModal()">配置机器人</button>`
+            ? `<button class="btn btn-sm btn-secondary integration-config-btn" onclick="integrationsPage.showWeixinBotModal()">${this._t('configureBot')}</button>`
             : '';
         const botStatusHtml = botBinding
             ? `
                 <div class="integration-binding-meta">
-                    <span class="integration-chip">${this.escapeHtml(botBindingMeta.label)} 绑定状态</span>
+                    <span class="integration-chip">${this._t('bindingStatus', { name: this.escapeHtml(botBindingMeta.label) })}</span>
                     <span class="integration-status-chip ${botStatusMeta.className}">${botStatusMeta.label}</span>
                     ${botRawParams.last_error ? `<span class="integration-binding-error">${this.escapeHtml(botRawParams.last_error)}</span>` : ''}
                 </div>
@@ -376,8 +448,8 @@ class IntegrationsPage {
                             <div class="integration-card-icon">
                                 <i data-lucide="${categoryMeta.icon}"></i>
                             </div>
-                            <h4>${this.escapeHtml(integration.name)}</h4>
-                            ${integration.is_builtin ? '<span class="integration-card-badge">内置</span>' : ''}
+                            <h4>${this.escapeHtml(this._displayName(integration))}</h4>
+                            ${integration.is_builtin ? `<span class="integration-card-badge">${this._t('builtin')}</span>` : ''}
                         </div>
                         <p class="integration-card-description">${this.escapeHtml(this._displayDescription(integration))}</p>
                     </div>
@@ -392,22 +464,22 @@ class IntegrationsPage {
                         ${statusMeta.label}
                     </span>
                     <div class="integration-card-actions">
-                        <button class="integration-action-btn" onclick="integrationsPage.viewIntegration(${integration.id})" title="查看详情">
+                        <button class="integration-action-btn" onclick="integrationsPage.viewIntegration(${integration.id})" title="${this._t('viewDetails')}">
                             <i data-lucide="eye"></i>
                         </button>
-                        <button class="integration-action-btn" onclick="integrationsPage.testIntegration(${integration.id})" title="测试">
+                        <button class="integration-action-btn" onclick="integrationsPage.testIntegration(${integration.id})" title="${this._t('test')}">
                             <i data-lucide="flask-conical"></i>
                         </button>
                         ${configureBotButton}
                         ${integration.is_builtin ? `
-                            <button class="integration-action-btn" onclick="integrationsPage.editIntegration(${integration.id})" title="编辑">
+                            <button class="integration-action-btn" onclick="integrationsPage.editIntegration(${integration.id})" title="${this._t('edit')}">
                                 <i data-lucide="pencil"></i>
                             </button>
                         ` : `
-                            <button class="integration-action-btn" onclick="integrationsPage.editIntegration(${integration.id})" title="编辑">
+                            <button class="integration-action-btn" onclick="integrationsPage.editIntegration(${integration.id})" title="${this._t('edit')}">
                                 <i data-lucide="pencil"></i>
                             </button>
-                            <button class="integration-action-btn danger" onclick="integrationsPage.deleteIntegration(${integration.id})" title="删除">
+                            <button class="integration-action-btn danger" onclick="integrationsPage.deleteIntegration(${integration.id})" title="${this._t('delete')}">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         `}
@@ -439,41 +511,41 @@ class IntegrationsPage {
         const statusMeta = this._integrationStatusMeta(integration.enabled);
 
         Modal.show({
-            title: integration.name,
+            title: this._displayName(integration),
             content: `
                 <div class="integration-modal-stack">
                     <div class="integration-detail-grid">
                         <div class="integration-detail-item">
-                            <div class="integration-detail-label">状态</div>
+                            <div class="integration-detail-label">${this._t('detailStatus')}</div>
                             <div class="integration-detail-value">
                                 <span class="integration-status-chip ${statusMeta.className}">${statusMeta.label}</span>
                             </div>
                         </div>
                         <div class="integration-detail-item">
-                            <div class="integration-detail-label">类型</div>
+                            <div class="integration-detail-label">${this._t('detailType')}</div>
                             <div class="integration-detail-value">${typeMeta.label}</div>
                         </div>
                         <div class="integration-detail-item">
-                            <div class="integration-detail-label">分类</div>
+                            <div class="integration-detail-label">${this._t('detailCategory')}</div>
                             <div class="integration-detail-value">${categoryMeta.label}</div>
                         </div>
                         <div class="integration-detail-item">
-                            <div class="integration-detail-label">描述</div>
+                            <div class="integration-detail-label">${this._t('detailDescription')}</div>
                             <div class="integration-detail-value">${this.escapeHtml(this._displayDescription(integration))}</div>
                         </div>
                     </div>
                     <div class="integration-detail-block">
-                        <div class="integration-detail-label">配置 Schema</div>
-                        <pre class="integration-code-block"><code>${this.escapeHtml(JSON.stringify(integration.config_schema || {}, null, 2))}</code></pre>
+                        <div class="integration-detail-label">${this._t('detailSchema')}</div>
+                        <pre class="integration-code-block"><code>${this.escapeHtml(JSON.stringify(this._localizedSchema(integration), null, 2))}</code></pre>
                     </div>
                     <div class="integration-detail-block">
-                        <div class="integration-detail-label">代码</div>
+                        <div class="integration-detail-label">${this._t('detailCode')}</div>
                         <pre class="integration-code-block integration-code-block-lg"><code>${this.escapeHtml(integration.code)}</code></pre>
                     </div>
                 </div>
             `,
             buttons: [
-                { text: '关闭', variant: 'secondary', onClick: () => Modal.hide() }
+                { text: this._t('close'), variant: 'secondary', onClick: () => Modal.hide() }
             ]
         });
     }
@@ -488,9 +560,9 @@ class IntegrationsPage {
                 const datasources = await API.get('/api/datasources');
                 datasourcesHtml = `
                     <div class="form-group">
-                        <label>测试数据源</label>
+                        <label>${this._t('testDatasource')}</label>
                         <select id="test-datasource-id" class="form-select">
-                            <option value="">请选择</option>
+                            <option value="">${this._t('select')}</option>
                             ${datasources.map(ds => `
                                 <option value="${ds.id}">${this.escapeHtml(ds.name)} (${this.escapeHtml(ds.db_type)})</option>
                             `).join('')}
@@ -500,7 +572,7 @@ class IntegrationsPage {
             } catch (error) {
                 datasourcesHtml = `
                     <div class="integration-modal-note danger">
-                        加载数据源失败: ${this.escapeHtml(error.message)}
+                        ${this._t('loadDatasourceFailed', { message: this.escapeHtml(error.message) })}
                     </div>
                 `;
             }
@@ -515,29 +587,29 @@ class IntegrationsPage {
                 const defaultValue = prop.format === 'password' ? '' : (prop.default ?? '');
                 paramsHtml += `
                     <div class="form-group">
-                        <label>${this.escapeHtml(prop.title || key)} ${required ? '*' : ''}</label>
-                        <input type="${prop.format === 'password' ? 'password' : 'text'}" class="form-input" id="test-param-${key}" value="${this.escapeHtml(String(defaultValue))}" placeholder="${this.escapeHtml(prop.description || '')}" ${required}>
+                        <label>${this.escapeHtml(this._schemaPropertyText(integration, key, prop, 'title'))} ${required ? '*' : ''}</label>
+                        <input type="${prop.format === 'password' ? 'password' : 'text'}" class="form-input" id="test-param-${key}" value="${this.escapeHtml(String(defaultValue))}" placeholder="${this.escapeHtml(this._schemaPropertyText(integration, key, prop, 'description'))}" ${required}>
                     </div>
                 `;
             }
         }
 
         Modal.show({
-            title: `测试 ${integration.name}`,
+            title: this._t('testTitle', { name: this._displayName(integration) }),
             content: `
                 <form id="test-integration-form" class="integration-modal-form">
                     ${this._renderIntegrationHint(integration)}
                     ${datasourcesHtml || ''}
-                    ${paramsHtml || '<div class="integration-modal-note">此集成无需额外参数，可以直接执行测试。</div>'}
+                    ${paramsHtml || `<div class="integration-modal-note">${this._t('noTestParams')}</div>`}
                 </form>
                 <div id="test-result" class="integration-test-result">
-                    <h3 class="integration-test-result-title">测试结果</h3>
+                    <h3 class="integration-test-result-title">${this._t('testResult')}</h3>
                     <pre id="test-result-content" class="integration-code-block"></pre>
                 </div>
             `,
             buttons: [
-                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
-                { text: '执行测试', variant: 'primary', onClick: () => this.executeTest(id) }
+                { text: this._t('cancel'), variant: 'secondary', onClick: () => Modal.hide() },
+                { text: this._t('runTest'), variant: 'primary', onClick: () => this.executeTest(id) }
             ],
             size: 'large'
         });
@@ -573,22 +645,22 @@ class IntegrationsPage {
             const response = await API.post(`/api/integrations/${id}/test`, testData);
             document.getElementById('test-result').classList.add('show');
             document.getElementById('test-result-content').textContent = JSON.stringify(response, null, 2);
-            if (response.success) Toast.success('测试成功');
-            else Toast.error('测试失败: ' + response.message);
+            if (response.success) Toast.success(this._t('testSucceeded'));
+            else Toast.error(this._t('testFailed', { message: response.message }));
         } catch (error) {
-            Toast.error('测试失败: ' + error.message);
+            Toast.error(this._t('testFailed', { message: error.message }));
         }
     }
 
 
     async deleteIntegration(id) {
-        if (!confirm('确定要删除这个集成吗？')) return;
+        if (!confirm(this._t('deleteConfirm'))) return;
         try {
             await API.delete(`/api/integrations/${id}`);
-            Toast.success('删除成功');
+            Toast.success(this._t('deleted'));
             await this.loadIntegrations();
         } catch (error) {
-            Toast.error('删除失败: ' + error.message);
+            Toast.error(this._t('deleteFailed', { message: error.message }));
         }
     }
 
@@ -608,11 +680,11 @@ class IntegrationsPage {
         this.currentIntegration = integration;
 
         Modal.show({
-            title: '编辑集成',
+            title: this._t('editTitle'),
             content: this._renderIntegrationEditorForm(integration),
             buttons: [
-                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
-                { text: '保存', variant: 'primary', onClick: () => this.updateIntegration() }
+                { text: this._t('cancel'), variant: 'secondary', onClick: () => Modal.hide() },
+                { text: this._t('save'), variant: 'primary', onClick: () => this.updateIntegration() }
             ],
             size: 'xlarge',
             width: 'min(1240px, 94vw)',
@@ -630,7 +702,7 @@ class IntegrationsPage {
         const enabled = document.getElementById('integration-enabled').checked;
 
         if (!name || !code) {
-            Toast.error('请填写必填项');
+            Toast.error(this._t('required'));
             return;
         }
 
@@ -639,7 +711,7 @@ class IntegrationsPage {
             try {
                 configSchema = JSON.parse(configSchemaText);
             } catch (error) {
-                Toast.error('配置 Schema 格式错误: ' + error.message);
+                Toast.error(this._t('invalidSchema', { message: error.message }));
                 return;
             }
         }
@@ -652,31 +724,31 @@ class IntegrationsPage {
                 code,
                 enabled
             });
-            Toast.success('更新成功');
+            Toast.success(this._t('updated'));
             Modal.hide();
             await this.loadIntegrations();
         } catch (error) {
-            Toast.error('更新失败: ' + error.message);
+            Toast.error(this._t('updateFailed', { message: error.message }));
         }
     }
 
     async loadBuiltinTemplates() {
         try {
             await API.post('/api/integrations/load-builtin');
-            Toast.success('内置模板加载成功');
+            Toast.success(this._t('builtinsLoaded'));
             await this.loadIntegrations();
         } catch (error) {
-            Toast.error('加载失败: ' + error.message);
+            Toast.error(this._t('builtinLoadFailed', { message: error.message }));
         }
     }
 
     showCreateIntegrationModal() {
         Modal.show({
-            title: '创建集成',
+            title: this._t('createTitle'),
             content: this._renderIntegrationEditorForm(),
             buttons: [
-                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
-                { text: '保存', variant: 'primary', onClick: () => this.saveIntegration() }
+                { text: this._t('cancel'), variant: 'secondary', onClick: () => Modal.hide() },
+                { text: this._t('save'), variant: 'primary', onClick: () => this.saveIntegration() }
             ],
             size: 'xlarge',
             width: 'min(1240px, 94vw)',
@@ -695,7 +767,7 @@ class IntegrationsPage {
         const code = document.getElementById('integration-code').value;
 
         if (!name || !integrationType || !category || !code) {
-            Toast.error('请填写必填项');
+            Toast.error(this._t('required'));
             return;
         }
 
@@ -704,7 +776,7 @@ class IntegrationsPage {
             try {
                 configSchema = JSON.parse(configSchemaText);
             } catch (error) {
-                Toast.error('配置 Schema 格式错误: ' + error.message);
+                Toast.error(this._t('invalidSchema', { message: error.message }));
                 return;
             }
         }
@@ -725,11 +797,11 @@ class IntegrationsPage {
                 code,
                 enabled: true
             });
-            Toast.success('创建成功');
+            Toast.success(this._t('created'));
             Modal.hide();
             await this.loadIntegrations();
         } catch (error) {
-            Toast.error('创建失败: ' + error.message);
+            Toast.error(this._t('createFailed', { message: error.message }));
         }
     }
 
@@ -739,31 +811,31 @@ class IntegrationsPage {
             const weixinBinding = bindings.find(b => b.code === 'weixin_bot');
             await this._showWeixinLoginModal(weixinBinding);
         } catch (error) {
-            Toast.error('加载微信机器人状态失败: ' + error.message);
+            Toast.error(this._t('weixin.loadFailed', { message: error.message }));
         }
     }
 
     async _showWeixinLoginModal(binding) {
         const statusMap = {
-            'not_ready': { label: '未配置', className: 'idle' },
-            'pending': { label: '等待扫码', className: 'warning' },
-            'confirmed': { label: '已登录', className: 'success' },
-            'error': { label: '登录失败', className: 'danger' },
+            'not_ready': { label: this._t('statusNotReady'), className: 'idle' },
+            'pending': { label: this._t('statusPending'), className: 'warning' },
+            'confirmed': { label: this._t('statusLoggedIn'), className: 'success' },
+            'error': { label: this._t('statusLoginFailed'), className: 'danger' },
         };
         const rawParams = binding?.params?.raw?.params || binding?.params || {};
         const s = statusMap[rawParams.login_status] || statusMap['not_ready'];
         const isLoggedIn = rawParams.login_status === 'confirmed';
 
         Modal.show({
-            title: '微信机器人配置',
+            title: this._t('weixin.title'),
             content: `
                 <div class="integration-weixin-panel">
                     <div class="integration-weixin-status-row">
-                        <span class="integration-detail-label">登录状态</span>
+                        <span class="integration-detail-label">${this._t('weixin.loginStatus')}</span>
                         <span class="integration-status-chip ${s.className}">${s.label}</span>
-                        ${isLoggedIn ? '<span class="integration-weixin-inline-status">后端轮询服务正在自动接收消息</span>' : ''}
+                        ${isLoggedIn ? `<span class="integration-weixin-inline-status">${this._t('weixin.polling')}</span>` : ''}
                     </div>
-                    ${rawParams.last_error ? `<div class="integration-weixin-error">错误：${this.escapeHtml(rawParams.last_error)}</div>` : ''}
+                    ${rawParams.last_error ? `<div class="integration-weixin-error">${this._t('weixin.error', { message: this.escapeHtml(rawParams.last_error) })}</div>` : ''}
                 </div>
                 <div id="weixin-login-body">
                     ${isLoggedIn ? this._weixinLoggedInHtml(rawParams) : this._weixinLoginFormHtml(rawParams)}
@@ -771,9 +843,9 @@ class IntegrationsPage {
                 <div id="weixin-login-status" class="integration-weixin-status-message"></div>
             `,
             buttons: [
-                { text: '关闭', variant: 'secondary', onClick: () => Modal.hide() },
+                { text: this._t('close'), variant: 'secondary', onClick: () => Modal.hide() },
                 ...(isLoggedIn ? [
-                    { text: '退出登录', variant: 'danger', onClick: () => this._weixinLogout(rawParams) }
+                    { text: this._t('weixin.logout'), variant: 'danger', onClick: () => this._weixinLogout(rawParams) }
                 ] : [])
             ],
             size: 'medium'
@@ -784,9 +856,9 @@ class IntegrationsPage {
         return `
             <div class="integration-modal-form">
                 <div class="form-group">
-                    <label>Step 1. 获取登录二维码</label>
-                    <div class="integration-modal-note">点击后将显示微信登录二维码，请用微信扫码确认登录。</div>
-                    <button class="btn btn-primary" id="weixin-get-qr-btn" onclick="integrationsPage._getWeixinQrcode()">获取二维码</button>
+                    <label>${this._t('weixin.step1')}</label>
+                    <div class="integration-modal-note">${this._t('weixin.qrHelp')}</div>
+                    <button class="btn btn-primary" id="weixin-get-qr-btn" onclick="integrationsPage._getWeixinQrcode()">${this._t('weixin.getQr')}</button>
                 </div>
             </div>
             <div id="weixin-qrcode-area" class="integration-qr-panel">
@@ -795,7 +867,7 @@ class IntegrationsPage {
                     <div id="weixin-qrcode-hint" class="integration-qr-hint"></div>
                 </div>
                 <div class="integration-qr-actions">
-                    <button class="btn btn-secondary" id="weixin-poll-status-btn" onclick="integrationsPage._pollWeixinLoginStatus()">查询扫码状态</button>
+                    <button class="btn btn-secondary" id="weixin-poll-status-btn" onclick="integrationsPage._pollWeixinLoginStatus()">${this._t('weixin.checkStatus')}</button>
                 </div>
             </div>
         `;
@@ -807,8 +879,8 @@ class IntegrationsPage {
                 <div class="integration-weixin-ready-icon">
                     <i data-lucide="bot"></i>
                 </div>
-                <div class="integration-weixin-ready-title">微信机器人已就绪</div>
-                <div class="integration-weixin-ready-text">后端轮询服务正在运行，可以直接在微信中向机器人发送消息。</div>
+                <div class="integration-weixin-ready-title">${this._t('weixin.ready')}</div>
+                <div class="integration-weixin-ready-text">${this._t('weixin.readyHint')}</div>
             </div>
         `;
     }
@@ -837,10 +909,10 @@ class IntegrationsPage {
             } else {
                 display.innerHTML = `<div class="integration-qr-placeholder">${this.escapeHtml(resp.qrcode)}</div>`;
             }
-            hint.textContent = '请使用微信扫码登录';
+            hint.textContent = this._t('weixin.scanHint');
             window._weixinQrcode = resp.qrcode;
         } catch (error) {
-            Toast.error('获取二维码失败: ' + error.message);
+            Toast.error(this._t('weixin.qrFailed', { message: error.message }));
         } finally {
             if (btn) btn.disabled = false;
         }
@@ -849,7 +921,7 @@ class IntegrationsPage {
     async _pollWeixinLoginStatus() {
         const qrcode = window._weixinQrcode;
         if (!qrcode) {
-            Toast.error('请先获取二维码');
+            Toast.error(this._t('weixin.getQrFirst'));
             return;
         }
         const btn = document.getElementById('weixin-poll-status-btn');
@@ -857,15 +929,15 @@ class IntegrationsPage {
         const statusDiv = document.getElementById('weixin-login-status');
 
         try {
-            statusDiv.innerHTML = '<span class="integration-status-chip warning">查询中...</span>';
+            statusDiv.innerHTML = `<span class="integration-status-chip warning">${this._t('weixin.querying')}</span>`;
             const resp = await API.pollWeixinLoginStatus(qrcode);
             statusDiv.innerHTML = '';
 
             const statusMap = {
-                'pending': { label: '等待扫码...', className: 'warning' },
-                'confirmed': { label: '登录成功！', className: 'success' },
-                'expired': { label: '二维码已过期，请重新获取', className: 'danger' },
-                'error': { label: '扫码失败，请重试', className: 'danger' },
+                'pending': { label: this._t('weixin.pending'), className: 'warning' },
+                'confirmed': { label: this._t('weixin.success'), className: 'success' },
+                'expired': { label: this._t('weixin.expired'), className: 'danger' },
+                'error': { label: this._t('weixin.scanFailed'), className: 'danger' },
             };
             const s = statusMap[resp.status] || { label: resp.status, className: 'idle' };
             statusDiv.innerHTML = `<span class="integration-status-chip ${s.className}">${this.escapeHtml(s.label)}</span>`;
@@ -875,23 +947,23 @@ class IntegrationsPage {
                 const bindings = await API.getWeixinBotBindings();
                 const weixinBinding = bindings.find(b => b.code === 'weixin_bot');
                 await this._showWeixinLoginModal(weixinBinding);
-                Toast.success('微信机器人登录成功！');
+                Toast.success(this._t('weixin.loginSucceeded'));
             }
         } catch (error) {
-            statusDiv.innerHTML = `<span class="integration-status-chip danger">查询失败：${this.escapeHtml(error.message)}</span>`;
+            statusDiv.innerHTML = `<span class="integration-status-chip danger">${this._t('weixin.queryFailed', { message: this.escapeHtml(error.message) })}</span>`;
         } finally {
             if (btn) btn.disabled = false;
         }
     }
 
     async _weixinLogout(params) {
-        if (!confirm('确定要退出微信机器人登录吗？退出后轮询服务将停止接收消息。')) return;
+        if (!confirm(this._t('weixin.logoutConfirm'))) return;
         try {
             await API.updateWeixinBotBinding('weixin_bot', { enabled: false, params: { bot_token: '', login_status: 'not_ready', api_baseurl: '', gateway_url: '' } });
-            Toast.success('已退出登录');
+            Toast.success(this._t('weixin.loggedOut'));
             await this.showWeixinBotModal();
         } catch (error) {
-            Toast.error('退出失败: ' + error.message);
+            Toast.error(this._t('weixin.logoutFailed', { message: error.message }));
         }
     }
 }

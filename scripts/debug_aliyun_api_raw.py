@@ -35,7 +35,7 @@ async def test_raw_api():
         sk_config = result.scalar_one_or_none()
 
         if not ak_config or not sk_config or not ak_config.value or not sk_config.value:
-            print("✗ AccessKey 未配置")
+            print("✗ AccessKey is not configured")
             return
 
         access_key_id = ak_config.value
@@ -46,7 +46,7 @@ async def test_raw_api():
             from aliyunsdkcore.client import AcsClient
             from aliyunsdkrds.request.v20140815 import DescribeDBInstancePerformanceRequest
         except ImportError:
-            print("✗ 阿里云 SDK 未安装")
+            print("✗ Alibaba Cloud SDK is not installed")
             return
 
         region_id = "cn-hangzhou"
@@ -94,7 +94,7 @@ async def test_raw_api():
 
         keys = ",".join(metric_mappings.keys())
 
-        print(f"查询参数:")
+        print("Query parameters:")
         print(f"  - Instance ID: {instance_id}")
         print(f"  - Region: {region_id}")
         print(f"  - Keys: {keys}")
@@ -113,26 +113,26 @@ async def test_raw_api():
             response = client.do_action_with_exception(request)
             data = json.loads(response)
 
-            print(f"\n✓ API 调用成功")
-            print(f"\n原始响应:")
+            print("\n✓ API call succeeded")
+            print("\nRaw response:")
             print(json.dumps(data, indent=2, ensure_ascii=False))
 
             # 解析性能数据
             perf_keys = data.get("PerformanceKeys", {}).get("PerformanceKey", [])
-            print(f"\n返回的指标类型数量: {len(perf_keys)}")
+            print(f"\nMetric types returned: {len(perf_keys)}")
 
             for perf_key in perf_keys:
                 metric_name = perf_key.get("Key")
                 values = perf_key.get("Values", {}).get("PerformanceValue", [])
-                print(f"\n指标: {metric_name}")
-                print(f"  - 数据点数量: {len(values)}")
+                print(f"\nMetric: {metric_name}")
+                print(f"  - Data points: {len(values)}")
                 if values:
                     sample = values[0]
-                    print(f"  - 样本值: {sample.get('Value')}")
-                    print(f"  - 样本时间: {sample.get('Date')}")
+                    print(f"  - Sample value: {sample.get('Value')}")
+                    print(f"  - Sample time: {sample.get('Date')}")
 
         except Exception as e:
-            print(f"\n✗ API 调用失败: {e}")
+            print(f"\n✗ API call failed: {e}")
             import traceback
             traceback.print_exc()
 

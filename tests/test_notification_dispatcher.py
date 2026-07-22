@@ -103,7 +103,7 @@ async def test_send_via_integration_records_missing_required_params(mocker):
 
     assert len(logs) == 1
     assert logs[0].status == "failed"
-    assert "缺少必填参数" in logs[0].error_message
+    assert "missing required parameters" in logs[0].error_message
     assert db.commit.await_count == 1
     assert len(added) >= 2
 

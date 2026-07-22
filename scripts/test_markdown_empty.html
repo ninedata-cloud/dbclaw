@@ -29,27 +29,27 @@
         // 测试 1: 空字符串
         const result1 = md.render('');
         document.getElementById('test1').innerHTML = result1;
-        console.log('空字符串渲染结果:', JSON.stringify(result1));
+        console.log('Empty string render result:', JSON.stringify(result1));
 
         // 测试 2: 只有空格
         const result2 = md.render('   ');
         document.getElementById('test2').innerHTML = result2;
-        console.log('空格渲染结果:', JSON.stringify(result2));
+        console.log('Whitespace render result:', JSON.stringify(result2));
 
         // 测试 3: 只有换行
         const result3 = md.render('\n\n');
         document.getElementById('test3').innerHTML = result3;
-        console.log('换行渲染结果:', JSON.stringify(result3));
+        console.log('Newline render result:', JSON.stringify(result3));
 
         // 测试 4: null
         const result4 = md.render(null);
         document.getElementById('test4').innerHTML = result4;
-        console.log('null 渲染结果:', JSON.stringify(result4));
+        console.log('null render result:', JSON.stringify(result4));
 
         // 测试 5: undefined
         const result5 = md.render(undefined);
         document.getElementById('test5').innerHTML = result5;
-        console.log('undefined 渲染结果:', JSON.stringify(result5));
+        console.log('undefined render result:', JSON.stringify(result5));
     </script>
 </body>
 </html>

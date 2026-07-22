@@ -16,6 +16,7 @@ const LoginPage = {
         const card = DOM.el('div', { className: 'login-card' });
 
         card.innerHTML = `
+            <div id="login-language" class="login-language"></div>
             <div class="login-logo">
                 <img src="/assets/logo-1.svg" alt="DBClaw">
                 <span>DBClaw</span>
@@ -23,19 +24,20 @@ const LoginPage = {
             <div class="login-error" id="login-error"></div>
             <form class="login-form" id="login-form">
                 <div class="form-group">
-                    <label for="login-username">用户名</label>
-                    <input type="text" id="login-username" placeholder="请输入用户名" autocomplete="username" required>
+                    <label for="login-username">${I18n.t('auth.username')}</label>
+                    <input type="text" id="login-username" placeholder="${I18n.t('auth.usernamePlaceholder')}" autocomplete="username" required>
                 </div>
                 <div class="form-group">
-                    <label for="login-password">密码</label>
-                    <input type="password" id="login-password" placeholder="请输入密码" autocomplete="current-password" required>
+                    <label for="login-password">${I18n.t('auth.password')}</label>
+                    <input type="password" id="login-password" placeholder="${I18n.t('auth.passwordPlaceholder')}" autocomplete="current-password" required>
                 </div>
-                <button type="submit" class="btn-login" id="login-btn">登录</button>
+                <button type="submit" class="btn-login" id="login-btn">${I18n.t('auth.signIn')}</button>
             </form>
         `;
 
         page.appendChild(card);
         content.appendChild(page);
+        DOM.$('#login-language').appendChild(I18n.createSelector('login-language-select'));
 
         // Wire up form
         const form = DOM.$('#login-form');
@@ -61,19 +63,20 @@ const LoginPage = {
         const btn = DOM.$('#login-btn');
 
         if (!username || !password) {
-            errorEl.textContent = '请输入用户名和密码';
+            errorEl.textContent = I18n.t('auth.required');
             errorEl.classList.add('visible');
             return;
         }
 
         btn.disabled = true;
-        btn.textContent = '登录中...';
+        btn.textContent = I18n.t('auth.signingIn');
         errorEl.classList.remove('visible');
 
         try {
             const result = await API.login(username, password);
             Store.set('currentUser', result.user);
             API.markSessionAvailable();
+            I18n.setLocale(result.user.locale || I18n.defaultLocale);
 
             // Restore sidebar and header
             const sidebar = DOM.$('#sidebar');
@@ -93,10 +96,10 @@ const LoginPage = {
 
             Router.navigate('dashboard');
         } catch (err) {
-            errorEl.textContent = err.message || '登录失败';
+            errorEl.textContent = err.message || I18n.t('auth.failed');
             errorEl.classList.add('visible');
             btn.disabled = false;
-            btn.textContent = '登录';
+            btn.textContent = I18n.t('auth.signIn');
         }
     }
 };

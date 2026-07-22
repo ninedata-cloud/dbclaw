@@ -263,21 +263,21 @@ def _build_reply_event_handler(
                 )
             except Exception as exc:
                 logger.exception(
-                    "飞书审批卡片发送失败: session_id=%s approval_id=%s",
+                    "Failed to send Feishu approval card: session_id=%s approval_id=%s",
                     session_id,
                     event_obj.get("approval_id"),
                 )
                 state["errors"].append(f"需要确认的操作未能发送审批卡片：{str(exc)}")
             return
         if event_type_local == "tool_call":
-            logger.info("飞书审批后执行工具: session_id=%s tool=%s args=%s", session_id, event_obj.get("tool_name"), event_obj.get("tool_args"))
+            logger.info("Running tool after Feishu approval: session_id=%s tool=%s args=%s", session_id, event_obj.get("tool_name"), event_obj.get("tool_args"))
         elif event_type_local == "tool_result":
-            logger.info("飞书审批后工具完成: session_id=%s tool=%s", session_id, event_obj.get("tool_name"))
+            logger.info("Tool completed after Feishu approval: session_id=%s tool=%s", session_id, event_obj.get("tool_name"))
         elif event_type_local == "error":
             error_text = str(event_obj.get("content") or event_obj.get("message") or "").strip()
             if error_text:
                 state["errors"].append(error_text)
-                logger.error("飞书会话处理报错: session_id=%s error=%s", session_id, error_text)
+                logger.error("Feishu session processing failed: session_id=%s error=%s", session_id, error_text)
 
     return state, on_event
 
@@ -490,9 +490,9 @@ class FeishuBotService:
                     app_secret=app_secret,
                 )
             except Exception:
-                logger.exception("飞书预回复发送失败: session_id=%s message_id=%s", binding.session_id, message_id)
+                logger.exception("Failed to send Feishu acknowledgement: session_id=%s message_id=%s", binding.session_id, message_id)
         else:
-            logger.warning("飞书机器人未配置 APP_ID/APP_SECRET，session_id=%s 无法发送回复", binding.session_id)
+            logger.warning("The Feishu bot is missing APP_ID/APP_SECRET; cannot send reply for session_id=%s", binding.session_id)
 
         messages, effective_datasource_id, effective_host_id, model_id, kb_ids, knowledge_context, skill_authorizations = await prepare_user_turn(
             db,
@@ -583,7 +583,7 @@ class FeishuBotService:
         value = action.get("value") or {}
         if not isinstance(value, dict):
             value = {}
-        logger.info("处理飞书卡片回调: event_type=%s action_tag=%s", event_type, action.get("tag"))
+        logger.info("Processing Feishu card callback: event_type=%s action_tag=%s", event_type, action.get("tag"))
         session_id = value.get("session_id")
         approval_id = value.get("approval_id")
         decision = value.get("action")
@@ -592,7 +592,7 @@ class FeishuBotService:
         sender_open_id = (sender.get("operator_id") or sender.get("sender_id") or {}).get("open_id")
         if not session_id or not approval_id or decision not in {"approved", "rejected"}:
             logger.info(
-                "忽略未携带审批参数的飞书卡片回调: event_type=%s action_tag=%s value_keys=%s",
+                "Ignoring Feishu card callback without approval parameters: event_type=%s action_tag=%s value_keys=%s",
                 event_type,
                 action.get("tag"),
                 sorted(value.keys()),
@@ -601,7 +601,7 @@ class FeishuBotService:
 
         approval_key = f"{session_id}:{approval_id}"
         if approval_key in PROCESSING_APPROVALS:
-            logger.info("忽略重复的飞书审批回调: session_id=%s approval_id=%s event_type=%s", session_id, approval_id, event_type)
+            logger.info("Ignoring duplicate Feishu approval callback: session_id=%s approval_id=%s event_type=%s", session_id, approval_id, event_type)
             return _toast_response("审批处理中，请勿重复点击。", "success")
 
         integration = await FeishuBotService.get_bot_integration(db)
@@ -642,7 +642,7 @@ class FeishuBotService:
                 on_event=followup_on_event,
             )
         except Exception as exc:
-            logger.exception("飞书审批恢复执行失败: session_id=%s approval_id=%s", session_id, approval_id)
+            logger.exception("Failed to resume execution after Feishu approval: session_id=%s approval_id=%s", session_id, approval_id)
             return _toast_response(f"审批执行失败：{str(exc)}", "error")
         finally:
             PROCESSING_APPROVALS.discard(approval_key)

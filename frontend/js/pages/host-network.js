@@ -66,10 +66,10 @@ const HostNetworkPage = {
                 <section class="host-network-hero">
                     <div class="host-network-hero-bg"></div>
                     <div class="host-network-hero-header">
-                        <div id="host-network-status" class="host-network-status">正在加载网络拓扑...</div>
+                        <div id="host-network-status" class="host-network-status">${I18n.t('hostDetail.networkView.loading')}</div>
                         <div class="host-network-actions">
                             <button class="btn btn-secondary" id="host-network-refresh" type="button">
-                                <i data-lucide="refresh-cw"></i> 立即刷新
+                                <i data-lucide="refresh-cw"></i> ${I18n.t('hostDetail.networkView.refreshNow')}
                             </button>
                         </div>
                     </div>
@@ -86,15 +86,15 @@ const HostNetworkPage = {
                                 <div class="host-network-server-icon">
                                     <i data-lucide="server"></i>
                                 </div>
-                                <div class="host-network-server-title" id="host-network-server-title">主机</div>
-                                <div class="host-network-server-meta" id="host-network-server-meta">等待数据...</div>
+                                <div class="host-network-server-title" id="host-network-server-title">${I18n.t('hostDetail.networkView.host')}</div>
+                                <div class="host-network-server-meta" id="host-network-server-meta">${I18n.t('hostDetail.networkView.waitingForData')}</div>
                             </div>
                         </div>
                         <div id="host-network-node-layer" class="host-network-node-layer"></div>
                         <div id="host-network-empty" class="host-network-empty hidden">
                             <div class="host-network-empty-icon"><i data-lucide="scan-search"></i></div>
-                            <div class="host-network-empty-title">当前没有观测到网络连接</div>
-                            <div class="host-network-empty-text">主机仍会继续轮询，一旦有连接建立会自动生成网络拓扑。</div>
+                            <div class="host-network-empty-title">${I18n.t('hostDetail.networkView.noConnections')}</div>
+                            <div class="host-network-empty-text">${I18n.t('hostDetail.networkView.pollingHint')}</div>
                         </div>
                     </div>
                     <div class="host-network-footer">
@@ -105,8 +105,8 @@ const HostNetworkPage = {
                     <div class="instance-panel host-network-panel host-network-list-panel">
                         <div class="host-network-panel-header">
                             <div>
-                                <h3>热点连接</h3>
-                                <div class="host-network-panel-subtitle">按连接数排序</div>
+                                <h3>${I18n.t('hostDetail.networkView.hotConnections')}</h3>
+                                <div class="host-network-panel-subtitle">${I18n.t('hostDetail.networkView.sortedByConnections')}</div>
                             </div>
                         </div>
                         <div id="host-network-node-list" class="host-network-node-list"></div>
@@ -163,7 +163,7 @@ const HostNetworkPage = {
         this.refreshInFlight = true;
 
         if (showLoading && this.refs.status) {
-            this.refs.status.textContent = '正在加载网络拓扑...';
+            this.refs.status.textContent = I18n.t('hostDetail.networkView.loading');
         }
 
         try {
@@ -178,16 +178,18 @@ const HostNetworkPage = {
             this._schedulePolling();
         } catch (error) {
             if (!silent) {
-                Toast.error(error.message || '加载网络拓扑失败');
+                Toast.error(error.message || I18n.t('hostDetail.networkView.loadFailed'));
             }
             if (this.refs.status) {
-                this.refs.status.textContent = `网络拓扑加载失败：${error.message || '未知错误'}`;
+                this.refs.status.textContent = I18n.t('hostDetail.networkView.loadFailedWithMessage', {
+                    message: error.message || I18n.t('common.unknown')
+                });
             }
             if (this.refs.list) {
                 this.refs.list.innerHTML = `
                     <div class="host-network-list-empty">
                         <i data-lucide="triangle-alert"></i>
-                        <span>${this._escapeHtml(error.message || '加载失败')}</span>
+                        <span>${this._escapeHtml(error.message || I18n.t('common.failed'))}</span>
                     </div>
                 `;
                 DOM.createIcons();
@@ -222,8 +224,10 @@ const HostNetworkPage = {
 
     _renderStatus() {
         if (!this.refs.status || !this.data) return;
-        const updatedAt = new Date().toLocaleTimeString();
-        this.refs.status.textContent = `网络拓扑 · 上次刷新 ${updatedAt} · ${this.pollIntervalSeconds}s 自动轮询`;
+        const updatedAt = I18n.formatTime(new Date());
+        this.refs.status.textContent = I18n.t('hostDetail.networkView.status', {
+            time: updatedAt, seconds: this.pollIntervalSeconds
+        });
     },
 
     _renderStats() {
@@ -238,19 +242,19 @@ const HostNetworkPage = {
 
         this.refs.stats.innerHTML = `
             <div class="host-network-stat-card compact">
-                <div class="host-network-stat-label">总连接数</div>
+                <div class="host-network-stat-label">${I18n.t('hostDetail.networkView.totalConnections')}</div>
                 <div class="host-network-stat-value">${this._escapeHtml(totalConnections)}</div>
             </div>
             <div class="host-network-stat-card compact">
-                <div class="host-network-stat-label">连接状态</div>
+                <div class="host-network-stat-label">${I18n.t('hostDetail.networkView.connectionStatus')}</div>
                 <div class="host-network-stat-triple">
-                    <span><strong>${this._escapeHtml(established)}</strong><em>已建立</em></span>
-                    <span><strong>${this._escapeHtml(timeWait)}</strong><em>等待</em></span>
-                    <span><strong>${this._escapeHtml(listen)}</strong><em>监听</em></span>
+                    <span><strong>${this._escapeHtml(established)}</strong><em>${I18n.t('hostDetail.networkView.established')}</em></span>
+                    <span><strong>${this._escapeHtml(timeWait)}</strong><em>${I18n.t('hostDetail.networkView.waiting')}</em></span>
+                    <span><strong>${this._escapeHtml(listen)}</strong><em>${I18n.t('hostDetail.networkView.listening')}</em></span>
                 </div>
             </div>
             <div class="host-network-stat-card compact">
-                <div class="host-network-stat-label">远程节点</div>
+                <div class="host-network-stat-label">${I18n.t('hostDetail.networkView.remoteNodes')}</div>
                 <div class="host-network-stat-value">${this._escapeHtml(uniqueIps)}</div>
             </div>
         `;
@@ -260,13 +264,13 @@ const HostNetworkPage = {
         if (!this.data) return;
         const host = this.data.host || this.host || {};
         if (this.refs.serverTitle) {
-            this.refs.serverTitle.textContent = host.name || '主机';
+            this.refs.serverTitle.textContent = host.name || I18n.t('hostDetail.networkView.host');
         }
         if (this.refs.serverMeta) {
             const metaParts = [
                 host.host ? `${host.host}:${host.port}` : null,
             ].filter(Boolean);
-            this.refs.serverMeta.textContent = metaParts.join(' / ') || '等待网络数据';
+            this.refs.serverMeta.textContent = metaParts.join(' / ') || I18n.t('hostDetail.networkView.waitingForNetworkData');
         }
     },
 
@@ -276,12 +280,12 @@ const HostNetworkPage = {
         const visibleCount = this.visibleNodes.length;
         const hiddenCount = Math.max(0, (this.data.connections || []).length - visibleCount);
         const parts = [
-            '<span class="legend-chip status-established">已建立连接</span>',
+            `<span class="legend-chip status-established">${I18n.t('hostDetail.networkView.establishedConnections')}</span>`,
             '<span class="legend-chip status-time-wait">TIME_WAIT</span>',
-            '<span class="legend-chip status-listen">监听端口</span>',
+            `<span class="legend-chip status-listen">${I18n.t('hostDetail.networkView.listeningPorts')}</span>`,
         ];
         if (hiddenCount > 0) {
-            parts.push(`<span class="legend-chip neutral">拓扑图显示前 ${visibleCount} 个热点，其余 ${hiddenCount} 个在右侧列表</span>`);
+            parts.push(`<span class="legend-chip neutral">${I18n.t('hostDetail.networkView.hiddenNodes', { visible: visibleCount, hidden: hiddenCount })}</span>`);
         }
         this.refs.legend.innerHTML = parts.join('');
     },
@@ -329,7 +333,7 @@ const HostNetworkPage = {
             this.refs.list.innerHTML = `
                 <div class="host-network-list-empty">
                     <i data-lucide="orbit"></i>
-                    <span>等待网络连接后生成拓扑榜单</span>
+                    <span>${I18n.t('hostDetail.networkView.waitingForRanking')}</span>
                 </div>
             `;
             DOM.createIcons();
@@ -349,7 +353,7 @@ const HostNetworkPage = {
                     <span class="host-network-list-main">
                         <span class="host-network-list-top">
                             <span class="host-network-list-title">${this._escapeHtml(node.remote_ip)}</span>
-                            <span class="host-network-list-count">${this._escapeHtml(String(node.connection_count))} 连接</span>
+                            <span class="host-network-list-count">${I18n.t('hostDetail.networkView.connections', { count: this._escapeHtml(String(node.connection_count)) })}</span>
                         </span>
                         <span class="host-network-list-meta">${this._escapeHtml(this._nodeListMetaText(node))}</span>
                         <span class="host-network-list-bar"><span style="width:${barWidth}%"></span></span>
@@ -550,27 +554,27 @@ const HostNetworkPage = {
             .join('');
 
         Modal.show({
-            title: `网络节点详情 · ${node.remote_ip}`,
+            title: I18n.t('hostDetail.networkView.nodeDetails', { ip: node.remote_ip }),
             content: `
                 <div class="host-network-modal">
                     <div class="host-network-modal-grid">
                         <div class="instance-config-field">
-                            <div class="instance-config-label">远程 IP</div>
+                            <div class="instance-config-label">${I18n.t('hostDetail.networkView.remoteIp')}</div>
                             <div class="instance-config-value"><code>${this._escapeHtml(node.remote_ip)}</code></div>
                         </div>
                         <div class="instance-config-field">
-                            <div class="instance-config-label">连接数</div>
+                            <div class="instance-config-label">${I18n.t('hostDetail.networkView.connectionCount')}</div>
                             <div class="instance-config-value">${this._escapeHtml(String(node.connection_count))}</div>
                         </div>
                     </div>
                     <div class="instance-config-field full">
-                        <div class="instance-config-label">连接状态分布</div>
-                        <div class="host-network-states">${statesHtml || '<div style="color:var(--text-secondary)">无状态数据</div>'}</div>
+                        <div class="instance-config-label">${I18n.t('hostDetail.networkView.stateDistribution')}</div>
+                        <div class="host-network-states">${statesHtml || `<div style="color:var(--text-secondary)">${I18n.t('hostDetail.networkView.noStateData')}</div>`}</div>
                     </div>
                 </div>
             `,
             buttons: [
-                { text: '关闭', variant: 'secondary', onClick: () => Modal.hide() },
+                { text: I18n.t('common.close'), variant: 'secondary', onClick: () => Modal.hide() },
             ],
         });
     },
@@ -586,21 +590,21 @@ const HostNetworkPage = {
     _nodeMetaText(node) {
         const states = node.states || {};
         const parts = [];
-        if (states.ESTABLISHED || states.ESTAB) parts.push(`${states.ESTABLISHED || states.ESTAB} 已建立`);
-        if (states.TIME_WAIT) parts.push(`${states.TIME_WAIT} 等待`);
-        if (states.LISTEN) parts.push(`${states.LISTEN} 监听`);
-        return parts.join(' / ') || `${node.connection_count} 连接`;
+        if (states.ESTABLISHED || states.ESTAB) parts.push(`${states.ESTABLISHED || states.ESTAB} ${I18n.t('hostDetail.networkView.established')}`);
+        if (states.TIME_WAIT) parts.push(`${states.TIME_WAIT} ${I18n.t('hostDetail.networkView.waiting')}`);
+        if (states.LISTEN) parts.push(`${states.LISTEN} ${I18n.t('hostDetail.networkView.listening')}`);
+        return parts.join(' / ') || I18n.t('hostDetail.networkView.connections', { count: node.connection_count });
     },
 
     _nodeListMetaText(node) {
         const states = node.states || {};
         const parts = [];
-        if (states.ESTABLISHED || states.ESTAB) parts.push(`${states.ESTABLISHED || states.ESTAB} 已建立`);
-        if (states.TIME_WAIT) parts.push(`${states.TIME_WAIT} 等待`);
-        if (states.LISTEN) parts.push(`${states.LISTEN} 监听`);
+        if (states.ESTABLISHED || states.ESTAB) parts.push(`${states.ESTABLISHED || states.ESTAB} ${I18n.t('hostDetail.networkView.established')}`);
+        if (states.TIME_WAIT) parts.push(`${states.TIME_WAIT} ${I18n.t('hostDetail.networkView.waiting')}`);
+        if (states.LISTEN) parts.push(`${states.LISTEN} ${I18n.t('hostDetail.networkView.listening')}`);
         const otherCount = node.connection_count - (states.ESTABLISHED || 0) - (states.ESTAB || 0) - (states.TIME_WAIT || 0) - (states.LISTEN || 0);
-        if (otherCount > 0) parts.push(`${otherCount} 其他`);
-        return parts.join(' · ') || '无状态数据';
+        if (otherCount > 0) parts.push(`${otherCount} ${I18n.t('hostDetail.networkView.other')}`);
+        return parts.join(' · ') || I18n.t('hostDetail.networkView.noStateData');
     },
 
     _statusColor(status) {

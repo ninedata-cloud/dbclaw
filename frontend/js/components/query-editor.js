@@ -40,6 +40,9 @@ const QueryEditor = {
 
         // Configure Monaco loader
         const monacoConfig = { paths: { vs: '/lib/monaco-editor/min/vs' } };
+        if (I18n.getLocale() === 'zh-CN') {
+            monacoConfig['vs/nls'] = { availableLanguages: { '*': 'zh-cn' } };
+        }
         if (window.DBCLAW_ASSET_VERSION) {
             monacoConfig.urlArgs = `build=${window.DBCLAW_ASSET_VERSION}`;
         }
@@ -67,6 +70,7 @@ const QueryEditor = {
             this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
                 if (this.onExecute) this.onExecute();
             });
+            this.disposables.push(this.editor.onDidChangeModelContent(() => DirtyState.mark('page')));
 
             // Store disposable
             this.disposables.push(this.editor);
@@ -77,6 +81,7 @@ const QueryEditor = {
         // Create a simple textarea fallback
         const textarea = DOM.el('textarea', {
             className: 'sql-textarea-fallback',
+            dataset: { dirtyTrack: 'true' },
             style: 'width: 100%; height: 400px; font-family: monospace; padding: 10px; background: #1e1e1e; color: #d4d4d4; border: 1px solid #3c3c3c;'
         });
         textarea.value = defaultValue;

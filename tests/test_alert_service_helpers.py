@@ -368,3 +368,33 @@ async def test_delete_subscription_returns_false_when_missing(mocker):
 
     assert result is False
     db.commit.assert_not_awaited()
+
+
+@pytest.mark.service
+@pytest.mark.asyncio
+async def test_pending_notifications_exclude_deleted_datasources():
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=_ScalarResult([]))
+
+    alerts = await AlertService.get_pending_notifications(db)
+
+    assert alerts == []
+    statement = str(db.execute.await_args.args[0])
+    assert "LEFT OUTER JOIN datasource" in statement
+    assert "datasource.is_deleted = false" in statement
+    assert "alert_message.datasource_id =" in statement
+
+
+@pytest.mark.service
+@pytest.mark.asyncio
+async def test_pending_recovery_notifications_exclude_deleted_datasources():
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=_ScalarResult([]))
+
+    alerts = await AlertService.get_pending_recovery_notifications(db)
+
+    assert alerts == []
+    statement = str(db.execute.await_args.args[0])
+    assert "LEFT OUTER JOIN datasource" in statement
+    assert "datasource.is_deleted = false" in statement
+    assert "alert_message.datasource_id =" in statement

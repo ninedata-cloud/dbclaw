@@ -10,7 +10,7 @@ const UsersPage = {
     async render() {
         Header.render('用户管理', DOM.el('button', {
             className: 'btn btn-primary',
-            innerHTML: '<i data-lucide="plus"></i> New 用户',
+            innerHTML: `<i data-lucide="plus"></i> ${I18n.t('users.newUser')}`,
             onClick: () => this._showCreateModal()
         }));
 
@@ -74,7 +74,7 @@ const UsersPage = {
                     const toggleBtn = DOM.el('button', {
                         className: `btn btn-sm ${user.is_active ? 'btn-warning' : 'btn-success'}`,
                         innerHTML: `<i data-lucide="${user.is_active ? 'user-x' : 'user-check'}"></i>`,
-                        title: user.is_active ? 'Disable' : 'Enable',
+                        title: I18n.translateLegacyText(user.is_active ? '禁用' : '启用'),
                         onClick: () => this._toggleStatus(user)
                     });
                     actionsCell.appendChild(toggleBtn);
@@ -95,7 +95,7 @@ const UsersPage = {
                 const logsBtn = DOM.el('button', {
                     className: 'btn btn-sm btn-secondary',
                     innerHTML: '<i data-lucide="scroll-text"></i>',
-                    title: 'Login Logs',
+                    title: I18n.translateLegacyText('登录记录'),
                     onClick: () => this._showLoginLogs(user)
                 });
                 actionsCell.appendChild(logsBtn);
@@ -105,7 +105,7 @@ const UsersPage = {
                     const deleteBtn = DOM.el('button', {
                         className: 'btn btn-sm btn-danger',
                         innerHTML: '<i data-lucide="trash-2"></i>',
-                        title: 'Delete',
+                        title: I18n.translateLegacyText('删除'),
                         onClick: () => this._deleteUser(user)
                     });
                     actionsCell.appendChild(deleteBtn);
@@ -120,7 +120,7 @@ const UsersPage = {
             content.appendChild(container);
             DOM.createIcons();
         } catch (err) {
-            Toast.error('加载失败 users: ' + err.message);
+            Toast.error(I18n.translateLegacyText('加载失败') + ': ' + err.message);
         }
     },
 
@@ -129,23 +129,23 @@ const UsersPage = {
         form.innerHTML = `
             <div class="form-group">
                 <label>用户名</label>
-                <input type="text" id="new-username" class="form-input" placeholder="用户名" required>
+                <input type="text" id="new-username" class="form-input" placeholder="${I18n.t('placeholders.username')}" required>
             </div>
             <div class="form-group">
                 <label>密码</label>
-                <input type="password" id="new-password" class="form-input" placeholder="密码（至少 6 位）">
+                <input type="password" id="new-password" class="form-input" placeholder="${I18n.t('placeholders.passwordMin')}">
             </div>
             <div class="form-group">
                 <label>显示名称</label>
-                <input type="text" id="new-display-name" class="form-input" placeholder="显示名称（可选）">
+                <input type="text" id="new-display-name" class="form-input" placeholder="${I18n.t('placeholders.displayNameOptional')}">
             </div>
             <div class="form-group">
                 <label>邮箱</label>
-                <input type="email" id="new-email" class="form-input" placeholder="邮箱（可选）">
+                <input type="email" id="new-email" class="form-input" placeholder="${I18n.t('placeholders.emailOptional')}">
             </div>
             <div class="form-group">
                 <label>电话</label>
-                <input type="text" id="new-phone" class="form-input" placeholder="电话（可选）">
+                <input type="text" id="new-phone" class="form-input" placeholder="${I18n.t('placeholders.phoneOptional')}">
             </div>
             <div class="form-group" style="display:flex;align-items:center;gap:8px;">
                 <input type="checkbox" id="new-is-admin">
@@ -205,15 +205,15 @@ const UsersPage = {
         form.innerHTML = `
             <div class="form-group">
                 <label>显示名称</label>
-                <input type="text" id="edit-display-name" class="form-input" placeholder="显示名称（可选）" value="${Utils.escapeHtml(user.display_name || '')}">
+                <input type="text" id="edit-display-name" class="form-input" placeholder="${I18n.t('placeholders.displayNameOptional')}" value="${Utils.escapeHtml(user.display_name || '')}">
             </div>
             <div class="form-group">
                 <label>邮箱</label>
-                <input type="email" id="edit-email" class="form-input" placeholder="邮箱（可选）" value="${Utils.escapeHtml(user.email || '')}">
+                <input type="email" id="edit-email" class="form-input" placeholder="${I18n.t('placeholders.emailOptional')}" value="${Utils.escapeHtml(user.email || '')}">
             </div>
             <div class="form-group">
                 <label>电话</label>
-                <input type="text" id="edit-phone" class="form-input" placeholder="电话（可选）" value="${Utils.escapeHtml(user.phone || '')}">
+                <input type="text" id="edit-phone" class="form-input" placeholder="${I18n.t('placeholders.phoneOptional')}" value="${Utils.escapeHtml(user.phone || '')}">
             </div>
             <div class="form-group" style="display:flex;align-items:center;gap:8px;">
                 <input type="checkbox" id="edit-is-admin" ${user.is_admin ? 'checked' : ''}>
@@ -252,10 +252,10 @@ const UsersPage = {
     _showResetPasswordModal(user) {
         const form = DOM.el('div');
         form.innerHTML = `
-            <p style="margin-bottom:12px;color:var(--text-secondary)">Reset password for <strong>${Utils.escapeHtml(user.username)}</strong></p>
+            <p style="margin-bottom:12px;color:var(--text-secondary)">${I18n.t('users.resetFor', { username: `<strong>${Utils.escapeHtml(user.username)}</strong>` })}</p>
             <div class="form-group">
-                <label>New Password</label>
-                <input type="password" id="reset-password" class="form-input" placeholder="新密码（至少 6 位）">
+                <label>${I18n.translateLegacyText('新密码')}</label>
+                <input type="password" id="reset-password" class="form-input" placeholder="${I18n.t('placeholders.newPasswordMin')}">
             </div>
         `;
 
@@ -264,17 +264,17 @@ const UsersPage = {
             content: form,
             size: 'small',
             buttons: [
-                { text: 'Cancel', variant: 'secondary', onClick: () => Modal.hide() },
-                { text: 'Reset', variant: 'primary', onClick: async () => {
+                { text: I18n.t('common.cancel'), variant: 'secondary', onClick: () => Modal.hide() },
+                { text: I18n.translateLegacyText('重置'), variant: 'primary', onClick: async () => {
                     const pw = DOM.$('#reset-password').value;
                     if (!pw || pw.length < 6) {
-                        Toast.error('Password must be at least 6 characters');
+                        Toast.error(I18n.translateLegacyText('密码不能少于 6 位'));
                         return;
                     }
                     try {
                         await API.resetUserPassword(user.id, pw);
                         Modal.hide();
-                        Toast.success('Password reset successfully');
+                        Toast.success(I18n.t('users.passwordReset'));
                     } catch (err) {
                         Toast.error(err.message);
                     }
@@ -289,7 +289,7 @@ const UsersPage = {
 
             const container = DOM.el('div');
             if (logs.length === 0) {
-                container.innerHTML = '<p style="text-align:center;color:var(--text-muted);padding:24px;">No login logs</p>';
+                container.innerHTML = `<p style="text-align:center;color:var(--text-muted);padding:24px;">${I18n.t('users.noLoginLogs')}</p>`;
             } else {
                 const table = DOM.el('table', { className: 'data-table' });
                 table.innerHTML = `
@@ -311,7 +311,7 @@ const UsersPage = {
                         <td style="white-space:nowrap">${Format.datetime(loginTime)}</td>
                         <td>${Utils.escapeHtml(log.ip_address || '-')}</td>
                         <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${Utils.escapeHtml(log.user_agent || '')}">${Utils.escapeHtml(log.user_agent || '-')}</td>
-                        <td><span class="badge ${isSuccess ? 'badge-success' : 'badge-danger'}">${isSuccess ? 'Success' : 'Failed'}</span></td>
+                        <td><span class="badge ${isSuccess ? 'badge-success' : 'badge-danger'}">${I18n.t(isSuccess ? 'common.success' : 'common.failed')}</span></td>
                     `;
                     tbody.appendChild(tr);
                 }
@@ -322,30 +322,30 @@ const UsersPage = {
             }
 
             Modal.show({
-                title: `Login Logs - ${user.username}`,
+                title: I18n.t('users.loginLogsTitle', { username: user.username }),
                 content: container,
                 size: 'large',
                 buttons: [
-                    { text: 'Close', variant: 'secondary', onClick: () => Modal.hide() },
+                    { text: I18n.t('common.close'), variant: 'secondary', onClick: () => Modal.hide() },
                 ]
             });
         } catch (err) {
-            Toast.error('加载失败 login logs: ' + err.message);
+            Toast.error(I18n.t('users.loadLoginLogsFailed', { message: err.message }));
         }
     },
 
     async _deleteUser(user) {
         Modal.show({
-            title: 'Delete 用户',
-            content: `<p>确认操作 you want to delete user <strong>${Utils.escapeHtml(user.username)}</strong>? This action cannot be undone.</p>`,
+            title: I18n.t('users.deleteTitle'),
+            content: `<p>${I18n.t('users.deleteConfirm', { username: Utils.escapeHtml(user.username) })}</p>`,
             size: 'small',
             buttons: [
-                { text: 'Cancel', variant: 'secondary', onClick: () => Modal.hide() },
-                { text: 'Delete', variant: 'danger', onClick: async () => {
+                { text: I18n.t('common.cancel'), variant: 'secondary', onClick: () => Modal.hide() },
+                { text: I18n.t('common.delete'), variant: 'danger', onClick: async () => {
                     try {
                         await API.deleteUser(user.id);
                         Modal.hide();
-                        Toast.success('用户 deleted');
+                        Toast.success(I18n.t('users.deleted'));
                         this.render();
                     } catch (err) {
                         Toast.error(err.message);

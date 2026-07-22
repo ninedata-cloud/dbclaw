@@ -19,11 +19,11 @@ async def reload_templates():
     engine = create_async_engine(settings.database_url, echo=False)
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-    print("重新加载内置模板...")
+    print("Reloading built-in templates...")
 
     async with async_session() as db:
         await IntegrationService.load_builtin_templates(db)
-        print("✓ 内置模板已重新加载")
+        print("✓ Built-in templates reloaded")
 
 
 if __name__ == "__main__":

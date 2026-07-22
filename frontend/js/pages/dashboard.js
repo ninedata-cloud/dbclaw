@@ -28,10 +28,10 @@ const DashboardPage = {
     },
 
     _relTime(iso) {
-        const diff = (Date.now() - new Date(iso)) / 1000;
-        if (diff < 60)   return Math.round(diff) + 's前';
-        if (diff < 3600) return Math.round(diff/60) + 'm前';
-        return Math.round(diff/3600) + 'h前';
+        const diff = Math.max(0, (Date.now() - new Date(iso)) / 1000);
+        if (diff < 60) return I18n.formatRelativeTime(-Math.round(diff), 'second', { numeric: 'always' });
+        if (diff < 3600) return I18n.formatRelativeTime(-Math.round(diff / 60), 'minute', { numeric: 'always' });
+        return I18n.formatRelativeTime(-Math.round(diff / 3600), 'hour', { numeric: 'always' });
     },
 
     _dbDotClass(type) {
@@ -63,7 +63,7 @@ const DashboardPage = {
                 const alert = await API.getAlert(alertId);
                 await AlertsPage.showAlertDetail(alert);
             } catch (e) {
-                Toast.error('加载告警详情失败: ' + e.message);
+                Toast.error(I18n.t('dashboard.loadAlertFailed', { message: e.message }));
             }
         }, 0);
     },
@@ -85,13 +85,31 @@ const DashboardPage = {
 
     _hostAnomalyReason(host) {
         const reason = String(host?.status_message || '').trim();
-        if (reason) return reason;
+        if (reason) {
+            const fixedReasons = {
+                '\u8fde\u63a5\u5931\u8d25\uff08\u8d85\u8fc75\u5206\u949f\u672a\u6536\u5230\u6570\u636e\uff09': 'staleMetrics',
+                '\u6682\u65e0\u76d1\u63a7\u6570\u636e': 'noMetrics',
+                '\u8fd0\u884c\u6b63\u5e38': 'normal'
+            };
+            if (fixedReasons[reason]) return I18n.t(`dashboard.hostReasons.${fixedReasons[reason]}`);
+
+            const metrics = { CPU: 'cpu', '\u5185\u5b58': 'memory', '\u78c1\u76d8': 'disk' };
+            const localizedIssues = reason.split('\uff1b').map(issue => {
+                const match = issue.match(/^(CPU|\u5185\u5b58|\u78c1\u76d8)\u4f7f\u7528\u7387(\u8fc7\u9ad8|\u8f83\u9ad8)\s*\(([^)]+)\)$/);
+                if (!match) return I18n.translateLegacyText(issue);
+                return I18n.t(
+                    match[2] === '\u8fc7\u9ad8' ? 'dashboard.hostReasons.metricTooHigh' : 'dashboard.hostReasons.metricHigh',
+                    { metric: I18n.t(`dashboard.hostReasons.${metrics[match[1]]}`), value: match[3] }
+                );
+            });
+            return localizedIssues.join(I18n.getLocale() === 'zh-CN' ? '\uff1b' : '; ');
+        }
 
         const status = host?.status;
-        if (status === 'offline') return '连接失败或监控数据中断';
-        if (status === 'error') return '核心指标超过阈值';
-        if (status === 'warning') return '核心指标接近阈值';
-        return '状态异常';
+        if (status === 'offline') return I18n.t('dashboard.hostReasons.offline');
+        if (status === 'error') return I18n.t('dashboard.hostReasons.error');
+        if (status === 'warning') return I18n.t('dashboard.hostReasons.warning');
+        return I18n.t('dashboard.hostReasons.unknown');
     },
 
     // ── Main render ──────────────────────────────────────────
@@ -109,11 +127,11 @@ const DashboardPage = {
             this._datasources = datasources;
             this._hosts = hosts;
 
-            Header.render('资源大盘', this._buildHeaderActions());
+            Header.render(I18n.t('navigation.dashboard'), this._buildHeaderActions());
             content.innerHTML = '';
 
             if (datasources.length === 0) {
-                content.innerHTML = `<div class="empty-state"><i data-lucide="database"></i><h3>暂无数据源</h3><p>添加数据库连接以开始监控和诊断</p><button class="btn btn-primary mt-16" onclick="Router.navigate('datasources')"><i data-lucide="plus"></i> 添加数据源</button></div>`;
+                content.innerHTML = `<div class="empty-state"><i data-lucide="database"></i><h3>${I18n.t('dashboard.noDatasources')}</h3><p>${I18n.t('dashboard.addDatasourcePrompt')}</p><button class="btn btn-primary mt-16" onclick="Router.navigate('datasources')"><i data-lucide="plus"></i> ${I18n.t('dashboard.addDatasource')}</button></div>`;
                 DOM.createIcons();
                 return;
             }
@@ -125,17 +143,17 @@ const DashboardPage = {
 
             // Anomaly section
             const anomalySection = DOM.el('div', { className: 'resource-section', id: 'anomaly-section', style: { display: 'none' } });
-            anomalySection.innerHTML = `<div class="resource-section-header anomaly" id="anomaly-header"><span>⚠ 需要关注</span><span class="resource-count-badge anomaly" id="anomaly-count">0</span></div><div class="dashboard-grid" id="anomaly-grid"></div>`;
+            anomalySection.innerHTML = `<div class="resource-section-header anomaly" id="anomaly-header"><span>⚠ ${I18n.t('dashboard.needsAttention')}</span><span class="resource-count-badge anomaly" id="anomaly-count">0</span></div><div class="dashboard-grid" id="anomaly-grid"></div>`;
             content.appendChild(anomalySection);
 
             // Normal section
             const normalSection = DOM.el('div', { className: 'resource-section', id: 'normal-section' });
-            normalSection.innerHTML = `<div class="resource-section-header normal" id="normal-header"><span>其余资源</span><span class="resource-count-badge normal" id="normal-count">0</span></div><div class="dashboard-grid" id="normal-grid"></div>`;
+            normalSection.innerHTML = `<div class="resource-section-header normal" id="normal-header"><span>${I18n.t('dashboard.otherResources')}</span><span class="resource-count-badge normal" id="normal-count">0</span></div><div class="dashboard-grid" id="normal-grid"></div>`;
             content.appendChild(normalSection);
 
             // Live status bar
             const liveBar = DOM.el('div', { style: { display: 'flex', justifyContent: 'flex-end', marginBottom: '8px', marginTop: '-16px' } });
-            liveBar.innerHTML = `<div class="live-indicator"><span class="live-dot"></span><span id="last-update">加载中...</span></div>`;
+            liveBar.innerHTML = `<div class="live-indicator"><span class="live-dot"></span><span id="last-update">${I18n.t('common.loading')}</span></div>`;
             content.insertBefore(liveBar, anomalySection);
 
             this._renderCards();
@@ -144,7 +162,7 @@ const DashboardPage = {
             await this._refreshAll();
             this._startTimer();
         } catch (err) {
-            content.innerHTML = `<div class="empty-state"><h3>错误</h3><p>${err.message}</p></div>`;
+            content.innerHTML = `<div class="empty-state"><h3>${I18n.t('dashboard.loadFailed')}</h3><p>${err.message}</p></div>`;
         }
     },
 
@@ -153,21 +171,21 @@ const DashboardPage = {
         const filtersContainer = DOM.el('div', { className: 'dashboard-filters' });
         filtersContainer.innerHTML = `
             <select id="filter-health" class="filter-select">
-                <option value="">全部状态</option>
-                <option value="healthy">健康</option>
-                <option value="warning">警告</option>
-                <option value="critical">异常</option>
-                <option value="unknown">未知</option>
+                <option value="">${I18n.t('dashboard.allStatuses')}</option>
+                <option value="healthy">${I18n.t('dashboard.health.healthy')}</option>
+                <option value="warning">${I18n.t('dashboard.health.warning')}</option>
+                <option value="critical">${I18n.t('dashboard.health.abnormal')}</option>
+                <option value="unknown">${I18n.t('dashboard.health.unknown')}</option>
             </select>
             <select id="filter-dbtype" class="filter-select">
-                <option value="">全部类型</option>
+                <option value="">${I18n.t('dashboard.allTypes')}</option>
                 ${dbTypes.map(t => `<option value="${t}">${t}</option>`).join('')}
             </select>
             <select id="filter-host" class="filter-select">
-                <option value="">全部主机</option>
+                <option value="">${I18n.t('dashboard.allHosts')}</option>
                 ${this._hosts.map(h => `<option value="${h.id}">${h.name || h.host}</option>`).join('')}
             </select>
-            <input id="filter-search" class="filter-input" type="text" placeholder="搜索名称/地址..." value="${this._filters.search}">
+            <input id="filter-search" class="filter-input" type="text" placeholder="${I18n.t('dashboard.searchPlaceholder')}" value="${this._filters.search}">
         `;
         setTimeout(() => {
             const bindFilter = (id, key) => {
@@ -191,23 +209,23 @@ const DashboardPage = {
         const online  = hosts.length - anomaly.length;
         const donutSvg = this._donut(online, hosts.length, 52);
         const listHtml = anomaly.length === 0
-            ? `<div class="all-healthy-text">✓ 全部在线</div>`
+            ? `<div class="all-healthy-text">✓ ${I18n.t('dashboard.allOnline')}</div>`
             : `<div class="anomaly-host-list">${anomaly.slice(0,3).map(h =>
                 `<div class="anomaly-host-item clickable" onclick="DashboardPage.openHostFromDashboard(${h.id})">
                     <div class="anomaly-host-main"><span class="status-dot ${h.status}"></span>${Utils.escapeHtml(h.name || h.host)}</div>
                     <div class="anomaly-host-reason" title="${Utils.escapeHtml(this._hostAnomalyReason(h))}">${Utils.escapeHtml(this._hostAnomalyReason(h))}</div>
                 </div>`
-              ).join('')}${anomaly.length > 3 ? `<div class="anomaly-host-item" style="color:rgba(255,255,255,0.3)">+${anomaly.length - 3} 台异常</div>` : ''}</div>`;
+              ).join('')}${anomaly.length > 3 ? `<div class="anomaly-host-item" style="color:rgba(255,255,255,0.3)">${I18n.t('dashboard.moreAbnormalHosts', { count: anomaly.length - 3 })}</div>` : ''}</div>`;
 
         const panel = DOM.$('#panel-hosts');
         if (!panel) return;
         panel.innerHTML = `
-            <div class="overview-panel-title">主机健康</div>
+            <div class="overview-panel-title">${I18n.t('dashboard.hostHealth')}</div>
             <div class="donut-container">
                 ${donutSvg}
                 <div class="donut-legend">
-                    <div class="donut-legend-item"><span class="donut-legend-dot" style="background:#3fb950"></span>在线 ${online}</div>
-                    <div class="donut-legend-item"><span class="donut-legend-dot" style="background:#f85149"></span>异常 ${anomaly.length}</div>
+                    <div class="donut-legend-item"><span class="donut-legend-dot" style="background:#3fb950"></span>${I18n.t('dashboard.online')} ${online}</div>
+                    <div class="donut-legend-item"><span class="donut-legend-dot" style="background:#f85149"></span>${I18n.t('dashboard.abnormal')} ${anomaly.length}</div>
                 </div>
             </div>
             ${listHtml}`;
@@ -221,9 +239,9 @@ const DashboardPage = {
             const alerts = resp.alerts || [];
             const total  = resp.total  || 0;
             const titleBadge = total > 0 ? `<span class="alert-count-badge">${total}</span>` : '';
-            const viewAllHtml = total > 0 ? `<div class="alert-view-all"><span class="alert-view-all-link" onclick="Router.navigate('alerts')">查看全部 ${total} 条 →</span></div>` : '';
+            const viewAllHtml = total > 0 ? `<div class="alert-view-all"><span class="alert-view-all-link" onclick="Router.navigate('alerts')">${I18n.t('dashboard.viewAllAlerts', { count: total })}</span></div>` : '';
             const listHtml = alerts.length === 0
-                ? `<div class="no-alerts-text">✓ 系统运行正常</div>`
+                ? `<div class="no-alerts-text">✓ ${I18n.t('dashboard.systemHealthy')}</div>`
                 : `<div class="alert-list">${alerts.map(a => {
                     const ds = this._datasources.find(d => d.id === a.datasource_id);
                     const dsName = ds ? (ds.name || ds.host || `#${a.datasource_id}`) : `#${a.datasource_id}`;
@@ -237,9 +255,9 @@ const DashboardPage = {
                     </div>`;
                 }).join('')}</div>`;
             const titleCls = total > 10 ? ' alert-title-critical' : '';
-            panel.innerHTML = `<div class="overview-panel-title${titleCls}">⚡ 活跃告警${titleBadge}</div>${listHtml}${viewAllHtml}`;
+            panel.innerHTML = `<div class="overview-panel-title${titleCls}">⚡ ${I18n.t('dashboard.activeAlerts')}${titleBadge}</div>${listHtml}${viewAllHtml}`;
         } catch {
-            panel.innerHTML = `<div class="overview-panel-title">⚡ 活跃告警</div><div style="color:rgba(255,255,255,0.3);font-size:13px">加载失败</div>`;
+            panel.innerHTML = `<div class="overview-panel-title">⚡ ${I18n.t('dashboard.activeAlerts')}</div><div style="color:rgba(255,255,255,0.3);font-size:13px">${I18n.t('dashboard.loadFailed')}</div>`;
         }
     },
 
@@ -255,15 +273,15 @@ const DashboardPage = {
             });
         const visibleItems = (unhealthy.length > 0 ? unhealthy : datasources).slice(0, 4);
         const hiddenCount = (unhealthy.length > 0 ? unhealthy.length : datasources.length) - visibleItems.length;
-        const listTitle = unhealthy.length > 0 ? '异常数据源' : '健康数据源';
+        const listTitle = unhealthy.length > 0 ? I18n.t('dashboard.unhealthyDatasources') : I18n.t('dashboard.healthyDatasources');
         const listHtml = visibleItems.length === 0
-            ? `<div class="all-healthy-text">暂无数据源</div>`
+            ? `<div class="all-healthy-text">${I18n.t('dashboard.noDatasources')}</div>`
             : `<div class="db-health-list">
                 <div class="db-health-list-title">${listTitle}</div>
                 ${visibleItems.map(d => {
                     const status = healthStatuses[d.id] || 'unknown';
                     const statusCls = this._statusClass(status);
-                    const name = Utils.escapeHtml(d.name || d.host || `数据源 #${d.id}`);
+                    const name = Utils.escapeHtml(d.name || d.host || I18n.t('dashboard.datasourceFallback', { id: d.id }));
                     const type = Utils.escapeHtml(d.db_type || '-');
                     const host = Utils.escapeHtml(`${d.host || '-'}:${d.port || '-'}`);
                     const statusLabel = Utils.escapeHtml(this._healthLabelShort(status, this._healthReasons[d.id]));
@@ -276,18 +294,18 @@ const DashboardPage = {
                         </div>
                     `;
                 }).join('')}
-                ${hiddenCount > 0 ? `<div class="db-health-more">+${hiddenCount} 个${unhealthy.length > 0 ? '异常' : '数据源'}</div>` : ''}
+                ${hiddenCount > 0 ? `<div class="db-health-more">${I18n.t(unhealthy.length > 0 ? 'dashboard.moreUnhealthyDatasources' : 'dashboard.moreDatasources', { count: hiddenCount })}</div>` : ''}
             </div>`;
 
         const panel = DOM.$('#panel-dbs');
         if (!panel) return;
         panel.innerHTML = `
-            <div class="overview-panel-title">数据源健康</div>
+            <div class="overview-panel-title">${I18n.t('dashboard.datasourceHealth')}</div>
             <div class="donut-container">
                 ${donutSvg}
                 <div class="donut-legend">
-                    <div class="donut-legend-item"><span class="donut-legend-dot" style="background:#3fb950"></span>健康 ${healthy}</div>
-                    <div class="donut-legend-item"><span class="donut-legend-dot" style="background:#f85149"></span>异常 ${total - healthy}</div>
+                    <div class="donut-legend-item"><span class="donut-legend-dot" style="background:#3fb950"></span>${I18n.t('dashboard.healthy')} ${healthy}</div>
+                    <div class="donut-legend-item"><span class="donut-legend-dot" style="background:#f85149"></span>${I18n.t('dashboard.abnormal')} ${total - healthy}</div>
                 </div>
             </div>
             ${listHtml}`;
@@ -296,16 +314,16 @@ const DashboardPage = {
     _buildOverviewSkeleton() {
         return `
         <div class="overview-panel" id="panel-hosts">
-            <div class="overview-panel-title">主机健康</div>
+            <div class="overview-panel-title">${I18n.t('dashboard.hostHealth')}</div>
             <div class="donut-container"><div style="width:120px;height:120px;background:rgba(255,255,255,0.04);border-radius:50%;"></div></div>
         </div>
         <div class="overview-panel" id="panel-dbs">
-            <div class="overview-panel-title">数据源健康</div>
+            <div class="overview-panel-title">${I18n.t('dashboard.datasourceHealth')}</div>
             <div class="donut-container"><div style="width:120px;height:120px;background:rgba(255,255,255,0.04);border-radius:50%;"></div></div>
         </div>
         <div class="overview-panel panel-alerts" id="panel-alerts">
-            <div class="overview-panel-title">⚡ 活跃告警</div>
-            <div style="color:rgba(255,255,255,0.3);font-size:13px">加载中...</div>
+            <div class="overview-panel-title">⚡ ${I18n.t('dashboard.activeAlerts')}</div>
+            <div style="color:rgba(255,255,255,0.3);font-size:13px">${I18n.t('common.loading')}</div>
         </div>`;
     },
 
@@ -365,7 +383,7 @@ const DashboardPage = {
         const grid = DOM.$(`#${gridId}`);
         if (!grid) return;
         if (list.length === 0) {
-            grid.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:13px;padding:8px 0">没有符合条件的资源</div>';
+            grid.innerHTML = `<div style="color:rgba(255,255,255,0.3);font-size:13px;padding:8px 0">${I18n.t('dashboard.noMatchingResources')}</div>`;
             return;
         }
         grid.innerHTML = '';
@@ -397,7 +415,7 @@ const DashboardPage = {
                 <div class="dash-card-host">${conn.host}:${conn.port}${conn.database ? ' / ' + conn.database : ''}</div>
                 <div class="dash-card-divider"></div>
                 <div class="dash-card-metrics" id="dash-metrics-${conn.id}">
-                    <div><div class="dash-metric-label">活跃连接</div><div class="dash-metric-value" id="conn-${conn.id}">${m ? m.active : '--'}</div></div>
+                    <div><div class="dash-metric-label">${I18n.t('dashboard.activeConnections')}</div><div class="dash-metric-value" id="conn-${conn.id}">${m ? m.active : '--'}</div></div>
                     <div>
                         <div class="dash-metric-label">CPU</div>
                         <div class="dash-metric-value" id="cpu-${conn.id}">${m && m.cpu != null ? m.cpu + '%' : '--'}</div>
@@ -410,15 +428,27 @@ const DashboardPage = {
     },
 
     _healthLabel(status, reason = '') {
-        if (reason === 'connection_failure') return '✗ 连接失败';
-        const map = { healthy: '✓ 健康', warning: '⚠ 警告', critical: '✗ 异常', error: '✗ 异常', unknown: '-- 未知' };
-        return map[status] || '-- 未知';
+        if (reason === 'connection_failure') return `✗ ${I18n.t('dashboard.health.connectionFailed')}`;
+        const map = {
+            healthy: `✓ ${I18n.t('dashboard.health.healthy')}`,
+            warning: `⚠ ${I18n.t('dashboard.health.warning')}`,
+            critical: `✗ ${I18n.t('dashboard.health.abnormal')}`,
+            error: `✗ ${I18n.t('dashboard.health.abnormal')}`,
+            unknown: `-- ${I18n.t('dashboard.health.unknown')}`
+        };
+        return map[status] || map.unknown;
     },
 
     _healthLabelShort(status, reason = '') {
-        if (reason === 'connection_failure') return '连接失败';
-        const map = { healthy: '健康', warning: '警告', critical: '异常', error: '异常', unknown: '未知' };
-        return map[status] || '未知';
+        if (reason === 'connection_failure') return I18n.t('dashboard.health.connectionFailed');
+        const map = {
+            healthy: I18n.t('dashboard.health.healthy'),
+            warning: I18n.t('dashboard.health.warning'),
+            critical: I18n.t('dashboard.health.abnormal'),
+            error: I18n.t('dashboard.health.abnormal'),
+            unknown: I18n.t('dashboard.health.unknown')
+        };
+        return map[status] || map.unknown;
     },
 
     // ── Metrics & refresh ────────────────────────────────────
@@ -429,7 +459,7 @@ const DashboardPage = {
             this._refreshMetrics()
         ]);
         const el = DOM.$('#last-update');
-        if (el) el.textContent = '最后更新 ' + new Date().toLocaleTimeString('zh-CN', { hour12: false });
+        if (el) el.textContent = I18n.t('dashboard.lastUpdated', { time: I18n.formatTime(new Date(), { hour12: false }) });
     },
 
     async _refreshHostPanel() {

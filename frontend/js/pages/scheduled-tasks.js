@@ -14,7 +14,7 @@ const ScheduledTasksPage = {
     _buildHeaderActions() {
         const filters = DOM.el('div', { className: 'dashboard-filters' });
         filters.innerHTML = `
-            <input type="text" id="scheduled-task-keyword" class="filter-input" placeholder="搜索任务..." style="min-width:180px;">
+            <input type="text" id="scheduled-task-keyword" class="filter-input" placeholder="${I18n.t('placeholders.searchTasks')}" style="min-width:180px;">
             <select id="scheduled-task-enabled" class="filter-select">
                 <option value="">全部状态</option>
                 <option value="true">已启用</option>
@@ -199,7 +199,7 @@ const ScheduledTasksPage = {
         const config = this.denormalizeSchedule(task);
         const code = task?.script_code || [
             'async def run(context):',
-            '    print("任务开始执行")',
+            '    print("Task initiated")',
             '    return {"success": True}',
             ''
         ].join('\n');
@@ -241,7 +241,7 @@ const ScheduledTasksPage = {
                             </div>
                             <div class="form-group scheduled-task-full">
                                 <label>任务描述</label>
-                                <textarea id="task-description" class="form-textarea scheduled-task-description-input" rows="2" placeholder="例如：每天凌晨执行巡检脚本，检查实例状态并输出摘要。">${Utils.escapeHtml(task?.description || '')}</textarea>
+                                <textarea id="task-description" class="form-textarea scheduled-task-description-input" rows="2" placeholder="${I18n.t('scheduledTasks.descriptionPlaceholder')}">${Utils.escapeHtml(task?.description || '')}</textarea>
                             </div>
                         </div>
                     </section>
@@ -266,8 +266,8 @@ const ScheduledTasksPage = {
                                 <div id="task-cron-hourly-fields" class="form-group scheduled-task-compact-field">
                                     <label>分钟 / 秒</label>
                                     <div class="scheduled-task-inline-fields">
-                                        <input id="task-cron-hourly-minute" type="number" min="0" max="59" class="form-input" value="${config.minute}" title="每小时内的第几分">
-                                        <input id="task-cron-hourly-second" type="number" min="0" max="59" class="form-input" value="${config.second}" title="该分钟内的第几秒">
+                                        <input id="task-cron-hourly-minute" type="number" min="0" max="59" class="form-input" value="${config.minute}" title="${I18n.t('scheduledTasks.hourlyMinuteTitle')}">
+                                        <input id="task-cron-hourly-second" type="number" min="0" max="59" class="form-input" value="${config.second}" title="${I18n.t('scheduledTasks.minuteSecondTitle')}">
                                     </div>
                                 </div>
                                 <div id="task-cron-time-fields" class="form-group scheduled-task-compact-field">
@@ -391,7 +391,7 @@ const ScheduledTasksPage = {
                         <input type="checkbox" class="scheduled-task-target-enabled" ${target.enabled !== false ? 'checked' : ''}>
                         <span>启用</span>
                     </label>
-                    <button type="button" class="btn-icon scheduled-task-remove-target" title="删除接口" aria-label="删除接口">
+                    <button type="button" class="btn-icon scheduled-task-remove-target" title="${I18n.t('scheduledTasks.removeTarget')}" aria-label="${I18n.t('scheduledTasks.removeTarget')}">
                         <i data-lucide="trash-2"></i>
                     </button>
                 </div>
@@ -438,7 +438,9 @@ const ScheduledTasksPage = {
             const isPassword = prop.format === 'password';
             const currentValue = existingParams[key];
             const value = isPassword ? '' : (currentValue || prop.default || '');
-            const placeholder = isPassword && currentValue ? '已配置，留空则保持不变' : (prop.description || '');
+            const placeholder = isPassword && currentValue
+                ? I18n.t('placeholders.configuredKeep')
+                : I18n.translateLegacyText(prop.description || '');
             html += `
                 <div class="scheduled-task-target-param-row">
                     <label>${Utils.escapeHtml(prop.title || key)}${required}</label>

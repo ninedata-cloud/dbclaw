@@ -101,7 +101,7 @@ const Format = {
         if (num >= 1e9) return (num / 1e9).toFixed(1) + 'B';
         if (num >= 1e6) return (num / 1e6).toFixed(1) + 'M';
         if (num >= 1e3) return (num / 1e3).toFixed(1) + 'K';
-        return num.toLocaleString();
+        return I18n.formatNumber(num);
     },
 
     percent(value) {
@@ -122,16 +122,16 @@ const Format = {
         const now = new Date();
         const seconds = Math.floor((now - date) / 1000);
         if (Number.isNaN(seconds) || seconds < 0) return 'N/A';
-        if (seconds < 60) return 'just now';
-        if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago';
-        if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ago';
-        return Math.floor(seconds / 86400) + 'd ago';
+        if (seconds < 60) return I18n.formatRelativeTime(0, 'second', { numeric: 'auto' });
+        if (seconds < 3600) return I18n.formatRelativeTime(-Math.floor(seconds / 60), 'minute', { numeric: 'auto' });
+        if (seconds < 86400) return I18n.formatRelativeTime(-Math.floor(seconds / 3600), 'hour', { numeric: 'auto' });
+        return I18n.formatRelativeTime(-Math.floor(seconds / 86400), 'day', { numeric: 'auto' });
     },
 
     datetime(dateStr) {
         const date = Format.parseDate(dateStr);
         if (!date) return typeof dateStr === 'string' && dateStr.trim() ? dateStr : 'N/A';
-        return date.toLocaleString();
+        return I18n.formatDate(date, { dateStyle: 'medium', timeStyle: 'medium' });
     },
 
     uptime(seconds) {

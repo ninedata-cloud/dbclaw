@@ -99,14 +99,14 @@ class SelfCheckReport:
 
     def to_console_text(self, title: str | None = None, include_passes: bool = False) -> str:
         report_title = title or {
-            "fail": "DBClaw 启动自检失败",
-            "warn": "DBClaw 启动自检通过（含警告）",
-            "pass": "DBClaw 启动自检通过",
+            "fail": "DBClaw startup self-check failed",
+            "warn": "DBClaw startup self-check passed with warnings",
+            "pass": "DBClaw startup self-check passed",
         }[self.status]
         lines = [
             report_title,
-            f"检查阶段: {self.phase}",
-            f"结果汇总: {self.pass_count} 通过, {self.warning_count} 警告, {self.blocker_count} 阻断",
+            f"Check phase: {self.phase}",
+            f"Summary: {self.pass_count} passed, {self.warning_count} warnings, {self.blocker_count} blockers",
         ]
 
         visible_checks = [
@@ -119,14 +119,14 @@ class SelfCheckReport:
         for check in visible_checks:
             lines.append("")
             lines.append(f"[{check.status.upper()}] {check.name}")
-            lines.append(f"  结论: {check.summary}")
+            lines.append(f"  Summary: {check.summary}")
             if check.detail:
                 detail_lines = check.detail.splitlines() or [check.detail]
-                lines.append("  详情:")
+                lines.append("  Details:")
                 lines.extend(f"    {line}" for line in detail_lines)
             if check.suggestion:
                 suggestion_lines = check.suggestion.splitlines() or [check.suggestion]
-                lines.append("  建议:")
+                lines.append("  Suggested action:")
                 lines.extend(f"    {line}" for line in suggestion_lines)
 
         return "\n".join(lines)
@@ -135,7 +135,7 @@ class SelfCheckReport:
 class StartupSelfCheckError(RuntimeError):
     def __init__(self, report: SelfCheckReport):
         self.report = report
-        super().__init__("启动自检失败，请根据日志中的中文诊断结果修复后重试。")
+        super().__init__("Startup self-check failed. Resolve the issues reported in the logs and try again.")
 
 
 def set_last_startup_report(report: SelfCheckReport) -> None:
@@ -190,11 +190,11 @@ def _check_encryption_key(settings: Settings) -> CheckResult:
             name="ENCRYPTION_KEY",
             status="fail",
             severity="blocker",
-            summary="未配置数据库凭据加密密钥。",
-            detail="当前仍在使用默认占位值，启动后无法安全处理数据库密码等敏感信息。",
+            summary="The database credential encryption key is not configured.",
+            detail="The default placeholder is still in use, so database passwords and other sensitive data cannot be handled securely.",
             suggestion=(
-                "请在 .env 或环境变量中设置 ENCRYPTION_KEY。\n"
-                "可执行: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+                "Set ENCRYPTION_KEY in .env or as an environment variable.\n"
+                "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
             ),
         )
 
@@ -205,11 +205,11 @@ def _check_encryption_key(settings: Settings) -> CheckResult:
             name="ENCRYPTION_KEY",
             status="fail",
             severity="blocker",
-            summary="ENCRYPTION_KEY 格式无效。",
-            detail=f"无法解析为合法的 Fernet key: {exc}",
+            summary="ENCRYPTION_KEY has an invalid format.",
+            detail=f"The value is not a valid Fernet key: {exc}",
             suggestion=(
-                "请重新生成合法的 Fernet key 后写入 ENCRYPTION_KEY。\n"
-                "可执行: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+                "Generate a valid Fernet key and assign it to ENCRYPTION_KEY.\n"
+                "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
             ),
         )
 
@@ -217,7 +217,7 @@ def _check_encryption_key(settings: Settings) -> CheckResult:
         name="ENCRYPTION_KEY",
         status="pass",
         severity="info",
-        summary="数据库凭据加密密钥可用。",
+        summary="The database credential encryption key is valid.",
     )
 
 
@@ -227,16 +227,16 @@ def _check_public_share_secret(settings: Settings) -> CheckResult:
             name="PUBLIC_SHARE_SECRET_KEY",
             status="fail",
             severity="blocker",
-            summary="未配置公开分享签名密钥。",
-            detail="当前仍在使用默认占位值，公开分享链接的签名校验无法安全工作。",
-            suggestion="请在 .env 或环境变量中设置一个强随机字符串到 PUBLIC_SHARE_SECRET_KEY。",
+            summary="The public share signing key is not configured.",
+            detail="The default placeholder is still in use, so public share link signatures cannot be verified securely.",
+            suggestion="Set PUBLIC_SHARE_SECRET_KEY to a strong random string in .env or as an environment variable.",
         )
 
     return CheckResult(
         name="PUBLIC_SHARE_SECRET_KEY",
         status="pass",
         severity="info",
-        summary="公开分享签名密钥可用。",
+        summary="The public share signing key is valid.",
     )
 
 
@@ -250,9 +250,9 @@ async def _check_initial_admin_password(settings: Settings) -> CheckResult:
             name="INITIAL_ADMIN_PASSWORD",
             status="pass",
             severity="info",
-            summary="无法自动校验管理员密码与 INITIAL_ADMIN_PASSWORD 是否一致。",
-            detail="元数据库连接或 app_user 查询失败，已跳过该项比对。",
-            suggestion="请确认 DATABASE_URL 可访问，且已完成数据库初始化后重试自检。",
+            summary="Could not determine whether the administrator password matches INITIAL_ADMIN_PASSWORD.",
+            detail="The metadata database connection or app_user query failed, so this comparison was skipped.",
+            suggestion="Verify that DATABASE_URL is reachable and the database is initialized, then run the self-check again.",
         )
 
     if not admin_password_hash:
@@ -260,8 +260,8 @@ async def _check_initial_admin_password(settings: Settings) -> CheckResult:
             name="INITIAL_ADMIN_PASSWORD",
             status="pass",
             severity="info",
-            summary="未检测到管理员账号，跳过 INITIAL_ADMIN_PASSWORD 比对。",
-            detail="当前数据库中不存在 admin 用户记录。",
+            summary="No administrator account was found; skipping the INITIAL_ADMIN_PASSWORD comparison.",
+            detail="The database does not contain an admin user record.",
         )
 
     try:
@@ -272,9 +272,9 @@ async def _check_initial_admin_password(settings: Settings) -> CheckResult:
             name="INITIAL_ADMIN_PASSWORD",
             status="pass",
             severity="info",
-            summary="无法自动校验管理员密码与 INITIAL_ADMIN_PASSWORD 是否一致。",
-            detail=f"密码哈希校验失败: {exc}",
-            suggestion="请确认管理员密码哈希格式有效，必要时重置管理员密码后重试。",
+            summary="Could not determine whether the administrator password matches INITIAL_ADMIN_PASSWORD.",
+            detail=f"Password hash verification failed: {exc}",
+            suggestion="Verify that the administrator password hash is valid. Reset the administrator password if necessary, then try again.",
         )
 
     if is_same_as_admin_password:
@@ -282,23 +282,23 @@ async def _check_initial_admin_password(settings: Settings) -> CheckResult:
             name="INITIAL_ADMIN_PASSWORD",
             status="warn",
             severity="warning",
-            summary="管理员密码与 INITIAL_ADMIN_PASSWORD 当前值一致。",
-            detail="共享或弱口令配置可能带来额外风险，建议避免将运行中管理员密码长期与初始化配置保持一致。",
-            suggestion="建议定期通过系统内密码修改流程更新管理员密码。",
+            summary="The administrator password currently matches INITIAL_ADMIN_PASSWORD.",
+            detail="Reusing a shared or weak password increases risk. Avoid keeping the active administrator password equal to the initialization setting.",
+            suggestion="Change the administrator password periodically using the in-product password change workflow.",
         )
 
     return CheckResult(
         name="INITIAL_ADMIN_PASSWORD",
         status="pass",
         severity="info",
-        summary="管理员密码与 INITIAL_ADMIN_PASSWORD 不一致。",
-        detail="说明管理员账号密码已独立于当前初始化配置。",
+        summary="The administrator password does not match INITIAL_ADMIN_PASSWORD.",
+        detail="The administrator password is independent of the current initialization setting.",
     )
 
 
 async def _fetch_admin_password_hash(database_url: str) -> tuple[str | None, str | None]:
     if not (database_url or "").strip():
-        return None, "DATABASE_URL 未配置"
+        return None, "DATABASE_URL is not configured"
 
     engine = None
     try:
@@ -339,48 +339,48 @@ def _check_single_path(path: Path) -> CheckResult:
 
     if path.exists() and not path.is_dir():
         return CheckResult(
-            name=f"目录 {path}",
+            name=f"Directory {path}",
             status="fail",
             severity="blocker",
-            summary=f"{path} 不是目录。",
-            detail="当前路径已存在，但类型不是目录，系统无法在其下写入运行数据。",
-            suggestion=f"请移除或重命名该路径，然后重新启动服务。",
+            summary=f"{path} is not a directory.",
+            detail="The path exists but is not a directory, so runtime data cannot be written beneath it.",
+            suggestion="Remove or rename the path, then restart the service.",
         )
 
     if not os.access(existing_parent, os.W_OK):
         return CheckResult(
-            name=f"目录 {path}",
+            name=f"Directory {path}",
             status="fail",
             severity="blocker",
-            summary=f"{path} 不可写。",
-            detail=f"最近的已存在父目录是 {existing_parent}，当前进程没有写入权限。",
-            suggestion=f"请修复 {existing_parent} 的写权限，或切换到有权限的工作目录后重试。",
+            summary=f"{path} is not writable.",
+            detail=f"The nearest existing parent is {existing_parent}, and the current process cannot write to it.",
+            suggestion=f"Grant write access to {existing_parent}, or run from a writable working directory and try again.",
         )
 
-    detail = f"最近的可写父目录: {existing_parent}"
+    detail = f"Nearest writable parent directory: {existing_parent}"
     if path.exists():
         try:
             probe_file = path / ".dbclaw_write_probe"
             probe_file.write_text("ok", encoding="utf-8")
             probe_file.unlink()
-            detail = f"{path} 已存在且可写。"
+            detail = f"{path} exists and is writable."
         except Exception as exc:
             return CheckResult(
-                name=f"目录 {path}",
+                name=f"Directory {path}",
                 status="fail",
                 severity="blocker",
-                summary=f"{path} 存在但不可写。",
-                detail=f"尝试写入测试文件失败: {exc}",
-                suggestion=f"请检查 {path} 的目录权限。",
+                summary=f"{path} exists but is not writable.",
+                detail=f"Writing a probe file failed: {exc}",
+                suggestion=f"Check the directory permissions for {path}.",
             )
     else:
-        detail = f"{path} 当前不存在，但其父目录可写，首次使用时可以创建。"
+        detail = f"{path} does not exist, but its parent is writable and the directory can be created when first used."
 
     return CheckResult(
-        name=f"目录 {path}",
+        name=f"Directory {path}",
         status="pass",
         severity="info",
-        summary=f"{path} 可用于运行时数据存储。",
+        summary=f"{path} is available for runtime data storage.",
         detail=detail,
     )
 
@@ -410,26 +410,26 @@ def _check_app_port(settings: Settings) -> CheckResult:
                 name="APP_PORT",
                 status="fail",
                 severity="blocker",
-                summary=f"应用端口 {port} 已被占用。",
-                detail=f"当前配置监听地址为 {host}:{port}，绑定端口时返回 Address already in use。",
-                suggestion=f"请释放端口 {port}，或修改 APP_PORT 后重试。",
+                summary=f"Application port {port} is already in use.",
+                detail=f"Binding the configured address {host}:{port} returned 'Address already in use'.",
+                suggestion=f"Release port {port}, or change APP_PORT and try again.",
             )
         if exc.errno == errno.EADDRNOTAVAIL:
             return CheckResult(
                 name="APP_PORT",
                 status="fail",
                 severity="blocker",
-                summary=f"监听地址 {host}:{port} 无法绑定。",
-                detail=f"系统返回 {exc}，通常表示 APP_HOST 配置的地址不存在。",
-                suggestion="请检查 APP_HOST 是否是当前机器可用的监听地址，例如 0.0.0.0 或 127.0.0.1。",
+                summary=f"Listen address {host}:{port} cannot be bound.",
+                detail=f"The system returned {exc}, which usually means the address configured in APP_HOST is unavailable.",
+                suggestion="Set APP_HOST to an address available on this machine, such as 0.0.0.0 or 127.0.0.1.",
             )
         return CheckResult(
             name="APP_PORT",
             status="fail",
             severity="blocker",
-            summary=f"无法绑定应用端口 {host}:{port}。",
+            summary=f"Application port {host}:{port} cannot be bound.",
             detail=str(exc),
-            suggestion="请检查 APP_HOST / APP_PORT 配置以及本机网络环境。",
+            suggestion="Check APP_HOST, APP_PORT, and the local network configuration.",
         )
     finally:
         if sock is not None:
@@ -439,7 +439,7 @@ def _check_app_port(settings: Settings) -> CheckResult:
         name="APP_PORT",
         status="pass",
         severity="info",
-        summary=f"应用端口 {host}:{port} 可用。",
+        summary=f"Application port {host}:{port} is available.",
     )
 
 
@@ -447,26 +447,26 @@ async def _check_metadata_database(settings: Settings) -> CheckResult:
     database_url = (settings.database_url or "").strip()
     if not database_url:
         return CheckResult(
-            name="元数据库",
+            name="Metadata database",
             status="fail",
             severity="blocker",
-            summary="DATABASE_URL 未配置。",
-            detail="系统无法确定元数据库连接地址。",
-            suggestion="请在 .env 或环境变量中设置 DATABASE_URL。",
+            summary="DATABASE_URL is not configured.",
+            detail="The metadata database connection address cannot be determined.",
+            suggestion="Set DATABASE_URL in .env or as an environment variable.",
         )
 
     try:
         url = make_url(database_url)
     except ArgumentError as exc:
         return CheckResult(
-            name="元数据库",
+            name="Metadata database",
             status="fail",
             severity="blocker",
-            summary="DATABASE_URL 格式无效。",
+            summary="DATABASE_URL has an invalid format.",
             detail=str(exc),
             suggestion=(
-                "请检查 DATABASE_URL 格式是否正确。\n"
-                "PostgreSQL 示例: postgresql+asyncpg://dbclaw:password@127.0.0.1:5432/dbclaw"
+                "Check the DATABASE_URL format.\n"
+                "PostgreSQL example: postgresql+asyncpg://dbclaw:password@127.0.0.1:5432/dbclaw"
             ),
         )
 
@@ -475,19 +475,19 @@ async def _check_metadata_database(settings: Settings) -> CheckResult:
         return await _check_postgres_database(database_url, url)
 
     return CheckResult(
-        name="元数据库",
+        name="Metadata database",
         status="fail",
         severity="blocker",
-        summary=f"不支持的元数据库驱动: {driver}",
-        detail="当前系统只支持 PostgreSQL 作为元数据库。",
-        suggestion="请将 DATABASE_URL 调整为 PostgreSQL 连接串。",
+        summary=f"Unsupported metadata database driver: {driver}",
+        detail="Only PostgreSQL is supported as the metadata database.",
+        suggestion="Change DATABASE_URL to a PostgreSQL connection string.",
     )
 
 
 async def _check_postgres_database(database_url: str, url: Any) -> CheckResult:
     host = url.host or "localhost"
     port = int(url.port or 5432)
-    database = url.database or "(未指定数据库)"
+    database = url.database or "(database not specified)"
     tcp_result = await _probe_postgres_endpoint(host, port, database)
     if tcp_result is not None:
         return tcp_result
@@ -509,11 +509,11 @@ async def _check_postgres_database(database_url: str, url: Any) -> CheckResult:
             await engine.dispose()
 
     return CheckResult(
-        name="元数据库",
+        name="Metadata database",
         status="pass",
         severity="info",
-        summary="PostgreSQL 元数据库连接正常。",
-        detail=f"地址: {host}:{port} / 数据库: {database}",
+        summary="The PostgreSQL metadata database connection is healthy.",
+        detail=f"Address: {host}:{port} / Database: {database}",
     )
 
 
@@ -524,87 +524,87 @@ async def _probe_postgres_endpoint(host: str, port: int, database: str) -> Check
         await writer.wait_closed()
     except socket.gaierror as exc:
         return CheckResult(
-            name="元数据库",
+            name="Metadata database",
             status="fail",
             severity="blocker",
-            summary="元数据库主机名无法解析。",
-            detail=f"地址: {host}:{port} / 数据库: {database}\n底层错误: {exc}",
-            suggestion="请检查 DATABASE_URL 中的主机名是否正确，或确认 DNS / host 配置可解析该地址。",
+            summary="The metadata database hostname could not be resolved.",
+            detail=f"Address: {host}:{port} / Database: {database}\nUnderlying error: {exc}",
+            suggestion="Check the hostname in DATABASE_URL and verify that DNS or host configuration can resolve it.",
         )
     except ConnectionRefusedError as exc:
         return CheckResult(
-            name="元数据库",
+            name="Metadata database",
             status="fail",
             severity="blocker",
-            summary="元数据库端口拒绝连接。",
-            detail=f"地址: {host}:{port} / 数据库: {database}\n底层错误: {exc}",
+            summary="The metadata database port refused the connection.",
+            detail=f"Address: {host}:{port} / Database: {database}\nUnderlying error: {exc}",
             suggestion=(
-                "请确认 PostgreSQL 服务已启动，并检查 DATABASE_URL 中的 host/port 是否正确。\n"
-                f"可先执行: pg_isready -h {host} -p {port}"
+                "Verify that PostgreSQL is running and that the host and port in DATABASE_URL are correct.\n"
+                f"Check with: pg_isready -h {host} -p {port}"
             ),
         )
     except TimeoutError:
         return CheckResult(
-            name="元数据库",
+            name="Metadata database",
             status="fail",
             severity="blocker",
-            summary="连接元数据库超时。",
-            detail=f"地址: {host}:{port} / 数据库: {database}\n3 秒内未建立 TCP 连接。",
-            suggestion="请检查网络连通性、防火墙和安全组配置。",
+            summary="The metadata database connection timed out.",
+            detail=f"Address: {host}:{port} / Database: {database}\nNo TCP connection was established within 3 seconds.",
+            suggestion="Check network connectivity, firewall rules, and security group settings.",
         )
     except OSError as exc:
         return CheckResult(
-            name="元数据库",
+            name="Metadata database",
             status="fail",
             severity="blocker",
-            summary="无法与元数据库建立网络连接。",
-            detail=f"地址: {host}:{port} / 数据库: {database}\n底层错误: {exc}",
-            suggestion="请检查 DATABASE_URL、网络连通性以及 PostgreSQL 服务监听地址。",
+            summary="A network connection to the metadata database could not be established.",
+            detail=f"Address: {host}:{port} / Database: {database}\nUnderlying error: {exc}",
+            suggestion="Check DATABASE_URL, network connectivity, and the PostgreSQL listen address.",
         )
     return None
 
 
 def _classify_postgres_connection_error(exc: Exception, host: str, port: int, database: str) -> CheckResult:
-    detail = f"地址: {host}:{port} / 数据库: {database}\n底层错误: {_format_exception_detail(exc)}"
+    detail = f"Address: {host}:{port} / Database: {database}\nUnderlying error: {_format_exception_detail(exc)}"
     lowered = detail.lower()
 
     if "password authentication failed" in lowered or "invalidpassworderror" in lowered:
         return CheckResult(
-            name="元数据库",
+            name="Metadata database",
             status="fail",
             severity="blocker",
-            summary="元数据库认证失败。",
+            summary="Metadata database authentication failed.",
             detail=detail,
-            suggestion="请检查 DATABASE_URL 中的用户名和密码是否正确。",
+            suggestion="Check the username and password in DATABASE_URL.",
         )
 
     if "does not exist" in lowered and "database" in lowered:
         return CheckResult(
-            name="元数据库",
+            name="Metadata database",
             status="fail",
             severity="blocker",
-            summary="元数据库不存在。",
+            summary="The metadata database does not exist.",
             detail=detail,
-            suggestion=f"请先创建数据库 {database}，或修改 DATABASE_URL 指向已存在的数据库。",
+            suggestion=f"Create database {database}, or update DATABASE_URL to reference an existing database.",
         )
 
     if "ssl" in lowered:
         return CheckResult(
-            name="元数据库",
+            name="Metadata database",
             status="fail",
             severity="blocker",
-            summary="元数据库 SSL 配置不兼容。",
+            summary="The metadata database SSL configuration is incompatible.",
             detail=detail,
-            suggestion="请检查 PostgreSQL 的 SSL 配置，并确认应用连接参数与服务端要求一致。",
+            suggestion="Check the PostgreSQL SSL configuration and ensure the application connection parameters match the server requirements.",
         )
 
     return CheckResult(
-        name="元数据库",
+        name="Metadata database",
         status="fail",
         severity="blocker",
-        summary="元数据库连接失败。",
+        summary="The metadata database connection failed.",
         detail=detail,
-        suggestion="请检查 DATABASE_URL、数据库账号权限，以及 PostgreSQL 服务状态。",
+        suggestion="Check DATABASE_URL, database account permissions, and the PostgreSQL service status.",
     )
 
 

@@ -31,7 +31,7 @@ def _set_binding_status(*, login_status: str, last_error: str = "") -> None:
     try:
         future.result(timeout=15)
     except Exception:
-        logger.exception("更新钉钉机器人绑定状态失败")
+        logger.exception("Failed to update DingTalk bot binding status")
 
 
 async def _process_message_payload(
@@ -55,7 +55,7 @@ def _ws_thread_main(*, client_id: str, client_secret: str) -> None:
         class _DingTalkChatbotHandler(dingtalk_stream.chatbot.AsyncChatbotHandler):
             def process(self, callback_message):
                 if _APP_LOOP is None:
-                    logger.warning("钉钉长连接主事件循环尚未就绪，忽略消息")
+                    logger.warning("The DingTalk long-connection main event loop is not ready; ignoring message")
                     return
 
                 incoming_message = dingtalk_stream.chatbot.ChatbotMessage.from_dict(callback_message.data or {})
@@ -73,7 +73,7 @@ def _ws_thread_main(*, client_id: str, client_secret: str) -> None:
                 try:
                     future.result(timeout=600)
                 except Exception:
-                    logger.exception("钉钉消息处理失败")
+                    logger.exception("Failed to process DingTalk message")
 
         credential = dingtalk_stream.Credential(client_id, client_secret)
         client = dingtalk_stream.DingTalkStreamClient(credential)
@@ -87,7 +87,7 @@ def _ws_thread_main(*, client_id: str, client_secret: str) -> None:
             while not stop_event.is_set():
                 connection = await asyncio.to_thread(client.open_connection)
                 if not connection:
-                    logger.error("钉钉长连接 open_connection 失败")
+                    logger.error("DingTalk long-connection open_connection failed")
                     _set_binding_status(login_status="error", last_error="钉钉 Stream open_connection 失败")
                     await asyncio.to_thread(stop_event.wait, 10)
                     continue
@@ -118,7 +118,7 @@ def _ws_thread_main(*, client_id: str, client_secret: str) -> None:
                 except Exception as exc:
                     if stop_event.is_set():
                         break
-                    logger.exception("钉钉长连接 websocket 异常")
+                    logger.exception("DingTalk long-connection WebSocket error")
                     _set_binding_status(login_status="error", last_error=str(exc))
                     await asyncio.to_thread(stop_event.wait, 5)
 
@@ -127,7 +127,7 @@ def _ws_thread_main(*, client_id: str, client_secret: str) -> None:
 
         loop.run_until_complete(runner())
     except Exception as exc:
-        logger.exception("钉钉长连接客户端退出异常")
+        logger.exception("DingTalk long-connection client exited unexpectedly")
         _set_binding_status(login_status="error", last_error=str(exc))
     finally:
         try:
@@ -138,7 +138,7 @@ def _ws_thread_main(*, client_id: str, client_secret: str) -> None:
                 loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
             loop.run_until_complete(loop.shutdown_asyncgens())
         except Exception:
-            logger.exception("钉钉长连接事件循环清理失败")
+            logger.exception("Failed to clean up the DingTalk long-connection event loop")
         finally:
             loop.close()
             logger.info("DingTalk stream client stopped")
@@ -157,7 +157,7 @@ async def start_dingtalk_stream_client() -> None:
         await DingTalkBotService.ensure_bot_binding(db, integration=integration)
 
     if importlib.util.find_spec("dingtalk_stream") is None:
-        logger.warning("未安装 dingtalk-stream，跳过钉钉长连接启动")
+        logger.warning("dingtalk-stream is not installed; skipping DingTalk long-connection startup")
         await _update_binding_status(
             login_status="error",
             last_error="未安装 dingtalk-stream，请先执行 pip install -r requirements.txt",
@@ -170,7 +170,7 @@ async def start_dingtalk_stream_client() -> None:
     client_secret = (config.get("client_secret") or "").strip()
 
     if not client_id or not client_secret:
-        logger.info("钉钉机器人未在系统参数中配置 dingtalk_client_id/dingtalk_client_secret，跳过长连接启动")
+        logger.info("The DingTalk bot is missing dingtalk_client_id/dingtalk_client_secret in system settings; skipping long-connection startup")
         await _update_binding_status(login_status="not_ready", last_error="")
         return
 
@@ -194,7 +194,7 @@ async def stop_dingtalk_stream_client() -> None:
     if _WS_THREAD:
         await asyncio.to_thread(_WS_THREAD.join, 10)
         if _WS_THREAD.is_alive():
-            logger.warning("钉钉长连接线程未在超时时间内退出，将等待进程结束时回收")
+            logger.warning("The DingTalk long-connection thread did not exit before the timeout and will be reclaimed when the process exits")
 
     _WS_THREAD = None
     _WS_STOP_EVENT = None

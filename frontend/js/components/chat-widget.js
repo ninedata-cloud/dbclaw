@@ -56,7 +56,7 @@ const ChatWidget = {
         const input = DOM.el('textarea', {
             className: 'chat-input',
             id: 'chat-input',
-            placeholder: '询问数据库相关问题，按 Ctrl/Command+Enter 发送...',
+            placeholder: I18n.t('placeholders.chatQuestion'),
             rows: '1',
         });
 
@@ -150,14 +150,14 @@ const ChatWidget = {
     async addAttachment(file, sessionId) {
         // Check file size (10MB limit)
         if (file.size > 10 * 1024 * 1024) {
-            Toast.error('File too large (max 10MB)');
+            Toast.error(I18n.t('chat.fileTooLarge'));
             return;
         }
 
         // Upload file
         try {
             if (!sessionId) {
-                Toast.error('No active session');
+                Toast.error(I18n.t('chat.noActiveSession'));
                 return;
             }
 
@@ -171,15 +171,15 @@ const ChatWidget = {
             });
 
             if (!response.ok) {
-                throw new Error('Upload failed');
+                throw new Error(I18n.t('chat.uploadError'));
             }
 
             const metadata = await response.json();
             this.attachments.push(metadata);
             this.updateAttachmentPreview();
-            Toast.success('File attached');
+            Toast.success(I18n.t('chat.attached'));
         } catch (error) {
-            Toast.error('Failed to upload file: ' + error.message);
+            Toast.error(I18n.t('chat.uploadFailed', { message: error.message }));
         }
     },
 
@@ -725,9 +725,9 @@ const ChatWidget = {
         panel.innerHTML = `
             <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
                 <div style="display:flex;gap:16px;flex-wrap:wrap;">
-                    <span><strong>本次会话已用</strong> ${usage.total_tokens.toLocaleString()} tokens</span>
-                    <span>输入 ${usage.input_tokens.toLocaleString()}</span>
-                    <span>输出 ${usage.output_tokens.toLocaleString()}</span>
+                    <span><strong>本次会话已用</strong> ${I18n.formatNumber(usage.total_tokens)} tokens</span>
+                    <span>输入 ${I18n.formatNumber(usage.input_tokens)}</span>
+                    <span>输出 ${I18n.formatNumber(usage.output_tokens)}</span>
                     <span>${contextWindow ? `上限 ${String(Number(contextWindow))}` : '未配置上下文上限'}</span>
                     <span>${usageRate !== null ? `使用率 ${usageRate.toFixed(1)}%` : ''}</span>
                 </div>
@@ -1259,7 +1259,7 @@ const ChatWidget = {
         this.currentRenderSegments = this._upsertToolRenderSegment(this.currentRenderSegments, toolName, toolCallId, {
             status: 'waiting_approval',
             args: args || {},
-            summary: summary || `技能 ${toolName} 需要确认后再执行`,
+            summary: summary || `${I18n.translateLegacyText('技能')} ${toolName} ${I18n.translateLegacyText('需要确认后再执行')}`,
             metadata: this._getToolSegmentMetadata({}, metadata),
         });
         return this._renderStreamingAssistantSegments();
@@ -1367,7 +1367,7 @@ const ChatWidget = {
         else if (absValue >= 100) maximumFractionDigits = 1;
         else if (absValue < 1) maximumFractionDigits = 4;
 
-        return numericValue.toLocaleString('zh-CN', {
+        return I18n.formatNumber(numericValue, {
             minimumFractionDigits: 0,
             maximumFractionDigits,
         });
@@ -1816,7 +1816,7 @@ const ChatWidget = {
         step.innerHTML = `
             <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary);">
                 <span style="font-size:14px;line-height:1;color:var(--accent-blue);" aria-hidden="true">⚙</span>
-                <span style="font-weight:500;color:var(--text-primary);">正在执行 ${toolName}...</span>
+                <span style="font-weight:500;color:var(--text-primary);">${I18n.translateLegacyText('正在执行')} ${toolName}...</span>
             </div>
         `;
         messages.appendChild(step);

@@ -62,7 +62,7 @@ class IntegrationService:
         db.add(integration)
         await db.commit()
         await db.refresh(integration)
-        logger.info("创建 Integration: %s (ID: %s)", integration.name, integration.integration_code)
+        logger.info("Created integration: %s (ID: %s)", integration.name, integration.integration_code)
         return integration
 
     @staticmethod
@@ -102,7 +102,7 @@ class IntegrationService:
         integration.updated_at = now()
         await db.commit()
         await db.refresh(integration)
-        logger.info("更新 Integration: %s", integration.name)
+        logger.info("Updated integration: %s", integration.name)
         return integration
 
     @staticmethod
@@ -116,7 +116,7 @@ class IntegrationService:
 
         integration.soft_delete(None)
         await db.commit()
-        logger.info("删除 Integration: %s", integration.name)
+        logger.info("Deleted integration: %s", integration.name)
 
     @staticmethod
     async def list_integration(
@@ -332,4 +332,4 @@ class IntegrationService:
                 loaded_count += 1
 
         await db.commit()
-        logger.info("内置模板加载完成: 新增 %s 个，更新 %s 个", loaded_count, updated_count)
+        logger.info("Built-in templates loaded: %s added, %s updated", loaded_count, updated_count)

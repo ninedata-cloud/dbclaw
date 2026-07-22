@@ -418,7 +418,7 @@ async def fetch_metrics(context, params, datasource):
     access_key_id = params.get("access_key_id") or await context.get_system_config("aliyun_access_key_id")
     access_key_secret = params.get("access_key_secret") or await context.get_system_config("aliyun_access_key_secret")
     if not access_key_id or not access_key_secret:
-        raise ValueError("阿里云 AccessKey 未配置，请在系统配置中设置 aliyun_access_key_id 和 aliyun_access_key_secret")
+        raise ValueError("Alibaba Cloud AccessKey is not configured; set aliyun_access_key_id and aliyun_access_key_secret in system settings")
     region_id = params.get("region_id", "cn-hangzhou")
     try:
         from aliyunsdkcore.client import AcsClient
@@ -428,7 +428,7 @@ async def fetch_metrics(context, params, datasource):
             DescribeDBInstancesRequest,
         )
     except ImportError:
-        raise ValueError("阿里云 SDK 未安装，请运行: pip install aliyun-python-sdk-core aliyun-python-sdk-rds")
+        raise ValueError("Alibaba Cloud SDK is not installed; run: pip install aliyun-python-sdk-core aliyun-python-sdk-rds")
     from datetime import datetime, timedelta
     import json
 
@@ -677,20 +677,20 @@ async def fetch_metrics(context, params, datasource):
     try:
         validate_credentials(client)
     except Exception as e:
-        raise ValueError("阿里云 AccessKey 验证失败，请检查配置: " + str(e))
+        raise ValueError("Alibaba Cloud AccessKey validation failed; check the configuration: " + str(e))
 
     metrics = []
     if not datasource:
-        await context.log("info", "没有配置数据源，阿里云凭证验证已通过")
+        await context.log("info", "No datasources are configured; Alibaba Cloud credentials were validated successfully")
         return metrics
 
     for ds in datasource:
         db_type = normalize_db_type(ds.get("db_type"))
         if db_type not in engine_metric_configs:
-            raise ValueError("数据源 " + ds["name"] + " 的数据库类型暂不支持阿里云 RDS 外部采集: " + str(ds.get("db_type")))
+            raise ValueError("Datasource " + ds["name"] + " has a database type that is not supported by Alibaba Cloud RDS collection: " + str(ds.get("db_type")))
         instance_id = ds.get("external_instance_id")
         if not instance_id:
-            raise ValueError("数据源 " + ds["name"] + " 未配置 external_instance_id")
+            raise ValueError("Datasource " + ds["name"] + " does not have external_instance_id configured")
         try:
             config = engine_metric_configs[db_type]
             end_time = datetime.utcnow()
@@ -747,10 +747,10 @@ async def fetch_metrics(context, params, datasource):
             latest_metrics.update(attribute_metrics)
 
             metrics.extend(latest_metrics.values())
-            await context.log("info", "成功采集数据源 " + ds["name"] + " 的 " + str(len(latest_metrics)) + " 条指标")
+            await context.log("info", "Collected " + str(len(latest_metrics)) + " metrics successfully for datasource " + ds["name"])
         except Exception as e:
-            await context.log("error", "采集数据源 " + ds["name"] + " 失败: " + str(e))
-            raise ValueError("阿里云 API 调用失败: " + str(e))
+            await context.log("error", "Failed to collect metrics for datasource " + ds["name"] + ": " + str(e))
+            raise ValueError("Alibaba Cloud API call failed: " + str(e))
     return metrics
 """
 }
@@ -1148,7 +1148,7 @@ async def fetch_metrics(context, params, datasource):
             project_response = await signed_request("GET", iam_endpoint + "/v3/projects")
             if project_response.status_code != 200:
                 raise ValueError(
-                    "华为云 IAM 项目查询失败: HTTP "
+                    "Huawei Cloud IAM project query failed: HTTP "
                     + str(project_response.status_code)
                     + ", "
                     + project_response.text
@@ -1167,15 +1167,15 @@ async def fetch_metrics(context, params, datasource):
             project_id = (matched_project or {}).get("id")
             if not project_id:
                 raise ValueError(
-                    "未找到华为云项目 ID，请确认 region_id="
+                    "Huawei Cloud project ID was not found; verify that region_id="
                     + str(region_id)
-                    + " 对应的项目可访问，或手动填写 project_id"
+                    + " maps to an accessible project, or set project_id explicitly"
                 )
         elif not datasource:
             project_response = await signed_request("GET", iam_endpoint + "/v3/projects")
             if project_response.status_code != 200:
                 raise ValueError(
-                    "华为云 AK/SK 鉴权失败: HTTP "
+                    "Huawei Cloud AK/SK authentication failed: HTTP "
                     + str(project_response.status_code)
                     + ", "
                     + project_response.text
@@ -1211,7 +1211,7 @@ async def fetch_metrics(context, params, datasource):
         )
         if token_response.status_code not in (200, 201):
             raise ValueError(
-                "华为云 IAM 鉴权失败: HTTP "
+                "Huawei Cloud IAM authentication failed: HTTP "
                 + str(token_response.status_code)
                 + ", "
                 + token_response.text
@@ -1219,13 +1219,13 @@ async def fetch_metrics(context, params, datasource):
 
         subject_token = token_response.header("X-Subject-Token") or token_response.header("x-subject-token")
         if not subject_token:
-            raise ValueError("华为云 IAM 鉴权成功，但响应头缺少 X-Subject-Token")
+            raise ValueError("Huawei Cloud IAM authentication succeeded, but the response is missing the X-Subject-Token header")
 
         token_payload = token_response.json() or {}
         project = ((token_payload.get("token") or {}).get("project") or {})
         project_id = project.get("id")
         if not project_id:
-            raise ValueError("华为云 IAM 鉴权成功，但响应中未返回 project.id")
+            raise ValueError("Huawei Cloud IAM authentication succeeded, but the response does not contain project.id")
 
         async def request_json(method, url, payload=None):
             kwargs = {
@@ -1240,13 +1240,13 @@ async def fetch_metrics(context, params, datasource):
 
     else:
         raise ValueError(
-            "华为云凭据未配置，请先在系统参数中设置 "
+            "Huawei Cloud credentials are not configured; set the following system parameters first: "
             "huaweicloud_access_key_id / huaweicloud_access_key_secret"
         )
 
     metrics = []
     if not datasource:
-        await context.log("info", "没有配置数据源，华为云凭证验证已通过")
+        await context.log("info", "No datasources are configured; Huawei Cloud credentials were validated successfully")
         return metrics
 
     async def get_rds_instance(instance_id):
@@ -1256,7 +1256,7 @@ async def fetch_metrics(context, params, datasource):
         )
         if response.status_code != 200:
             raise ValueError(
-                "华为云 RDS 实例查询失败: HTTP "
+                "Huawei Cloud RDS instance query failed: HTTP "
                 + str(response.status_code)
                 + ", "
                 + response.text
@@ -1274,19 +1274,19 @@ async def fetch_metrics(context, params, datasource):
     for ds in datasource:
         db_type = normalize_db_type(ds.get("db_type"))
         if db_type not in engine_metric_configs:
-            raise ValueError("数据源 " + ds["name"] + " 的数据库类型暂不支持华为云 RDS 外部采集: " + str(ds.get("db_type")))
+            raise ValueError("Datasource " + ds["name"] + " has a database type that is not supported by Huawei Cloud RDS collection: " + str(ds.get("db_type")))
 
         instance_id = ds.get("external_instance_id")
         if not instance_id:
-            raise ValueError("数据源 " + ds["name"] + " 未配置 external_instance_id")
+            raise ValueError("Datasource " + ds["name"] + " does not have external_instance_id configured")
 
         rds_instance = await get_rds_instance(instance_id)
         if not rds_instance:
             raise ValueError(
-                "华为云 RDS API 未找到实例 "
+                "Huawei Cloud RDS API did not find instance "
                 + str(instance_id)
-                + "。请核对该数据源的 external_instance_id、region_id，"
-                + "并确认当前系统参数中的 AK/SK 属于该实例所在账号/项目"
+                + ". Verify the datasource external_instance_id and region_id, "
+                + "and confirm that the configured AK/SK belongs to the account and project containing the instance"
             )
 
         config = engine_metric_configs[db_type]
@@ -1311,7 +1311,7 @@ async def fetch_metrics(context, params, datasource):
                 break
 
         if response_metrics is None:
-            raise ValueError("华为云 CES 调用失败: " + (last_error or "未返回有效响应"))
+            raise ValueError("Huawei Cloud CES call failed: " + (last_error or "no valid response was returned"))
 
         latest_metrics = {}
         latest_metric_timestamps = {}
@@ -1358,17 +1358,17 @@ async def fetch_metrics(context, params, datasource):
 
         if not latest_metrics:
             raise ValueError(
-                "华为云 CES 未返回实例 "
+                "Huawei Cloud CES returned no monitoring data for instance "
                 + str(instance_id)
-                + " 的监控数据。已尝试维度 "
+                + ". Tried dimensions: "
                 + ",".join(config["dimension_candidates"])
-                + "；请核对实例 ID、region_id，或确认当前 AK/SK 是否有该实例监控查看权限"
+                + ". Verify the instance ID and region_id, and confirm that the AK/SK can view monitoring data for this instance"
             )
 
         metrics.extend(latest_metrics.values())
         await context.log(
             "info",
-            "成功采集数据源 " + ds["name"] + " 的 " + str(len(latest_metrics)) + " 条指标（维度 " + str(used_dimension) + "）"
+            "Collected " + str(len(latest_metrics)) + " metrics successfully for datasource " + ds["name"] + " (dimension: " + str(used_dimension) + ")"
         )
 
     return metrics
@@ -1417,9 +1417,9 @@ async def fetch_metrics(context, params, datasource):
     version = "2018-07-24"
 
     if not secret_id or not secret_key:
-        raise ValueError("腾讯云 SecretId/SecretKey 未配置，请在系统参数中设置 tencentcloud_secret_id 和 tencentcloud_secret_key")
+        raise ValueError("Tencent Cloud SecretId/SecretKey is not configured; set tencentcloud_secret_id and tencentcloud_secret_key in system settings")
     if not region_input:
-        raise ValueError("腾讯云 region_id 未配置")
+        raise ValueError("Tencent Cloud region_id is not configured")
 
     db_type_aliases = {
         "mysql": "mysql",
@@ -1582,9 +1582,9 @@ async def fetch_metrics(context, params, datasource):
             return raw
 
         raise ValueError(
-            "无效的腾讯云 region_id: "
+            "Invalid Tencent Cloud region_id: "
             + str(value)
-            + "。请填写标准地域，例如 ap-guangzhou；也支持监控文档中的地域缩写/数字 ID，例如 gz 或 1"
+            + ". Use a standard region such as ap-guangzhou, or a documented abbreviation or numeric ID such as gz or 1"
         )
 
     def to_float(value, scale=1.0):
@@ -1680,7 +1680,7 @@ async def fetch_metrics(context, params, datasource):
 
         body = raw.get("Response") if isinstance(raw, dict) else None
         if not isinstance(body, dict):
-            raise ValueError("腾讯云 API 返回数据格式异常")
+            raise ValueError("Tencent Cloud API returned an invalid data format")
 
         error = body.get("Error")
         if isinstance(error, dict):
@@ -1723,8 +1723,8 @@ async def fetch_metrics(context, params, datasource):
             })
         except Exception as e:
             if is_network_error(e):
-                raise ValueError("腾讯云 API 网络连接失败，请检查 DNS/网络配置: " + str(e))
-            raise ValueError("腾讯云 SecretId/SecretKey 验证失败，请检查配置: " + str(e))
+                raise ValueError("Tencent Cloud API network connection failed; check DNS and network configuration: " + str(e))
+            raise ValueError("Tencent Cloud SecretId/SecretKey validation failed; check the configuration: " + str(e))
 
     def build_dimensions(mode, instance_id):
         if mode == "mysql":
@@ -1829,7 +1829,7 @@ async def fetch_metrics(context, params, datasource):
 
     metrics = []
     if not datasource:
-        await context.log("info", "没有配置数据源，腾讯云凭证验证已通过")
+        await context.log("info", "No datasources are configured; Tencent Cloud credentials were validated successfully")
         return metrics
 
     end_time = datetime.now(timezone.utc).replace(microsecond=0)
@@ -1842,11 +1842,11 @@ async def fetch_metrics(context, params, datasource):
     for ds in datasource:
         db_type = normalize_db_type(ds.get("db_type"))
         if db_type not in engine_metric_configs:
-            raise ValueError("数据源 " + ds["name"] + " 的数据库类型暂不支持腾讯云 RDS 外部采集: " + str(ds.get("db_type")))
+            raise ValueError("Datasource " + ds["name"] + " has a database type that is not supported by Tencent Cloud RDS collection: " + str(ds.get("db_type")))
 
         instance_id = (ds.get("external_instance_id") or "").strip()
         if not instance_id:
-            raise ValueError("数据源 " + ds["name"] + " 未配置 external_instance_id")
+            raise ValueError("Datasource " + ds["name"] + " does not have external_instance_id configured")
 
         config = engine_metric_configs[db_type]
         dimensions = build_dimensions(config["dimensions"], instance_id)
@@ -1886,11 +1886,11 @@ async def fetch_metrics(context, params, datasource):
                 last_error = str(e)
                 await context.log(
                     "warning",
-                    "腾讯云指标 "
+                    "Tencent Cloud metric "
                     + metric_def["remote_name"]
-                    + " 采集失败（数据源 "
+                    + " collection failed (datasource: "
                     + ds["name"]
-                    + "）: "
+                    + "): "
                     + str(e),
                 )
 
@@ -1946,23 +1946,23 @@ async def fetch_metrics(context, params, datasource):
 
         if not latest_metrics:
             if last_error:
-                raise ValueError("腾讯云 API 调用失败: " + last_error)
+                raise ValueError("Tencent Cloud API call failed: " + last_error)
             raise ValueError(
-                "腾讯云监控未返回实例 "
+                "Tencent Cloud monitoring returned no valid data for instance "
                 + instance_id
-                + " 的有效监控数据，请确认 external_instance_id、region_id 以及实例类型与数据源 db_type 是否匹配"
+                + "; verify external_instance_id, region_id, and that the instance type matches the datasource db_type"
             )
 
         metrics.extend(latest_metrics.values())
         await context.log(
             "info",
-            "成功采集数据源 "
-            + ds["name"]
-            + " 的 "
+            "Collected "
             + str(len(latest_metrics))
-            + " 条腾讯云指标（成功请求 "
+            + " Tencent Cloud metrics successfully for datasource "
+            + ds["name"]
+            + " (successful metric requests: "
             + str(successful_metric_count)
-            + " 个监控项）",
+            + ")",
         )
 
     return metrics

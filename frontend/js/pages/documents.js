@@ -189,7 +189,7 @@ const DocumentsPage = {
                         </label>
                         <label class="docs-form-field">
                             <span>症状标签</span>
-                            <input type="text" id="doc-symptom-tags" class="form-control" value="${Utils.escapeHtml((diagnosisProfile.symptom_tags || []).join(', '))}" placeholder="连接失败, cpu高">
+                            <input type="text" id="doc-symptom-tags" class="form-control" value="${Utils.escapeHtml((diagnosisProfile.symptom_tags || []).join(', '))}" placeholder="${I18n.t('placeholders.symptomTags')}">
                         </label>
                         <label class="docs-form-field">
                             <span>信号标签</span>
@@ -252,7 +252,7 @@ const DocumentsPage = {
                                 <div class="docs-warning-item">${Utils.escapeHtml(item)}</div>
                             `).join('') : '<div class="docs-empty-hint">当前没有编译告警</div>'}
                         </div>
-                        <div class="docs-compile-time">最近编译：${doc.compiled_at ? new Date(doc.compiled_at).toLocaleString('zh-CN') : '未编译'}</div>
+                        <div class="docs-compile-time">最近编译：${doc.compiled_at ? I18n.formatDate(doc.compiled_at, { dateStyle: 'medium', timeStyle: 'medium' }) : '未编译'}</div>
                     </div>
                 </aside>
             </div>
@@ -324,6 +324,9 @@ const DocumentsPage = {
             this.monacoEditor = null;
         }
         const monacoConfig = { paths: { vs: '/lib/monaco-editor/min/vs' } };
+        if (I18n.getLocale() === 'zh-CN') {
+            monacoConfig['vs/nls'] = { availableLanguages: { '*': 'zh-cn' } };
+        }
         if (window.DBCLAW_ASSET_VERSION) {
             monacoConfig.urlArgs = `build=${window.DBCLAW_ASSET_VERSION}`;
         }
@@ -344,7 +347,10 @@ const DocumentsPage = {
                 scrollBeyondLastLine: false,
                 automaticLayout: true,
             });
-            this.monacoEditor.onDidChangeModelContent(() => this.updatePreview());
+            this.monacoEditor.onDidChangeModelContent(() => {
+                DirtyState.mark('page');
+                this.updatePreview();
+            });
             this.updatePreview();
         });
     },
@@ -425,7 +431,7 @@ const DocumentsPage = {
             content: `
                 <div class="form-group">
                     <label>文档标题</label>
-                    <input type="text" id="new-doc-title" class="form-control" placeholder="请输入文档标题">
+                    <input type="text" id="new-doc-title" class="form-control" placeholder="${I18n.t('placeholders.documentTitle')}">
                 </div>
             `,
             buttons: [

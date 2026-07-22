@@ -3,7 +3,7 @@ const Header = {
     render(title, actions = null) {
         const header = DOM.$('#page-header');
         header.innerHTML = '';
-        header.appendChild(DOM.el('h1', { textContent: title }));
+        header.appendChild(DOM.el('h1', { textContent: I18n.translateLegacyText(title) }));
         if (actions) {
             const actionsContainer = DOM.el('div', { className: 'flex gap-8' });
             if (typeof actions === 'string') actionsContainer.innerHTML = actions;

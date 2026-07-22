@@ -9,10 +9,31 @@ from backend.models.soft_delete import alive_filter
 from backend.agent.prompts import REPORT_GENERATION_PROMPT
 from backend.agent.conversation_skills import generate_report_with_skills
 from backend.utils.datetime_helper import now
+from backend.i18n.locale import DEFAULT_LOCALE, normalize_locale, translate
 
 logger = logging.getLogger(__name__)
 
 TERMINAL_REPORT_STATUSES = {"completed", "partial", "timed_out", "awaiting_confirm", "failed"}
+
+REPORT_TRIGGER_LABELS = {
+    "zh-CN": {
+        "scheduled": "定时",
+        "manual": "手动",
+        "anomaly": "异常",
+        "connection_failure": "连接失败",
+    },
+    "en-US": {
+        "scheduled": "Scheduled",
+        "manual": "Manual",
+        "anomaly": "Anomaly",
+        "connection_failure": "Connection Failure",
+    },
+}
+
+
+def _report_trigger_label(trigger_type: str, locale: str) -> str:
+    labels = REPORT_TRIGGER_LABELS.get(locale, REPORT_TRIGGER_LABELS[DEFAULT_LOCALE])
+    return labels.get(trigger_type, trigger_type.replace("_", " ").title())
 
 
 def _strip_markdown(text: str) -> str:
@@ -52,12 +73,13 @@ class ReportGenerator:
     def __init__(self, db):
         self.db = db
 
-    async def generate_inspection_report(self, trigger_id: int) -> int:
+    async def generate_inspection_report(self, trigger_id: int, locale: str | None = None) -> int:
         """Generate AI-driven inspection report from trigger"""
         from backend.models.inspection_trigger import InspectionTrigger
         from backend.models.inspection_config import InspectionConfig
         from backend.agent.conversation_skills import generate_report_with_skills
 
+        response_locale = normalize_locale(locale) or DEFAULT_LOCALE
         result = await self.db.execute(select(InspectionTrigger).where(InspectionTrigger.id == trigger_id))
         trigger = result.scalar_one_or_none()
         if not trigger:
@@ -66,7 +88,7 @@ class ReportGenerator:
         result = await self.db.execute(select(Datasource).where(Datasource.id == trigger.datasource_id, alive_filter(Datasource)))
         datasource = result.scalar_one_or_none()
         if not datasource:
-            return await self._create_failed_report_for_missing_datasource(trigger)
+            return await self._create_failed_report_for_missing_datasource(trigger, response_locale)
 
         result = await self.db.execute(select(InspectionConfig).where(InspectionConfig.datasource_id == trigger.datasource_id))
         config = result.scalar_one_or_none()
@@ -74,7 +96,11 @@ class ReportGenerator:
         # Create report
         report = Report(
             datasource_id=trigger.datasource_id,
-            title=f"{trigger.trigger_type.capitalize()} Inspection - {datasource.name}",
+            title=translate(
+                response_locale,
+                "ai.report.title",
+                {"trigger_type": _report_trigger_label(trigger.trigger_type, response_locale), "datasource": datasource.name},
+            ),
             report_type="inspection",
             status="generating",
             trigger_type=trigger.trigger_type,
@@ -105,7 +131,8 @@ class ReportGenerator:
                 system_prompt=system_prompt,
                 db=self.db,
                 model_id=config.ai_model_id if config else None,
-                timeout_seconds=1800
+                timeout_seconds=1800,
+                locale=response_locale,
             )
 
             report.status = result.get("status") or "failed"
@@ -133,7 +160,7 @@ class ReportGenerator:
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>数据库巡检报告 - {datasource.name}</title>
+    <title>{translate(response_locale, "ai.report.title", {"trigger_type": _report_trigger_label(trigger.trigger_type, response_locale), "datasource": datasource.name})}</title>
     <style>
         * {{ box-sizing: border-box; }}
         body {{
@@ -253,8 +280,8 @@ class ReportGenerator:
     <div class="container">
         {content_html_body}
         <div class="footer">
-            <p>报告由 <strong>DBClaw 智能诊断引擎</strong> 生成</p>
-            <p>数据源: {datasource.name} ({datasource.db_type.upper()}) | 生成时间: {now().strftime('%Y-%m-%d %H:%M')}</p>
+            <p>{translate(response_locale, "ai.report.footer.generated")}</p>
+            <p>{translate(response_locale, "ai.report.footer.datasource", {"datasource": datasource.name, "db_type": datasource.db_type.upper(), "generated_at": now().strftime('%Y-%m-%d %H:%M')})}</p>
         </div>
     </div>
 </body>
@@ -271,7 +298,7 @@ class ReportGenerator:
             report = result.scalar_one_or_none()
             if report:
                 report.status = "failed"
-                report.summary = report.summary or "报告生成失败，未产出有效内容。"
+                report.summary = report.summary or translate(response_locale, "ai.report.failed")
                 report.content_md = report.content_md or ""
                 report.content_html = report.content_html if report.content_html else None
                 report.error_message = str(e)
@@ -284,7 +311,7 @@ class ReportGenerator:
 
         return report_id
 
-    async def _create_failed_report_for_missing_datasource(self, trigger) -> int:
+    async def _create_failed_report_for_missing_datasource(self, trigger, locale: str = DEFAULT_LOCALE) -> int:
         message = (
             f"Datasource {trigger.datasource_id} for inspection trigger {trigger.id} "
             "was not found or has been deleted"
@@ -293,10 +320,21 @@ class ReportGenerator:
 
         report = Report(
             datasource_id=trigger.datasource_id,
-            title=f"{trigger.trigger_type.capitalize()} Inspection - Datasource {trigger.datasource_id}",
+            title=translate(
+                locale,
+                "ai.report.title",
+                {
+                    "trigger_type": _report_trigger_label(trigger.trigger_type, locale),
+                    "datasource": (
+                        f"Datasource {trigger.datasource_id}"
+                        if locale == "en-US"
+                        else f"数据源 {trigger.datasource_id}"
+                    ),
+                },
+            ),
             report_type="inspection",
             status="failed",
-            summary="报告生成失败：数据源不存在或已删除。",
+            summary=translate(locale, "ai.report.missing_datasource"),
             content_md="",
             content_html=None,
             trigger_type=trigger.trigger_type,

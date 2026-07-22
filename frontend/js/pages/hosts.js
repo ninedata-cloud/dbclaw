@@ -43,14 +43,14 @@ const HostsPage = {
             DOM.createIcons();
 
         } catch (err) {
-            Toast.error('加载失败 hosts: ' + err.message);
+            Toast.error(I18n.translateLegacyText('加载失败') + ': ' + err.message);
         }
     },
 
     _buildHeaderActions() {
         const filtersContainer = DOM.el('div', { className: 'dashboard-filters' });
         filtersContainer.innerHTML = `
-            <input type="text" id="filter-search" class="filter-input" placeholder="按名称或 IP 搜索..." style="min-width:220px">
+            <input type="text" id="filter-search" class="filter-input" placeholder="${I18n.t('placeholders.searchHost')}" style="min-width:220px">
             <button id="btn-search" class="btn btn-primary">
                 <i data-lucide="search"></i> 检索
             </button>
@@ -276,7 +276,7 @@ const HostsPage = {
         const isEdit = !!host;
         const form = DOM.el('form');
         form.innerHTML = `
-            <div class="form-group"><label>名称</label><input type="text" class="form-input" name="name" required placeholder="生产服务器" value="${host?.name || ''}"></div>
+            <div class="form-group"><label>名称</label><input type="text" class="form-input" name="name" required placeholder="${I18n.t('placeholders.hostName')}" value="${host?.name || ''}"></div>
             <div class="form-row">
                 <div class="form-group"><label>主机</label><input type="text" class="form-input" name="host" required placeholder="10.0.0.1" value="${host?.host || ''}"></div>
                 <div class="form-group"><label>端口</label><input type="number" class="form-input" name="port" value="${host?.port || 22}"></div>
@@ -290,7 +290,7 @@ const HostsPage = {
                     </select>
                 </div>
             </div>
-            <div class="form-group auth-password"><label>密码</label><input type="password" class="form-input" name="password" placeholder="${isEdit ? '(保持不变)' : ''}"></div>
+            <div class="form-group auth-password"><label>密码</label><input type="password" class="form-input" name="password" placeholder="${isEdit ? I18n.t('placeholders.keepUnchanged') : ''}"></div>
             <div class="form-group auth-key" style="display:none"><label>私钥</label><textarea class="form-textarea" name="private_key" rows="4" placeholder="-----BEGIN RSA PRIVATE KEY-----"></textarea></div>
         `;
 

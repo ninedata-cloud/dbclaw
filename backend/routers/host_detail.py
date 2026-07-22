@@ -277,7 +277,7 @@ async def get_host_config(
     if not force_refresh and host.config_data and host.config_collected_at:
         cache_age = (now() - host.config_collected_at).total_seconds()
         if cache_age < 30 * 24 * 60 * 60:  # 30天
-            logger.info(f"返回主机 {host_id} 的缓存配置（{cache_age:.0f}秒前采集）")
+            logger.info(f"Returning cached configuration for host {host_id} (collected {cache_age:.0f} seconds ago)")
             return HostConfigResponse(
                 **host.config_data,
                 collected_at=host.config_collected_at
@@ -473,7 +473,7 @@ async def get_host_config(
             host.config_data = config_response.model_dump(exclude={'collected_at'})
             host.config_collected_at = config_response.collected_at
             await db.commit()
-            logger.info(f"已保存主机 {host_id} 的配置到数据库")
+            logger.info(f"Saved configuration for host {host_id} to the database")
 
             return config_response
 

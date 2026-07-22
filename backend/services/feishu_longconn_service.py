@@ -75,7 +75,7 @@ def _set_binding_status(*, login_status: str, last_error: str = "") -> None:
     try:
         future.result(timeout=15)
     except Exception:
-        logger.exception("更新飞书机器人绑定状态失败")
+        logger.exception("Failed to update Feishu bot binding status")
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
@@ -167,12 +167,12 @@ def _log_future_exception(future) -> None:
     try:
         future.result()
     except Exception:
-        logger.exception("飞书长连接事件处理失败")
+        logger.exception("Failed to process Feishu long-connection event")
 
 
 def _handle_sdk_message(data: Any) -> None:
     if _APP_LOOP is None:
-        logger.warning("飞书长连接主事件循环尚未就绪，忽略消息事件")
+        logger.warning("The Feishu long-connection main event loop is not ready; ignoring message event")
         return
     payload = _normalize_message_event(data)
     future = asyncio.run_coroutine_threadsafe(_process_message_payload(payload), _APP_LOOP)
@@ -187,7 +187,7 @@ def _handle_sdk_action(data: Any) -> dict[str, Any]:
     try:
         return future.result(timeout=120)
     except Exception as exc:
-        logger.exception("飞书长连接卡片回调处理失败")
+        logger.exception("Failed to process Feishu long-connection card callback")
         return _toast_response(f"处理失败：{str(exc)}", "error")
 
 
@@ -241,7 +241,7 @@ def _ws_thread_main(*, app_id: str, app_secret: str) -> None:
 
         loop.run_until_complete(runner())
     except Exception as exc:
-        logger.exception("飞书长连接客户端退出异常")
+        logger.exception("Feishu long-connection client exited unexpectedly")
         _set_binding_status(login_status="error", last_error=str(exc))
     finally:
         try:
@@ -252,7 +252,7 @@ def _ws_thread_main(*, app_id: str, app_secret: str) -> None:
                 loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
             loop.run_until_complete(loop.shutdown_asyncgens())
         except Exception:
-            logger.exception("飞书长连接事件循环清理失败")
+            logger.exception("Failed to clean up the Feishu long-connection event loop")
         finally:
             loop.close()
             logger.info("Feishu long connection client stopped")
@@ -271,7 +271,7 @@ async def start_feishu_longconn_client() -> None:
         await FeishuBotService.ensure_bot_binding(db, integration=integration)
 
     if importlib.util.find_spec("lark_oapi") is None:
-        logger.warning("未安装 lark-oapi，跳过飞书长连接启动")
+        logger.warning("lark-oapi is not installed; skipping Feishu long-connection startup")
         await _update_binding_status(
             login_status="error",
             last_error="未安装 lark-oapi，请先执行 pip install -r requirements.txt",
@@ -283,7 +283,7 @@ async def start_feishu_longconn_client() -> None:
     app_secret = (config.get("app_secret") or "").strip()
 
     if not app_id or not app_secret:
-        logger.info("飞书机器人未配置 APP_ID/APP_SECRET，跳过长连接启动")
+        logger.info("The Feishu bot is missing APP_ID/APP_SECRET; skipping long-connection startup")
         await _update_binding_status(login_status="not_ready", last_error="")
         return
 
@@ -307,7 +307,7 @@ async def stop_feishu_longconn_client() -> None:
     if _WS_THREAD:
         await asyncio.to_thread(_WS_THREAD.join, 10)
         if _WS_THREAD.is_alive():
-            logger.warning("飞书长连接线程未在超时时间内退出，将等待进程结束时回收")
+            logger.warning("The Feishu long-connection thread did not exit before the timeout and will be reclaimed when the process exits")
 
     _WS_THREAD = None
     _WS_STOP_EVENT = None

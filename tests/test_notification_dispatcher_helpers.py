@@ -295,9 +295,45 @@ async def test_send_recovery_via_integration_records_missing_required_params(moc
     assert len(logs) == 1
     assert logs[0].status == "failed"
     assert logs[0].channel.endswith(":recovery")
-    assert "缺少必填参数" in logs[0].error_message
+    assert "missing required parameters" in logs[0].error_message
     assert db.commit.await_count == 1
     assert len(added) >= 2
+
+
+@pytest.mark.service
+@pytest.mark.asyncio
+async def test_send_recovery_via_integration_skips_deleted_datasource(mocker):
+    alert = SimpleNamespace(id=19, datasource_id=9, event_id=None)
+    subscription = SimpleNamespace(id=8, integration_targets=[{"integration_id": 77}])
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=_ScalarOneOrNoneResult(None))
+    integration_lookup = mocker.patch(
+        "backend.services.notification_dispatcher.get_alive_by_id",
+        AsyncMock(),
+    )
+
+    logs = await dispatcher._send_recovery_via_integration(db, alert, subscription)
+
+    assert logs == []
+    integration_lookup.assert_not_awaited()
+
+
+@pytest.mark.service
+@pytest.mark.asyncio
+async def test_send_via_integration_skips_deleted_datasource(mocker):
+    alert = SimpleNamespace(id=20, datasource_id=9)
+    subscription = SimpleNamespace(id=8, integration_targets=[{"integration_id": 77}])
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=_ScalarOneOrNoneResult(None))
+    integration_lookup = mocker.patch(
+        "backend.services.notification_dispatcher.get_alive_by_id",
+        AsyncMock(),
+    )
+
+    logs = await dispatcher._send_via_integration(db, alert, subscription)
+
+    assert logs == []
+    integration_lookup.assert_not_awaited()
 
 
 @pytest.mark.service
@@ -343,6 +379,33 @@ async def test_process_pending_alerts_notifies_old_still_active_alert(mocker):
 
 @pytest.mark.service
 @pytest.mark.asyncio
+async def test_process_pending_alerts_skips_deleted_datasource(mocker):
+    alert = SimpleNamespace(
+        id=44,
+        datasource_id=9,
+        event_id=None,
+        metric_name="cpu_usage",
+    )
+    subscription = SimpleNamespace(id=7, integration_targets=[{"integration_id": 1}])
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=_ScalarOneOrNoneResult(None))
+
+    mocker.patch("backend.services.notification_dispatcher.async_session", return_value=_AsyncSessionContext(db))
+    mocker.patch.object(dispatcher.AggregationEngine, "_get_notification_cooldown_minutes", AsyncMock(return_value=60))
+    mocker.patch.object(dispatcher.AlertService, "get_pending_notifications", AsyncMock(return_value=[alert]))
+    mocker.patch.object(dispatcher.AlertService, "get_all_subscriptions", AsyncMock(return_value=[subscription]))
+    mocker.patch("backend.services.notification_dispatcher._has_active_network_probe_failure", AsyncMock(return_value=False))
+    mocker.patch("backend.services.notification_dispatcher._is_datasource_silenced", AsyncMock(return_value=False))
+    send_mock = mocker.patch("backend.services.notification_dispatcher._send_via_integration", AsyncMock())
+    mocker.patch("backend.services.notification_dispatcher._process_recovery_notifications", AsyncMock())
+
+    await dispatcher._process_pending_alerts()
+
+    send_mock.assert_not_awaited()
+
+
+@pytest.mark.service
+@pytest.mark.asyncio
 async def test_process_recovery_notifications_notifies_old_alert_resolved_recently(mocker):
     alert = SimpleNamespace(
         id=43,
@@ -353,6 +416,7 @@ async def test_process_recovery_notifications_notifies_old_alert_resolved_recent
     )
     subscription = SimpleNamespace(id=8)
     db = AsyncMock()
+    db.execute = AsyncMock(return_value=_ScalarOneOrNoneResult(SimpleNamespace(id=1)))
 
     mocker.patch.object(dispatcher.AlertService, "get_pending_recovery_notifications", AsyncMock(return_value=[alert]))
     mocker.patch.object(dispatcher.AlertService, "get_all_subscriptions", AsyncMock(return_value=[subscription]))
@@ -369,3 +433,29 @@ async def test_process_recovery_notifications_notifies_old_alert_resolved_recent
     await dispatcher._process_recovery_notifications(db)
 
     send_mock.assert_awaited_once_with(db, alert, subscription)
+
+
+@pytest.mark.service
+@pytest.mark.asyncio
+async def test_process_recovery_notifications_skips_deleted_datasource(mocker):
+    alert = SimpleNamespace(
+        id=45,
+        datasource_id=9,
+        metric_name="cpu_usage",
+        created_at=now() - timedelta(days=10),
+        resolved_at=now(),
+    )
+    subscription = SimpleNamespace(id=8)
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=_ScalarOneOrNoneResult(None))
+
+    mocker.patch.object(dispatcher.AlertService, "get_pending_recovery_notifications", AsyncMock(return_value=[alert]))
+    mocker.patch.object(dispatcher.AlertService, "get_all_subscriptions", AsyncMock(return_value=[subscription]))
+    mocker.patch.object(dispatcher.NotificationService, "check_subscription_match", AsyncMock(return_value=True))
+    mocker.patch("backend.services.notification_dispatcher._has_active_network_probe_failure", AsyncMock(return_value=False))
+    mocker.patch("backend.services.notification_dispatcher._is_datasource_silenced", AsyncMock(return_value=False))
+    send_mock = mocker.patch("backend.services.notification_dispatcher._send_recovery_via_integration", AsyncMock())
+
+    await dispatcher._process_recovery_notifications(db)
+
+    send_mock.assert_not_awaited()

@@ -1,6 +1,7 @@
 /* Toast notification component */
 const Toast = {
     show(message, type = 'info', duration = 4000) {
+        message = I18n.translateLegacyText(message);
         const container = DOM.$('#toast-container');
         const toast = DOM.el('div', { className: `toast ${type}` },
             DOM.el('span', { textContent: message }),

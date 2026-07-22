@@ -22,7 +22,7 @@ def _ensure_scheduler_started() -> AsyncIOScheduler:
     if scheduler is None:
         scheduler = AsyncIOScheduler()
         scheduler.start()
-        logger.info("任务调度器已启动")
+        logger.info("Scheduled task scheduler started")
     return scheduler
 
 
@@ -31,7 +31,7 @@ async def execute_scheduled_task(task_id: int):
     try:
         await ScheduledTaskService.execute_task_by_id(task_id, trigger_source="scheduler")
     except Exception as exc:
-        logger.error("调度任务执行入口失败 task_id=%s: %s", task_id, exc, exc_info=True)
+        logger.error("Scheduled task entry point failed: task_id=%s: %s", task_id, exc, exc_info=True)
 
 
 async def sync_task_schedule(task_id: int) -> None:
@@ -66,12 +66,12 @@ async def sync_task_schedule(task_id: int) -> None:
             )
             task.next_run_at = job.next_run_time
             await db.commit()
-            logger.info("已刷新任务调度 task_id=%s next_run_at=%s", task.id, task.next_run_at)
+            logger.info("Refreshed scheduled task: task_id=%s next_run_at=%s", task.id, task.next_run_at)
         except Exception as exc:
             task.next_run_at = None
             task.last_error = f"调度配置无效: {exc}"
             await db.commit()
-            logger.error("刷新任务调度失败 task_id=%s: %s", task.id, exc, exc_info=True)
+            logger.error("Failed to refresh scheduled task: task_id=%s: %s", task.id, exc, exc_info=True)
 
 
 async def refresh_all_scheduled_tasks() -> None:
@@ -92,9 +92,9 @@ async def refresh_all_scheduled_tasks() -> None:
 
 
 async def start_scheduled_task_scheduler() -> None:
-    logger.info("正在启动任务调度器...")
+    logger.info("Starting scheduled task scheduler...")
     await refresh_all_scheduled_tasks()
-    logger.info("任务调度器启动完成")
+    logger.info("Scheduled task scheduler startup completed")
 
 
 def stop_scheduled_task_scheduler() -> None:
@@ -102,4 +102,4 @@ def stop_scheduled_task_scheduler() -> None:
     if scheduler:
         scheduler.shutdown()
         scheduler = None
-        logger.info("任务调度器已停止")
+        logger.info("Scheduled task scheduler stopped")

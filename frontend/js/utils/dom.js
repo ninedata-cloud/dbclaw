@@ -7,7 +7,8 @@ const DOM = {
         const baseText = String(
             control instanceof HTMLInputElement ? (control.value || '') : (control?.textContent || '')
         ).trim();
-        if (!baseText) return '处理中...';
+        if (!baseText) return I18n.translateLegacyText('处理中...');
+        if (I18n.getLocale() === 'en-US') return `${I18n.translateLegacyText(baseText)}...`;
         if (/[一-龥]/.test(baseText)) {
             return `${baseText}中...`;
         }
@@ -60,14 +61,15 @@ const DOM = {
         for (const [key, value] of Object.entries(attrs)) {
             if (key === 'className') element.className = value;
             else if (key === 'innerHTML') element.innerHTML = value;
-            else if (key === 'textContent') element.textContent = value;
+            else if (key === 'textContent') element.textContent = I18n.translateLegacyText(value);
             else if (key.startsWith('on')) element.addEventListener(key.slice(2).toLowerCase(), value);
             else if (key === 'style' && typeof value === 'object') Object.assign(element.style, value);
             else if (key === 'dataset') Object.assign(element.dataset, value);
+            else if (['placeholder', 'title', 'aria-label'].includes(key)) element.setAttribute(key, I18n.translateLegacyText(value));
             else element.setAttribute(key, value);
         }
         for (const child of children) {
-            if (typeof child === 'string') element.appendChild(document.createTextNode(child));
+            if (typeof child === 'string') element.appendChild(document.createTextNode(I18n.translateLegacyText(child)));
             else if (child instanceof Node) element.appendChild(child);
         }
         return element;

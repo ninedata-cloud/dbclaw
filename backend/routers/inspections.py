@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 import logging
 
 from backend.database import get_db
+from backend.dependencies import get_current_user
 from backend.utils.security import escape_html
 from backend.utils.datetime_helper import now, to_utc_isoformat
 from backend.models.inspection_config import InspectionConfig
@@ -526,7 +527,8 @@ async def rebuild_baseline(datasource_id: int, db: AsyncSession = Depends(get_db
 @router.post("/trigger/{datasource_id}", response_model=TriggerResponse)
 async def trigger_manual_inspection(
     datasource_id: int,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     """Manually trigger an inspection"""
     from backend.services import metric_collector
@@ -536,8 +538,14 @@ async def trigger_manual_inspection(
         raise HTTPException(status_code=503, detail="Inspection service not available")
 
     trigger_id = await inspection_service.trigger_inspection(
-        db, datasource_id, "manual", "人工触发巡检"
+        db,
+        datasource_id,
+        "manual",
+        "Manual inspection" if current_user.locale == "en-US" else "人工触发巡检",
+        locale=current_user.locale,
     )
+    if trigger_id is None:
+        raise HTTPException(status_code=404, detail="数据源不存在")
     return TriggerResponse(trigger_id=trigger_id, report_id=None)
 
 

@@ -9,6 +9,7 @@
 }
 
 .login-card {
+    position: relative;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 12px;
@@ -16,6 +17,22 @@
     width: 100%;
     max-width: 400px;
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+}
+
+.login-language {
+    display: flex;
+    justify-content: flex-end;
+    margin: -20px -20px 18px 0;
+}
+
+.language-selector {
+    min-width: 112px;
+    padding: 6px 28px 6px 10px;
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 12px;
 }
 
 .login-logo {
@@ -155,6 +172,13 @@
 
 .sidebar-user-menu .ds-more-menu-item:hover {
     background: var(--bg-tertiary);
+}
+
+.sidebar-language-item .language-selector {
+    margin-left: auto;
+    min-width: 104px;
+    padding-top: 4px;
+    padding-bottom: 4px;
 }
 
 .sidebar-user-info:focus-visible {

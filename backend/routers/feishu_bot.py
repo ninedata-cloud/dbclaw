@@ -49,12 +49,12 @@ async def handle_feishu_events(
         return await FeishuBotService.handle_message_event(db, payload)
 
     if event_type in {"card.action.trigger", "card.action.trigger_v1"}:
-        logger.info("收到飞书卡片回调: event_type=%s", event_type)
+        logger.info("Received Feishu card callback: event_type=%s", event_type)
         return await FeishuBotService.handle_action_event(db, payload)
 
     if event_body.action:
-        logger.info("收到未声明类型的飞书卡片回调，按兼容模式处理: event_type=%s", event_type)
+        logger.info("Received a Feishu card callback with an undeclared type; handling in compatibility mode: event_type=%s", event_type)
         return await FeishuBotService.handle_action_event(db, payload)
 
-    logger.info("忽略未处理的飞书事件: event_type=%s", event_type)
+    logger.info("Ignoring unhandled Feishu event: event_type=%s", event_type)
     return {"ok": True, "ignored": True}

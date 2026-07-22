@@ -71,7 +71,7 @@ async def _collect_direct_metrics_supplement(datasource: Datasource) -> dict:
             supplement['buffer_pool_hit_rate'] = status['buffer_pool_hit_rate']
 
     except Exception as e:
-        logger.warning(f"补充采集数据源 {datasource.id} 失败: {e}")
+        logger.warning(f"Failed to collect supplemental metrics for datasource {datasource.id}: {e}")
     finally:
         if connector is not None:
             try:
@@ -89,7 +89,7 @@ def _ensure_scheduler_started():
     if scheduler is None:
         scheduler = AsyncIOScheduler()
         scheduler.start()
-        logger.info("集成调度器已启动")
+        logger.info("Integration scheduler started")
 
 
 async def refresh_scheduler(interval_seconds: Optional[int] = None, trigger_now: bool = False):
@@ -109,7 +109,7 @@ async def refresh_scheduler(interval_seconds: Optional[int] = None, trigger_now:
         id=GLOBAL_INTEGRATION_JOB_ID,
         replace_existing=True
     )
-    logger.info("已刷新全局入站集成调度任务: 每 %s 秒", interval_seconds)
+    logger.info("Refreshed the global inbound integration job: every %s seconds", interval_seconds)
 
     if trigger_now:
         asyncio.create_task(execute_all_integration())
@@ -144,7 +144,7 @@ async def execute_integration(datasource_id: int):
         try:
             datasource = await get_alive_by_id(session, Datasource, datasource_id)
             if not datasource or not datasource.is_active:
-                logger.warning(f"数据源 {datasource_id} 不存在或未启用")
+                logger.warning(f"Datasource {datasource_id} does not exist or is disabled")
                 return
 
             inbound_source = datasource.inbound_source or {}
@@ -153,12 +153,12 @@ async def execute_integration(datasource_id: int):
 
             integration_id = inbound_source.get('integration_id')
             if not integration_id:
-                logger.warning(f"数据源 {datasource_id} 未配置 inbound_source.integration_id")
+                logger.warning(f"Datasource {datasource_id} does not have inbound_source.integration_id configured")
                 return
 
             integration = await get_alive_by_id(session, Integration, int(integration_id))
             if not integration or not integration.is_enabled:
-                logger.warning(f"集成 {integration_id} 不存在或未启用")
+                logger.warning(f"Integration {integration_id} does not exist or is disabled")
                 return
 
             if integration.integration_type != 'inbound_metric':
@@ -251,7 +251,7 @@ async def execute_integration(datasource_id: int):
             await session.commit()
 
         except Exception as e:
-            error_msg = f"集成执行失败: {str(e)}"
+            error_msg = f"Integration execution failed: {str(e)}"
             logger.error(error_msg, exc_info=True)
             if execution_log:
                 execution_log.status = 'failed'
@@ -284,10 +284,10 @@ async def execute_all_integration():
         ]
 
     if not datasource_ids:
-        logger.debug("当前没有启用的入站集成数据源")
+        logger.debug("No enabled inbound integration datasources were found")
         return
 
-    logger.info("开始执行 %s 个入站集成数据源的全局采集任务", len(datasource_ids))
+    logger.info("Starting the global collection job for %s inbound integration datasources", len(datasource_ids))
     await asyncio.gather(
         *(execute_integration(datasource_id) for datasource_id in datasource_ids),
         return_exceptions=True,
@@ -301,9 +301,9 @@ async def schedule_all_integration():
 
 async def start_integration_scheduler():
     """启动集成调度器"""
-    logger.info("正在启动集成调度器...")
+    logger.info("Starting integration scheduler...")
     await refresh_scheduler(trigger_now=True)
-    logger.info("集成调度器启动完成")
+    logger.info("Integration scheduler startup completed")
 
 
 def stop_integration_scheduler():
@@ -312,4 +312,4 @@ def stop_integration_scheduler():
     if scheduler:
         scheduler.shutdown()
         scheduler = None
-        logger.info("集成调度器已停止")
+        logger.info("Integration scheduler stopped")

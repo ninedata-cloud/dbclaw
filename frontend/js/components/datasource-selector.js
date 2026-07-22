@@ -4,7 +4,7 @@ class DatasourceSelector {
     constructor(options = {}) {
         this.options = {
             container: null,
-            placeholder: '选择数据源',
+            placeholder: I18n.t('datasourceSelector.select'),
             multiple: false,
             searchable: true,
             groupByType: true,
@@ -12,7 +12,7 @@ class DatasourceSelector {
             showDetails: true,
             showDescription: false,
             allowEmpty: true,
-            emptyText: '所有数据源',
+            emptyText: I18n.t('datasourceSelector.all'),
             disabled: false,
             filter: null,
             onChange: null,
@@ -98,18 +98,18 @@ class DatasourceSelector {
 
     getStatusMeta(status) {
         if (status === 'connected' || status === 'success' || status === 'healthy' || status === 'normal') {
-            return { className: 'success', label: '连接正常' };
+            return { className: 'success', label: I18n.t('datasourceSelector.connectionHealthy') };
         }
 
         if (status === 'error' || status === 'failed' || status === 'disconnected') {
-            return { className: 'error', label: '连接异常' };
+            return { className: 'error', label: I18n.t('datasourceSelector.connectionUnhealthy') };
         }
 
         if (status === 'warning') {
-            return { className: 'warning', label: '连接警告' };
+            return { className: 'warning', label: I18n.t('datasourceSelector.connectionWarning') };
         }
 
-        return { className: 'unknown', label: '状态未知' };
+        return { className: 'unknown', label: I18n.t('datasourceSelector.statusUnknown') };
     }
 
     renderButtonContent() {
@@ -121,7 +121,7 @@ class DatasourceSelector {
             mainText.textContent = allowEmpty ? emptyText : placeholder;
             textWrap.appendChild(mainText);
         } else if (multiple) {
-            mainText.textContent = `已选择 ${this.selectedIds.size} 项`;
+            mainText.textContent = I18n.t('datasourceSelector.selectedCount', { count: this.selectedIds.size });
             textWrap.appendChild(mainText);
         } else {
             const selected = this.getSelectedDatasource();
@@ -149,7 +149,7 @@ class DatasourceSelector {
             }
         } catch (error) {
             console.error('[DatasourceSelector] Failed to load datasources:', error);
-            Toast.error('加载数据源失败');
+            Toast.error(I18n.t('datasourceSelector.loadFailed'));
         }
     }
 
@@ -162,10 +162,10 @@ class DatasourceSelector {
             const searchBox = DOM.el('div', { className: 'datasource-selector-search' });
             this.searchInput = DOM.el('input', {
                 type: 'text',
-                placeholder: '搜索数据源...',
+                placeholder: I18n.t('datasourceSelector.searchPlaceholder'),
                 className: 'datasource-selector-search-input',
                 value: this.searchQuery,
-                'aria-label': '搜索数据源'
+                'aria-label': I18n.t('datasourceSelector.searchLabel')
             });
             this.searchInput.addEventListener('input', (e) => {
                 this.searchQuery = e.target.value.toLowerCase();
@@ -200,7 +200,7 @@ class DatasourceSelector {
         if (filtered.length === 0) {
             this.itemsContainer.appendChild(DOM.el('div', {
                 className: 'datasource-selector-empty',
-                textContent: this.searchQuery ? '未找到匹配的数据源' : '暂无数据源'
+                textContent: this.searchQuery ? I18n.t('datasourceSelector.noMatches') : I18n.t('datasourceSelector.noData')
             }));
             return;
         }
@@ -277,7 +277,7 @@ class DatasourceSelector {
                 DOM.el('div', { className: 'datasource-selector-item-name', textContent: customText }),
                 DOM.el('div', {
                     className: 'datasource-selector-item-details datasource-selector-item-empty-hint',
-                    textContent: '不过滤数据源'
+                    textContent: I18n.t('datasourceSelector.noFilter')
                 })
             );
 
@@ -285,7 +285,7 @@ class DatasourceSelector {
             if (isSelected) {
                 item.appendChild(DOM.el('span', {
                     className: 'datasource-selector-item-check',
-                    textContent: '当前'
+                    textContent: I18n.t('datasourceSelector.current')
                 }));
             }
             item.addEventListener('click', () => this.selectDatasource(null));
@@ -319,7 +319,8 @@ class DatasourceSelector {
                 details.appendChild(DOM.el('span', {
                     className: 'datasource-selector-item-host',
                     textContent: hostText,
-                    title: hostText
+                    title: hostText,
+                    dataset: { label: I18n.t('datasourceSelector.address') }
                 }));
             }
 
@@ -354,7 +355,7 @@ class DatasourceSelector {
         if (isSelected) {
             item.appendChild(DOM.el('span', {
                 className: 'datasource-selector-item-check',
-                textContent: '已选'
+                textContent: I18n.t('datasourceSelector.selected')
             }));
         }
 

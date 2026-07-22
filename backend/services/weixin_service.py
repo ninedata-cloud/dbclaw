@@ -61,8 +61,8 @@ class WeixinService:
         try:
             import qrcode
         except ImportError:
-            logger.error("qrcode 库未安装，无法生成二维码图片。请运行: pip install qrcode")
-            raise ImportError("qrcode 库未安装，请运行: pip install qrcode")
+            logger.error("The qrcode package is not installed, so the QR code image cannot be generated. Run: pip install qrcode")
+            raise ImportError("The qrcode package is not installed. Run: pip install qrcode")
 
         qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=size, border=2)
         qr.add_data(qrcode_string)
@@ -145,7 +145,7 @@ class WeixinService:
             resp_data = response.json() if response.content else {}
             ret = resp_data.get("ret") if resp_data else None
             if ret is not None and ret != 0:
-                logger.warning(f"WeChat sendmessage返回错误: ret={ret}, data={resp_data}")
+                logger.warning(f"WeChat sendmessage returned an error: ret={ret}, data={resp_data}")
             return resp_data
 
 

@@ -33,6 +33,10 @@ const AlertsPage = {
         events: 0
     },
 
+    _t(key, params = {}) {
+        return I18n.t(`alerts.${key}`, params);
+    },
+
     async init(options = {}) {
         this._renderOptions = options || {};
         this._container = options.container || DOM.$('#page-content');
@@ -155,10 +159,10 @@ const AlertsPage = {
             await API.post(`/api/alerts/events/${eventId}/acknowledge`, {});
             await this.loadEvents();
             this.updateAlertsList();
-            Toast.success('事件已确认');
+            Toast.success(this._t('event.acknowledged'));
         } catch (error) {
             console.error('Failed to acknowledge event:', error);
-            Toast.error('确认事件失败');
+            Toast.error(this._t('event.acknowledgeFailed', { message: error.message }));
         }
     },
 
@@ -167,10 +171,10 @@ const AlertsPage = {
             await API.post(`/api/alerts/events/${eventId}/resolve`, {});
             await this.loadEvents();
             this.updateAlertsList();
-            Toast.success('事件已解决');
+            Toast.success(this._t('event.resolved'));
         } catch (error) {
             console.error('Failed to resolve event:', error);
-            Toast.error('解决事件失败');
+            Toast.error(this._t('event.resolveFailed', { message: error.message }));
         }
     },
 
@@ -218,7 +222,7 @@ const AlertsPage = {
             });
             embeddedToolbar.appendChild(DOM.el('div', {
                 className: 'instance-embedded-title',
-                textContent: '告警管理'
+                textContent: this._t('title')
             }));
             if (Array.isArray(headerActions)) {
                 headerActions.forEach(action => {
@@ -231,7 +235,7 @@ const AlertsPage = {
             }
             container.appendChild(embeddedToolbar);
         } else {
-            Header.render('告警管理', headerActions);
+            Header.render(this._t('title'), headerActions);
             DOM.$('#page-header')?.classList.add('page-header-alerts');
         }
 
@@ -250,11 +254,11 @@ const AlertsPage = {
                 }
             });
             note.appendChild(DOM.el('div', {
-                textContent: '当前仅展示该实例的告警事件与详情，订阅管理和告警模板继续保留在全局告警页。'
+                textContent: this._t('embeddedNote')
             }));
             note.appendChild(DOM.el('button', {
                 className: 'btn btn-secondary btn-sm',
-                textContent: '打开全局告警页',
+                textContent: this._t('openGlobal'),
                 onClick: () => Router.navigate('alerts')
             }));
             container.appendChild(note);
@@ -265,17 +269,17 @@ const AlertsPage = {
             const tabs = DOM.el('div', { className: 'tabs' });
             const alertsTab = DOM.el('button', {
                 className: `tab ${this.activeTab === 'alerts' ? 'active' : ''}`,
-                textContent: '告警列表',
+                textContent: this._t('tabs.events'),
                 onClick: (e) => this.switchTab(e.target, 'alerts')
             });
             const subscriptionsTab = DOM.el('button', {
                 className: `tab ${this.activeTab === 'subscriptions' ? 'active' : ''}`,
-                textContent: '订阅管理',
+                textContent: this._t('tabs.subscriptions'),
                 onClick: (e) => this.switchTab(e.target, 'subscriptions')
             });
             const templatesTab = DOM.el('button', {
                 className: `tab ${this.activeTab === 'templates' ? 'active' : ''}`,
-                textContent: '告警模板',
+                textContent: this._t('tabs.templates'),
                 onClick: (e) => this.switchTab(e.target, 'templates')
             });
             tabs.appendChild(alertsTab);
@@ -300,7 +304,7 @@ const AlertsPage = {
             });
             templatesContent.appendChild(DOM.el('div', {
                 className: 'alert-ai-pane-placeholder text-muted text-sm',
-                textContent: '正在加载告警模板...'
+                textContent: this._t('loadingTemplates')
             }));
             tabContent.appendChild(alertsContent);
             tabContent.appendChild(subscriptionsContent);
@@ -340,7 +344,7 @@ const AlertsPage = {
                 this.datasourceSelector = new DatasourceSelector({
                     container,
                     allowEmpty: true,
-                    emptyText: '全部数据源',
+                    emptyText: this._t('filters.allDatasources'),
                     minWidth: '240px',
                     maxWidth: '320px',
                     showStatus: true,
@@ -365,10 +369,10 @@ const AlertsPage = {
                 this.loadEvents().then(() => this.updateAlertsList());
             }
         });
-        statusSelect.appendChild(DOM.el('option', { value: 'all', textContent: '全部状态' }));
-        statusSelect.appendChild(DOM.el('option', { value: 'active', textContent: '活跃' }));
-        statusSelect.appendChild(DOM.el('option', { value: 'acknowledged', textContent: '已确认' }));
-        statusSelect.appendChild(DOM.el('option', { value: 'resolved', textContent: '已解决' }));
+        statusSelect.appendChild(DOM.el('option', { value: 'all', textContent: this._t('filters.allStatuses') }));
+        statusSelect.appendChild(DOM.el('option', { value: 'active', textContent: this._t('statuses.active') }));
+        statusSelect.appendChild(DOM.el('option', { value: 'acknowledged', textContent: this._t('statuses.acknowledged') }));
+        statusSelect.appendChild(DOM.el('option', { value: 'resolved', textContent: this._t('statuses.resolved') }));
         statusSelect.value = this.filters.status;
         filtersContainer.appendChild(statusSelect);
 
@@ -380,18 +384,18 @@ const AlertsPage = {
                 this.loadEvents().then(() => this.updateAlertsList());
             }
         });
-        severitySelect.appendChild(DOM.el('option', { value: '', textContent: '全部严重程度' }));
-        severitySelect.appendChild(DOM.el('option', { value: 'critical', textContent: '严重' }));
-        severitySelect.appendChild(DOM.el('option', { value: 'high', textContent: '高' }));
-        severitySelect.appendChild(DOM.el('option', { value: 'medium', textContent: '中' }));
-        severitySelect.appendChild(DOM.el('option', { value: 'low', textContent: '低' }));
+        severitySelect.appendChild(DOM.el('option', { value: '', textContent: this._t('filters.allSeverities') }));
+        for (const severity of ['critical', 'high', 'medium', 'low']) {
+            severitySelect.appendChild(DOM.el('option', { value: severity, textContent: this.getSeverityLabel(severity) }));
+        }
         severitySelect.value = this.filters.severity || '';
         filtersContainer.appendChild(severitySelect);
 
         const startTimeInput = DOM.el('input', {
             type: 'datetime-local',
             className: 'filter-input alerts-date-input',
-            title: '开始时间',
+            dataset: { datePicker: '' },
+            title: this._t('filters.startTime'),
             value: this.filters.start_time || '',
             onChange: (e) => {
                 this.filters.start_time = e.target.value || null;
@@ -404,7 +408,8 @@ const AlertsPage = {
         const endTimeInput = DOM.el('input', {
             type: 'datetime-local',
             className: 'filter-input alerts-date-input',
-            title: '结束时间',
+            dataset: { datePicker: '' },
+            title: this._t('filters.endTime'),
             value: this.filters.end_time || '',
             onChange: (e) => {
                 this.filters.end_time = e.target.value || null;
@@ -413,11 +418,13 @@ const AlertsPage = {
             }
         });
         filtersContainer.appendChild(endTimeInput);
+        DatePicker.enhance(startTimeInput);
+        DatePicker.enhance(endTimeInput);
 
         const searchInput = DOM.el('input', {
             type: 'text',
             className: 'filter-input alerts-search-input',
-            placeholder: '搜索标题或内容',
+            placeholder: I18n.t('placeholders.searchAlerts'),
             value: this.filters.search || '',
             onInput: (e) => {
                 this.filters.search = e.target.value;
@@ -444,7 +451,7 @@ const AlertsPage = {
         const showDatasourceColumn = !this._renderOptions?.fixedDatasourceId;
 
         if (this.events.length === 0) {
-            list.appendChild(DOM.el('div', { className: 'empty-state', textContent: '暂无事件' }));
+            list.appendChild(DOM.el('div', { className: 'empty-state', textContent: this._t('empty.events') }));
             return list;
         }
 
@@ -472,19 +479,19 @@ const AlertsPage = {
         };
 
         headerRow.appendChild(DOM.el('th', { textContent: '', style: 'width: 40px' }));
-        headerRow.appendChild(createSortableHeader('严重程度', 'severity'));
+        headerRow.appendChild(createSortableHeader(this._t('columns.severity'), 'severity'));
         if (showDatasourceColumn) {
-            headerRow.appendChild(createSortableHeader('数据源', 'datasource_id'));
+            headerRow.appendChild(createSortableHeader(this._t('columns.datasource'), 'datasource_id'));
         }
-        headerRow.appendChild(createSortableHeader('故障域', 'fault_domain'));
-        headerRow.appendChild(createSortableHeader('生命周期', 'lifecycle_stage'));
-        headerRow.appendChild(DOM.el('th', { textContent: '类型/指标' }));
-        headerRow.appendChild(DOM.el('th', { textContent: '标题' }));
-        headerRow.appendChild(createSortableHeader('开始时间', 'event_started_at'));
-        headerRow.appendChild(createSortableHeader('最近时间', 'event_ended_at'));
-        headerRow.appendChild(createSortableHeader('持续时间', 'duration'));
-        headerRow.appendChild(createSortableHeader('状态', 'status'));
-        headerRow.appendChild(DOM.el('th', { textContent: '操作' }));
+        headerRow.appendChild(createSortableHeader(this._t('columns.faultDomain'), 'fault_domain'));
+        headerRow.appendChild(createSortableHeader(this._t('columns.lifecycle'), 'lifecycle_stage'));
+        headerRow.appendChild(DOM.el('th', { textContent: this._t('columns.typeMetric') }));
+        headerRow.appendChild(DOM.el('th', { textContent: this._t('columns.title') }));
+        headerRow.appendChild(createSortableHeader(this._t('columns.startTime'), 'event_started_at'));
+        headerRow.appendChild(createSortableHeader(this._t('columns.latestTime'), 'event_ended_at'));
+        headerRow.appendChild(createSortableHeader(this._t('columns.duration'), 'duration'));
+        headerRow.appendChild(createSortableHeader(this._t('columns.status'), 'status'));
+        headerRow.appendChild(DOM.el('th', { textContent: this._t('columns.actions') }));
         thead.appendChild(headerRow);
         table.appendChild(thead);
 
@@ -524,15 +531,15 @@ const AlertsPage = {
                 if (silenceState.isSilenced) {
                     const badgeDiv = DOM.el('div', { style: 'margin-top:6px;' });
                     const titleParts = [
-                        `静默至：${Format.datetime(event.datasource_silence_until)}`,
-                        `剩余：${this._formatHourValue(silenceState.remainingHours)} 小时`,
+                        this._t('silence.until', { time: Format.datetime(event.datasource_silence_until) }),
+                        this._t('silence.remaining', { hours: this._formatHourValue(silenceState.remainingHours) }),
                     ];
                     if (silenceState.reason) {
-                        titleParts.push(`原因：${silenceState.reason}`);
+                        titleParts.push(this._t('silence.reason', { reason: silenceState.reason }));
                     }
                     const badge = DOM.el('span', {
                         className: 'badge badge-warning',
-                        textContent: `告警静默中 ${this._formatHourValue(silenceState.remainingHours)}h`,
+                        textContent: this._t('silence.badge', { hours: this._formatHourValue(silenceState.remainingHours) }),
                         title: titleParts.join('\n')
                     });
                     badgeDiv.appendChild(badge);
@@ -548,7 +555,7 @@ const AlertsPage = {
                 innerHTML: `<span class="event-pill lifecycle-${this._escapeHtml(event.lifecycle_stage || 'active')}">${this._escapeHtml(this.getLifecycleStageLabel(event.lifecycle_stage))}</span>`
             }));
 
-            const typeMetric = event.metric_name || this.getAlertTypeLabel(event.alert_type);
+            const typeMetric = event.metric_name ? this.getMetricLabel(event.metric_name) : this.getAlertTypeLabel(event.alert_type);
             row.appendChild(DOM.el('td', { textContent: typeMetric || '-' }));
             row.appendChild(DOM.el('td', { textContent: event.title || '-' }));
             const eventStartTime = event.event_started_at || event.event_start_time || null;
@@ -561,11 +568,11 @@ const AlertsPage = {
             if (event.status === 'resolved' && eventEndTime) {
                 // 已解决：显示恢复时间
                 endTimeCell.textContent = Format.datetime(eventEndTime);
-                endTimeCell.title = '恢复时间';
+                endTimeCell.title = this._t('event.recoveryTime');
             } else if (eventEndTime) {
                 // 活跃/已确认：显示最后触发时间
                 endTimeCell.textContent = Format.datetime(eventEndTime);
-                endTimeCell.title = '最后触发时间';
+                endTimeCell.title = this._t('event.lastTriggeredAt');
             } else {
                 endTimeCell.textContent = '-';
             }
@@ -582,16 +589,16 @@ const AlertsPage = {
 
                 let durationText = '';
                 if (durationDays > 0) {
-                    durationText = `${durationDays}天${durationHours % 24}小时`;
+                    durationText = this._t('event.durationDaysHours', { days: durationDays, hours: durationHours % 24 });
                 } else if (durationHours > 0) {
-                    durationText = `${durationHours}小时${durationMinutes % 60}分`;
+                    durationText = this._t('event.durationHoursMinutes', { hours: durationHours, minutes: durationMinutes % 60 });
                 } else if (durationMinutes > 0) {
-                    durationText = `${durationMinutes}分钟`;
+                    durationText = this._t('event.durationMinutes', { minutes: durationMinutes });
                 } else {
-                    durationText = '< 1分钟';
+                    durationText = this._t('event.durationLessThanMinute');
                 }
                 durationCell.textContent = durationText;
-                durationCell.title = `从 ${Format.datetime(eventStartTime)} 到 ${Format.datetime(eventEndTime)}`;
+                durationCell.title = this._t('event.durationRange', { start: Format.datetime(eventStartTime), end: Format.datetime(eventEndTime) });
             } else {
                 durationCell.textContent = '-';
             }
@@ -610,7 +617,7 @@ const AlertsPage = {
                 actionsWrap.appendChild(DOM.el('button', {
                     className: 'btn btn-sm btn-secondary',
                     textContent: '✓',
-                    title: '确认',
+                    title: this._t('actions.acknowledge'),
                     onClick: (e) => {
                         e.stopPropagation();
                         this.acknowledgeEvent(event.id);
@@ -621,7 +628,7 @@ const AlertsPage = {
                 actionsWrap.appendChild(DOM.el('button', {
                     className: 'btn btn-sm btn-success',
                     textContent: '✓✓',
-                    title: '解决',
+                    title: this._t('actions.resolve'),
                     onClick: (e) => {
                         e.stopPropagation();
                         this.resolveEvent(event.id);
@@ -634,7 +641,7 @@ const AlertsPage = {
             actionsWrap.appendChild(DOM.el('button', {
                 className: 'btn btn-sm btn-warning',
                 textContent: '🔕',
-                title: '静默',
+                title: this._t('actions.silence'),
                 onClick: (e) => {
                     e.stopPropagation();
                     this._showSilenceModal(event.datasource_id, datasourceName);
@@ -662,13 +669,13 @@ const AlertsPage = {
                     const diagDiv = DOM.el('div', {
                         style: 'background:rgba(47,129,247,0.06);border-left:3px solid var(--accent-blue);padding:10px 12px;margin-bottom:12px;border-radius:6px;font-size:13px;'
                     });
-                    let diagHTML = '<div style="font-weight:600;margin-bottom:8px;color:var(--accent-blue);">🧠 AI 诊断分析</div>';
+                    let diagHTML = `<div style="font-weight:600;margin-bottom:8px;color:var(--accent-blue);">🧠 ${this._t('diagnosis.title')}</div>`;
 
                     if (event.root_cause) {
-                        diagHTML += `<div style="margin-bottom:8px;"><div style="font-weight:500;color:var(--text-primary);margin-bottom:3px;">🔍 根本原因</div><div style="color:var(--text-secondary);line-height:1.6;">${this._escapeHtml(event.root_cause)}</div></div>`;
+                        diagHTML += `<div style="margin-bottom:8px;"><div style="font-weight:500;color:var(--text-primary);margin-bottom:3px;">🔍 ${this._t('diagnosis.rootCause')}</div><div style="color:var(--text-secondary);line-height:1.6;">${this._escapeHtml(event.root_cause)}</div></div>`;
                     }
                     if (event.recommended_actions) {
-                        diagHTML += `<div style="margin-bottom:8px;"><div style="font-weight:500;color:var(--text-primary);margin-bottom:3px;">🛠 处置建议</div><div style="color:var(--text-secondary);line-height:1.6;">${this._escapeHtml(event.recommended_actions)}</div></div>`;
+                        diagHTML += `<div style="margin-bottom:8px;"><div style="font-weight:500;color:var(--text-primary);margin-bottom:3px;">🛠 ${this._t('diagnosis.recommendations')}</div><div style="color:var(--text-secondary);line-height:1.6;">${this._escapeHtml(event.recommended_actions)}</div></div>`;
                     }
                     if (event.ai_diagnosis_summary && !event.root_cause && !event.recommended_actions) {
                         diagHTML += `<div style="color:var(--text-secondary);line-height:1.6;">${this._escapeHtml(event.ai_diagnosis_summary)}</div>`;
@@ -679,13 +686,13 @@ const AlertsPage = {
                     const diagPending = DOM.el('div', {
                         style: 'background:rgba(47,129,247,0.05);padding:10px 12px;margin-bottom:12px;border-radius:6px;font-size:12px;color:var(--text-muted);'
                     });
-                    diagPending.textContent = '🤖 AI 正在诊断中...';
+                    diagPending.textContent = this._t('diagnosis.inProgress');
                     alertsContainer.appendChild(diagPending);
                 } else if (event.diagnosis_status === 'pending') {
                     const diagPending = DOM.el('div', {
                         style: 'background:rgba(251,140,0,0.08);padding:10px 12px;margin-bottom:12px;border-radius:6px;font-size:12px;color:#fb8c00;'
                     });
-                    diagPending.textContent = '⏳ 诊断超时，正在后台继续分析...';
+                    diagPending.textContent = this._t('diagnosis.timedOut');
                     alertsContainer.appendChild(diagPending);
                 }
 
@@ -693,7 +700,7 @@ const AlertsPage = {
                     const baselineDiv = DOM.el('div', { className: 'event-baseline-panel' });
                     baselineDiv.appendChild(DOM.el('div', {
                         className: 'event-panel-title',
-                        textContent: '实例基线对比'
+                        textContent: this._t('baseline.comparison')
                     }));
                     const compareGrid = DOM.el('div', { className: 'event-baseline-grid' });
                     for (const item of eventContext.baseline_comparisons) {
@@ -701,9 +708,9 @@ const AlertsPage = {
                         card.innerHTML = `
                             <div class="event-baseline-card-title">${this._escapeHtml(this.getMetricLabel(item.metric_name))}</div>
                             <div class="event-baseline-card-main">${this.formatNumber(item.current_value)}</div>
-                            <div class="event-baseline-card-meta">P95: ${this.formatNumber(item.baseline_p95)} / 上界: ${this.formatNumber(item.upper_bound)}</div>
-                            <div class="event-baseline-card-meta">均值: ${this.formatNumber(item.baseline_avg)} / 样本: ${item.sample_count || 0}</div>
-                            <div class="event-baseline-card-meta">状态: ${this._escapeHtml(this.getBaselineStatusLabel(item.status))}${item.deviation_ratio ? ` / 偏离: ${item.deviation_ratio.toFixed(2)}x` : ''}</div>
+                            <div class="event-baseline-card-meta">P95: ${this.formatNumber(item.baseline_p95)} / ${this._t('baseline.upperBound')}: ${this.formatNumber(item.upper_bound)}</div>
+                            <div class="event-baseline-card-meta">${this._t('baseline.average')}: ${this.formatNumber(item.baseline_avg)} / ${this._t('baseline.samples')}: ${item.sample_count || 0}</div>
+                            <div class="event-baseline-card-meta">${this._t('baseline.status')}: ${this._escapeHtml(this.getBaselineStatusLabel(item.status))}${item.deviation_ratio ? ` / ${this._t('baseline.deviation')}: ${item.deviation_ratio.toFixed(2)}x` : ''}</div>
                         `;
                         compareGrid.appendChild(card);
                     }
@@ -715,11 +722,11 @@ const AlertsPage = {
                     const alertsTable = DOM.el('table', { className: 'nested-alerts-table' });
                     const alertsThead = DOM.el('thead');
                     const alertsHeaderRow = DOM.el('tr');
-                    alertsHeaderRow.appendChild(DOM.el('th', { textContent: '时间' }));
-                    alertsHeaderRow.appendChild(DOM.el('th', { textContent: '指标值' }));
-                    alertsHeaderRow.appendChild(DOM.el('th', { textContent: '阈值' }));
-                    alertsHeaderRow.appendChild(DOM.el('th', { textContent: '状态' }));
-                    alertsHeaderRow.appendChild(DOM.el('th', { textContent: '操作' }));
+                    alertsHeaderRow.appendChild(DOM.el('th', { textContent: this._t('columns.time') }));
+                    alertsHeaderRow.appendChild(DOM.el('th', { textContent: this._t('columns.metricValue') }));
+                    alertsHeaderRow.appendChild(DOM.el('th', { textContent: this._t('columns.threshold') }));
+                    alertsHeaderRow.appendChild(DOM.el('th', { textContent: this._t('columns.status') }));
+                    alertsHeaderRow.appendChild(DOM.el('th', { textContent: this._t('columns.actions') }));
                     alertsThead.appendChild(alertsHeaderRow);
                     alertsTable.appendChild(alertsThead);
 
@@ -746,7 +753,7 @@ const AlertsPage = {
                         alertActionsCell.appendChild(DOM.el('button', {
                             className: 'btn-icon',
                             textContent: '👁',
-                            title: '查看详情',
+                            title: this._t('actions.viewDetails'),
                             onClick: () => this.showAlertDetail(alert)
                         }));
                         alertRow.appendChild(alertActionsCell);
@@ -755,7 +762,7 @@ const AlertsPage = {
                     alertsTable.appendChild(alertsTbody);
                     alertsContainer.appendChild(alertsTable);
                 } else {
-                    alertsContainer.textContent = '加载中...';
+                    alertsContainer.textContent = I18n.t('common.loading');
                 }
 
                 expandedCell.appendChild(alertsContainer);
@@ -777,48 +784,48 @@ const AlertsPage = {
         const toolbar = DOM.el('div', { style: 'margin-bottom: 16px; display: flex; justify-content: flex-end;' });
         toolbar.appendChild(DOM.el('button', {
             className: 'btn btn-primary',
-            textContent: '新建订阅',
+            textContent: this._t('subscriptions.new'),
             onClick: () => this.showSubscriptionModal()
         }));
         list.appendChild(toolbar);
 
         if (this.subscriptions.length === 0) {
-            list.appendChild(DOM.el('div', { className: 'empty-state', textContent: '暂无订阅' }));
+            list.appendChild(DOM.el('div', { className: 'empty-state', textContent: this._t('empty.subscriptions') }));
             return list;
         }
 
         const table = DOM.el('table', { className: 'data-table' });
         const thead = DOM.el('thead');
         const headerRow = DOM.el('tr');
-        headerRow.appendChild(DOM.el('th', { textContent: '数据源' }));
-        headerRow.appendChild(DOM.el('th', { textContent: '严重程度' }));
-        headerRow.appendChild(DOM.el('th', { textContent: '通知目标' }));
-        headerRow.appendChild(DOM.el('th', { textContent: '状态' }));
-        headerRow.appendChild(DOM.el('th', { textContent: '操作' }));
+        headerRow.appendChild(DOM.el('th', { textContent: this._t('columns.datasource') }));
+        headerRow.appendChild(DOM.el('th', { textContent: this._t('columns.severity') }));
+        headerRow.appendChild(DOM.el('th', { textContent: this._t('columns.notificationTargets') }));
+        headerRow.appendChild(DOM.el('th', { textContent: this._t('columns.status') }));
+        headerRow.appendChild(DOM.el('th', { textContent: this._t('columns.actions') }));
         thead.appendChild(headerRow);
         table.appendChild(thead);
 
         const tbody = DOM.el('tbody');
         for (const sub of this.subscriptions) {
             const row = DOM.el('tr');
-            const datasourceNames = sub.datasource_ids.length === 0 ? '全部' : sub.datasource_ids.map(id => {
+            const datasourceNames = sub.datasource_ids.length === 0 ? this._t('subscriptions.all') : sub.datasource_ids.map(id => {
                 const ds = this.datasources.find(d => d.id === id);
                 return ds ? ds.name : `ID: ${id}`;
             }).join(', ');
             row.appendChild(DOM.el('td', { textContent: datasourceNames }));
 
-            const severityText = sub.severity_levels.length === 0 ? '全部' : sub.severity_levels.map(s => this.getSeverityLabel(s)).join(', ');
+            const severityText = sub.severity_levels.length === 0 ? this._t('subscriptions.all') : sub.severity_levels.map(s => this.getSeverityLabel(s)).join(', ');
             row.appendChild(DOM.el('td', { textContent: severityText }));
 
             const targetNames = (sub.integration_targets || []).length > 0
                 ? sub.integration_targets.map(target => `${target.name} (${this.getIntegrationName(target.integration_id)})`).join(', ')
-                : '未配置';
+                : this._t('subscriptions.notConfigured');
             row.appendChild(DOM.el('td', { textContent: targetNames }));
 
             const statusCell = DOM.el('td');
             statusCell.appendChild(DOM.el('span', {
                 className: `status-badge ${sub.enabled ? 'status-active' : 'status-disabled'}`,
-                textContent: sub.enabled ? '启用' : '禁用'
+                textContent: sub.enabled ? this._t('subscriptions.enabled') : this._t('subscriptions.disabled')
             }));
             row.appendChild(statusCell);
 
@@ -827,19 +834,19 @@ const AlertsPage = {
             actionsWrap.appendChild(DOM.el('button', {
                 className: 'btn btn-sm btn-secondary',
                 innerHTML: '<i data-lucide="edit"></i>',
-                title: '编辑',
+                title: this._t('actions.edit'),
                 onClick: () => this.showSubscriptionModal(sub)
             }));
             actionsWrap.appendChild(DOM.el('button', {
                 className: 'btn btn-sm btn-primary',
                 innerHTML: '<i data-lucide="send"></i>',
-                title: '测试通知',
+                title: this._t('actions.testNotification'),
                 onClick: () => this.testNotification(sub.id)
             }));
             actionsWrap.appendChild(DOM.el('button', {
                 className: 'btn btn-sm btn-danger',
                 innerHTML: '<i data-lucide="trash-2"></i>',
-                title: '删除',
+                title: this._t('actions.delete'),
                 onClick: () => this.deleteSubscription(sub.id)
             }));
             actionsCell.appendChild(actionsWrap);
@@ -863,7 +870,7 @@ const AlertsPage = {
         nextPane?.classList.add('active');
 
         if (!this._renderOptions?.embedded) {
-            Header.render('告警管理', this._buildHeaderActions());
+            Header.render(this._t('title'), this._buildHeaderActions());
             DOM.$('#page-header')?.classList.add('page-header-alerts');
         }
 
@@ -894,11 +901,11 @@ const AlertsPage = {
 
     async showAlertDetail(alert) {
         Modal.show({
-            title: '告警详情',
+            title: this._t('detail.title'),
             content: this.renderAlertDetailContent(alert),
             size: 'large',
             buttons: [
-                { text: '关闭', className: 'btn-secondary', onClick: () => Modal.hide() }
+                { text: this._t('actions.close'), className: 'btn-secondary', onClick: () => Modal.hide() }
             ]
         });
     },
@@ -917,35 +924,35 @@ const AlertsPage = {
         dsCard.innerHTML = `
             <div class="detail-card-header">
                 <span class="detail-card-icon">📊</span>
-                <span class="detail-card-title">数据库配置信息</span>
+                <span class="detail-card-title">${this._t('detail.datasourceConfig')}</span>
             </div>
             <div class="detail-card-body">
                 <div class="detail-row">
                     <div class="detail-row-item">
-                        <span class="detail-label">名称</span>
+                        <span class="detail-label">${this._t('detail.name')}</span>
                         <span class="detail-value">${this._escapeHtml(dsInfo.name || '-')}</span>
                     </div>
                     <div class="detail-row-item">
-                        <span class="detail-label">类型</span>
+                        <span class="detail-label">${this._t('detail.type')}</span>
                         <span class="detail-value">${this._escapeHtml(this._getDbTypeLabel(dsInfo.db_type))}</span>
                     </div>
                 </div>
                 <div class="detail-row">
                     <div class="detail-row-item">
-                        <span class="detail-label">连接</span>
+                        <span class="detail-label">${this._t('detail.connection')}</span>
                         <span class="detail-value">${this._escapeHtml(dsInfo.host || '-')}:${dsInfo.port || '-'} / ${this._escapeHtml(dsInfo.database || '-')}</span>
                     </div>
                 </div>
                 ${dsInfo.remark ? `
                 <div class="detail-row">
                     <div class="detail-row-item full-width">
-                        <span class="detail-label">备注</span>
+                        <span class="detail-label">${this._t('detail.remark')}</span>
                         <span class="detail-value">${this._escapeHtml(dsInfo.remark)}</span>
                     </div>
                 </div>` : ''}
                 <div class="detail-row">
                     <div class="detail-row-item">
-                        <span class="detail-label">状态</span>
+                        <span class="detail-label">${this._t('detail.status')}</span>
                         <span class="detail-value ${this._getConnectionStatusClass(dsInfo.connection_status)}">${this._getConnectionStatusLabel(dsInfo.connection_status)}</span>
                     </div>
                 </div>
@@ -962,69 +969,69 @@ const AlertsPage = {
         alertCard.innerHTML = `
             <div class="detail-card-header">
                 <span class="detail-card-icon">⚠️</span>
-                <span class="detail-card-title">告警详情</span>
+                <span class="detail-card-title">${this._t('detail.title')}</span>
             </div>
             <div class="detail-card-body">
                 <div class="detail-row">
                     <div class="detail-row-item">
-                        <span class="detail-label">严重程度</span>
+                        <span class="detail-label">${this._t('detail.severity')}</span>
                         <span class="detail-value ${severityClass}">${severityIcon} ${severityLabel}</span>
                     </div>
                     <div class="detail-row-item">
-                        <span class="detail-label">状态</span>
+                        <span class="detail-label">${this._t('detail.status')}</span>
                         <span class="detail-value">${this.getStatusLabel(alert.status)}</span>
                     </div>
                 </div>
                 <div class="detail-row">
                     <div class="detail-row-item">
-                        <span class="detail-label">告警类型</span>
+                        <span class="detail-label">${this._t('detail.alertType')}</span>
                         <span class="detail-value">${this.getAlertTypeLabel(alert.alert_type)}</span>
                     </div>
                     <div class="detail-row-item">
-                        <span class="detail-label">时间</span>
+                        <span class="detail-label">${this._t('detail.time')}</span>
                         <span class="detail-value">${alertTime ? Format.datetime(alertTime) : '-'}</span>
                     </div>
                 </div>
                 ${alert.metric_name ? `
                 <div class="detail-row">
                     <div class="detail-row-item">
-                        <span class="detail-label">指标</span>
-                        <span class="detail-value">${this._escapeHtml(alert.metric_name)}</span>
+                        <span class="detail-label">${this._t('detail.metric')}</span>
+                        <span class="detail-value">${this._escapeHtml(this.getMetricLabel(alert.metric_name))}</span>
                     </div>
                     <div class="detail-row-item">
-                        <span class="detail-label">当前值</span>
+                        <span class="detail-label">${this._t('detail.currentValue')}</span>
                         <span class="detail-value">${this.formatNumber(metricValue)}</span>
                     </div>
                     ${thresholdValue !== null && thresholdValue !== undefined ? `
                     <div class="detail-row-item">
-                        <span class="detail-label">阈值</span>
+                        <span class="detail-label">${this._t('detail.threshold')}</span>
                         <span class="detail-value">${this.formatNumber(thresholdValue)}</span>
                     </div>` : ''}
                 </div>` : ''}
                 ${alert.trigger_reason ? `
                 <div class="detail-row">
                     <div class="detail-row-item full-width">
-                        <span class="detail-label">触发原因</span>
+                        <span class="detail-label">${this._t('detail.triggerReason')}</span>
                         <span class="detail-value">${this._escapeHtml(alert.trigger_reason)}</span>
                     </div>
                 </div>` : ''}
                 ${alert.acknowledged_at ? `
                 <div class="detail-row">
                     <div class="detail-row-item">
-                        <span class="detail-label">确认时间</span>
-                        <span class="detail-value">${new Date(alert.acknowledged_at).toLocaleString('zh-CN')}</span>
+                        <span class="detail-label">${this._t('detail.acknowledgedAt')}</span>
+                        <span class="detail-value">${I18n.formatDate(alert.acknowledged_at, { dateStyle: 'medium', timeStyle: 'medium' })}</span>
                     </div>
                 </div>` : ''}
                 ${alert.resolved_at ? `
                 <div class="detail-row">
                     <div class="detail-row-item">
-                        <span class="detail-label">恢复时间</span>
-                        <span class="detail-value">${new Date(alert.resolved_at).toLocaleString('zh-CN')}</span>
+                        <span class="detail-label">${this._t('detail.recoveredAt')}</span>
+                        <span class="detail-value">${I18n.formatDate(alert.resolved_at, { dateStyle: 'medium', timeStyle: 'medium' })}</span>
                     </div>
                 </div>` : ''}
                 <div class="detail-row">
                     <div class="detail-row-item full-width">
-                        <span class="detail-label">标题</span>
+                        <span class="detail-label">${this._t('detail.alertTitle')}</span>
                         <span class="detail-value">${this._escapeHtml(alert.title || '-')}</span>
                     </div>
                 </div>
@@ -1041,7 +1048,7 @@ const AlertsPage = {
             let diagHTML = `
                 <div class="detail-card-header">
                     <span class="detail-card-icon">🧠</span>
-                    <span class="detail-card-title">AI 诊断分析</span>
+                    <span class="detail-card-title">${this._t('diagnosis.title')}</span>
                 </div>
                 <div class="detail-card-body">
             `;
@@ -1049,7 +1056,7 @@ const AlertsPage = {
             if (diagCtx.case_summary) {
                 diagHTML += `
                     <div class="diagnosis-section">
-                        <div class="diagnosis-label">📋 案例摘要</div>
+                        <div class="diagnosis-label">📋 ${this._t('diagnosis.caseSummary')}</div>
                         <div class="diagnosis-content">${this._escapeHtml(diagCtx.case_summary)}</div>
                     </div>
                 `;
@@ -1058,7 +1065,7 @@ const AlertsPage = {
             if (diagCtx.diagnosis_summary) {
                 diagHTML += `
                     <div class="diagnosis-section">
-                        <div class="diagnosis-label">🔬 诊断摘要</div>
+                        <div class="diagnosis-label">🔬 ${this._t('diagnosis.summary')}</div>
                         <div class="diagnosis-content">${this._escapeHtml(diagCtx.diagnosis_summary)}</div>
                     </div>
                 `;
@@ -1067,7 +1074,7 @@ const AlertsPage = {
             if (diagCtx.root_cause) {
                 diagHTML += `
                     <div class="diagnosis-section">
-                        <div class="diagnosis-label">🔍 根本原因</div>
+                        <div class="diagnosis-label">🔍 ${this._t('diagnosis.rootCause')}</div>
                         <div class="diagnosis-content">${this._escapeHtml(diagCtx.root_cause)}</div>
                     </div>
                 `;
@@ -1076,7 +1083,7 @@ const AlertsPage = {
             if (diagCtx.recommended_action) {
                 diagHTML += `
                     <div class="diagnosis-section">
-                        <div class="diagnosis-label">🛠 建议措施</div>
+                        <div class="diagnosis-label">🛠 ${this._t('diagnosis.suggestedActions')}</div>
                         <div class="diagnosis-content">${this._escapeHtml(diagCtx.recommended_action)}</div>
                     </div>
                 `;
@@ -1093,16 +1100,16 @@ const AlertsPage = {
             reportCard.innerHTML = `
                 <div class="detail-card-header">
                     <span class="detail-card-icon">📋</span>
-                    <span class="detail-card-title">关联诊断报告</span>
+                    <span class="detail-card-title">${this._t('detail.linkedReport')}</span>
                 </div>
                 <div class="detail-card-body">
                     <div class="report-info">
                         <div class="report-meta">
-                            <span class="report-time">${linkedReport.created_at ? new Date(linkedReport.created_at).toLocaleString('zh-CN') : '-'}</span>
-                            <span class="report-title">${this._escapeHtml(linkedReport.title || `报告 #${linkedReport.report_id}`)}</span>
+                            <span class="report-time">${linkedReport.created_at ? I18n.formatDate(linkedReport.created_at, { dateStyle: 'medium', timeStyle: 'medium' }) : '-'}</span>
+                            <span class="report-title">${this._escapeHtml(linkedReport.title || this._t('detail.reportFallback', { id: linkedReport.report_id }))}</span>
                             <span class="report-status">${this._getReportStatusLabel(linkedReport.status)}</span>
                         </div>
-                        <button class="btn btn-sm btn-secondary" onclick="AlertsPage.viewReport(${linkedReport.report_id})">查看报告</button>
+                        <button class="btn btn-sm btn-secondary" onclick="AlertsPage.viewReport(${linkedReport.report_id})">${this._t('detail.viewReport')}</button>
                     </div>
                 </div>
             `;
@@ -1114,7 +1121,7 @@ const AlertsPage = {
         contentCard.innerHTML = `
             <div class="detail-card-header">
                 <span class="detail-card-icon">📝</span>
-                <span class="detail-card-title">详细内容</span>
+                <span class="detail-card-title">${this._t('detail.content')}</span>
             </div>
             <div class="detail-card-body">
                 <pre class="detail-content">${this._escapeHtml(alert.content || '-')}</pre>
@@ -1140,7 +1147,13 @@ const AlertsPage = {
     },
 
     _navigateToDiagnosis(event) {
-        const prompt = `请结合该告警事件进行根因分析，并给出处置建议。\n\n事件标题：${event.title || '-'}\n严重程度：${event.severity || '-'}\n告警类型：${event.alert_type || '-'}\n指标：${event.metric_name || '-'}\n告警数量：${event.alert_count || 0}`;
+        const prompt = this._t('prompt', {
+            title: event.title || '-',
+            severity: this.getSeverityLabel(event.severity) || '-',
+            type: this.getAlertTypeLabel(event.alert_type) || '-',
+            metric: this.getMetricLabel(event.metric_name) || '-',
+            count: event.alert_count || 0,
+        });
         if (this._renderOptions?.embedded) {
             const params = new URLSearchParams();
             params.set('datasource', event.datasource_id);
@@ -1203,8 +1216,7 @@ const AlertsPage = {
 
     // Helper: Get connection status label
     _getConnectionStatusLabel(status) {
-        const labels = { normal: '✅ 正常', warning: '⚠️ 警告', failed: '❌ 失败', unknown: '❓ 未知' };
-        return labels[status] || status || '❓ 未知';
+        return this._t(`connectionStatus.${['normal', 'warning', 'failed'].includes(status) ? status : 'unknown'}`);
     },
 
     // Helper: Get connection status class
@@ -1214,8 +1226,7 @@ const AlertsPage = {
 
     // Helper: Get report status label
     _getReportStatusLabel(status) {
-        const labels = { pending: '待处理', running: '生成中', completed: '已完成', failed: '失败' };
-        return labels[status] || status || '-';
+        return ['pending', 'running', 'completed', 'failed'].includes(status) ? this._t(`reportStatus.${status}`) : status || '-';
     },
 
     showSubscriptionModal(subscription = null) {
@@ -1230,13 +1241,13 @@ const AlertsPage = {
         };
 
         Modal.show({
-            title: isEdit ? '编辑订阅' : '新建订阅',
+            title: isEdit ? this._t('subscriptions.edit') : this._t('subscriptions.new'),
             content: this.renderSubscriptionForm(formData),
             size: 'large',
             buttons: [
-                { text: '取消', className: 'btn-secondary', onClick: () => Modal.hide() },
+                { text: this._t('actions.cancel'), className: 'btn-secondary', onClick: () => Modal.hide() },
                 {
-                    text: '保存',
+                    text: this._t('actions.save'),
                     className: 'btn-primary',
                     onClick: async () => {
                         const data = this.getSubscriptionFormData(subscription);
@@ -1250,10 +1261,10 @@ const AlertsPage = {
                             await this.loadSubscriptions();
                             this.updateSubscriptionsList();
                             Modal.hide();
-                            Toast.success('保存成功');
+                            Toast.success(this._t('subscriptions.saved'));
                         } catch (error) {
                             console.error('Failed to save subscription:', error);
-                            Toast.error('保存失败: ' + error.message);
+                            Toast.error(this._t('subscriptions.saveFailed', { message: error.message }));
                         }
                     }
                 }
@@ -1265,7 +1276,7 @@ const AlertsPage = {
         const form = DOM.el('div', { className: 'subscription-form', id: 'subscription-form' });
 
         const datasourceGroup = DOM.el('div', { className: 'form-group' });
-        datasourceGroup.appendChild(DOM.el('label', { textContent: '数据源（留空表示全部）' }));
+        datasourceGroup.appendChild(DOM.el('label', { textContent: this._t('subscriptions.datasourceHint') }));
         const datasourceSelect = DOM.el('select', { multiple: true, className: 'form-control', id: 'sub-datasources' });
         for (const ds of this.datasources) {
             datasourceSelect.appendChild(DOM.el('option', {
@@ -1278,7 +1289,7 @@ const AlertsPage = {
         form.appendChild(datasourceGroup);
 
         const severityGroup = DOM.el('div', { className: 'form-group' });
-        severityGroup.appendChild(DOM.el('label', { textContent: '严重程度（留空表示全部）' }));
+        severityGroup.appendChild(DOM.el('label', { textContent: this._t('subscriptions.severityHint') }));
         const severityOptions = DOM.el('div', { className: 'checkbox-group' });
         for (const severity of ['critical', 'high', 'medium', 'low']) {
             const checkbox = DOM.el('label', { className: 'checkbox-label' });
@@ -1296,10 +1307,10 @@ const AlertsPage = {
 
         const targetsGroup = DOM.el('div', { className: 'form-group' });
         const targetsHeader = DOM.el('div', { className: 'subscription-targets-header' });
-        targetsHeader.appendChild(DOM.el('label', { textContent: '通知目标' }));
+        targetsHeader.appendChild(DOM.el('label', { textContent: this._t('subscriptions.targets') }));
         targetsHeader.appendChild(DOM.el('button', {
             className: 'btn btn-sm btn-secondary',
-            textContent: '新增目标',
+            textContent: this._t('subscriptions.addTarget'),
             type: 'button',
             onClick: () => this.addIntegrationTargetRow()
         }));
@@ -1307,7 +1318,7 @@ const AlertsPage = {
 
         targetsGroup.appendChild(DOM.el('div', {
             className: 'integration-target-help',
-            textContent: '直接选择 Integration，并在这里填写 webhook、email 等目标参数。默认同时发送告警和恢复通知。密码类字段会自动以 ENCRYPT: 形式提交。'
+            textContent: this._t('subscriptions.targetHelp')
         }));
 
         const list = DOM.el('div', { id: 'integration-targets-list', className: 'integration-targets-list' });
@@ -1319,7 +1330,7 @@ const AlertsPage = {
         const enabledGroup = DOM.el('div', { className: 'form-group' });
         const enabledLabel = DOM.el('label', { className: 'checkbox-label' });
         enabledLabel.appendChild(DOM.el('input', { type: 'checkbox', id: 'sub-enabled', checked: data.enabled }));
-        enabledLabel.appendChild(DOM.el('span', { textContent: '启用订阅' }));
+        enabledLabel.appendChild(DOM.el('span', { textContent: this._t('subscriptions.enable') }));
         enabledGroup.appendChild(enabledLabel);
         form.appendChild(enabledGroup);
 
@@ -1343,7 +1354,7 @@ const AlertsPage = {
 
         const integrationOptions = this.notificationIntegrations.map(item => {
             const selected = String(target.integration_id) === String(item.id) ? 'selected' : '';
-            return `<option value="${item.id}" ${selected}>${item.name}</option>`;
+            return `<option value="${item.id}" ${selected}>${this._escapeHtml(this._integrationDisplayName(item))}</option>`;
         }).join('');
 
         wrapper.innerHTML = `
@@ -1351,13 +1362,13 @@ const AlertsPage = {
                 <div class="form-group">
                     <label>Integration</label>
                     <select class="target-integration">
-                        <option value="">请选择</option>
+                        <option value="">${this._t('subscriptions.select')}</option>
                         ${integrationOptions}
                     </select>
                 </div>
                 <div class="integration-target-actions">
-                    <label class="checkbox-label target-enabled-label"><input type="checkbox" class="target-enabled" ${target.enabled !== false ? 'checked' : ''}> <span>启用</span></label>
-                    <button type="button" class="btn-icon remove-target-btn" title="删除目标" aria-label="删除目标">×</button>
+                    <label class="checkbox-label target-enabled-label"><input type="checkbox" class="target-enabled" ${target.enabled !== false ? 'checked' : ''}> <span>${this._t('subscriptions.targetEnabled')}</span></label>
+                    <button type="button" class="btn-icon remove-target-btn" title="${this._t('subscriptions.removeTarget')}" aria-label="${this._t('subscriptions.removeTarget')}">×</button>
                 </div>
             </div>
             <div class="target-params"></div>
@@ -1384,15 +1395,17 @@ const AlertsPage = {
             return;
         }
 
-        let html = '<div class="target-params-title">目标参数</div>';
+        let html = `<div class="target-params-title">${this._t('subscriptions.targetParams')}</div>`;
         for (const [key, prop] of Object.entries(integration.config_schema.properties)) {
             const required = integration.config_schema.required?.includes(key) ? '<span class="target-param-required">*</span>' : '';
             const type = prop.format === 'password' ? 'password' : 'text';
             const value = prop.format === 'password' ? '' : (existingParams[key] || prop.default || '');
+            const title = this._integrationSchemaPropertyText(integration, key, prop, 'title');
+            const description = this._integrationSchemaPropertyText(integration, key, prop, 'description');
             html += `
                 <div class="target-param-row">
-                    <label class="target-param-label">${prop.title || key}${required}</label>
-                    <input type="${type}" class="target-param target-param-input" data-key="${key}" data-format="${prop.format || ''}" value="${value}" placeholder="${prop.description || ''}">
+                    <label class="target-param-label">${this._escapeHtml(title)}${required}</label>
+                    <input type="${type}" class="target-param target-param-input" data-key="${key}" data-format="${prop.format || ''}" value="${this._escapeAttr(value)}" placeholder="${this._escapeAttr(description)}">
                 </div>
             `;
         }
@@ -1426,7 +1439,7 @@ const AlertsPage = {
             });
 
             const existingTarget = subscription?.integration_targets?.[index];
-            const integrationName = this.getIntegrationName(integrationId);
+            const integrationName = this.getIntegrationName(integrationId, false);
             const name = (existingTarget?.name && existingTarget.name.trim()) ? existingTarget.name.trim() : `${integrationName} #${index + 1}`;
 
             return {
@@ -1440,7 +1453,7 @@ const AlertsPage = {
         }).filter(target => Number.isFinite(target.integration_id));
 
         if (integrationTargets.length === 0) {
-            Toast.error('请至少配置一个通知目标');
+            Toast.error(this._t('subscriptions.targetRequired'));
             return null;
         }
 
@@ -1452,103 +1465,148 @@ const AlertsPage = {
         };
     },
 
-    getIntegrationName(integrationId) {
+    getIntegrationName(integrationId, localized = true) {
         const integration = this.notificationIntegrations.find(item => item.id === integrationId);
-        return integration ? integration.name : `Integration #${integrationId}`;
+        if (!integration) return `Integration #${integrationId}`;
+        return localized ? this._integrationDisplayName(integration) : integration.name;
+    },
+
+    _knownIntegrationKey(integration) {
+        const builtIn = {
+            builtin_feishu_webhook: 'feishuWebhook',
+            builtin_dingtalk_webhook: 'dingtalkWebhook',
+            builtin_email: 'email',
+            builtin_generic_webhook: 'genericWebhook',
+            builtin_aliyun_rds: 'aliyunRds',
+            builtin_huaweicloud_rds: 'huaweiRds',
+            builtin_tencentcloud_rds: 'tencentRds',
+            builtin_feishu_bot: 'feishuBot',
+            builtin_dingtalk_bot: 'dingtalkBot',
+            builtin_weixin_bot: 'weixinBot',
+        }[integration?.integration_id];
+        if (builtIn) return builtIn;
+
+        const identifier = String(integration?.integration_id || integration?.code || '').toLowerCase();
+        const name = String(integration?.name || '');
+        if (!/(?:wecom|wechat[_-]?work|wework|qyweixin|enterprise[_-]?wechat)/.test(identifier)
+            && !/\u4f01\u4e1a\u5fae\u4fe1|\u4f01\u5fae/.test(name)) return null;
+        return integration?.integration_type === 'bot' || /bot|\u673a\u5668\u4eba/.test(`${identifier} ${name}`)
+            ? 'enterpriseWechatBot'
+            : 'enterpriseWechatWebhook';
+    },
+
+    _integrationDisplayName(integration) {
+        const knownKey = this._knownIntegrationKey(integration);
+        return knownKey ? I18n.t(`integrations.builtinNames.${knownKey}`) : (integration?.name || '');
+    },
+
+    _integrationSchemaPropertyText(integration, key, prop, field) {
+        const metadata = {
+            builtin_feishu_webhook: {
+                webhook_url: { description: 'feishuWebhook' },
+                secret: { title: 'secretOptional', description: 'feishuSecret' },
+            },
+            builtin_dingtalk_webhook: {
+                webhook_url: { description: 'dingtalkWebhook' },
+                secret: { title: 'secret', description: 'dingtalkSecret' },
+            },
+            builtin_email: {
+                to: { title: 'recipient', description: 'recipientHelp' },
+                cc: { title: 'ccOptional', description: 'ccHelp' },
+            },
+            builtin_generic_webhook: {
+                webhook_url: { description: 'targetWebhook' }, method: { title: 'httpMethod' },
+                auth_type: { title: 'authMethod' }, auth_token: { title: 'authTokenOptional' },
+            },
+        };
+        const localeKey = metadata[integration?.integration_id]?.[key]?.[field];
+        if (localeKey) return I18n.t(`integrations.schemaFields.${localeKey}`);
+        const fallback = field === 'title' ? (prop.title || key) : (prop.description || '');
+        return I18n.translateLegacyText(fallback);
     },
 
     async testNotification(subscriptionId) {
-        if (!confirm('发送测试通知？')) return;
+        if (!confirm(this._t('subscriptions.testConfirm'))) return;
         try {
             const result = await API.post(`/api/alerts/subscriptions/${subscriptionId}/test`, {});
-            alert(`测试通知已发送\n${JSON.stringify(result.deliveries, null, 2)}`);
+            alert(this._t('subscriptions.testSent', { deliveries: JSON.stringify(result.deliveries, null, 2) }));
         } catch (error) {
             console.error('Failed to test notification:', error);
-            alert('测试失败: ' + error.message);
+            alert(this._t('subscriptions.testFailed', { message: error.message }));
         }
     },
 
     async deleteSubscription(subscriptionId) {
-        if (!confirm('确认删除此订阅？')) return;
+        if (!confirm(this._t('subscriptions.deleteConfirm'))) return;
         try {
             await API.delete(`/api/alerts/subscriptions/${subscriptionId}`);
             await this.loadSubscriptions();
             this.updateSubscriptionsList();
-            Toast.success('订阅已删除');
+            Toast.success(this._t('subscriptions.deleted'));
         } catch (error) {
             console.error('Failed to delete subscription:', error);
-            Toast.error('删除失败: ' + error.message);
+            Toast.error(this._t('subscriptions.deleteFailed', { message: error.message }));
         }
     },
 
     getSeverityLabel(severity) {
-        const labels = { critical: '严重', high: '高', medium: '中', low: '低' };
-        return labels[severity] || severity;
+        return ['critical', 'high', 'medium', 'low'].includes(severity) ? this._t(`severity.${severity}`) : severity;
     },
 
     getStatusLabel(status) {
-        const labels = { active: '活跃', acknowledged: '已确认', resolved: '已解决' };
-        return labels[status] || status;
+        return ['active', 'acknowledged', 'resolved'].includes(status) ? this._t(`statuses.${status}`) : status;
     },
 
     getAlertTypeLabel(type) {
         const labels = {
-            threshold_violation: '超过阈值',
-            baseline_deviation: '偏离基线',
-            custom_expression: '自定义表达式',
-            system_error: '系统错误',
-            ai_policy_violation: '智能判定异常'
+            threshold_violation: 'thresholdViolation',
+            baseline_deviation: 'baselineDeviation',
+            custom_expression: 'customExpression',
+            system_error: 'systemError',
+            ai_policy_violation: 'aiPolicyViolation'
         };
-        return labels[type] || type;
+        return labels[type] ? this._t(`alertTypes.${labels[type]}`) : type;
     },
 
     getFaultDomainLabel(domain) {
         const labels = {
-            availability: '可用性',
-            performance: '性能',
-            storage: '存储',
-            replication: '复制',
-            general: '通用'
+            availability: 'availability', performance: 'performance', storage: 'storage',
+            replication: 'replication', general: 'general'
         };
-        return labels[domain] || domain || '通用';
+        return labels[domain] ? this._t(`faultDomains.${labels[domain]}`) : domain || this._t('faultDomains.general');
     },
 
     getLifecycleStageLabel(stage) {
         const labels = {
-            created: '新建',
-            active: '处理中',
-            escalated: '已升级',
-            acknowledged: '已确认',
-            recovered: '已恢复'
+            created: 'created', active: 'active', escalated: 'escalated',
+            acknowledged: 'acknowledged', recovered: 'recovered'
         };
-        return labels[stage] || stage || '处理中';
+        return labels[stage] ? this._t(`lifecycle.${labels[stage]}`) : stage || this._t('lifecycle.active');
     },
 
     getMetricLabel(metric) {
         const labels = {
-            cpu_usage: 'CPU 使用率',
-            disk_usage: '磁盘使用率',
-            connections_active: '活跃连接',
-            connection_status: '连接状态',
+            cpu_usage: 'cpu',
+            disk_usage: 'disk',
+            connections_active: 'activeConnections',
+            connection_status: 'connectionStatus',
             qps: 'QPS',
             tps: 'TPS'
         };
-        return labels[metric] || metric || '-';
+        if (['qps', 'tps'].includes(metric)) return labels[metric];
+        return labels[metric] ? this._t(`metrics.${labels[metric]}`) : metric || '-';
     },
 
     getBaselineStatusLabel(status) {
         const labels = {
-            above_baseline: '高于基线',
-            within_baseline: '基线内',
-            no_profile: '暂无画像',
-            unknown: '未知'
+            above_baseline: 'above', within_baseline: 'within', no_profile: 'noProfile', unknown: 'unknown'
         };
-        return labels[status] || status || '未知';
+        return labels[status] ? this._t(`baseline.${labels[status]}`) : status || this._t('baseline.unknown');
     },
 
     formatNumber(value) {
         if (value === null || value === undefined || Number.isNaN(Number(value))) return '-';
-        return Number(value).toFixed(2);
+        return I18n.formatNumber(Number(value), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     },
 
     _pickFirstDefined(...values) {
@@ -1602,7 +1660,7 @@ const AlertsPage = {
 
         const buttons = [];
         const currentPage = this.currentPage[type];
-        buttons.push(`<button class="btn btn-sm btn-secondary" style="flex: 0 0 auto;" ${currentPage === 1 ? 'disabled' : ''} onclick="AlertsPage.goToPage('${type}', ${currentPage - 1})">上一页</button>`);
+        buttons.push(`<button class="btn btn-sm btn-secondary" style="flex: 0 0 auto;" ${currentPage === 1 ? 'disabled' : ''} onclick="AlertsPage.goToPage('${type}', ${currentPage - 1})">${this._t('pagination.previous')}</button>`);
         for (let i = 1; i <= totalPages; i++) {
             if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
                 buttons.push(`<button class="btn btn-sm ${i === currentPage ? 'btn-primary' : 'btn-secondary'}" style="flex: 0 0 auto;" onclick="AlertsPage.goToPage('${type}', ${i})">${i}</button>`);
@@ -1610,7 +1668,7 @@ const AlertsPage = {
                 buttons.push('<span style="padding:0 5px; flex: 0 0 auto;">...</span>');
             }
         }
-        buttons.push(`<button class="btn btn-sm btn-secondary" style="flex: 0 0 auto;" ${currentPage === totalPages ? 'disabled' : ''} onclick="AlertsPage.goToPage('${type}', ${currentPage + 1})">下一页</button>`);
+        buttons.push(`<button class="btn btn-sm btn-secondary" style="flex: 0 0 auto;" ${currentPage === totalPages ? 'disabled' : ''} onclick="AlertsPage.goToPage('${type}', ${currentPage + 1})">${this._t('pagination.next')}</button>`);
         container.innerHTML = buttons.join('');
         return container;
     },
@@ -1683,7 +1741,7 @@ const AlertsPage = {
 
     _escapeAttr(text) {
         if (text == null) return '';
-        return String(text).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        return this._escapeHtml(text).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     },
 
     async _showSilenceModal(datasourceId, datasourceName) {
@@ -1694,36 +1752,36 @@ const AlertsPage = {
         const defaultHours = state.isSilenced ? this._formatHourValue(state.remainingHours) : '1';
         const currentStatusHtml = state.isSilenced ? `
             <div style="margin-bottom:12px;padding:10px 12px;border-radius:8px;background:rgba(217,119,6,0.12);color:var(--text-primary);">
-                <div style="font-weight:600;margin-bottom:4px;">当前处于告警静默中</div>
-                <div style="font-size:12px;color:var(--text-secondary);">截止时间：${this._escapeHtml(Format.datetime(event.datasource_silence_until))}</div>
-                <div style="font-size:12px;color:var(--text-secondary);">剩余时长：${this._escapeHtml(this._formatHourValue(state.remainingHours))} 小时</div>
-                ${state.reason ? `<div style="font-size:12px;color:var(--text-secondary);">静默原因：${this._escapeHtml(state.reason)}</div>` : ''}
+                <div style="font-weight:600;margin-bottom:4px;">${this._t('silence.current')}</div>
+                <div style="font-size:12px;color:var(--text-secondary);">${this._t('silence.deadline', { time: this._escapeHtml(Format.datetime(event.datasource_silence_until)) })}</div>
+                <div style="font-size:12px;color:var(--text-secondary);">${this._t('silence.remainingDuration', { hours: this._escapeHtml(this._formatHourValue(state.remainingHours)) })}</div>
+                ${state.reason ? `<div style="font-size:12px;color:var(--text-secondary);">${this._t('silence.currentReason', { reason: this._escapeHtml(state.reason) })}</div>` : ''}
             </div>
         ` : '';
 
         Modal.show({
-            title: '设置告警静默',
+            title: this._t('silence.title'),
             content: `
                 <div style="padding:6px 0;">
                     <div style="margin-bottom:12px;color:var(--text-secondary);line-height:1.6;">
-                        为数据源 <strong>${this._escapeHtml(datasourceName)}</strong> 设置告警静默。静默期间将暂停该数据源的告警触发与通知。
+                        ${this._t('silence.description', { name: `<strong>${this._escapeHtml(datasourceName)}</strong>` })}
                     </div>
                     ${currentStatusHtml}
                     <div class="form-group">
-                        <label for="alert-silence-hours">静默时长（小时）</label>
+                        <label for="alert-silence-hours">${this._t('silence.durationLabel')}</label>
                         <input id="alert-silence-hours" type="number" class="form-input" min="0.5" max="240" step="0.5" value="${this._escapeAttr(defaultHours)}" placeholder="1">
-                        <small class="text-muted">默认 1 小时，可设置范围 0.5 ~ 240 小时</small>
+                        <small class="text-muted">${this._t('silence.durationHint')}</small>
                     </div>
                     <div class="form-group" style="margin-top:12px;">
-                        <label for="alert-silence-reason">静默原因（可选）</label>
-                        <textarea id="alert-silence-reason" class="form-input" rows="3" maxlength="500" placeholder="例如：计划变更窗口、已知故障处理中">${this._escapeHtml(state.reason || '')}</textarea>
+                        <label for="alert-silence-reason">${this._t('silence.reasonLabel')}</label>
+                        <textarea id="alert-silence-reason" class="form-input" rows="3" maxlength="500" placeholder="${I18n.t('placeholders.silenceReason')}">${this._escapeHtml(state.reason || '')}</textarea>
                     </div>
                 </div>
             `,
             buttons: [
-                { text: '取消', variant: 'secondary', onClick: () => Modal.hide() },
+                { text: this._t('actions.cancel'), variant: 'secondary', onClick: () => Modal.hide() },
                 {
-                    text: state.isSilenced ? '更新静默' : '开始静默',
+                    text: state.isSilenced ? this._t('silence.update') : this._t('silence.start'),
                     variant: 'primary',
                     onClick: () => this._setDatasourceSilence(datasourceId)
                 }
@@ -1737,11 +1795,11 @@ const AlertsPage = {
         const hours = parseFloat(hoursValue);
 
         if (!Number.isFinite(hours)) {
-            Toast.error('请输入有效的静默时长');
+            Toast.error(this._t('silence.invalidDuration'));
             return;
         }
         if (hours < 0.5 || hours > 240) {
-            Toast.error('静默时长必须在 0.5 到 240 小时之间');
+            Toast.error(this._t('silence.outOfRange'));
             return;
         }
 
@@ -1751,11 +1809,11 @@ const AlertsPage = {
                 reason: reasonValue || null,
             });
             Modal.hide();
-            Toast.success(`已设置告警静默 ${this._formatHourValue(result.remaining_hours ?? hours)} 小时`);
+            Toast.success(this._t('silence.set', { hours: this._formatHourValue(result.remaining_hours ?? hours) }));
             await this.loadEvents();
             this.updateAlertsList();
         } catch (err) {
-            Toast.error('设置告警静默失败: ' + err.message);
+            Toast.error(this._t('silence.setFailed', { message: err.message }));
         }
     }
 };

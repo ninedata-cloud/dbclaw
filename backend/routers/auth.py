@@ -9,7 +9,15 @@ from backend.database import get_db
 from backend.models.user import User
 from backend.models.login_log import LoginLog
 from backend.models.soft_delete import alive_filter
-from backend.schemas.auth import LoginRequest, LoginResponse, ChangePasswordRequest, CurrentUserUpdateRequest, UserResponse
+from backend.schemas.auth import (
+    ChangePasswordRequest,
+    CurrentUserUpdateRequest,
+    LocaleUpdateRequest,
+    LoginRequest,
+    LoginResponse,
+    UserResponse,
+)
+from backend.i18n.errors import ApiError
 from backend.utils.security import verify_password, hash_password
 from backend.dependencies import get_current_user
 from backend.services.session_service import SessionService
@@ -57,7 +65,7 @@ async def login(data: LoginRequest, request: Request, response: Response, db: As
         )
         db.add(log)
         await db.commit()
-        raise HTTPException(status_code=401, detail="用户名或密码错误")
+        raise ApiError(401, "auth.invalid_credentials")
 
     if not user.is_active:
         log = LoginLog(
@@ -68,7 +76,7 @@ async def login(data: LoginRequest, request: Request, response: Response, db: As
         )
         db.add(log)
         await db.commit()
-        raise HTTPException(status_code=403, detail="账户已被禁用")
+        raise ApiError(403, "auth.account_disabled")
 
     log = LoginLog(
         user_id=user.id,
@@ -110,6 +118,18 @@ async def update_me(
     return current_user
 
 
+@router.put("/me/locale", response_model=UserResponse)
+async def update_my_locale(
+    data: LocaleUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    current_user.locale = data.locale
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user
+
+
 @router.post("/logout")
 async def logout(
     request: Request,
@@ -143,7 +163,7 @@ async def change_password(
     db: AsyncSession = Depends(get_db),
 ):
     if not verify_password(data.old_password, current_user.password_hash):
-        raise HTTPException(status_code=400, detail="当前密码不正确")
+        raise ApiError(400, "auth.invalid_current_password")
 
     current_user.password_hash = hash_password(data.new_password)
     current_user.password_changed_at = datetime.now(timezone.utc)

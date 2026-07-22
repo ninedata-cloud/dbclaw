@@ -30,14 +30,14 @@ async def debug_response():
         integration = result.scalar_one_or_none()
 
         if not integration:
-            print("✗ 集成模板未加载")
+            print("✗ Integration template is not loaded")
             return
 
         # 测试参数
         test_params = {"region_id": "cn-hangzhou"}
         test_datasource_id = 9
 
-        print(f"执行测试...")
+        print("Running test...")
 
         try:
             result = await IntegrationService.test_integration(
@@ -49,12 +49,12 @@ async def debug_response():
             )
 
             if not result.get("success"):
-                print(f"✗ 测试失败: {result.get('message')}")
+                print(f"✗ Test failed: {result.get('message')}")
                 return
 
             metrics = result.get("data", {}).get("metrics", [])
 
-            print(f"\n返回的指标数量: {len(metrics)}")
+            print(f"\nMetrics returned: {len(metrics)}")
 
             # 按 metric_name 分组
             from collections import defaultdict
@@ -63,17 +63,17 @@ async def debug_response():
                 metric_name = metric.get("metric_name")
                 metric_groups[metric_name].append(metric)
 
-            print(f"\n指标类型统计:")
+            print("\nMetric type counts:")
             for metric_name, items in metric_groups.items():
-                print(f"  - {metric_name}: {len(items)} 条")
+                print(f"  - {metric_name}: {len(items)} entries")
 
             # 显示前几条原始数据
-            print(f"\n前 5 条原始数据:")
+            print("\nFirst 5 raw records:")
             for i, metric in enumerate(metrics[:5], 1):
                 print(f"\n{i}. {json.dumps(metric, indent=2, ensure_ascii=False)}")
 
         except Exception as e:
-            print(f"\n✗ 测试失败: {e}")
+            print(f"\n✗ Test failed: {e}")
             import traceback
             traceback.print_exc()
 

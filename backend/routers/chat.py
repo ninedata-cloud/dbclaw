@@ -35,6 +35,7 @@ from backend.services.chat_orchestration_service import (
 from backend.services.config_service import get_config
 from backend.services.session_service import SessionService
 from backend.utils.json_sanitizer import sanitize_for_json
+from backend.i18n.locale import DEFAULT_LOCALE, normalize_locale, translate
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
@@ -167,9 +168,8 @@ def _update_stream_state(session_id: int, payload: dict) -> None:
 
     if payload_type == "plan_step_status":
         if payload.get("status") == "running":
-            tool_name = payload.get("tool_name") or "工具"
             state["thinking_phase"] = "tool_execution"
-            state["thinking_message"] = f"正在执行 {tool_name}..."
+            state["thinking_message"] = payload.get("summary") or payload.get("title") or ""
         else:
             state["thinking_phase"] = None
             state["thinking_message"] = ""
@@ -462,6 +462,7 @@ async def resolve_chat_approval(
             user_id=user.id,
             pending_approvals=PENDING_APPROVALS,
             on_event=lambda event: _emit_session_event(session_id, event),
+            locale=user.locale,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
@@ -494,7 +495,10 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
         try:
             await websocket.send_json({
                 "type": "stream_resuming",
-                "message": stream_state.get("thinking_message") or "AI 正在生成中...",
+                "message": stream_state.get("thinking_message") or translate(
+                    normalize_locale(getattr(user, "locale", None)) or DEFAULT_LOCALE,
+                    "ai.session.generating",
+                ),
                 "content": stream_state.get("content") or "",
                 "thinking_phase": stream_state.get("thinking_phase"),
                 "thinking_message": stream_state.get("thinking_message") or "",
@@ -543,7 +547,10 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
                 try:
                     await websocket.send_json({
                         "type": "error",
-                        "content": "AI 正在生成中，请等待完成或点击停止按钮。",
+                        "content": translate(
+                            normalize_locale(getattr(user, "locale", None)) or DEFAULT_LOCALE,
+                            "ai.session.busy",
+                        ),
                     })
                 except Exception:
                     pass
@@ -558,6 +565,7 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
                 h_id=payload_host_id,
                 m_id=model_id,
                 skill_auths=payload_skill_authorizations,
+                response_locale=normalize_locale(getattr(user, "locale", None)) or DEFAULT_LOCALE,
             ):
                 _start_stream_state(sid)
                 try:
@@ -586,13 +594,14 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
                             skill_authorizations=skill_authorizations,
                             pending_approvals=PENDING_APPROVALS,
                             on_event=lambda payload: _emit_session_event(sid, payload),
+                            locale=response_locale,
                         )
                 except asyncio.CancelledError:
                     logger.info(f"Stream task cancelled for session {sid}")
                     try:
                         await _emit_session_event(sid, {
                             "type": "content",
-                            "content": "\n\n[用户已停止生成]",
+                            "content": "\n\n" + translate(response_locale, "ai.session.cancelled"),
                         })
                         await _emit_session_event(sid, {"type": "done"})
                     except Exception:
@@ -601,7 +610,7 @@ async def chat_websocket(websocket: WebSocket, session_id: int):
                     logger.error(f"Stream task error for session {sid}: {e}", exc_info=True)
                     await _emit_session_event(sid, {
                         "type": "error",
-                        "content": f"AI 会话出错: {str(e)}",
+                        "content": translate(response_locale, "ai.session.error", {"error": str(e)}),
                     })
                 finally:
                     ACTIVE_STREAM_TASKS.pop(sid, None)

@@ -36,7 +36,7 @@ const DataTable = {
                     return 'NULL';
                 }
                 if (typeof params.value === 'number' && params.value > 9999) {
-                    return params.value.toLocaleString();
+                    return I18n.formatNumber(params.value);
                 }
                 return String(params.value);
             },
@@ -75,6 +75,14 @@ const DataTable = {
             pagination: options.pagination === true,
             paginationPageSize: options.paginationPageSize || 100,
             paginationPageSizeSelector: [50, 100, 500, 1000],
+            localeText: {
+                page: I18n.t('dataTable.page'), more: I18n.t('dataTable.more'), to: I18n.t('dataTable.to'),
+                of: I18n.t('dataTable.of'), next: I18n.t('dataTable.next'), last: I18n.t('dataTable.last'),
+                first: I18n.t('dataTable.first'), previous: I18n.t('dataTable.previous'),
+                loadingOoo: I18n.t('dataTable.loading'), noRowsToShow: I18n.t('dataTable.noRows'),
+                searchOoo: I18n.t('dataTable.search'), blanks: I18n.t('dataTable.blanks'),
+                filterOoo: I18n.t('dataTable.filter')
+            },
             licenseKey: '',
             // onGridReady: reveal the grid once it's fully initialized
             onGridReady: () => {
@@ -85,7 +93,7 @@ const DataTable = {
         if (typeof agGrid === 'undefined') {
             console.error('[DataTable] agGrid not loaded!');
             container.style.display = '';
-            container.innerHTML = '<div style="padding:20px;color:var(--accent-red)">AG Grid 未加载，请刷新页面</div>';
+            container.innerHTML = `<div style="padding:20px;color:var(--accent-red)">${I18n.t('dataTable.gridUnavailable')}</div>`;
             return container;
         }
 
@@ -101,7 +109,7 @@ const DataTable = {
         } catch (err) {
             console.error('[DataTable] agGrid.createGrid failed:', err);
             container.style.display = '';
-            container.innerHTML = `<div style="padding:20px;color:var(--accent-red)">表格渲染失败: ${Utils.escapeHtml(err.message)}</div>`;
+            container.innerHTML = `<div style="padding:20px;color:var(--accent-red)">${I18n.t('dataTable.renderFailed', { message: Utils.escapeHtml(err.message) })}</div>`;
         }
 
         return container;

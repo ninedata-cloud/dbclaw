@@ -12,7 +12,12 @@ from typing import AsyncGenerator, List, Dict, Any, Optional
 from sqlalchemy import select
 
 from backend.agent.diagnosis_context import build_diagnostic_brief, render_diagnostic_brief_for_prompt
-from backend.agent.prompts import DIAGNOSTIC_PROMPT, INFORMATIONAL_PROMPT, ADMINISTRATIVE_PROMPT
+from backend.agent.prompts import (
+    ADMINISTRATIVE_PROMPT,
+    DIAGNOSTIC_PROMPT,
+    INFORMATIONAL_PROMPT,
+    apply_ai_output_language,
+)
 from backend.agent.intent_detector import analyze_query_intent, IntentAnalysis, detect_intent_with_llm
 from backend.agent.skill_authorization import (
     is_static_tool_authorized,
@@ -33,6 +38,7 @@ from backend.utils.command_safety import (
     looks_clearly_read_only_command,
 )
 from backend.utils.datetime_helper import now
+from backend.i18n.locale import DEFAULT_LOCALE, normalize_locale, translate
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +102,36 @@ ISSUE_CATEGORY_LABELS = {
     "general": "综合诊断",
 }
 
+ISSUE_CATEGORY_LABELS_EN = {
+    "performance": "performance issue",
+    "connectivity": "connectivity issue",
+    "locking": "lock wait/blocking",
+    "replication": "replication issue",
+    "capacity": "capacity issue",
+    "sql": "SQL optimization",
+    "resource": "host resource issue",
+    "configuration": "configuration issue",
+    "error": "error diagnosis",
+    "general": "general diagnosis",
+}
+
+
+def _response_locale(locale: str | None) -> str:
+    return normalize_locale(locale) or DEFAULT_LOCALE
+
+
+def _ai_text(locale: str | None, key: str, **params: Any) -> str:
+    return translate(_response_locale(locale), key, params)
+
+
+def _localized(locale: str | None, zh_cn: str, en_us: str) -> str:
+    return en_us if _response_locale(locale) == "en-US" else zh_cn
+
+
+def _issue_category_label(issue_category: str | None, locale: str | None) -> str:
+    labels = ISSUE_CATEGORY_LABELS_EN if _response_locale(locale) == "en-US" else ISSUE_CATEGORY_LABELS
+    return labels.get(issue_category or "general", issue_category or labels["general"])
+
 
 def _compose_system_message(base_system_msg: str, knowledge_context: Optional[Dict[str, Any]]) -> str:
     knowledge_prompt = render_knowledge_plan_for_prompt(knowledge_context or {})
@@ -130,7 +166,10 @@ def _prioritize_tools_by_knowledge_plan(
     return sorted(active_tools, key=_tool_sort_key)
 
 
-def _initial_knowledge_events(knowledge_context: Optional[Dict[str, Any]]) -> list[dict[str, Any]]:
+def _initial_knowledge_events(
+    knowledge_context: Optional[Dict[str, Any]],
+    locale: str | None = None,
+) -> list[dict[str, Any]]:
     if not knowledge_context:
         return []
     knowledge_plan = knowledge_context.get("knowledge_plan") or {}
@@ -139,7 +178,11 @@ def _initial_knowledge_events(knowledge_context: Optional[Dict[str, Any]]) -> li
         events.append(
             {
                 "type": "knowledge_plan_created",
-                "summary": "已根据当前问题自动生成诊断知识计划。",
+                "summary": _localized(
+                    locale,
+                    "已根据当前问题自动生成诊断知识计划。",
+                    "A diagnostic knowledge plan was generated for the current question.",
+                ),
                 "active_documents": knowledge_plan.get("active_documents") or [],
                 "active_units": knowledge_plan.get("active_units") or [],
                 "recommended_skills": knowledge_plan.get("recommended_skills") or [],
@@ -159,7 +202,11 @@ def _initial_knowledge_events(knowledge_context: Optional[Dict[str, Any]]) -> li
                 "citation": item.get("citation"),
                 "unit_id": item.get("unit_id"),
                 "unit_type": item.get("unit_type"),
-                "reason": "；".join(item.get("reasons") or []) or "匹配当前诊断路径",
+                "reason": "；".join(item.get("reasons") or []) or _localized(
+                    locale,
+                    "匹配当前诊断路径",
+                    "Matches the current diagnostic path",
+                ),
                 "recommended_skills": item.get("recommended_skills") or [],
             }
         )
@@ -169,6 +216,7 @@ def _initial_knowledge_events(knowledge_context: Optional[Dict[str, Any]]) -> li
 def _diff_knowledge_units(
     previous_context: Optional[Dict[str, Any]],
     current_context: Optional[Dict[str, Any]],
+    locale: str | None = None,
 ) -> list[dict[str, Any]]:
     previous_units = {
         item.get("unit_id")
@@ -191,7 +239,11 @@ def _diff_knowledge_units(
                 "citation": item.get("citation"),
                 "unit_id": unit_id,
                 "unit_type": item.get("unit_type"),
-                "reason": "；".join(item.get("reasons") or []) or "知识计划已切换到该节点",
+                "reason": "；".join(item.get("reasons") or []) or _localized(
+                    locale,
+                    "知识计划已切换到该节点",
+                    "The knowledge plan switched to this node",
+                ),
                 "recommended_skills": item.get("recommended_skills") or [],
             }
         )
@@ -209,7 +261,29 @@ async def _persist_knowledge_snapshot(db, session_id: Optional[int], knowledge_c
     await db.commit()
 
 
-def _build_plan_summary(intent: str, issue_category: str | None, focus_areas: list[str]) -> str:
+def _build_plan_summary(
+    intent: str,
+    issue_category: str | None,
+    focus_areas: list[str],
+    locale: str | None = None,
+) -> str:
+    if _response_locale(locale) == "en-US":
+        if intent != "diagnostic":
+            if intent == "administrative":
+                return "Execution plan started: confirm the target and risk, collect any required information, then provide actionable steps."
+            return "Retrieval plan started: understand the request, retrieve the required information, then organize and present the result."
+
+        label = _issue_category_label(issue_category, locale)
+        plan_steps = [
+            f"classified as {label}",
+            "verify overall status and context",
+            "collect evidence with database or host tools based on abnormal signals",
+            "cross-check the root cause and provide recommended actions",
+        ]
+        if focus_areas:
+            plan_steps.append(f"focus for this run: {focus_areas[0]}")
+        return "Diagnostic plan started: " + "; ".join(plan_steps) + "."
+
     if intent != "diagnostic":
         if intent == "administrative":
             return "执行计划已启动：确认操作对象和风险、必要时收集信息、输出可执行步骤。"
@@ -251,10 +325,15 @@ _RISK_ASSESS_SYSTEM_PROMPT = """你是一个数据库运维安全审计专家。
 4. 不带 WHERE 的 DELETE/UPDATE 应判定为 destructive。
 
 请严格以 JSON 格式返回，不要包含任何其他文字：
-{"level": "safe|high|destructive", "reason": "简短的中文原因说明"}"""
+{"level": "safe|high|destructive", "reason": "使用目标输出语言的简短原因说明"}"""
 
 
-async def _llm_assess_risk(client, sql: str = "", command: str = "") -> Optional[Dict[str, Any]]:
+async def _llm_assess_risk(
+    client,
+    sql: str = "",
+    command: str = "",
+    locale: str | None = None,
+) -> Optional[Dict[str, Any]]:
     """调用 LLM 判定 SQL/OS 命令的风险等级，返回 None 表示判定失败需 fallback。"""
     if not client:
         return None
@@ -268,7 +347,7 @@ async def _llm_assess_risk(client, sql: str = "", command: str = "") -> Optional
         return None
 
     messages = [
-        {"role": "system", "content": _RISK_ASSESS_SYSTEM_PROMPT},
+        {"role": "system", "content": apply_ai_output_language(_RISK_ASSESS_SYSTEM_PROMPT, locale)},
         {"role": "user", "content": "\n".join(content_parts)},
     ]
 
@@ -292,28 +371,38 @@ async def _llm_assess_risk(client, sql: str = "", command: str = "") -> Optional
         return None
 
 
-def build_confirmation_reason(tool_name: str, arguments: Dict[str, Any], risk_level: str) -> str:
+def build_confirmation_reason(
+    tool_name: str,
+    arguments: Dict[str, Any],
+    risk_level: str,
+    locale: str | None = None,
+) -> str:
     command = _get_command_arg(arguments)
     sql = str(arguments.get('sql') or '').strip()
     if tool_name == "manage_alert_settings":
         target = str(arguments.get("target") or "").strip() or "settings"
         action = str(arguments.get("action") or "").strip() or "update"
         if risk_level == "safe":
-            return f"这是只读告警设置查询：`{target}.{action}`"
-        return f"该操作会修改告警配置，需要确认后再执行：`{target}.{action}`"
+            return _localized(locale, f"这是只读告警设置查询：`{target}.{action}`", f"This is a read-only alert settings query: `{target}.{action}`")
+        return _localized(locale, f"该操作会修改告警配置，需要确认后再执行：`{target}.{action}`", f"This operation changes alert settings and requires confirmation: `{target}.{action}`")
 
     if command:
         if risk_level == 'destructive':
-            return f"该命令可能直接修改主机状态或中断服务：`{command}`"
-        return f"该命令具备修改主机状态的风险，需要确认后再执行：`{command}`"
+            return _localized(locale, f"该命令可能直接修改主机状态或中断服务：`{command}`", f"This command may directly change host state or interrupt a service: `{command}`")
+        return _localized(locale, f"该命令具备修改主机状态的风险，需要确认后再执行：`{command}`", f"This command may change host state and requires confirmation: `{command}`")
     if sql:
         if risk_level == 'destructive':
-            return f"该 SQL 可能直接修改或破坏数据库对象/数据：`{sql[:120]}`"
-        return f"该 SQL 可能修改数据库状态，需要确认后再执行：`{sql[:120]}`"
-    return f"技能 `{tool_name}` 具备潜在变更能力，需要确认后再执行。"
+            return _localized(locale, f"该 SQL 可能直接修改或破坏数据库对象/数据：`{sql[:120]}`", f"This SQL may directly modify or destroy database objects/data: `{sql[:120]}`")
+        return _localized(locale, f"该 SQL 可能修改数据库状态，需要确认后再执行：`{sql[:120]}`", f"This SQL may change database state and requires confirmation: `{sql[:120]}`")
+    return _localized(locale, f"技能 `{tool_name}` 具备潜在变更能力，需要确认后再执行。", f"Skill `{tool_name}` can potentially change state and requires confirmation.")
 
 
-def _keyword_assess_risk(tool_name: str, arguments: Dict[str, Any], permissions: Optional[List[str]] = None) -> Dict[str, Any]:
+def _keyword_assess_risk(
+    tool_name: str,
+    arguments: Dict[str, Any],
+    permissions: Optional[List[str]] = None,
+    locale: str | None = None,
+) -> Dict[str, Any]:
     """基于关键词匹配的风险判定（fallback 方案）。"""
     permissions = permissions or []
     command = _get_command_arg(arguments)
@@ -326,7 +415,7 @@ def _keyword_assess_risk(tool_name: str, arguments: Dict[str, Any], permissions:
             return {
                 'level': 'safe',
                 'requires_confirmation': False,
-                'risk_reason': build_confirmation_reason(tool_name, arguments, 'safe'),
+                'risk_reason': build_confirmation_reason(tool_name, arguments, 'safe', locale),
                 'suppressible': False,
                 'confirmation_key': 'generic_readonly',
             }
@@ -334,7 +423,7 @@ def _keyword_assess_risk(tool_name: str, arguments: Dict[str, Any], permissions:
             return {
                 'level': 'high',
                 'requires_confirmation': False,
-                'risk_reason': build_confirmation_reason(tool_name, arguments, 'high'),
+                'risk_reason': build_confirmation_reason(tool_name, arguments, 'high', locale),
                 'suppressible': True,
                 'confirmation_key': 'generic_write',
             }
@@ -346,7 +435,7 @@ def _keyword_assess_risk(tool_name: str, arguments: Dict[str, Any], permissions:
             return {
                 'level': level,
                 'requires_confirmation': False,
-                'risk_reason': build_confirmation_reason(tool_name, arguments, level),
+                'risk_reason': build_confirmation_reason(tool_name, arguments, level, locale),
                 'suppressible': level != 'destructive',
                 'confirmation_key': 'os_destructive' if level == 'destructive' else 'os_write',
             }
@@ -357,7 +446,7 @@ def _keyword_assess_risk(tool_name: str, arguments: Dict[str, Any], permissions:
             return {
                 'level': 'safe',
                 'requires_confirmation': False,
-                'risk_reason': '这是只读 OS 诊断命令，不会修改主机状态。',
+                'risk_reason': _localized(locale, '这是只读 OS 诊断命令，不会修改主机状态。', 'This is a read-only OS diagnostic command and will not change host state.'),
                 'suppressible': False,
                 'confirmation_key': 'os_readonly',
             }
@@ -365,7 +454,7 @@ def _keyword_assess_risk(tool_name: str, arguments: Dict[str, Any], permissions:
         return {
             'level': 'high',
             'requires_confirmation': False,
-            'risk_reason': build_confirmation_reason(tool_name, arguments, 'high'),
+            'risk_reason': build_confirmation_reason(tool_name, arguments, 'high', locale),
             'suppressible': True,
             'confirmation_key': 'os_write',
         }
@@ -376,7 +465,7 @@ def _keyword_assess_risk(tool_name: str, arguments: Dict[str, Any], permissions:
             return {
                 'level': level,
                 'requires_confirmation': False,
-                'risk_reason': build_confirmation_reason(tool_name, arguments, level),
+                'risk_reason': build_confirmation_reason(tool_name, arguments, level, locale),
                 'suppressible': level != 'destructive',
                 'confirmation_key': 'sql_destructive' if level == 'destructive' else 'sql_write',
             }
@@ -386,7 +475,7 @@ def _keyword_assess_risk(tool_name: str, arguments: Dict[str, Any], permissions:
             return {
                 'level': 'safe',
                 'requires_confirmation': False,
-                'risk_reason': '这是只读 SQL 诊断查询，不会修改数据库状态。',
+                'risk_reason': _localized(locale, '这是只读 SQL 诊断查询，不会修改数据库状态。', 'This is a read-only SQL diagnostic query and will not change database state.'),
                 'suppressible': False,
                 'confirmation_key': 'sql_readonly',
             }
@@ -394,7 +483,7 @@ def _keyword_assess_risk(tool_name: str, arguments: Dict[str, Any], permissions:
         return {
             'level': 'high',
             'requires_confirmation': False,
-            'risk_reason': build_confirmation_reason(tool_name, arguments, 'high'),
+            'risk_reason': build_confirmation_reason(tool_name, arguments, 'high', locale),
             'suppressible': True,
             'confirmation_key': 'sql_write',
         }
@@ -403,7 +492,7 @@ def _keyword_assess_risk(tool_name: str, arguments: Dict[str, Any], permissions:
         return {
             'level': 'high',
             'requires_confirmation': False,
-            'risk_reason': build_confirmation_reason(tool_name, arguments, 'high'),
+            'risk_reason': build_confirmation_reason(tool_name, arguments, 'high', locale),
             'suppressible': True,
             'confirmation_key': 'sql_write',
         }
@@ -411,7 +500,7 @@ def _keyword_assess_risk(tool_name: str, arguments: Dict[str, Any], permissions:
         return {
             'level': 'high',
             'requires_confirmation': False,
-            'risk_reason': build_confirmation_reason(tool_name, arguments, 'high'),
+            'risk_reason': build_confirmation_reason(tool_name, arguments, 'high', locale),
             'suppressible': True,
             'confirmation_key': 'os_write',
         }
@@ -419,13 +508,18 @@ def _keyword_assess_risk(tool_name: str, arguments: Dict[str, Any], permissions:
     return {
         'level': 'safe',
         'requires_confirmation': False,
-        'risk_reason': '这是只读诊断步骤。',
+        'risk_reason': _localized(locale, '这是只读诊断步骤。', 'This is a read-only diagnostic step.'),
         'suppressible': False,
         'confirmation_key': 'generic_readonly',
     }
 
 
-def _build_risk_dict_from_llm(llm_result: Dict[str, Any], tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+def _build_risk_dict_from_llm(
+    llm_result: Dict[str, Any],
+    tool_name: str,
+    arguments: Dict[str, Any],
+    locale: str | None = None,
+) -> Dict[str, Any]:
     """将 LLM 返回的风险判定结果转换为标准 risk dict。"""
     level = llm_result["level"]
     command = _get_command_arg(arguments)
@@ -448,7 +542,7 @@ def _build_risk_dict_from_llm(llm_result: Dict[str, Any], tool_name: str, argume
     else:
         key = 'generic_readonly'
 
-    reason = llm_result.get("reason") or build_confirmation_reason(tool_name, arguments, level)
+    reason = llm_result.get("reason") or build_confirmation_reason(tool_name, arguments, level, locale)
 
     return {
         'level': level,
@@ -459,11 +553,17 @@ def _build_risk_dict_from_llm(llm_result: Dict[str, Any], tool_name: str, argume
     }
 
 
-async def assess_tool_risk(tool_name: str, arguments: Dict[str, Any], permissions: Optional[List[str]] = None, client=None) -> Dict[str, Any]:
+async def assess_tool_risk(
+    tool_name: str,
+    arguments: Dict[str, Any],
+    permissions: Optional[List[str]] = None,
+    client=None,
+    locale: str | None = None,
+) -> Dict[str, Any]:
     """评估工具调用的风险等级。优先使用 LLM 判定，失败时 fallback 到关键词匹配。"""
     command = _get_command_arg(arguments)
     sql = str(arguments.get('sql') or '').strip()
-    keyword_risk = _keyword_assess_risk(tool_name, arguments, permissions)
+    keyword_risk = _keyword_assess_risk(tool_name, arguments, permissions, locale)
 
     # 对明显只读的命令优先采用本地规则，避免 LLM 将 cat/grep/head/wc 等诊断命令误判为高危。
     if command and keyword_risk.get('level') == 'safe' and looks_clearly_read_only_command(command):
@@ -477,9 +577,9 @@ async def assess_tool_risk(tool_name: str, arguments: Dict[str, Any], permission
 
     # 有 client 且存在 sql/command 时，优先走 LLM 判定
     if client and (sql or command):
-        llm_result = await _llm_assess_risk(client, sql=sql, command=command)
+        llm_result = await _llm_assess_risk(client, sql=sql, command=command, locale=locale)
         if llm_result:
-            return _build_risk_dict_from_llm(llm_result, tool_name, arguments)
+            return _build_risk_dict_from_llm(llm_result, tool_name, arguments, locale)
         logger.info("LLM risk assessment unavailable, falling back to keyword matching")
 
     return keyword_risk
@@ -661,6 +761,7 @@ async def run_conversation_with_skills(
     system_prompt_override: Optional[str] = None,
     skip_approval: bool = False,
     context_override: Optional[Dict[str, Any]] = None,
+    locale: Optional[str] = None,
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """Run the AI conversation loop with dynamic skill calling and streaming."""
     from backend.models.ai_model import AIModel
@@ -695,7 +796,7 @@ async def run_conversation_with_skills(
                 reasoning_effort=getattr(model, "reasoning_effort", None),
             )
     if not client:
-        yield {"type": "error", "message": "AI model not configured. Please add an AI model in the AI Model Management page."}
+        yield {"type": "error", "message": _ai_text(locale, "ai.model_not_configured")}
         return
 
     first_user_message = next((msg['content'] for msg in messages if msg['role'] == 'user'), '')
@@ -705,7 +806,11 @@ async def run_conversation_with_skills(
         intent_text = first_user_message
 
     # 阶段1: 意图检测（关键词匹配 + 低置信度 LLM 回退）
-    yield {"type": "thinking_phase", "phase": "intent_detection", "message": "正在分析您的问题..."}
+    yield {
+        "type": "thinking_phase",
+        "phase": "intent_detection",
+        "message": _ai_text(locale, "ai.intent.analyzing"),
+    }
     intent_analysis = analyze_query_intent(intent_text)
     if intent_analysis.confidence < 0.7 or intent_analysis.needs_clarification:
         try:
@@ -724,16 +829,22 @@ async def run_conversation_with_skills(
     intent = intent_analysis.intent
     issue_category = intent_analysis.issue_category
 
-    intent_message_map = {
-        "diagnostic": "检测到诊断意图，正在分析数据库问题...",
-        "informational": "检测到查询意图，正在准备信息检索...",
-        "administrative": "检测到操作意图，正在准备执行任务...",
+    intent_message_key_map = {
+        "diagnostic": "ai.intent.diagnostic",
+        "informational": "ai.intent.informational",
+        "administrative": "ai.intent.administrative",
     }
+    intent_message = _ai_text(locale, intent_message_key_map.get(intent, "ai.intent.analyzing"))
     if intent == "diagnostic" and issue_category:
-        category_label = ISSUE_CATEGORY_LABELS.get(issue_category, issue_category)
-        detail_message = f"{intent_message_map.get(intent, '正在分析...')} 当前更像 {category_label}。"
+        category_label = _issue_category_label(issue_category, locale)
+        detail_message = _ai_text(
+            locale,
+            "ai.intent.category",
+            message=intent_message,
+            category=category_label,
+        )
     else:
-        detail_message = intent_message_map.get(intent, "正在分析...")
+        detail_message = intent_message
     yield {
         "type": "thinking_phase",
         "phase": "intent_detection",
@@ -933,7 +1044,7 @@ async def run_conversation_with_skills(
                 "type": "diagnosis_state",
                 "intent": intent,
                 "issue_category": issue_category,
-                "issue_category_label": ISSUE_CATEGORY_LABELS.get(issue_category or "general", "综合诊断"),
+                "issue_category_label": _issue_category_label(issue_category, locale),
                 "confidence": intent_analysis.confidence,
                 "datasource_id": datasource_id,
                 "datasource_name": datasource_name,
@@ -949,21 +1060,33 @@ async def run_conversation_with_skills(
     # 阶段2: 数据源上下文构建完成（复用阶段1已查询的 datasource_ctx）
     datasource_info = ""
     if datasource_ctx:
-        datasource_info = f"数据源: {datasource_ctx.name} ({datasource_ctx.db_type})"
+        datasource_info = _localized(
+            locale,
+            f"数据源: {datasource_ctx.name} ({datasource_ctx.db_type})",
+            f"Datasource: {datasource_ctx.name} ({datasource_ctx.db_type})",
+        )
         if datasource_ctx.host_id:
-            datasource_info += " · 已关联主机"
+            datasource_info += _localized(locale, " · 已关联主机", " · host linked")
         else:
-            datasource_info += " · 未关联主机"
+            datasource_info += _localized(locale, " · 未关联主机", " · no host linked")
     elif virtual_datasource_ctx:
-        datasource_info = f"数据源: {virtual_datasource_ctx['name']} ({virtual_datasource_ctx['db_type']})"
+        datasource_info = _localized(
+            locale,
+            f"数据源: {virtual_datasource_ctx['name']} ({virtual_datasource_ctx['db_type']})",
+            f"Datasource: {virtual_datasource_ctx['name']} ({virtual_datasource_ctx['db_type']})",
+        )
         if virtual_datasource_ctx.get("host_id") is not None:
-            datasource_info += " · 已关联主机"
+            datasource_info += _localized(locale, " · 已关联主机", " · host linked")
         else:
-            datasource_info += " · 未关联主机"
+            datasource_info += _localized(locale, " · 未关联主机", " · no host linked")
     yield {
         "type": "thinking_phase",
         "phase": "context_building",
-        "message": f"正在构建诊断上下文... {datasource_info}" if datasource_info else "正在构建诊断上下文...",
+        "message": (
+            _ai_text(locale, "ai.context.building_detail", detail=datasource_info)
+            if datasource_info
+            else _ai_text(locale, "ai.context.building")
+        ),
         "datasource_name": datasource_ctx.name if datasource_ctx else (virtual_datasource_ctx or {}).get("name"),
         "datasource_type": datasource_ctx.db_type if datasource_ctx else (virtual_datasource_ctx or {}).get("db_type"),
         "host_configured": bool(datasource_ctx.host_id) if datasource_ctx else bool((virtual_datasource_ctx or {}).get("host_id")),
@@ -998,12 +1121,12 @@ async def run_conversation_with_skills(
     yield {
         "type": "thinking_phase",
         "phase": "skill_selection",
-        "message": f"已选中 {skill_count} 个诊断技能",
+        "message": _ai_text(locale, "ai.skills.selected", count=skill_count),
         "skill_count": skill_count,
     }
 
     # 阶段4: 准备开始输出
-    yield {"type": "thinking_complete", "message": "开始诊断..."}
+    yield {"type": "thinking_complete", "message": _ai_text(locale, "ai.diagnosis.starting")}
 
     # 预构建技能权限缓存，避免循环内重复查询 SkillRegistry
     _skill_cache: Dict[str, Any] = {}
@@ -1018,7 +1141,13 @@ async def run_conversation_with_skills(
                     _skill_cache[_tool_name] = _cached_skill
 
     base_system_msg = system_msg
-    full_messages = [{"role": "system", "content": _compose_system_message(base_system_msg, knowledge_context)}] + messages
+    full_messages = [{
+        "role": "system",
+        "content": apply_ai_output_language(
+            _compose_system_message(base_system_msg, knowledge_context),
+            locale,
+        ),
+    }] + messages
     emitted_plan = False
     emitted_kb_hint = False
     emitted_kb_recommendations = False
@@ -1045,18 +1174,19 @@ async def run_conversation_with_skills(
                                 intent,
                                 issue_category,
                                 (diagnostic_brief or {}).get("focus_areas", []),
+                                locale,
                             )
                             yield {
                                 "type": "plan_created",
                                 "summary": plan_summary,
                                 "intent": intent,
                                 "issue_category": issue_category,
-                                "issue_category_label": ISSUE_CATEGORY_LABELS.get(issue_category or "general", "综合诊断"),
+                                "issue_category_label": _issue_category_label(issue_category, locale),
                                 "focus_areas": (diagnostic_brief or {}).get("focus_areas", []),
                             }
                         if knowledge_context and not emitted_knowledge_plan and round_num == 0:
                             emitted_knowledge_plan = True
-                            for knowledge_event in _initial_knowledge_events(knowledge_context):
+                            for knowledge_event in _initial_knowledge_events(knowledge_context, locale):
                                 yield knowledge_event
                         if knowledge_context and knowledge_context.get("knowledge_brief") and not emitted_kb_recommendations and round_num == 0:
                             emitted_kb_recommendations = True
@@ -1073,7 +1203,11 @@ async def run_conversation_with_skills(
                             emitted_kb_hint = True
                             yield {
                                 "type": "kb_document_selected",
-                                "title": f"当前会话启用了 {len(kb_ids)} 个知识库，将优先结合文档诊断。",
+                                "title": _localized(
+                                    locale,
+                                    f"当前会话启用了 {len(kb_ids)} 个知识库，将优先结合文档诊断。",
+                                    f"{len(kb_ids)} knowledge bases are enabled for this session and will be prioritized during diagnosis.",
+                                ),
                             }
                         if event["type"] == "content":
                             collected_content += event["content"]
@@ -1090,10 +1224,14 @@ async def run_conversation_with_skills(
             except TimeoutError:
                 logger.error(f"AI API stream timed out at round {round_num} after {STREAM_ROUND_TIMEOUT}s")
                 if collected_content:
-                    yield {"type": "content", "content": "\n\n[AI 响应超时，以上为部分结果]"}
-                    yield {"type": "done", "content": collected_content + "\n\n[AI 响应超时，以上为部分结果]"}
+                    timeout_note = "\n\n" + _ai_text(locale, "ai.response.partial_timeout")
+                    yield {"type": "content", "content": timeout_note}
+                    yield {"type": "done", "content": collected_content + timeout_note}
                 else:
-                    yield {"type": "error", "message": f"AI 响应超时（{STREAM_ROUND_TIMEOUT}秒），请稍后重试或简化问题。"}
+                    yield {
+                        "type": "error",
+                        "message": _ai_text(locale, "ai.response.timeout", seconds=STREAM_ROUND_TIMEOUT),
+                    }
                 return
 
             if not collected_tool_calls:
@@ -1118,8 +1256,12 @@ async def run_conversation_with_skills(
                         "step_id": tc["id"],
                         "tool_name": tool_name,
                         "status": "failed",
-                        "title": f"尝试调用技能 {tool_name}",
-                        "summary": f"技能 {tool_name} 在当前会话中未被授权或不可用。",
+                        "title": _localized(locale, f"尝试调用技能 {tool_name}", f"Attempted skill {tool_name}"),
+                        "summary": _localized(
+                            locale,
+                            f"技能 {tool_name} 在当前会话中未被授权或不可用。",
+                            f"Skill {tool_name} is not authorized or available in this session.",
+                        ),
                         "error": f"Tool '{tool_name}' is not authorized or available for this session.",
                     }
                     tool_result = json.dumps({"error": f"Tool '{tool_name}' is not authorized or available for this session."})
@@ -1150,8 +1292,8 @@ async def run_conversation_with_skills(
                         "step_id": tc["id"],
                         "tool_name": tool_name,
                         "status": "running",
-                        "title": f"读取知识库 {tool_name}",
-                        "summary": f"正在调用 {tool_name}...",
+                        "title": _localized(locale, f"读取知识库 {tool_name}", f"Read knowledge base with {tool_name}"),
+                        "summary": _localized(locale, f"正在调用 {tool_name}...", f"Calling {tool_name}..."),
                     }
                     yield {
                         "type": "tool_call",
@@ -1172,7 +1314,11 @@ async def run_conversation_with_skills(
                             if first_doc:
                                 yield {
                                     "type": "kb_document_selected",
-                                    "title": first_doc.get("title") or f"已找到 {len(docs)} 篇候选文档",
+                                    "title": first_doc.get("title") or _localized(
+                                        locale,
+                                        f"已找到 {len(docs)} 篇候选文档",
+                                        f"Found {len(docs)} candidate documents",
+                                    ),
                                     "document_id": first_doc.get("id"),
                                 }
                         except Exception:
@@ -1181,7 +1327,11 @@ async def run_conversation_with_skills(
                         yield {
                             "type": "kb_document_read",
                             "document_id": tool_args.get("doc_id"),
-                            "title": f"已读取文档 #{tool_args.get('doc_id')}",
+                            "title": _localized(
+                                locale,
+                                f"已读取文档 #{tool_args.get('doc_id')}",
+                                f"Read document #{tool_args.get('doc_id')}",
+                            ),
                         }
                     yield {
                         "type": "tool_result",
@@ -1195,8 +1345,16 @@ async def run_conversation_with_skills(
                         "step_id": tc["id"],
                         "tool_name": tool_name,
                         "status": "completed",
-                        "title": f"知识库工具 {tool_name} 执行完成",
-                        "summary": f"知识库 {tool_name} 执行完成。",
+                        "title": _localized(
+                            locale,
+                            f"知识库工具 {tool_name} 执行完成",
+                            f"Knowledge-base tool {tool_name} completed",
+                        ),
+                        "summary": _localized(
+                            locale,
+                            f"知识库 {tool_name} 执行完成。",
+                            f"Knowledge-base tool {tool_name} completed.",
+                        ),
                         "execution_time_ms": 0,
                     }
                     full_messages.append({
@@ -1207,15 +1365,21 @@ async def run_conversation_with_skills(
                     continue
 
                 skill = _skill_cache.get(tool_name)
-                risk = await assess_tool_risk(tool_name, tool_args, getattr(skill, 'permissions', None), client=client)
+                risk = await assess_tool_risk(
+                    tool_name,
+                    tool_args,
+                    getattr(skill, 'permissions', None),
+                    client=client,
+                    locale=locale,
+                )
 
                 yield {
                     "type": "plan_step_status",
                     "step_id": tc["id"],
                     "tool_name": tool_name,
                     "status": "running",
-                    "title": f"执行技能 {tool_name}",
-                    "summary": f"正在执行 {tool_name}...",
+                    "title": _localized(locale, f"执行技能 {tool_name}", f"Run skill {tool_name}"),
+                    "summary": _localized(locale, f"正在执行 {tool_name}...", f"Running {tool_name}..."),
                 }
 
                 if risk.get("level") in {"high", "destructive"} and not skip_approval:
@@ -1227,8 +1391,16 @@ async def run_conversation_with_skills(
                         "tool_args": tool_args,
                         "tool_call_id": tc["id"],
                         "reasoning_content": collected_reasoning_content or None,
-                        "summary": f"技能 {tool_name} 可能带来数据库或主机状态变更，需要确认后再执行。",
-                        "plan_markdown": f"1. 执行技能 `{tool_name}`\n2. 观察执行结果\n3. 继续完成本轮诊断",
+                        "summary": _localized(
+                            locale,
+                            f"技能 {tool_name} 可能带来数据库或主机状态变更，需要确认后再执行。",
+                            f"Skill {tool_name} may change database or host state and requires confirmation.",
+                        ),
+                        "plan_markdown": _localized(
+                            locale,
+                            f"1. 执行技能 `{tool_name}`\n2. 观察执行结果\n3. 继续完成本轮诊断",
+                            f"1. Run skill `{tool_name}`\n2. Review the result\n3. Continue the current diagnosis",
+                        ),
                         "risk_level": risk.get("level", "high"),
                         "risk_reason": risk.get("risk_reason"),
                         "suppressible": risk.get("suppressible", False),
@@ -1239,8 +1411,12 @@ async def run_conversation_with_skills(
                         "step_id": tc["id"],
                         "tool_name": tool_name,
                         "status": "waiting_approval",
-                        "title": f"等待确认 {tool_name}",
-                        "summary": f"技能 {tool_name} 已提交，等待用户批准后执行。",
+                        "title": _localized(locale, f"等待确认 {tool_name}", f"Await confirmation for {tool_name}"),
+                        "summary": _localized(
+                            locale,
+                            f"技能 {tool_name} 已提交，等待用户批准后执行。",
+                            f"Skill {tool_name} is waiting for user approval.",
+                        ),
                     }
                     return
 
@@ -1267,15 +1443,19 @@ async def run_conversation_with_skills(
                     result_data = json.loads(tool_result)
                     if isinstance(result_data, dict) and result_data.get("success") is False:
                         step_status = "failed"
-                        step_summary = f"技能 {tool_name} 执行失败：{result_data.get('error', 'unknown')}"
+                        step_summary = _localized(
+                            locale,
+                            f"技能 {tool_name} 执行失败：{result_data.get('error', 'unknown')}",
+                            f"Skill {tool_name} failed: {result_data.get('error', 'unknown')}",
+                        )
                         step_error = result_data.get("error")
                     else:
                         step_status = "completed"
-                        step_summary = f"技能 {tool_name} 执行完成"
+                        step_summary = _localized(locale, f"技能 {tool_name} 执行完成", f"Skill {tool_name} completed")
                         step_error = None
                 except Exception:
                     step_status = "completed"
-                    step_summary = f"技能 {tool_name} 执行完成"
+                    step_summary = _localized(locale, f"技能 {tool_name} 执行完成", f"Skill {tool_name} completed")
                     step_error = None
 
                 yield {
@@ -1292,7 +1472,7 @@ async def run_conversation_with_skills(
                     "step_id": tc["id"],
                     "tool_name": tool_name,
                     "status": step_status,
-                    "title": f"执行技能 {tool_name}",
+                    "title": _localized(locale, f"执行技能 {tool_name}", f"Run skill {tool_name}"),
                     "summary": step_summary,
                     "execution_time_ms": execution_time_ms,
                     "error": step_error,
@@ -1316,14 +1496,21 @@ async def run_conversation_with_skills(
                     knowledge_context.clear()
                     knowledge_context.update(updated_knowledge_context)
                     await _persist_knowledge_snapshot(db, session_id, knowledge_context)
-                    full_messages[0]["content"] = _compose_system_message(base_system_msg, knowledge_context)
+                    full_messages[0]["content"] = apply_ai_output_language(
+                        _compose_system_message(base_system_msg, knowledge_context),
+                        locale,
+                    )
                     active_tools = _prioritize_tools_by_knowledge_plan(active_tools, knowledge_context)
-                    for knowledge_event in _diff_knowledge_units(previous_knowledge_context, knowledge_context):
+                    for knowledge_event in _diff_knowledge_units(previous_knowledge_context, knowledge_context, locale):
                         yield knowledge_event
                     yield {
                         "type": "knowledge_replanned",
                         "tool_name": tool_name,
-                        "summary": f"已根据 {tool_name} 的结果更新知识计划。",
+                        "summary": _localized(
+                            locale,
+                            f"已根据 {tool_name} 的结果更新知识计划。",
+                            f"The knowledge plan was updated from the result of {tool_name}.",
+                        ),
                         "active_documents": (knowledge_context.get("knowledge_plan") or {}).get("active_documents") or [],
                         "active_units": (knowledge_context.get("knowledge_plan") or {}).get("active_units") or [],
                         "recommended_skills": (knowledge_context.get("knowledge_plan") or {}).get("recommended_skills") or [],
@@ -1332,16 +1519,12 @@ async def run_conversation_with_skills(
 
         except Exception as e:
             logger.error(f"Conversation error at round {round_num}: {e}")
-            yield {"type": "error", "message": f"Error: {str(e)}"}
+            yield {"type": "error", "message": _ai_text(locale, "ai.response.error", error=str(e))}
             return
 
     yield {
         "type": "error",
-        "message": (
-            f"Maximum tool execution rounds ({MAX_TOOL_ROUNDS}) reached. "
-            "The diagnosis may be too complex or requires manual intervention. "
-            "Please try breaking down your question into smaller parts."
-        ),
+        "message": _ai_text(locale, "ai.response.max_rounds", rounds=MAX_TOOL_ROUNDS),
     }
 
 
@@ -1372,6 +1555,10 @@ def _sanitize_report_markdown(content_md: str) -> str:
         "# 数据库连接失败诊断报告",
         "## 一、执行摘要",
         "## 执行摘要",
+        "# Database Inspection Report",
+        "# Database Diagnostic Report",
+        "# Database Connection Failure Diagnostic Report",
+        "## Executive Summary",
     ]
 
     start_index = -1
@@ -1394,6 +1581,13 @@ def _sanitize_report_markdown(content_md: str) -> str:
         r"^下面(开始)?生成",
         r"^接下来我将",
         r"^继续调用",
+        r"^I will generate .+ report",
+        r"^Let me first",
+        r"^I will first collect",
+        r"^Continuing to collect",
+        r"^I now have enough (diagnostic )?data",
+        r"^Next, I will generate",
+        r"^Continuing to call",
     ]
 
     for raw_line in normalized.splitlines():
@@ -1422,7 +1616,7 @@ def _has_meaningful_report_content(content_md: str) -> bool:
     for fragment in ["未生成任何内容", "报告生成超时", "报告生成失败", "需要人工确认"]:
         if fragment in plain:
             return False
-    if "timeout" in lower_plain and len(plain) < 120:
+    if any(fragment in lower_plain for fragment in ["timeout", "timed out", "report generation failed", "manual confirmation required"]) and len(plain) < 120:
         return False
 
     return len(plain) >= 40
@@ -1442,9 +1636,10 @@ async def generate_report_with_skills(
     db: Any,
     user_id: int = 1,
     model_id: Optional[int] = None,
-    timeout_seconds: int = 600
-) -> tuple[str, list]:
-    """Generate inspection report using AI with skill calls. Returns (markdown, skill_executions)."""
+    timeout_seconds: int = 600,
+    locale: Optional[str] = None,
+) -> dict[str, Any]:
+    """Generate an inspection report using AI and return its structured result."""
     import asyncio
 
     skill_executions: list[dict[str, Any]] = []
@@ -1466,20 +1661,38 @@ async def generate_report_with_skills(
             host_result = await db.execute(select(Host).filter(Host.id == ds.host_id))
             host = host_result.scalar_one_or_none()
             host_name = host.name or host.host if host else "unknown"
-            host_info_msg = f"""
+            host_info_msg = _localized(
+                locale,
+                f"""
 - 主机连接：已配置（主机：{host_name}）
-- **重要**：该数据源已关联主机，请务必使用 OS 诊断技能（get_os_metrics、diagnose_high_cpu、diagnose_high_memory、diagnose_disk_space、diagnose_disk_io、diagnose_network）收集操作系统层面数据，并在报告中包含完整的"操作系统资源分析"章节。"""
+- **重要**：该数据源已关联主机，请务必使用 OS 诊断技能（get_os_metrics、diagnose_high_cpu、diagnose_high_memory、diagnose_disk_space、diagnose_disk_io、diagnose_network）收集操作系统层面数据，并在报告中包含完整的"操作系统资源分析"章节。""",
+                f"""
+- Host connection: configured (host: {host_name})
+- **Important**: This datasource has a linked host. Use the OS diagnostic skills (get_os_metrics, diagnose_high_cpu, diagnose_high_memory, diagnose_disk_space, diagnose_disk_io, diagnose_network) to collect OS-level evidence and include a complete "Operating System Resource Analysis" section.""",
+            )
         else:
-            host_info_msg = "\n- 主机连接：未配置（无法进行操作系统层面分析，请在报告中注明）"
+            host_info_msg = _localized(
+                locale,
+                "\n- 主机连接：未配置（无法进行操作系统层面分析，请在报告中注明）",
+                "\n- Host connection: not configured (OS-level analysis is unavailable; state this in the report)",
+            )
     except Exception as e:
         logger.warning(f"Failed to check host config for report: {e}")
 
-    initial_message = f"""请为以下数据库生成一份全面的巡检报告：
+    if _response_locale(locale) == "en-US":
+        initial_message = f"""Generate a comprehensive inspection report for this database:
+- Database: {datasource_name} ({datasource_type})
+- Datasource ID: {datasource_id}
+- Trigger reason: {trigger_reason}{host_info_msg}
+
+Use the available skills to collect evidence and write a complete report in the standard format of a professional DBA report."""
+    else:
+        initial_message = f"""请为以下数据库生成一份全面的巡检报告：
 - 数据库名称：{datasource_name} ({datasource_type})
 - 数据源 ID：{datasource_id}
 - 触发原因：{trigger_reason}{host_info_msg}
 
-请使用技能收集数据，并按照专业 DBA 报告的标准格式撰写完整的中文报告。"""
+请使用技能收集数据，并按照专业 DBA 报告的标准格式撰写完整报告。"""
 
     messages = [{"role": "user", "content": initial_message}]
 
@@ -1495,6 +1708,7 @@ async def generate_report_with_skills(
                 db=db,
                 user_id=user_id,
                 system_prompt_override=system_prompt,
+                locale=locale,
             ):
                 etype = event.get("type")
 
@@ -1524,11 +1738,15 @@ async def generate_report_with_skills(
         sanitized_content = _sanitize_report_markdown(collected_content)
         if sanitized_content.strip() and _has_meaningful_report_content(sanitized_content):
             summary = _build_report_summary(sanitized_content)
-            error_message = f"报告生成超时（{timeout_seconds}s），以上为部分结果。"
+            error_message = _localized(
+                locale,
+                f"报告生成超时（{timeout_seconds}s），以上为部分结果。",
+                f"Report generation timed out after {timeout_seconds}s; the partial result is included.",
+            )
             return {
                 "status": status,
                 "content_md": sanitized_content,
-                "summary": summary or "报告生成超时（部分结果）",
+                "summary": summary or _localized(locale, "报告生成超时（部分结果）", "Report generation timed out (partial result)"),
                 "error_message": error_message,
                 "skill_executions": skill_executions,
             }
@@ -1536,8 +1754,12 @@ async def generate_report_with_skills(
         return {
             "status": status,
             "content_md": "",
-            "summary": "报告生成超时，未产出正文。",
-            "error_message": f"报告生成超时（{timeout_seconds}s），未能获取到任何内容。",
+            "summary": _localized(locale, "报告生成超时，未产出正文。", "Report generation timed out without producing content."),
+            "error_message": _localized(
+                locale,
+                f"报告生成超时（{timeout_seconds}s），未能获取到任何内容。",
+                f"Report generation timed out after {timeout_seconds}s without returning any content.",
+            ),
             "skill_executions": skill_executions,
         }
 
@@ -1551,16 +1773,16 @@ async def generate_report_with_skills(
             return {
                 "status": "partial",
                 "content_md": sanitized_content,
-                "summary": _build_report_summary(sanitized_content) or "报告生成部分成功",
-                "error_message": error_message or "报告生成过程中出错，已返回部分内容。",
+                "summary": _build_report_summary(sanitized_content) or _localized(locale, "报告生成部分成功", "Report partially generated"),
+                "error_message": error_message or _localized(locale, "报告生成过程中出错，已返回部分内容。", "An error occurred during report generation; partial content is available."),
                 "skill_executions": skill_executions,
             }
 
         return {
             "status": "failed",
             "content_md": "",
-            "summary": "报告生成失败，未产出有效内容。",
-            "error_message": error_message or "报告生成失败（未产出有效内容）。",
+            "summary": _localized(locale, "报告生成失败，未产出有效内容。", "Report generation failed without producing valid content."),
+            "error_message": error_message or _localized(locale, "报告生成失败（未产出有效内容）。", "Report generation failed without producing valid content."),
             "skill_executions": skill_executions,
         }
 
@@ -1573,15 +1795,15 @@ async def generate_report_with_skills(
             return {
                 "status": "partial",
                 "content_md": sanitized_content,
-                "summary": _build_report_summary(sanitized_content) or "报告生成部分成功",
-                "error_message": "对话流提前结束，已返回部分内容。",
+                "summary": _build_report_summary(sanitized_content) or _localized(locale, "报告生成部分成功", "Report partially generated"),
+                "error_message": _localized(locale, "对话流提前结束，已返回部分内容。", "The conversation stream ended early; partial content is available."),
                 "skill_executions": skill_executions,
             }
         return {
             "status": "failed",
             "content_md": "",
-            "summary": "报告生成失败，未产出有效内容。",
-            "error_message": "对话流提前结束，未生成任何有效内容。",
+            "summary": _localized(locale, "报告生成失败，未产出有效内容。", "Report generation failed without producing valid content."),
+            "error_message": _localized(locale, "对话流提前结束，未生成任何有效内容。", "The conversation stream ended early without producing valid content."),
             "skill_executions": skill_executions,
         }
 
@@ -1589,15 +1811,15 @@ async def generate_report_with_skills(
         return {
             "status": "failed",
             "content_md": "",
-            "summary": "报告生成失败，未产出有效内容。",
-            "error_message": "AI 未生成任何有效报告内容。",
+            "summary": _localized(locale, "报告生成失败，未产出有效内容。", "Report generation failed without producing valid content."),
+            "error_message": _localized(locale, "AI 未生成任何有效报告内容。", "The AI did not produce any valid report content."),
             "skill_executions": skill_executions,
         }
 
     return {
         "status": "completed",
         "content_md": sanitized_content,
-        "summary": _build_report_summary(sanitized_content) or "报告生成完成",
+        "summary": _build_report_summary(sanitized_content) or _localized(locale, "报告生成完成", "Report generation completed"),
         "error_message": None,
         "skill_executions": skill_executions,
     }

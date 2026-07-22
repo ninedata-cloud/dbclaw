@@ -4,10 +4,13 @@ import json
 import re
 from pathlib import Path
 from contextlib import asynccontextmanager
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from urllib.parse import parse_qs, parse_qsl, urlencode, urlsplit, urlunsplit
 
 from backend.config import get_settings
@@ -23,6 +26,13 @@ from backend.services.monitoring_scheduler_service import (
     DEFAULT_MONITORING_COLLECTION_INTERVAL_SECONDS,
     MONITORING_COLLECTION_INTERVAL_CONFIG_KEY,
     get_monitoring_collection_interval_seconds,
+)
+from backend.i18n.errors import ApiError, DomainError
+from backend.i18n.locale import (
+    get_request_locale,
+    legacy_error_code,
+    resolve_request_locale,
+    translate,
 )
 
 logger = logging.getLogger(__name__)
@@ -103,7 +113,7 @@ async def lifespan(app: FastAPI):
     app.state.startup_self_check_report = startup_report.to_dict()
     if not startup_report.ok:
         logger.error("\n%s", startup_report.to_console_text())
-        raise RuntimeError("启动自检失败，请根据上方中文诊断结果修复后重试。")
+        raise RuntimeError("Startup self-check failed. Resolve the issues reported above and try again.")
 
     # Initialize database
     await init_db()
@@ -368,6 +378,94 @@ def create_app() -> FastAPI:
     )
     app.state.startup_self_check_report = get_last_startup_report()
 
+    @app.middleware("http")
+    async def locale_middleware(request: Request, call_next):
+        locale, source = resolve_request_locale(request)
+        request.state.locale = locale
+        request.state.locale_source = source
+        response = await call_next(request)
+        response.headers["Content-Language"] = get_request_locale(request)
+        return response
+
+    @app.exception_handler(ApiError)
+    async def api_error_handler(request: Request, exc: ApiError):
+        locale = get_request_locale(request)
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "detail": translate(locale, exc.error_code, exc.params),
+                "error_code": exc.error_code,
+                "params": exc.params,
+            },
+            headers={**(exc.headers or {}), "Content-Language": locale},
+        )
+
+    @app.exception_handler(DomainError)
+    async def domain_error_handler(request: Request, exc: DomainError):
+        locale = get_request_locale(request)
+        return JSONResponse(
+            status_code=400,
+            content={
+                "detail": translate(locale, exc.error_code, exc.params),
+                "error_code": exc.error_code,
+                "params": exc.params,
+            },
+            headers={"Content-Language": locale},
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(request: Request, exc: RequestValidationError):
+        locale = get_request_locale(request)
+        localized_errors = []
+        for error in exc.errors():
+            item = dict(error)
+            if locale == "zh-CN":
+                error_type = item.get("type", "")
+                if error_type == "missing":
+                    item["msg"] = "字段为必填项"
+                elif error_type.startswith("string_too_short"):
+                    item["msg"] = "字符串长度不足"
+                elif error_type == "literal_error":
+                    item["msg"] = "输入值不在允许范围内"
+                else:
+                    item["msg"] = "输入值无效"
+            localized_errors.append(item)
+        return JSONResponse(
+            status_code=422,
+            content=jsonable_encoder({
+                "detail": localized_errors,
+                "error_code": "request.validation_error",
+                "params": {},
+            }),
+            headers={"Content-Language": locale},
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error_handler(request: Request, exc: StarletteHTTPException):
+        locale = get_request_locale(request)
+        detail = exc.detail
+        error_code = "request.failed"
+        params = {}
+        if isinstance(detail, str):
+            mapped_code = legacy_error_code(detail)
+            if mapped_code:
+                error_code = mapped_code
+                detail = translate(locale, mapped_code)
+            elif locale == "en-US" and re.search(r"[\u3400-\u9fff]", detail):
+                # Do not leak untranslated internal text into the English UI.
+                detail = translate(locale, error_code)
+            elif locale == "zh-CN" and detail.isascii():
+                detail = translate(locale, error_code)
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=jsonable_encoder({
+                "detail": detail,
+                "error_code": error_code,
+                "params": params,
+            }),
+            headers={**(exc.headers or {}), "Content-Language": locale},
+        )
+
     @app.exception_handler(Exception)
     async def global_exception_handler(request, exc):
         import traceback
@@ -381,11 +479,15 @@ def create_app() -> FastAPI:
             traceback.format_exc(),
         )
 
+        locale = get_request_locale(request)
         return JSONResponse(
             status_code=500,
             content={
-                "detail": "Internal server error",
-            }
+                "detail": translate(locale, "request.internal_error"),
+                "error_code": "request.internal_error",
+                "params": {},
+            },
+            headers={"Content-Language": locale},
         )
 
     @app.get("/health")

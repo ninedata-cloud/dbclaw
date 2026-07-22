@@ -1,0 +1,11 @@
+{
+  "name": "dbclaw-frontend-tests",
+  "private": true,
+  "scripts": {
+    "test:i18n": "node --test tests/frontend/i18n.test.js",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.0"
+  }
+}

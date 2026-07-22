@@ -418,6 +418,13 @@ async def _process_pending_alerts():
                         select(Datasource).where(Datasource.id == alert.datasource_id, alive_filter(Datasource))
                     )
                     datasource = ds_result.scalar_one_or_none()
+                    if alert.datasource_id and not datasource:
+                        logger.info(
+                            "Skipping alert %s: datasource %s was deleted",
+                            alert.id,
+                            alert.datasource_id,
+                        )
+                        continue
 
                     # Pre-diagnosis: run sync diagnosis before sending notifications (max 60s timeout)
                     diagnosis_result = {
@@ -588,6 +595,13 @@ async def _send_via_integration(db, alert, subscription, diagnosis_result=None):
             select(Datasource).where(Datasource.id == alert.datasource_id, alive_filter(Datasource))
         )
         datasource = ds_result.scalar_one_or_none()
+        if not datasource:
+            logger.info(
+                "Skipping alert %s delivery: datasource %s was deleted",
+                alert.id,
+                alert.datasource_id,
+            )
+            return []
 
     settings = get_settings()
     alert_url = None
@@ -616,7 +630,7 @@ async def _send_via_integration(db, alert, subscription, diagnosis_result=None):
 
         integration = await get_alive_by_id(db, Integration, int(integration_id))
         if not integration or not integration.is_enabled:
-            logger.warning(f"Integration {integration_id} 不存在或已禁用")
+            logger.warning(f"Integration {integration_id} does not exist or is disabled")
             continue
 
         # Fetch AI diagnosis fields from alert event (fallback if sync diagnosis didn't run)
@@ -676,9 +690,9 @@ async def _send_via_integration(db, alert, subscription, diagnosis_result=None):
 
         if missing_params:
             missing_params_text = ", ".join(missing_params)
-            error_message = f"Integration 缺少必填参数: {missing_params_text}"
+            error_message = f"Integration is missing required parameters: {missing_params_text}"
             logger.warning(
-                "跳过告警通知 target=%s integration=%s subscription=%s，原因：%s",
+                "Skipping alert notification: target=%s integration=%s subscription=%s reason=%s",
                 target_name,
                 integration.integration_id,
                 subscription.id,
@@ -757,7 +771,7 @@ async def _send_via_integration(db, alert, subscription, diagnosis_result=None):
             await db.commit()
 
         except Exception as e:
-            logger.error(f"Integration 执行异常: {str(e)}", exc_info=True)
+            logger.error(f"Integration execution raised an exception: {str(e)}", exc_info=True)
             exec_log = IntegrationExecutionLog(
                 integration_id=integration.id,
                 target_type="subscription_target",
@@ -811,6 +825,13 @@ async def _send_recovery_via_integration(db, alert, subscription):
             select(Datasource).where(Datasource.id == alert.datasource_id, alive_filter(Datasource))
         )
         datasource = ds_result.scalar_one_or_none()
+        if not datasource:
+            logger.info(
+                "Skipping recovery alert %s delivery: datasource %s was deleted",
+                alert.id,
+                alert.datasource_id,
+            )
+            return []
     if alert.event_id:
         from backend.models.alert_event import AlertEvent
 
@@ -832,7 +853,7 @@ async def _send_recovery_via_integration(db, alert, subscription):
 
         integration = await get_alive_by_id(db, Integration, int(integration_id))
         if not integration or not integration.is_enabled:
-            logger.warning(f"Integration {integration_id} 不存在或已禁用")
+            logger.warning(f"Integration {integration_id} does not exist or is disabled")
             continue
 
         payload = _build_recovery_alert_payload(alert, datasource, diagnosis_summary)
@@ -847,9 +868,9 @@ async def _send_recovery_via_integration(db, alert, subscription):
 
         if missing_params:
             missing_params_text = ", ".join(missing_params)
-            error_message = f"Integration 缺少必填参数: {missing_params_text}"
+            error_message = f"Integration is missing required parameters: {missing_params_text}"
             logger.warning(
-                "跳过恢复通知 target=%s integration=%s subscription=%s，原因：%s",
+                "Skipping recovery notification: target=%s integration=%s subscription=%s reason=%s",
                 target_name,
                 integration.integration_id,
                 subscription.id,
@@ -928,7 +949,7 @@ async def _send_recovery_via_integration(db, alert, subscription):
             await db.commit()
 
         except Exception as e:
-            logger.error(f"Integration 执行异常: {str(e)}", exc_info=True)
+            logger.error(f"Integration execution raised an exception: {str(e)}", exc_info=True)
             exec_log = IntegrationExecutionLog(
                 integration_id=integration.id,
                 target_type="subscription_target",
@@ -1042,6 +1063,23 @@ async def _process_recovery_notifications(db):
         if await _is_datasource_silenced(db, alert.datasource_id):
             logger.debug(f"Skipping recovery notification for alert {alert.id}: datasource {alert.datasource_id} is silenced")
             continue
+
+        if alert.datasource_id:
+            from backend.models.datasource import Datasource
+
+            datasource_result = await db.execute(
+                select(Datasource.id).where(
+                    Datasource.id == alert.datasource_id,
+                    alive_filter(Datasource),
+                )
+            )
+            if datasource_result.scalar_one_or_none() is None:
+                logger.info(
+                    "Skipping recovery notification for alert %s: datasource %s was deleted",
+                    alert.id,
+                    alert.datasource_id,
+                )
+                continue
 
         for subscription in subscriptions:
             try:

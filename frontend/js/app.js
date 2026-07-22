@@ -30,6 +30,7 @@
         try {
             const currentUser = await API.getMe();
             Store.set('currentUser', currentUser);
+            I18n.setLocale(currentUser.locale || I18n.defaultLocale);
             Sidebar.render();
             API.getDatasources().then(datasources => {
                 Store.set('datasources', datasources);

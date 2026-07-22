@@ -148,8 +148,8 @@ const DatasourcesPage = {
     _buildHeaderActions() {
         const filtersContainer = DOM.el('div', { className: 'dashboard-filters' });
         filtersContainer.innerHTML = `
-            <input type="text" id="filterName" class="filter-input" placeholder="搜索名称/IP/主机名/数据库名...">
-            <input type="text" id="filterTags" class="filter-input" placeholder="标签筛选（逗号分隔，可组合）">
+            <input type="text" id="filterName" class="filter-input" placeholder="${I18n.t('placeholders.searchDatasource')}">
+            <input type="text" id="filterTags" class="filter-input" placeholder="${I18n.t('placeholders.filterTags')}">
             <select id="filterType" class="filter-select">
                 <option value="">所有类型</option>
                 <option value="mysql">MySQL</option>
@@ -567,7 +567,7 @@ const DatasourcesPage = {
                     </div>
                     <div class="form-group" style="margin-top:12px;">
                         <label for="datasource-silence-reason">静默原因（可选）</label>
-                        <textarea id="datasource-silence-reason" class="form-input" rows="3" maxlength="500" placeholder="例如：计划变更窗口、已知故障处理中">${this._escapeHtml(state.reason || '')}</textarea>
+                        <textarea id="datasource-silence-reason" class="form-input" rows="3" maxlength="500" placeholder="${I18n.t('placeholders.silenceReason')}">${this._escapeHtml(state.reason || '')}</textarea>
                     </div>
                 </div>
             `,
@@ -973,7 +973,7 @@ const DatasourcesPage = {
             .sort((left, right) => {
                 const leftIndex = preferredOrder.indexOf(left);
                 const rightIndex = preferredOrder.indexOf(right);
-                if (leftIndex === -1 && rightIndex === -1) return left.localeCompare(right);
+                if (leftIndex === -1 && rightIndex === -1) return left.localeCompare(right, I18n.getLocale());
                 if (leftIndex === -1) return 1;
                 if (rightIndex === -1) return -1;
                 return leftIndex - rightIndex;

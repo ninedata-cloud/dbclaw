@@ -1134,7 +1134,7 @@ const EvaluationPage = {
 
     _fmtTime(iso) {
         if (!iso) return '-';
-        try { return new Date(iso).toLocaleString('zh-CN'); } catch (e) { return iso; }
+        try { return I18n.formatDate(iso, { dateStyle: 'medium', timeStyle: 'medium' }); } catch (e) { return iso; }
     },
 
     _formatElapsed(start, end) {

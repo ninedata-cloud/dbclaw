@@ -539,7 +539,11 @@ async def _check_thresholds_and_trigger(db, datasource_id: int, metrics: Dict[st
             select(Datasource).where(Datasource.id == datasource_id, alive_filter(Datasource))
         )
         datasource = result.scalar_one_or_none()
-        if datasource and datasource.silence_until:
+        if not datasource:
+            logger.debug("Skipping alert detection for deleted datasource %s", datasource_id)
+            return
+
+        if datasource.silence_until:
             current_time = now()
             if current_time < datasource.silence_until:
                 logger.debug(f"Skipping threshold check for datasource {datasource_id}: in silence period")
@@ -763,6 +767,16 @@ async def _get_enabled_inspection_config(db, datasource_id: int):
 
 async def _route_alert_engine(db, datasource, metrics: Dict[str, Any]):
     try:
+        alive_result = await db.execute(
+            select(Datasource.id).where(
+                Datasource.id == datasource.id,
+                alive_filter(Datasource),
+            )
+        )
+        if alive_result.scalar_one_or_none() is None:
+            logger.debug("Skipping alert engine for deleted datasource %s", datasource.id)
+            return
+
         config = await _get_enabled_inspection_config(db, datasource.id)
         if not config:
             return
@@ -927,6 +941,16 @@ async def _handle_connection_failure(db, datasource_id: int, datasource, error_m
     global _inspection_service
 
     try:
+        alive_result = await db.execute(
+            select(Datasource.id).where(
+                Datasource.id == datasource_id,
+                alive_filter(Datasource),
+            )
+        )
+        if alive_result.scalar_one_or_none() is None:
+            logger.debug("Skipping connection failure alert for deleted datasource %s", datasource_id)
+            return
+
         # 检查数据源是否在静默期内
         if datasource.silence_until:
             current_time = now()
@@ -1103,7 +1127,10 @@ async def collect_all_metrics():
 
         async with async_session() as db:
             result = await db.execute(
-                select(Datasource.id).where(Datasource.is_active == True)
+                select(Datasource.id).where(
+                    Datasource.is_active == True,
+                    alive_filter(Datasource),
+                )
             )
             datasource_ids = [row[0] for row in result.fetchall()]
 

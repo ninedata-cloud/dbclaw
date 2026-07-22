@@ -115,8 +115,18 @@ class InspectionService:
     async def trigger_inspection(self, db: AsyncSession, datasource_id: int,
                                 trigger_type: str, reason: str = None,
                                 datasource_metric: Dict[str, Any] = None,
-                                alert_id: Optional[int] = None) -> int:
+                                alert_id: Optional[int] = None,
+                                locale: Optional[str] = None) -> Optional[int]:
         """Manually or programmatically trigger an inspection"""
+        datasource = await get_alive_by_id(db, Datasource, datasource_id)
+        if not datasource:
+            logger.info(
+                "Skipping %s inspection for deleted or missing datasource %s",
+                trigger_type,
+                datasource_id,
+            )
+            return None
+
         recent_trigger = await self._find_recent_duplicate_trigger(
             db=db,
             datasource_id=datasource_id,
@@ -146,7 +156,7 @@ class InspectionService:
 
         logger.info(f"Created {trigger_type} trigger {trigger.id} for datasource {datasource_id}")
 
-        self._create_tracked_task(self._generate_report_async(trigger.id))
+        self._create_tracked_task(self._generate_report_async(trigger.id, locale=locale))
 
         return trigger.id
 
@@ -217,27 +227,37 @@ class InspectionService:
 
             await asyncio.sleep(60)
 
-    async def _generate_report_async(self, trigger_id: int):
+    async def _generate_report_async(self, trigger_id: int, locale: Optional[str] = None):
         """Generate report in background task"""
         try:
             async with self.db_session_factory() as db:
-                await self._generate_report(db, trigger_id)
+                await self._generate_report(db, trigger_id, locale=locale)
         except Exception as e:
             logger.error(f"Error generating report for trigger {trigger_id}: {e}", exc_info=True)
 
-    async def _generate_report(self, db: AsyncSession, trigger_id: int):
+    async def _generate_report(self, db: AsyncSession, trigger_id: int, locale: Optional[str] = None):
         """Generate comprehensive inspection report"""
         from backend.services.report_generator import ReportGenerator
 
         result = await db.execute(
-            select(InspectionTrigger).where(InspectionTrigger.id == trigger_id)
+            select(InspectionTrigger)
+            .join(Datasource, Datasource.id == InspectionTrigger.datasource_id)
+            .where(
+                InspectionTrigger.id == trigger_id,
+                alive_filter(Datasource),
+            )
         )
         trigger = result.scalar_one_or_none()
         if not trigger or trigger.is_processed:
+            if not trigger:
+                logger.info(
+                    "Skipping report generation for trigger %s: datasource was deleted or trigger is missing",
+                    trigger_id,
+                )
             return
 
         generator = ReportGenerator(db)
-        report_id = await generator.generate_inspection_report(trigger_id)
+        report_id = await generator.generate_inspection_report(trigger_id, locale=locale)
 
         trigger.is_processed = True
         trigger.report_id = report_id

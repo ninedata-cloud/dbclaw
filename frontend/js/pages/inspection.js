@@ -129,8 +129,8 @@ const InspectionPage = {
                 <option value="scheduled">定时</option>
                 <option value="anomaly">异常</option>
             </select>
-            <input type="date" id="filterStartDate" class="filter-input inspection-date-input" placeholder="开始日期">
-            <input type="date" id="filterEndDate" class="filter-input inspection-date-input" placeholder="结束日期">
+            <input type="date" id="filterStartDate" class="filter-input inspection-date-input" data-date-picker placeholder="${I18n.t('placeholders.startDate')}">
+            <input type="date" id="filterEndDate" class="filter-input inspection-date-input" data-date-picker placeholder="${I18n.t('placeholders.endDate')}">
         `;
 
         // Bind events after render
@@ -139,6 +139,7 @@ const InspectionPage = {
                 this.initDatasourceSelector();
             }
             this._bindFilterEvents();
+            DatePicker.enhanceAll(filtersContainer);
             DOM.createIcons();
         }, 0);
 
@@ -228,7 +229,10 @@ const InspectionPage = {
             this.totalReports = response.total || reports.length;
             const meta = DOM.$('#inspection-list-meta');
             if (meta) {
-                meta.textContent = `共 ${this.totalReports.toLocaleString()} 条报告，当前第 ${this.currentPage} 页`;
+                meta.textContent = I18n.t('inspection.listMeta', {
+                    total: I18n.formatNumber(this.totalReports),
+                    page: I18n.formatNumber(this.currentPage)
+                });
             }
 
             if (reports.length === 0) {
@@ -522,7 +526,7 @@ const InspectionPage = {
                 : '暂无内容';
             reportContent.innerHTML = MarkdownRenderer.render(report.content_md || fallbackContent);
         } catch (error) {
-            Toast.show('加载失败 report', 'error');
+            Toast.show(I18n.translateLegacyText('加载失败') + ': ' + error.message, 'error');
         }
     },
 

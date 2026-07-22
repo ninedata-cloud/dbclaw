@@ -1048,13 +1048,24 @@ class AlertService:
         """
         cutoff_time = now() - timedelta(minutes=max(int(minutes or 0), 0))
 
+        from backend.models.datasource import Datasource
+
         result = await db.execute(
-            select(AlertMessage).where(
+            select(AlertMessage)
+            .outerjoin(Datasource, Datasource.id == AlertMessage.datasource_id)
+            .where(
                 and_(
                     AlertMessage.status == "active",
                     or_(
                         AlertMessage.notified_at.is_(None),
                         AlertMessage.notified_at <= cutoff_time,
+                    ),
+                    or_(
+                        AlertMessage.datasource_id == 0,
+                        and_(
+                            Datasource.id.is_not(None),
+                            alive_filter(Datasource),
+                        ),
                     ),
                 )
             )
@@ -1082,13 +1093,24 @@ class AlertService:
         """
         cutoff_time = now() - timedelta(minutes=minutes)
 
+        from backend.models.datasource import Datasource
+
         # Get recently resolved alerts
         result = await db.execute(
-            select(AlertMessage).where(
+            select(AlertMessage)
+            .outerjoin(Datasource, Datasource.id == AlertMessage.datasource_id)
+            .where(
                 and_(
                     AlertMessage.status == "resolved",
                     AlertMessage.resolved_at >= cutoff_time,
                     AlertMessage.notified_at.is_not(None),
+                    or_(
+                        AlertMessage.datasource_id == 0,
+                        and_(
+                            Datasource.id.is_not(None),
+                            alive_filter(Datasource),
+                        ),
+                    ),
                 )
             )
         )

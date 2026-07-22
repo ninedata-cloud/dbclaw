@@ -32,6 +32,23 @@
     --transition: 0.2s ease;
 }
 
+/* English labels are often longer than their Chinese counterparts. */
+html[lang="en-US"] .nav-item span,
+html[lang="en-US"] .nav-section-title,
+html[lang="en-US"] .btn,
+html[lang="en-US"] th {
+    overflow-wrap: anywhere;
+}
+
+html[lang="en-US"] .nav-item {
+    line-height: 1.25;
+}
+
+html[lang="en-US"] .page-header {
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
 /* === Reset === */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 

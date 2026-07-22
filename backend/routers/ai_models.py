@@ -200,12 +200,12 @@ async def test_model_chat(model_id: int, data: AIModelTestChatRequest, db: Async
     except Exception as e:
         response_details = _format_exception_response(e)
         if response_details:
-            logger.exception("模型调用失败，完整响应: %s", response_details)
+            logger.exception("Model invocation failed; full response: %s", response_details)
             raise HTTPException(
                 status_code=502,
                 detail=f"模型调用失败：{str(e)}；response={response_details}",
             )
-        logger.exception("模型调用失败")
+        logger.exception("Model invocation failed")
         raise HTTPException(status_code=502, detail=f"模型调用失败：{str(e)}")
 
     latency_ms = int((perf_counter() - started_at) * 1000)
@@ -232,6 +232,4 @@ async def set_default_model(model_id: int, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
     return {"message": "Default model updated"}
-
-
 

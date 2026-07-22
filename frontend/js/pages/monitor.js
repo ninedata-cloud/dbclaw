@@ -152,7 +152,7 @@ const MonitorPage = {
             date.getDate() === now.getDate();
 
         if (isToday) {
-            return date.toLocaleTimeString([], {
+            return I18n.formatTime(date, {
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit'
@@ -339,7 +339,7 @@ const MonitorPage = {
             this.datasourceSelector = new DatasourceSelector({
                 container: datasourceContainer,
                 allowEmpty: false,
-                placeholder: '选择数据源',
+                placeholder: I18n.t('placeholders.selectDatasource'),
                 showStatus: true,
                 showDetails: true,
                 onLoad: (loadedDatasources) => {
@@ -799,6 +799,7 @@ const MonitorPage = {
             type: 'datetime-local',
             className: 'filter-input inspection-date-input',
             id: 'custom-start-time',
+            dataset: { datePicker: '' },
             value: startTime
         });
         startGroup.appendChild(startInput);
@@ -811,6 +812,7 @@ const MonitorPage = {
             type: 'datetime-local',
             className: 'filter-input inspection-date-input',
             id: 'custom-end-time',
+            dataset: { datePicker: '' },
             value: endTime
         });
         endGroup.appendChild(endInput);
@@ -861,6 +863,7 @@ const MonitorPage = {
 
         dialog.appendChild(modal);
         document.body.appendChild(dialog);
+        DatePicker.enhanceAll(dialog);
         DOM.createIcons();
     },
 
@@ -1021,8 +1024,8 @@ const MonitorPage = {
         }
 
         const summaryEl = cards[0].querySelector('[data-connection-metric="summary"]');
-        const activeText = active !== undefined && active !== null ? Number(active).toLocaleString() : '--';
-        const totalText = total !== undefined && total !== null ? Number(total).toLocaleString() : '--';
+        const activeText = active !== undefined && active !== null ? I18n.formatNumber(Number(active)) : '--';
+        const totalText = total !== undefined && total !== null ? I18n.formatNumber(Number(total)) : '--';
         const maxText = maxConnections !== undefined && maxConnections !== null && maxConnections !== 0 ? String(Number(maxConnections)) : '--';
         if (summaryEl) summaryEl.textContent = `${activeText}/${totalText}/${maxText}`;
 

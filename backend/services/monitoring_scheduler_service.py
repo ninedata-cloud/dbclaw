@@ -49,7 +49,7 @@ async def get_monitoring_collection_interval_seconds(
     except ValueError:
         raise
     except Exception as exc:
-        logger.warning("读取全局监控采集周期失败，回退默认值: %s", exc)
+        logger.warning("Failed to read the global monitoring collection interval; using the default: %s", exc)
         return normalize_monitoring_collection_interval_seconds(default_value, default_value)
 
 
