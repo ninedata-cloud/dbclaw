@@ -82,7 +82,7 @@ APP_PORT=9939
 DATABASE_URL=postgresql+asyncpg://dbclaw:your-postgres-password@localhost:5432/dbclaw
 ENCRYPTION_KEY=your-fernet-key-here
 PUBLIC_SHARE_SECRET_KEY=replace-with-random-public-share-secret
-INITIAL_ADMIN_PASSWORD=admin1234
+INITIAL_ADMIN_PASSWORD=replace-with-strong-random-password
 ```
 
 Generate an `ENCRYPTION_KEY`:
@@ -103,7 +103,7 @@ After startup, open:
 
 - Web console: `http://127.0.0.1:9939`
 - Default administrator: `admin`
-- Default password: `admin1234` (override it with `INITIAL_ADMIN_PASSWORD`)
+- Administrator password: the value configured in `INITIAL_ADMIN_PASSWORD`
 
 After signing in for the first time, we recommend adding at least one available model under **AI Model Management**. Core features such as monitoring, inspections, and data source management remain available without a configured model, but AI chat and AI diagnostics will be unavailable.
 
@@ -166,8 +166,10 @@ Common environment variables:
 - `TIMESCALE_*`: Optional settings that control Timescale migrations, whether startup should stop if the extension is unavailable, chunk intervals, compression, metric retention, and more. See `.env.example` for details.
 - `ENCRYPTION_KEY`: Fernet encryption key for database passwords and other sensitive values
 - `PUBLIC_SHARE_SECRET_KEY`: Signing key for public share links
-- `INITIAL_ADMIN_PASSWORD`: Initial administrator password; defaults to `admin1234`
+- `INITIAL_ADMIN_PASSWORD`: Initial administrator password. The Docker bootstrap generates and stores a random value when omitted; local deployments should set a strong value explicitly.
 - `METRIC_INTERVAL`: Metric collection interval on first startup; defaults to `60` seconds
+- `DATABASE_POOL_SIZE` / `DATABASE_MAX_OVERFLOW` / `DATABASE_POOL_TIMEOUT_SECONDS`: Metadata connection-pool limits and checkout timeout
+- `DATASOURCE_COLLECTION_CONCURRENCY` / `HOST_COLLECTION_CONCURRENCY` / `INTEGRATION_COLLECTION_CONCURRENCY` / `METADATA_WRITE_CONCURRENCY`: Bounded background collection and metadata-write concurrency
 
 AI model settings should preferably be managed through **AI Model Management** in the web console. The `OPENAI_*` environment variables are retained only as fallback compatibility settings.
 
@@ -198,7 +200,8 @@ AI chat passes the resolved language to the model as the target output language.
 
 ## Health Check
 
-- `GET /health`: Basic health check
+- `GET /health` or `GET /health/live`: Process liveness only
+- `GET /health/ready`: Readiness check through the application's metadata connection pool
 
 ## Development
 

@@ -5,6 +5,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from backend.database import async_session
+from backend.config import get_settings
 from backend.models.host import Host
 from backend.models.host_metric import HostMetric
 from backend.models.soft_delete import alive_filter
@@ -12,7 +13,16 @@ from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
 
-MAX_CONCURRENT_HOST_COLLECTIONS = 10
+_settings = get_settings()
+MAX_CONCURRENT_HOST_COLLECTIONS = max(1, _settings.host_collection_concurrency)
+
+
+def _compute_round_sleep(interval_seconds: float, elapsed_seconds: float) -> float:
+    """Keep a small delay after an overrun instead of immediately hot-looping."""
+    return max(
+        max(0.1, _settings.host_collection_overrun_backoff_seconds),
+        interval_seconds - elapsed_seconds,
+    )
 
 
 async def collect_host_metric():
@@ -21,35 +31,37 @@ async def collect_host_metric():
         round_started_at = time.monotonic()
         collection_interval_seconds = 60
         try:
-            network_ok = True
             async with async_session() as db:
                 from backend.services.monitoring_scheduler_service import (
                     get_monitoring_collection_interval_seconds,
                 )
                 from backend.services.config_service import get_config
-                from backend.services.network_probe import check_network
 
                 collection_interval_seconds = await get_monitoring_collection_interval_seconds(db)
                 probe_host = await get_config(db, "network_probe_host", default="127.0.0.1")
-                network_ok = await check_network(probe_host)
-                if not network_ok:
-                    logger.error(
-                        "Network probe failed (host=%s), skipping host metrics collection round",
-                        probe_host,
-                    )
-                    try:
-                        from backend.services.metric_collector import _handle_network_probe_failure
-                        await _handle_network_probe_failure(probe_host)
-                    except Exception as probe_alert_error:
-                        logger.warning("Failed to create network probe alert: %s", probe_alert_error)
-                    host_ids = []
-                else:
-                    try:
-                        from backend.services.metric_collector import _auto_resolve_network_probe_alerts
-                        await _auto_resolve_network_probe_alerts()
-                    except Exception as resolve_error:
-                        logger.warning("Failed to auto-resolve network probe alerts: %s", resolve_error)
 
+            from backend.services.network_probe import check_network
+
+            network_ok = await check_network(probe_host)
+            if not network_ok:
+                logger.error(
+                    "Network probe failed (host=%s), skipping host metrics collection round",
+                    probe_host,
+                )
+                try:
+                    from backend.services.metric_collector import _handle_network_probe_failure
+                    await _handle_network_probe_failure(probe_host)
+                except Exception as probe_alert_error:
+                    logger.warning("Failed to create network probe alert: %s", probe_alert_error)
+                host_ids = []
+            else:
+                try:
+                    from backend.services.metric_collector import _auto_resolve_network_probe_alerts
+                    await _auto_resolve_network_probe_alerts()
+                except Exception as resolve_error:
+                    logger.warning("Failed to auto-resolve network probe alerts: %s", resolve_error)
+
+                async with async_session() as db:
                     result = await db.execute(select(Host.id).where(alive_filter(Host)))
                     host_ids = [row[0] for row in result.fetchall()]
 
@@ -68,27 +80,27 @@ async def collect_host_metric():
             logger.error(f"SSH host metrics collection error: {e}")
 
         elapsed_seconds = time.monotonic() - round_started_at
-        sleep_seconds = max(0.0, collection_interval_seconds - elapsed_seconds)
-        if sleep_seconds > 0:
-            await asyncio.sleep(sleep_seconds)
+        sleep_seconds = _compute_round_sleep(collection_interval_seconds, elapsed_seconds)
+        await asyncio.sleep(sleep_seconds)
 
 
 async def _collect_host_metric_by_host_id(host_id: int):
     """Collect metrics for one host with short-lived DB sessions."""
     try:
-        host = None
+        from backend.services.ssh_connection_pool import SSHHostConfig
+
         async with async_session() as db:
             result = await db.execute(select(Host).where(Host.id == host_id, alive_filter(Host)))
             host = result.scalar_one_or_none()
         if not host:
             return
 
-        await _collect_host_metric(host)
+        await _collect_host_metric(SSHHostConfig.from_host(host))
     except Exception as e:
         logger.error(f"Failed to collect metrics for host_id={host_id}: {e}")
 
 
-async def _collect_host_metric(host: Host):
+async def _collect_host_metric(host):
     """Collect metrics for a single SSH host without long DB hold time."""
     try:
         from backend.services.ssh_connection_pool import get_ssh_pool
@@ -100,14 +112,12 @@ async def _collect_host_metric(host: Host):
         os_metrics = None
 
         try:
-            # Use a dedicated short-lived session for SSH connection bootstrap only.
-            async with async_session() as ssh_db:
-                async with ssh_pool.get_connection(ssh_db, host.id) as ssh_client:
+            async with ssh_pool.get_collector_connection(host) as ssh_client:
                 # 使用 OSMetricsCollector 采集完整指标
-                    os_metrics = await asyncio.wait_for(
-                        OSMetricsCollector.collect_via_ssh(ssh_client, os_type='linux'),
-                        timeout=30.0
-                    )
+                os_metrics = await asyncio.wait_for(
+                    OSMetricsCollector.collect_via_ssh(ssh_client, os_type='linux'),
+                    timeout=max(0.1, _settings.datasource_operation_timeout_seconds),
+                )
 
         except asyncio.TimeoutError:
             logger.warning(f"SSH metrics collection timeout for host {host.name} (id={host.id})")

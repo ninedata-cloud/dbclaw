@@ -132,7 +132,7 @@ async def test_execute_integration_collects_merges_persists_and_pushes(mocker):
     assert pushed_datasource_id == 7
     assert pushed_payload["type"] == "db_status"
     assert pushed_payload["data"] == snapshot.data
-    assert session.commit.await_count == 3
+    assert session.commit.await_count == 5
 
 
 @pytest.mark.integration
@@ -164,7 +164,7 @@ async def test_execute_integration_records_failure_when_executor_raises(mocker):
     assert "provider timeout" in integration.last_error
     assert integration.last_run_at is not None
     push.assert_not_awaited()
-    assert session.commit.await_count == 2
+    assert session.commit.await_count == 3
 
 
 @pytest.mark.integration
@@ -202,7 +202,7 @@ async def test_execute_integration_records_success_without_snapshot_when_no_metr
     session.execute.assert_not_awaited()
     direct_supplement.assert_not_awaited()
     push.assert_not_awaited()
-    assert session.commit.await_count == 2
+    assert session.commit.await_count == 3
 
 
 @pytest.mark.integration

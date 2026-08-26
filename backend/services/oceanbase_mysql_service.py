@@ -65,17 +65,27 @@ class OceanBaseMySQLConnector(DBConnector):
                     logger.warning("OceanBase MySQL status query failed: %s", exc)
                     status = {}
 
-                try:
-                    await cur.execute(
-                        "SELECT "
-                        "COUNT(*) as total, "
-                        "SUM(CASE WHEN COMMAND != 'Sleep' THEN 1 ELSE 0 END) as active "
-                        "FROM information_schema.PROCESSLIST "
-                    )
-                    process_stats = await cur.fetchone()
-                except Exception as exc:
-                    logger.warning("OceanBase MySQL processlist stats query failed: %s", exc)
-                    process_stats = None
+                process_stats = None
+                if "Threads_connected" not in status or "Threads_running" not in status:
+                    for processlist_table in (
+                        "performance_schema.processlist",
+                        "information_schema.PROCESSLIST",
+                    ):
+                        try:
+                            await cur.execute(
+                                "SELECT "
+                                "COUNT(*) as total, "
+                                "SUM(CASE WHEN COMMAND != 'Sleep' THEN 1 ELSE 0 END) as active "
+                                f"FROM {processlist_table} "
+                            )
+                            process_stats = await cur.fetchone()
+                            break
+                        except Exception as exc:
+                            logger.debug(
+                                "OceanBase MySQL processlist stats query failed for %s: %s",
+                                processlist_table,
+                                exc,
+                            )
 
                 try:
                     await cur.execute("SHOW GLOBAL VARIABLES LIKE 'max_connections'")
@@ -91,11 +101,22 @@ class OceanBaseMySQLConnector(DBConnector):
                 visible_threads_running = self._safe_int(process_stats[1]) if process_stats else 0
                 visible_threads_connected = self._safe_int(process_stats[0]) if process_stats else 0
 
-                threads_running = global_threads_running if global_threads_running > 0 else visible_threads_running
-                threads_connected = global_threads_connected if global_threads_connected > 0 else visible_threads_connected
-                process_count = self._safe_int(process_stats[0]) if process_stats else 0
+                threads_running = (
+                    global_threads_running
+                    if "Threads_running" in status
+                    else visible_threads_running
+                )
+                threads_connected = (
+                    global_threads_connected
+                    if "Threads_connected" in status
+                    else visible_threads_connected
+                )
+                process_count = self._safe_int(process_stats[0]) if process_stats else threads_connected
 
-                if threads_connected == 0 or threads_running == 0:
+                if (
+                    ("Threads_connected" not in status or "Threads_running" not in status)
+                    and process_stats is None
+                ):
                     logger.warning(
                         "OceanBase MySQL connection metrics may be incomplete - "
                         "global: connected=%s, running=%s; visible: connected=%s, running=%s; "
@@ -172,14 +193,25 @@ class OceanBaseMySQLConnector(DBConnector):
         conn = await self._connect()
         try:
             async with conn.cursor(aiomysql.DictCursor) as cur:
-                await cur.execute(
-                    "SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO "
-                    "FROM information_schema.PROCESSLIST "
-                    "ORDER BY TIME DESC",
-                )
-                rows = await cur.fetchall()
-                return [dict(r) for r in rows]
-        except Exception:
+                for processlist_table in (
+                    "performance_schema.processlist",
+                    "information_schema.PROCESSLIST",
+                ):
+                    try:
+                        await cur.execute(
+                            "SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO "
+                            f"FROM {processlist_table} "
+                            "ORDER BY TIME DESC",
+                        )
+                        rows = await cur.fetchall()
+                        return [dict(r) for r in rows]
+                    except Exception as exc:
+                        logger.debug(
+                            "OceanBase MySQL process list query failed for %s: %s",
+                            processlist_table,
+                            exc,
+                        )
+
             async with conn.cursor() as cur:
                 try:
                     await cur.execute("SHOW PROCESSLIST")

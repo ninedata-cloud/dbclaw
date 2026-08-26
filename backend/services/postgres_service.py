@@ -8,6 +8,30 @@ from backend.services.query_execution_state import QueryCancelledError
 class PostgreSQLConnector(DBConnector):
     """PostgreSQL database connector using asyncpg."""
 
+    async def _get_activity_columns(self, conn) -> set[str]:
+        """Return the actual pg_stat_activity layout exposed by the server.
+
+        Greenplum can report a PostgreSQL-compatible version while exposing the
+        system catalog of an older PostgreSQL release.  Capability detection is
+        therefore more reliable than parsing server_version.
+        """
+        rows = await conn.fetch(
+            "SELECT attname FROM pg_catalog.pg_attribute "
+            "WHERE attrelid = 'pg_catalog.pg_stat_activity'::regclass "
+            "AND attnum > 0 AND NOT attisdropped"
+        )
+        return {str(row["attname"]) for row in rows}
+
+    @staticmethod
+    def _activity_wait_condition(columns: set[str]) -> Optional[str]:
+        if "wait_event_type" in columns:
+            return "wait_event_type IS NOT NULL AND wait_event_type NOT IN ('Client', 'Activity')"
+        if "waiting" in columns:
+            # PostgreSQL <= 9.5 (and Greenplum based on PostgreSQL 9.4)
+            # exposes only the lock-wait boolean.
+            return "waiting = true"
+        return None
+
     async def _connect(self):
         import asyncpg
 
@@ -41,6 +65,13 @@ class PostgreSQLConnector(DBConnector):
     async def get_status(self) -> Dict[str, Any]:
         conn = await self._connect()
         try:
+            activity_columns = await self._get_activity_columns(conn)
+            wait_condition = self._activity_wait_condition(activity_columns)
+            waiting_expr = (
+                f"count(CASE WHEN {wait_condition} THEN 1 END)"
+                if wait_condition
+                else "0::bigint"
+            )
             stats = await conn.fetchrow(
                 """SELECT 
                         sum(numbackends)::bigint as numbackends, 
@@ -61,7 +92,7 @@ class PostgreSQLConnector(DBConnector):
                 "SELECT count(*) as total, "
                 "count(CASE WHEN state = 'active' THEN 1 END) as active, "
                 "count(CASE WHEN state = 'idle' THEN 1 END) as idle, "
-                "count(CASE WHEN wait_event_type IS NOT NULL AND wait_event_type NOT IN ('Client', 'Activity') THEN 1 END) as waiting "
+                f"{waiting_expr} as waiting "
                 "FROM pg_stat_activity"
             )
             size = await conn.fetchrow(
@@ -73,11 +104,6 @@ class PostgreSQLConnector(DBConnector):
             )
             max_conn = await conn.fetchrow(
                 "SELECT setting::int as max_conn FROM pg_settings WHERE name = 'max_connections'"
-            )
-            # 锁等待数
-            lock_waiting = await conn.fetchrow(
-                "SELECT count(*) as cnt FROM pg_stat_activity "
-                "WHERE wait_event_type IS NOT NULL AND wait_event_type NOT IN ('Client', 'Activity')"
             )
             # 最长事务运行时间（秒）
             longest_tx = await conn.fetchrow(
@@ -108,7 +134,7 @@ class PostgreSQLConnector(DBConnector):
                 "connections_idle": activity["idle"] if activity else 0,
                 "connections_waiting": activity["waiting"] if activity else 0,
                 "max_connections": max_conn["max_conn"] if max_conn else 0,
-                "lock_waiting": lock_waiting["cnt"] if lock_waiting else 0,
+                "lock_waiting": activity["waiting"] if activity else 0,
                 "longest_transaction_sec": longest_tx["seconds"] if longest_tx and longest_tx["seconds"] else 0,
                 "xact_commit": stats["xact_commit"] if stats else 0,
                 "xact_rollback": stats["xact_rollback"] if stats else 0,
@@ -140,9 +166,24 @@ class PostgreSQLConnector(DBConnector):
     async def get_process_list(self) -> List[Dict[str, Any]]:
         conn = await self._connect()
         try:
+            columns = await self._get_activity_columns(conn)
+            pid_expr = "pid" if "pid" in columns else "procpid"
+            query_expr = "query" if "query" in columns else "current_query"
+
+            if "wait_event_type" in columns:
+                wait_type_expr = "wait_event_type"
+                wait_event_expr = "wait_event" if "wait_event" in columns else "NULL::text"
+            elif "waiting" in columns:
+                wait_type_expr = "CASE WHEN waiting THEN 'Lock' ELSE NULL END"
+                wait_event_expr = "CASE WHEN waiting THEN 'Lock' ELSE NULL END"
+            else:
+                wait_type_expr = "NULL::text"
+                wait_event_expr = "NULL::text"
+
             rows = await conn.fetch(
-                "SELECT pid, usename, client_addr, datname, state, "
-                "query_start, wait_event_type, wait_event, query "
+                f"SELECT {pid_expr} AS pid, usename, client_addr, datname, state, "
+                f"query_start, {wait_type_expr} AS wait_event_type, "
+                f"{wait_event_expr} AS wait_event, {query_expr} AS query "
                 "FROM pg_stat_activity "
                 "ORDER BY query_start DESC NULLS LAST"
             )

@@ -325,7 +325,7 @@ async def lifespan(app: FastAPI):
     from backend.services.integration_service import IntegrationService
     async with async_session() as _db:
         await IntegrationService.load_builtin_templates(_db)
-    logger.info("ntegration templates loaded")
+    logger.info("Integration templates loaded")
 
     # Start integration scheduler
     from backend.services.integration_scheduler import start_integration_scheduler

@@ -395,7 +395,7 @@ class WeixinBotService:
         await asyncio.sleep(5)
 
     @staticmethod
-    async def poll_once(db: AsyncSession, binding: IntegrationBotBinding) -> None:
+    async def poll_once(db: AsyncSession | None, binding: IntegrationBotBinding) -> None:
         params = binding.params or {}
         api_baseurl = str(params.get("api_baseurl") or params.get("gateway_url") or "").strip()
         bot_token = WeixinBotService._decrypt_bot_token(params)
@@ -428,13 +428,26 @@ class WeixinBotService:
             logger.info(f"[Weixin polling] Received {len(msgs)} new messages; queue_size={_MESSAGE_QUEUE.qsize()}")
 
         if new_cursor != cursor:
-            params["get_updates_buf"] = new_cursor
-            binding.params = params
             from sqlalchemy.orm.attributes import flag_modified
-            flag_modified(binding, "params")
-            await db.commit()
+
+            if db is None:
+                async with async_session() as save_db:
+                    result = await save_db.execute(
+                        select(IntegrationBotBinding).where(IntegrationBotBinding.id == binding.id)
+                    )
+                    stored_binding = result.scalar_one_or_none()
+                    if stored_binding is not None:
+                        stored_params = dict(stored_binding.params or {})
+                        stored_params["get_updates_buf"] = new_cursor
+                        stored_binding.params = stored_params
+                        flag_modified(stored_binding, "params")
+                        await save_db.commit()
+            else:
+                params["get_updates_buf"] = new_cursor
+                binding.params = params
+                flag_modified(binding, "params")
+                await db.commit()
             logger.debug("[Weixin polling] Cursor updated and saved")
-            await db.commit()
 
 
 async def _polling_loop() -> None:
@@ -444,17 +457,19 @@ async def _polling_loop() -> None:
         try:
             async with async_session() as db:
                 binding = await WeixinBotService.get_bot_binding(db)
-                if binding is None:
-                    await asyncio.sleep(3)
-                    continue
-                if binding.id in _PROCESSING_BINDINGS:
-                    await asyncio.sleep(1)
-                    continue
-                _PROCESSING_BINDINGS.add(binding.id)
-                try:
-                    await WeixinBotService.poll_once(db, binding)
-                finally:
-                    _PROCESSING_BINDINGS.discard(binding.id)
+            if binding is None:
+                await asyncio.sleep(3)
+                continue
+            if binding.id in _PROCESSING_BINDINGS:
+                await asyncio.sleep(1)
+                continue
+            _PROCESSING_BINDINGS.add(binding.id)
+            try:
+                # The metadata session is already closed before the up-to-40s
+                # remote long poll starts.
+                await WeixinBotService.poll_once(None, binding)
+            finally:
+                _PROCESSING_BINDINGS.discard(binding.id)
         except Exception:
             logger.exception("Weixin bot polling failed")
             await asyncio.sleep(5)

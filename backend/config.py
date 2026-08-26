@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     initial_admin_password: str = "admin1234"
 
     database_url: str = "postgresql+asyncpg://dbclaw:dbclaw@localhost:5432/dbclaw"
+    database_pool_size: int = 30
+    database_max_overflow: int = 60
+    database_pool_timeout_seconds: float = 10.0
+    database_pool_recycle_seconds: int = 1800
+    readiness_database_timeout_seconds: float = 5.0
 
     # TimescaleDB（PostgreSQL 扩展）：时序表 hypertable / 压缩 / 可选保留策略
     timescale_enable: bool = True
@@ -50,6 +55,17 @@ class Settings(BaseSettings):
     timescale_retention_interval: str = ""
 
     metric_interval: int = 60
+    datasource_collection_concurrency: int = 24
+    datasource_operation_timeout_seconds: float = 30.0
+    datasource_probe_timeout_seconds: float = 10.0
+    connector_close_timeout_seconds: float = 5.0
+    host_collection_concurrency: int = 15
+    host_collection_overrun_backoff_seconds: float = 5.0
+    host_metric_max_age_seconds: int = 180
+    ssh_failure_backoff_base_seconds: float = 30.0
+    ssh_failure_backoff_max_seconds: float = 300.0
+    integration_collection_concurrency: int = 12
+    metadata_write_concurrency: int = 9
 
     # Inspection trigger deduplication window (in minutes)
     inspection_dedup_window_minutes: int = 60

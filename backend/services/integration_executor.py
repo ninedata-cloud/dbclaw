@@ -89,16 +89,26 @@ class IntegrationContext:
         """
         from backend.models.system_config import SystemConfig
 
-        result = await self.db.execute(
-            select(SystemConfig).where(SystemConfig.key == key)
-        )
-        config = result.scalar_one_or_none()
+        from backend.database import async_session
 
-        if config:
-            if config.is_encrypted and config.value:
-                from backend.utils.encryption import decrypt_value
-                return decrypt_value(config.value)
-            return config.value
+        async with async_session() as db:
+            result = await db.execute(
+                select(SystemConfig).where(SystemConfig.key == key)
+            )
+            config = result.scalar_one_or_none()
+
+            if config:
+                value = config.value
+                is_encrypted = config.is_encrypted
+            else:
+                value = None
+                is_encrypted = False
+
+        if is_encrypted and value:
+            from backend.utils.encryption import decrypt_value
+            return decrypt_value(value)
+        if value is not None:
+            return value
         return None
 
     async def encrypt(self, plaintext: str) -> str:
@@ -150,12 +160,16 @@ class IntegrationContext:
         from backend.models.datasource import Datasource
         from backend.models.soft_delete import alive_filter
 
-        result = await self.db.execute(
-            select(Datasource).where(Datasource.id == datasource_id, alive_filter(Datasource))
-        )
-        ds = result.scalar_one_or_none()
+        from backend.database import async_session
 
-        if ds:
+        async with async_session() as db:
+            result = await db.execute(
+                select(Datasource).where(Datasource.id == datasource_id, alive_filter(Datasource))
+            )
+            ds = result.scalar_one_or_none()
+
+            if not ds:
+                return None
             return {
                 "id": ds.id,
                 "name": ds.name,
@@ -165,7 +179,6 @@ class IntegrationContext:
                 "database": ds.database,
                 "external_instance_id": getattr(ds, "external_instance_id", None)
             }
-        return None
 
     async def close(self):
         """关闭资源"""

@@ -40,7 +40,7 @@ def _is_postgres_url(url: str) -> bool:
         u = make_url(url)
     except Exception:
         return False
-    return (u.get_driver_name() or "").split("+", 1)[0] in ("postgresql", "postgres")
+    return (u.get_backend_name() or "").lower() in ("postgresql", "postgres")
 
 
 async def _table_exists(conn, name: str) -> bool:

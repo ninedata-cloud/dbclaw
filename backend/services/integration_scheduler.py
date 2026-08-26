@@ -12,6 +12,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select, and_, desc
 
 from backend.database import async_session
+from backend.config import get_settings
 from backend.models.integration import Integration, IntegrationExecutionLog
 from backend.models.datasource import Datasource
 from backend.models.soft_delete import get_alive_by_id, alive_filter
@@ -24,10 +25,14 @@ from backend.services.metric_collector import _push_to_subscribers
 from backend.utils.datetime_helper import now
 
 logger = logging.getLogger(__name__)
+_settings = get_settings()
 
 # Global scheduler instance
 scheduler: Optional[AsyncIOScheduler] = None
 GLOBAL_INTEGRATION_JOB_ID = "integration_global_collector"
+_integration_collection_semaphore = asyncio.Semaphore(
+    max(1, _settings.integration_collection_concurrency)
+)
 
 
 async def _collect_direct_metrics_supplement(datasource: Datasource) -> dict:
@@ -58,7 +63,10 @@ async def _collect_direct_metrics_supplement(datasource: Datasource) -> dict:
             extra_params=datasource.extra_params,
         )
 
-        status = await connector.get_status()
+        status = await asyncio.wait_for(
+            connector.get_status(),
+            timeout=max(0.1, _settings.datasource_operation_timeout_seconds),
+        )
 
         # 只提取云 API 不提供的字段
         if 'max_connections' in status:
@@ -75,7 +83,10 @@ async def _collect_direct_metrics_supplement(datasource: Datasource) -> dict:
     finally:
         if connector is not None:
             try:
-                await connector.close()
+                await asyncio.wait_for(
+                    connector.close(),
+                    timeout=max(0.1, _settings.connector_close_timeout_seconds),
+                )
             except Exception:
                 pass
 
@@ -107,7 +118,10 @@ async def refresh_scheduler(interval_seconds: Optional[int] = None, trigger_now:
         'interval',
         seconds=interval_seconds,
         id=GLOBAL_INTEGRATION_JOB_ID,
-        replace_existing=True
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=max(1, interval_seconds),
     )
     logger.info("Refreshed the global inbound integration job: every %s seconds", interval_seconds)
 
@@ -132,6 +146,12 @@ async def unschedule_datasource(datasource_id: int):
 
 
 async def execute_integration(datasource_id: int):
+    """Execute one inbound integration with global concurrency control."""
+    async with _integration_collection_semaphore:
+        await _execute_integration(datasource_id)
+
+
+async def _execute_integration(datasource_id: int):
     """
     按数据源执行 inbound_metric 集成。
     """
@@ -188,6 +208,10 @@ async def execute_integration(datasource_id: int):
                 "external_instance_id": datasource.external_instance_id
             }]
 
+            # refresh() starts a new transaction. End it before executing remote
+            # integration code so HTTP/provider latency does not pin a pool slot.
+            await session.commit()
+
             executor = IntegrationExecutor(session, logger)
             params = inbound_source.get('params') or {}
             metrics = await executor.execute_metric_collection(integration.code, params, datasource_list)
@@ -216,6 +240,10 @@ async def execute_integration(datasource_id: int):
                         metric_data,
                     )
                     merged_data = cleanup_obsolete_integration_keys(datasource.db_type, merged_data)
+
+                    # Release the transaction opened by the snapshot SELECT
+                    # before querying the target database.
+                    await session.commit()
 
                     # 补充直连采集的关键字段（max_connections、uptime、cache_hit_rate 等）
                     # 这些字段会强制覆盖集成采集的值，因为直连采集更准确

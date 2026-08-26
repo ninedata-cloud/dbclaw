@@ -787,6 +787,9 @@ async def _send_via_integration(db, alert, subscription, diagnosis_result=None):
             continue
 
         try:
+            # End the read transaction before the external notification call.
+            # expire_on_commit=False keeps the already-rendered ORM attributes usable.
+            await db.commit()
             result = await executor.execute_notification(integration.code, params, payload)
             execution_time_ms = int((now() - start_time).total_seconds() * 1000)
 
@@ -978,6 +981,7 @@ async def _send_recovery_via_integration(db, alert, subscription):
             continue
 
         try:
+            await db.commit()
             result = await executor.execute_notification(integration.code, params, payload)
             execution_time_ms = int((now() - start_time).total_seconds() * 1000)
 

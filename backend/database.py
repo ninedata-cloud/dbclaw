@@ -19,10 +19,11 @@ def _create_engine():
     return create_async_engine(
         settings.database_url,
         echo=settings.debug,
-        pool_size=10,
-        max_overflow=20,
+        pool_size=max(1, settings.database_pool_size),
+        max_overflow=max(0, settings.database_max_overflow),
+        pool_timeout=max(0.1, settings.database_pool_timeout_seconds),
         pool_pre_ping=True,
-        pool_recycle=1800,
+        pool_recycle=max(1, settings.database_pool_recycle_seconds),
         connect_args=connect_args,
     )
 

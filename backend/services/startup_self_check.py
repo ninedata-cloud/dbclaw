@@ -167,7 +167,9 @@ async def run_startup_self_check(
 
 async def run_readiness_self_check(settings: Settings) -> SelfCheckReport:
     checks = _check_runtime_paths()
-    checks.append(await _check_metadata_database(settings))
+    from backend.database import get_engine
+
+    checks.append(await _check_metadata_database(settings, shared_engine=get_engine()))
     return SelfCheckReport(phase="readiness", checks=checks)
 
 
@@ -443,7 +445,7 @@ def _check_app_port(settings: Settings) -> CheckResult:
     )
 
 
-async def _check_metadata_database(settings: Settings) -> CheckResult:
+async def _check_metadata_database(settings: Settings, *, shared_engine=None) -> CheckResult:
     database_url = (settings.database_url or "").strip()
     if not database_url:
         return CheckResult(
@@ -472,7 +474,12 @@ async def _check_metadata_database(settings: Settings) -> CheckResult:
 
     driver = url.drivername
     if driver.startswith(POSTGRES_DRIVERS):
-        return await _check_postgres_database(database_url, url)
+        return await _check_postgres_database(
+            database_url,
+            url,
+            shared_engine=shared_engine,
+            timeout_seconds=settings.readiness_database_timeout_seconds if shared_engine is not None else None,
+        )
 
     return CheckResult(
         name="Metadata database",
@@ -484,7 +491,13 @@ async def _check_metadata_database(settings: Settings) -> CheckResult:
     )
 
 
-async def _check_postgres_database(database_url: str, url: Any) -> CheckResult:
+async def _check_postgres_database(
+    database_url: str,
+    url: Any,
+    *,
+    shared_engine=None,
+    timeout_seconds: float | None = None,
+) -> CheckResult:
     host = url.host or "localhost"
     port = int(url.port or 5432)
     database = url.database or "(database not specified)"
@@ -492,20 +505,29 @@ async def _check_postgres_database(database_url: str, url: Any) -> CheckResult:
     if tcp_result is not None:
         return tcp_result
 
-    engine = None
+    engine = shared_engine
+    owns_engine = engine is None
     try:
-        engine = create_async_engine(
-            database_url,
-            echo=False,
-            pool_pre_ping=True,
-            connect_args={"ssl": False},
-        )
-        async with engine.connect() as conn:
-            await conn.execute(text("SELECT 1"))
+        if engine is None:
+            engine = create_async_engine(
+                database_url,
+                echo=False,
+                pool_pre_ping=True,
+                connect_args={"ssl": False},
+            )
+
+        async def _execute_probe():
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+
+        if timeout_seconds is None:
+            await _execute_probe()
+        else:
+            await asyncio.wait_for(_execute_probe(), timeout=max(0.1, timeout_seconds))
     except Exception as exc:
         return _classify_postgres_connection_error(exc, host, port, database)
     finally:
-        if engine is not None:
+        if owns_engine and engine is not None:
             await engine.dispose()
 
     return CheckResult(

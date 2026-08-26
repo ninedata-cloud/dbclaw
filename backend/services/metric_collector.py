@@ -8,9 +8,11 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select, and_, desc
 
 from backend.database import async_session
+from backend.config import get_settings
 from backend.models.datasource import Datasource
 from backend.models.soft_delete import alive_filter
 from backend.models.datasource_metric import DatasourceMetric
+from backend.models.host_metric import HostMetric
 from backend.models.inspection_trigger import InspectionTrigger
 from backend.models.alert_message import AlertMessage
 from backend.services.db_connector import get_connector
@@ -45,8 +47,77 @@ _inspection_service = None
 _threshold_checker = ThresholdChecker()
 _baseline_detector = BaselineSignalDetector()
 
-# Semaphore to limit concurrent database writes
-_db_write_semaphore = asyncio.Semaphore(3)  # 最多 3 个并发写入
+_settings = get_settings()
+
+# Bound the whole remote collection and the metadata persistence phases separately.
+# Tasks waiting for either semaphore do not own a metadata database session.
+_datasource_collection_semaphore = asyncio.Semaphore(
+    max(1, _settings.datasource_collection_concurrency)
+)
+_db_write_semaphore = asyncio.Semaphore(max(1, _settings.metadata_write_concurrency))
+
+
+async def _probe_connection_after_collection_error(connector, collection_error: Exception) -> tuple[bool, str]:
+    """Separate metric-query failures from actual connectivity failures."""
+    try:
+        await asyncio.wait_for(
+            connector.test_connection(),
+            timeout=max(0.1, _settings.datasource_probe_timeout_seconds),
+        )
+    except Exception as connection_error:
+        return True, str(connection_error)
+    return False, str(collection_error)
+
+
+async def _load_collection_config(datasource_id: int) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    """Load collection inputs without keeping a DB session across remote I/O."""
+    async with async_session() as db:
+        result = await db.execute(
+            select(Datasource).where(
+                Datasource.id == datasource_id,
+                Datasource.is_active == True,
+                alive_filter(Datasource),
+            )
+        )
+        datasource = result.scalar_one_or_none()
+        if not datasource:
+            return None
+        if datasource.metric_source == "integration":
+            logger.debug("Skipping direct collection for integration datasource %s", datasource_id)
+            return None
+
+        if datasource.silence_until and now() >= datasource.silence_until:
+            datasource.silence_until = None
+            datasource.silence_reason = None
+            await db.commit()
+            logger.info("Silence period expired for datasource %s, resuming alerts", datasource_id)
+
+        host_metrics: dict[str, Any] = {}
+        if datasource.host_id:
+            fresh_after = now() - timedelta(seconds=max(1, _settings.host_metric_max_age_seconds))
+            latest_result = await db.execute(
+                select(HostMetric)
+                .where(
+                    HostMetric.host_id == datasource.host_id,
+                    HostMetric.collected_at >= fresh_after,
+                )
+                .order_by(desc(HostMetric.collected_at))
+                .limit(1)
+            )
+            latest_host_metric = latest_result.scalar_one_or_none()
+            if latest_host_metric and latest_host_metric.data:
+                host_metrics = dict(latest_host_metric.data)
+
+        config = {
+            "db_type": datasource.db_type,
+            "host": datasource.host,
+            "port": datasource.port,
+            "username": datasource.username,
+            "password": decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None,
+            "database": datasource.database,
+            "extra_params": dict(datasource.extra_params or {}),
+        }
+        return config, host_metrics
 
 
 def set_inspection_service(service):
@@ -96,132 +167,120 @@ async def _push_to_subscribers(datasource_id: int, data: Dict[str, Any]):
 async def collect_metrics_for_connection(datasource_id: int):
     """Collect and store metrics for a single datasource."""
     connector = None
-    try:
-        async with async_session() as db:
-                result = await db.execute(
-                    select(Datasource).where(Datasource.id == datasource_id, Datasource.is_active == True, alive_filter(Datasource))
+    async with _datasource_collection_semaphore:
+        try:
+            loaded = await _load_collection_config(datasource_id)
+            if loaded is None:
+                return
+            config, host_metrics = loaded
+
+            connector = get_connector(
+                db_type=config["db_type"],
+                host=config["host"],
+                port=config["port"],
+                username=config["username"],
+                password=config["password"],
+                database=config["database"],
+                extra_params=config["extra_params"],
+            )
+
+            try:
+                status = await asyncio.wait_for(
+                    connector.get_status(),
+                    timeout=max(0.1, _settings.datasource_operation_timeout_seconds),
                 )
-                datasource = result.scalar_one_or_none()
-                if not datasource:
-                    return
+                connection_failed = False
+                failure_detail = None
+            except Exception as exc:
+                logger.warning("Failed to collect metrics for datasource %s: %s", datasource_id, exc)
+                connection_failed, failure_detail = await _probe_connection_after_collection_error(connector, exc)
+                status = {
+                    "error": failure_detail if connection_failed else "metric_collection_failed",
+                    "error_code": "operation.failed",
+                    "connection_failed": connection_failed,
+                }
+                if not connection_failed:
+                    status["metric_collection_error"] = failure_detail
+                    logger.error(
+                        "Datasource %s is reachable, but its metric query failed: %s",
+                        datasource_id,
+                        failure_detail,
+                    )
 
-                # 对于使用外部集成采集的数据源，跳过直连采集，避免数据竞争
-                if datasource.metric_source == "integration":
-                    logger.debug(f"Skipping direct collection for integration datasource {datasource_id}")
-                    return
+            from backend.services.metric_normalizer import MetricNormalizer
 
-                # 检查静默期是否已过期，如果过期则自动清除（但不影响指标采集）
-                if datasource.silence_until:
-                    current_time = now()
-                    if current_time >= datasource.silence_until:
-                        # 静默已过期，自动清除
-                        datasource.silence_until = None
-                        datasource.silence_reason = None
-                        await db.commit()
-                        logger.info(f"Silence period expired for datasource {datasource_id}, resuming alerts")
+            snapshot_data = MetricNormalizer.normalize(config["db_type"], datasource_id, status)
+            if host_metrics:
+                snapshot_data.update(host_metrics)
 
-                password = decrypt_value(datasource.password_encrypted) if datasource.password_encrypted else None
-                connector = get_connector(
-                    db_type=datasource.db_type,
-                    host=datasource.host,
-                    port=datasource.port,
-                    username=datasource.username,
-                    password=password,
-                    database=datasource.database,
-                    extra_params=datasource.extra_params,
-                )
-
-                try:
-                    status = await connector.get_status()
-                    connection_failed = False
-                    datasource.connection_status = "normal"
-                    datasource.connection_error = None
-                    datasource.connection_checked_at = now()
-
-                    # Auto-resolve connection failure alerts if connection is now successful
-                    await _auto_resolve_connection_alerts(db, datasource_id)
-
-                except Exception as e:
-                    logger.warning(f"Failed to collect metrics for datasource {datasource_id}: {e}")
-                    status = {"error": "metric_collection_failed", "error_code": "operation.failed", "connection_failed": True}
-                    connection_failed = True
-                    datasource.connection_status = "failed"
-                    datasource.connection_error = str(e)
-                    datasource.connection_checked_at = now()
-
-                # 标准化指标
-                from backend.services.metric_normalizer import MetricNormalizer
-                normalized_status = MetricNormalizer.normalize(
-                    datasource.db_type, datasource_id, status
-                )
-
-                # 采集 OS 指标（如果配置了 SSH）
-                if datasource.host_id:
-                    try:
-                        # 使用超时保护，避免SSH连接挂起导致长时间阻塞
-                        os_metrics = await asyncio.wait_for(
-                            _collect_os_metrics(db, datasource.host_id),
-                            timeout=30.0  # 30秒超时
+            # Acquire the write limit before opening the persistence session. This
+            # prevents queued tasks from occupying pool connections.
+            async with _db_write_semaphore:
+                async with async_session() as db:
+                    result = await db.execute(
+                        select(Datasource).where(
+                            Datasource.id == datasource_id,
+                            Datasource.is_active == True,
+                            alive_filter(Datasource),
                         )
-                        if os_metrics:
-                            # 所有数据库统一使用 SSH 采集的 OS 指标
-                            # 直接使用 OS 指标，覆盖数据库层面的同名指标（如果有）
-                            normalized_status.update(os_metrics)
-                    except asyncio.TimeoutError:
-                        logger.warning(f"SSH metrics collection timeout for datasource {datasource_id} (host_id={datasource.host_id})")
-                        # 标记连接为不健康，触发重建
-                        from backend.services.ssh_connection_pool import get_ssh_pool
-                        ssh_pool = get_ssh_pool()
-                        ssh_pool.mark_connection_unhealthy(datasource.host_id)
-                    except Exception as e:
-                        logger.warning(f"Failed to collect SSH metrics for datasource {datasource_id}: {e}")
+                    )
+                    datasource = result.scalar_one_or_none()
+                    if not datasource:
+                        return
 
-                snapshot_data = normalized_status
+                    datasource.connection_status = "failed" if connection_failed else "normal"
+                    datasource.connection_error = failure_detail if connection_failed else None
+                    datasource.connection_checked_at = now()
 
-                # 使用信号量保护数据库写入
-                async with _db_write_semaphore:
+                    if not connection_failed:
+                        await _auto_resolve_connection_alerts(db, datasource_id)
+
                     snapshot = DatasourceMetric(
                         datasource_id=datasource_id,
                         metric_type="db_status",
                         data=snapshot_data,
-                        collected_at=now(),  # 使用本地时间
+                        collected_at=now(),
                     )
                     db.add(snapshot)
                     await db.commit()
 
-                # Handle connection failure - create alert and trigger diagnosis
-                if connection_failed:
-                    # Even when DB connection fails, we may still have host/OS metrics.
-                    # Run recovery check to close stale threshold alerts that already recovered.
-                    await _auto_resolve_threshold_alerts_on_connection_failure(
-                        db=db,
-                        datasource_id=datasource_id,
-                        metrics=snapshot_data,
-                    )
-                    await _handle_connection_failure(db, datasource_id, datasource, status.get("error", "Unknown error"))
+                    if connection_failed:
+                        await _auto_resolve_threshold_alerts_on_connection_failure(
+                            db=db,
+                            datasource_id=datasource_id,
+                            metrics=snapshot_data,
+                        )
+                        await _handle_connection_failure(
+                            db,
+                            datasource_id,
+                            datasource,
+                            status.get("error", "Unknown error"),
+                        )
+                    else:
+                        await _route_alert_engine(db, datasource, snapshot_data)
 
-                # Route alert engine after metrics are persisted
-                if not connection_failed:
-                    await _route_alert_engine(db, datasource, snapshot_data)
+                    await db.commit()
 
-                # Commit all alert/inspection changes
-                await db.commit()
-
-                # Push to WebSocket subscribers
-                await _push_to_subscribers(datasource_id, {
+            await _push_to_subscribers(
+                datasource_id,
+                {
                     "type": "db_status",
                     "datasource_id": datasource_id,
                     "data": snapshot_data,
                     "collected_at": now().isoformat(),
-                })
-    except Exception as e:
-        logger.error(f"Error collecting metrics for datasource {datasource_id}: {e}")
-    finally:
-        if connector is not None:
-            try:
-                await connector.close()
-            except Exception:
-                logger.debug("Failed to close connector for datasource %s", datasource_id, exc_info=True)
+                },
+            )
+        except Exception as exc:
+            logger.error("Error collecting metrics for datasource %s: %s", datasource_id, exc)
+        finally:
+            if connector is not None:
+                try:
+                    await asyncio.wait_for(
+                        connector.close(),
+                        timeout=max(0.1, _settings.connector_close_timeout_seconds),
+                    )
+                except Exception:
+                    logger.debug("Failed to close connector for datasource %s", datasource_id, exc_info=True)
 
 
 async def _auto_resolve_connection_alerts(db, datasource_id: int):
@@ -1156,6 +1215,9 @@ def start_scheduler(interval_seconds: int = 60):
         seconds=interval_seconds,
         id="metric_collector",
         replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=max(1, interval_seconds),
     )
     if not scheduler.running:
         scheduler.start()

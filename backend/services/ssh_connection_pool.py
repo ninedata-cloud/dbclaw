@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import time
-from typing import Dict, Optional, Tuple
+from typing import Awaitable, Callable, Dict, Optional
 from dataclasses import dataclass
 from contextlib import asynccontextmanager
 
@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.host import Host
+from backend.config import get_settings
 from backend.utils.encryption import decrypt_value
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,38 @@ class SSHConnection:
         return time.time() - self.last_used > max_idle_seconds
 
 
+@dataclass(frozen=True)
+class SSHHostConfig:
+    id: int
+    name: str
+    host: str
+    port: int
+    username: str
+    auth_type: str
+    password_encrypted: Optional[str]
+    private_key_encrypted: Optional[str]
+
+    @classmethod
+    def from_host(cls, host: Host) -> "SSHHostConfig":
+        return cls(
+            id=host.id,
+            name=host.name,
+            host=host.host,
+            port=host.port,
+            username=host.username,
+            auth_type=host.auth_type,
+            password_encrypted=host.password_encrypted,
+            private_key_encrypted=host.private_key_encrypted,
+        )
+
+
+@dataclass
+class SSHFailureState:
+    failures: int
+    next_retry_at: float
+    detail: str
+
+
 class SSHConnectionPool:
     """SSH连接池管理器"""
     
@@ -49,6 +82,13 @@ class SSHConnectionPool:
         self._health_check_interval = health_check_interval
         self._health_check_task: Optional[asyncio.Task] = None
         self._running = False
+        self._failure_states: Dict[int, SSHFailureState] = {}
+        settings = get_settings()
+        self._failure_backoff_base = max(1.0, settings.ssh_failure_backoff_base_seconds)
+        self._failure_backoff_max = max(
+            self._failure_backoff_base,
+            settings.ssh_failure_backoff_max_seconds,
+        )
         
     async def start(self):
         """启动连接池和健康检查任务"""
@@ -80,6 +120,7 @@ class SSHConnectionPool:
         
         self._connections.clear()
         self._locks.clear()
+        self._failure_states.clear()
         logger.info("SSH connection pool stopped")
     
     def _get_lock(self, host_id: int) -> asyncio.Lock:
@@ -89,9 +130,8 @@ class SSHConnectionPool:
         return self._locks[host_id]
     
     async def _create_connection(self, db: AsyncSession, host_id: int) -> Optional[SSHConnection]:
-        """创建新的SSH连接"""
+        """Load a host record and create an SSH connection."""
         try:
-            # 获取主机配置
             result = await db.execute(
                 select(Host).where(Host.id == host_id)
             )
@@ -100,24 +140,34 @@ class SSHConnectionPool:
                 logger.warning(f"Host {host_id} not found")
                 return None
 
-            # 创建SSH客户端
-            ssh_client = paramiko.SSHClient()
+            return await self._create_connection_from_config(SSHHostConfig.from_host(host))
+        except Exception as e:
+            logger.error(f"Failed to load SSH configuration for host {host_id}: {e}")
+            return None
+
+    async def _create_connection_from_config(self, host: SSHHostConfig) -> Optional[SSHConnection]:
+        """Create SSH transport from a detached, immutable host configuration."""
+        ssh_client = paramiko.SSHClient()
+        try:
             ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-            # 在线程池中执行阻塞的 SSH 连接，避免阻塞事件循环
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
+            common_connect_args = {
+                "hostname": host.host,
+                "port": host.port,
+                "username": host.username,
+                "timeout": 10,
+                "banner_timeout": 10,
+                "auth_timeout": 10,
+            }
 
             if host.auth_type == 'agent':
-                # SSH Agent 认证
                 await loop.run_in_executor(
                     None,
                     lambda: ssh_client.connect(
-                        hostname=host.host,
-                        port=host.port,
-                        username=host.username,
+                        **common_connect_args,
                         allow_agent=True,
                         look_for_keys=True,
-                        timeout=10
                     )
                 )
             elif host.auth_type == 'password':
@@ -125,17 +175,13 @@ class SSHConnectionPool:
                 await loop.run_in_executor(
                     None,
                     lambda: ssh_client.connect(
-                        hostname=host.host,
-                        port=host.port,
-                        username=host.username,
+                        **common_connect_args,
                         password=password,
                         allow_agent=False,
                         look_for_keys=False,
-                        timeout=10
                     )
                 )
             else:
-                # 密钥认证
                 private_key_str = decrypt_value(host.private_key_encrypted) if host.private_key_encrypted else None
                 if private_key_str:
                     from io import StringIO
@@ -154,31 +200,30 @@ class SSHConnectionPool:
                     await loop.run_in_executor(
                         None,
                         lambda: ssh_client.connect(
-                            hostname=host.host,
-                            port=host.port,
-                            username=host.username,
+                            **common_connect_args,
                             pkey=private_key,
                             allow_agent=False,
                             look_for_keys=False,
-                            timeout=10
                         )
                     )
                 else:
-                    logger.warning(f"No private key found for host {host_id}")
+                    logger.warning(f"No private key found for host {host.id}")
+                    ssh_client.close()
                     return None
 
             conn = SSHConnection(
                 client=ssh_client,
-                host_id=host_id,
+                host_id=host.id,
                 last_used=time.time(),
                 is_healthy=True
             )
 
-            logger.info(f"Created SSH connection for host {host_id} ({host.host}:{host.port})")
+            logger.info(f"Created SSH connection for host {host.id} ({host.host}:{host.port})")
             return conn
 
         except Exception as e:
-            logger.error(f"Failed to create SSH connection for host {host_id}: {e}")
+            ssh_client.close()
+            logger.error(f"Failed to create SSH connection for host {host.id}: {e}")
             return None
 
     def _sync_check_connection_health(self, conn: SSHConnection) -> bool:
@@ -241,53 +286,105 @@ class SSHConnectionPool:
             except Exception as e:
                 logger.error(f"Error in health check loop: {e}")
     
-    @asynccontextmanager
-    async def get_connection(self, db: AsyncSession, host_id: int):
-        """
-        获取SSH连接（上下文管理器）
-        
-        Args:
-            db: 数据库会话
-            host_id: 主机ID
-            
-        Yields:
-            paramiko.SSHClient: SSH客户端
-        """
+    def _record_connection_failure(self, host_id: int, detail: str) -> None:
+        previous = self._failure_states.get(host_id)
+        failures = (previous.failures + 1) if previous else 1
+        exponent = min(failures - 1, 30)
+        delay = min(self._failure_backoff_max, self._failure_backoff_base * (2 ** exponent))
+        self._failure_states[host_id] = SSHFailureState(
+            failures=failures,
+            next_retry_at=time.monotonic() + delay,
+            detail=detail,
+        )
+        logger.warning(
+            "SSH reconnect for host %s will be retried in %.0f seconds after %s consecutive failures",
+            host_id,
+            delay,
+            failures,
+        )
+
+    def _check_retry_backoff(self, host_id: int) -> None:
+        state = self._failure_states.get(host_id)
+        if not state:
+            return
+        remaining = state.next_retry_at - time.monotonic()
+        if remaining > 0:
+            raise ConnectionError(
+                f"SSH retry backoff active for host {host_id} ({remaining:.0f}s remaining): {state.detail}"
+            )
+
+    async def _acquire_connection(
+        self,
+        host_id: int,
+        creator: Callable[[], Awaitable[Optional[SSHConnection]]],
+        *,
+        enforce_backoff: bool,
+    ) -> SSHConnection:
         lock = self._get_lock(host_id)
-        
         async with lock:
             conn = self._connections.get(host_id)
-            
-            # 如果连接不存在或不健康，创建新连接
             if conn is None or not conn.is_healthy:
                 if conn is not None:
                     try:
                         conn.client.close()
                     except Exception as e:
                         logger.debug("Error closing unhealthy SSH connection: %s", e)
-                
-                conn = await self._create_connection(db, host_id)
+
+                if enforce_backoff:
+                    self._check_retry_backoff(host_id)
+
+                conn = await creator()
                 if conn is None:
+                    self._record_connection_failure(host_id, "connection creation failed")
                     raise ConnectionError(f"Failed to create SSH connection for host {host_id}")
-                
+
                 self._connections[host_id] = conn
-            
-            # 标记使用
+                self._failure_states.pop(host_id, None)
+
             conn.mark_used()
-        
+            return conn
+
+    @asynccontextmanager
+    async def _yield_connection(self, conn: SSHConnection):
         try:
             yield conn.client
         except Exception as e:
-            # 如果使用过程中出错，标记连接为不健康
-            logger.warning(f"Error using SSH connection for host {host_id}: {e}")
+            logger.warning(f"Error using SSH connection for host {conn.host_id}: {e}")
             conn.is_healthy = False
             raise
+
+    @asynccontextmanager
+    async def get_connection(self, db: AsyncSession, host_id: int):
+        """Get an SSH connection for request-driven operations.
+
+        Request paths bypass collector backoff so an operator can immediately
+        verify a host after correcting its configuration.
+        """
+        conn = await self._acquire_connection(
+            host_id,
+            lambda: self._create_connection(db, host_id),
+            enforce_backoff=False,
+        )
+        async with self._yield_connection(conn) as client:
+            yield client
+
+    @asynccontextmanager
+    async def get_collector_connection(self, host: SSHHostConfig):
+        """Get an SSH connection without holding a metadata DB session."""
+        conn = await self._acquire_connection(
+            host.id,
+            lambda: self._create_connection_from_config(host),
+            enforce_backoff=True,
+        )
+        async with self._yield_connection(conn) as client:
+            yield client
     
     def get_stats(self) -> Dict[str, any]:
         """获取连接池统计信息"""
         return {
             "total_connections": len(self._connections),
             "healthy_connections": sum(1 for c in self._connections.values() if c.is_healthy),
+            "backoff_hosts": len(self._failure_states),
             "connections": {
                 host_id: {
                     "is_healthy": conn.is_healthy,

@@ -82,7 +82,7 @@ APP_PORT=9939
 DATABASE_URL=postgresql+asyncpg://dbclaw:your-postgres-password@localhost:5432/dbclaw
 ENCRYPTION_KEY=your-fernet-key-here
 PUBLIC_SHARE_SECRET_KEY=replace-with-random-public-share-secret
-INITIAL_ADMIN_PASSWORD=admin1234
+INITIAL_ADMIN_PASSWORD=replace-with-strong-random-password
 ```
 
 生成 `ENCRYPTION_KEY`：
@@ -103,7 +103,7 @@ python run.py
 
 - Web 控制台：`http://127.0.0.1:9939`
 - 默认管理员：`admin`
-- 默认密码：`admin1234`，可通过 `INITIAL_ADMIN_PASSWORD` 覆盖
+- 管理员密码：`INITIAL_ADMIN_PASSWORD` 中配置的值
 
 首次登录后，建议先进入“AI 大模型管理”添加至少一个可用模型。未配置模型时，监控、巡检、数据源管理等基础能力仍可使用，但 AI 对话和 AI 诊断能力不可用。
 
@@ -166,8 +166,10 @@ docker build \
 - `TIMESCALE_*`：可选。控制是否启用 Timescale 迁移、扩展缺失是否中止启动、chunk 间隔、压缩与指标保留周期等，详见 `.env.example`
 - `ENCRYPTION_KEY`：数据库密码等敏感信息的 Fernet 加密密钥
 - `PUBLIC_SHARE_SECRET_KEY`：公开分享链接签名密钥
-- `INITIAL_ADMIN_PASSWORD`：初始管理员密码，默认 `admin1234`
+- `INITIAL_ADMIN_PASSWORD`：初始管理员密码。Docker 启动时若未配置，会自动生成随机值并持久化；本地部署请显式设置强密码。
 - `METRIC_INTERVAL`：首次启动时的指标采集周期，默认 `60` 秒
+- `DATABASE_POOL_SIZE` / `DATABASE_MAX_OVERFLOW` / `DATABASE_POOL_TIMEOUT_SECONDS`：元数据库连接池容量和等待超时
+- `DATASOURCE_COLLECTION_CONCURRENCY` / `HOST_COLLECTION_CONCURRENCY` / `INTEGRATION_COLLECTION_CONCURRENCY` / `METADATA_WRITE_CONCURRENCY`：各类后台采集与元数据写入的并发上限
 
 AI 模型配置优先在 Web 控制台的“AI 大模型管理”中维护。`OPENAI_*` 环境变量仅作为兜底兼容配置。
 
@@ -198,7 +200,8 @@ AI 对话会将账号语言作为目标输出语言传给模型；手动触发�
 
 ## 健康检查
 
-- `GET /health`：基础健康检查
+- `GET /health` 或 `GET /health/live`：仅检查进程存活
+- `GET /health/ready`：通过应用元数据库连接池执行就绪检查
 
 ## 开发
 

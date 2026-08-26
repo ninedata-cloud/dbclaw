@@ -4,7 +4,6 @@ set -euo pipefail
 
 RUNTIME_ENV_FILE="${RUNTIME_ENV_FILE:-/app/data/bootstrap/runtime.env}"
 BOOTSTRAP_DIR="$(dirname "$RUNTIME_ENV_FILE")"
-DEFAULT_ADMIN_PASSWORD="${DEFAULT_ADMIN_PASSWORD:-admin1234}"
 LOG_DIR="${LOG_DIR:-/app/data/logs}"
 UPLOAD_DIR="${UPLOAD_DIR:-/app/uploads}"
 CHAT_ATTACHMENTS_DIR="${CHAT_ATTACHMENTS_DIR:-$UPLOAD_DIR/chat_attachments}"
@@ -113,8 +112,16 @@ if [ -z "${POSTGRES_PASSWORD:-}" ]; then
     POSTGRES_PASSWORD="$(generate_password)"
 fi
 
+ADMIN_PASSWORD_GENERATED=false
 if [ -z "${INITIAL_ADMIN_PASSWORD:-}" ]; then
-    INITIAL_ADMIN_PASSWORD="$DEFAULT_ADMIN_PASSWORD"
+    if [ -n "${DEFAULT_ADMIN_PASSWORD:-}" ]; then
+        # Backward-compatible override for existing deployments. New deployments
+        # receive a random password when neither variable is provided.
+        INITIAL_ADMIN_PASSWORD="$DEFAULT_ADMIN_PASSWORD"
+    else
+        INITIAL_ADMIN_PASSWORD="$(generate_password)"
+        ADMIN_PASSWORD_GENERATED=true
+    fi
 fi
 
 if [ -z "${DATABASE_URL:-}" ]; then
@@ -143,9 +150,11 @@ EOF
 chmod 600 "$RUNTIME_ENV_FILE"
 
 echo "Bootstrap runtime config ready: $RUNTIME_ENV_FILE"
-if [ "$INITIAL_ADMIN_PASSWORD" = "$DEFAULT_ADMIN_PASSWORD" ]; then
-    echo "Default admin credentials: admin / $DEFAULT_ADMIN_PASSWORD"
-    echo "Please change the admin password after first login."
+if [ "$ADMIN_PASSWORD_GENERATED" = "true" ]; then
+    echo "A random initial administrator password was generated and stored in the protected runtime config."
+    echo "Retrieve it from INITIAL_ADMIN_PASSWORD in $RUNTIME_ENV_FILE and change it after first login."
+elif [ "$INITIAL_ADMIN_PASSWORD" = "admin1234" ]; then
+    echo "WARNING: The administrator initialization password uses the legacy default; change it immediately."
 fi
 
 # Decide whether to run the bundled PostgreSQL. An operator may force the choice
