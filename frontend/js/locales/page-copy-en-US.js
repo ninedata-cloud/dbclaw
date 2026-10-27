@@ -702,6 +702,12 @@
         "pollingStatus": "{value0} · {value1} · last refreshed {value2} · {value3}s Automatic polling"
     },
     "monitor": {
+        "chartInitFailed": "Charts could not be loaded. Retry, or reload the page if the problem persists.",
+        "retryLoading": "Retry",
+        "latestLoadFailed": "Failed to load latest metrics: {message}",
+        "historyLoadFailed": "Failed to load metric history. Existing charts have been kept: {message}",
+        "invalidHistory": "Invalid metric history response",
+        "realtimeDisconnected": "Real-time monitoring disconnected. Reconnecting; you can refresh metrics manually.",
         "last1Minute": "Last 1 minute",
         "last10Minutes": "Last 10 minutes",
         "last1Hour": "Last 1 hour",

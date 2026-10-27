@@ -259,6 +259,19 @@ async def lifespan(app: FastAPI):
                 category="monitoring"
             )
 
+        _dashboard_interval_exists = await _db.execute(
+            _select(_SystemConfig).where(_SystemConfig.key == _config_service.DASHBOARD_REFRESH_INTERVAL_CONFIG_KEY)
+        )
+        if not _dashboard_interval_exists.scalar_one_or_none():
+            await _config_service.set_config(
+                _db,
+                key=_config_service.DASHBOARD_REFRESH_INTERVAL_CONFIG_KEY,
+                value=str(_config_service.DEFAULT_DASHBOARD_REFRESH_INTERVAL_SECONDS),
+                value_type="integer",
+                description="资源大盘自动刷新时间（秒），支持 1–86400 秒，默认 15 秒，重新进入资源大盘后生效",
+                category="dashboard"
+            )
+
         _external_base_exists = await _db.execute(_select(_SystemConfig).where(_SystemConfig.key == "app_external_base_url"))
         if not _external_base_exists.scalar_one_or_none():
             await _config_service.set_config(

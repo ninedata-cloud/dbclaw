@@ -6,6 +6,28 @@ from backend.models.system_config import SystemConfig
 from backend.utils.encryption import encrypt_value, decrypt_value
 
 MASKED_VALUE = "****"
+DASHBOARD_REFRESH_INTERVAL_CONFIG_KEY = "dashboard_refresh_interval_seconds"
+DEFAULT_DASHBOARD_REFRESH_INTERVAL_SECONDS = 15
+MAX_DASHBOARD_REFRESH_INTERVAL_SECONDS = 86400
+
+
+def normalize_dashboard_refresh_interval_seconds(value: Any) -> int:
+    interval = int(str(value))
+    if not 1 <= interval <= MAX_DASHBOARD_REFRESH_INTERVAL_SECONDS:
+        raise ValueError("Dashboard refresh interval must be between 1 and 86400 seconds")
+    return interval
+
+
+async def get_dashboard_refresh_interval_seconds(db: AsyncSession) -> int:
+    try:
+        value = await get_config(
+            db,
+            DASHBOARD_REFRESH_INTERVAL_CONFIG_KEY,
+            DEFAULT_DASHBOARD_REFRESH_INTERVAL_SECONDS,
+        )
+        return normalize_dashboard_refresh_interval_seconds(value)
+    except (TypeError, ValueError):
+        return DEFAULT_DASHBOARD_REFRESH_INTERVAL_SECONDS
 
 
 async def get_config(db: AsyncSession, key: str, default: Any = None) -> Any:

@@ -157,13 +157,14 @@ async def _create_hypertable(conn, table: str, chunk_interval: str) -> None:
     if await _is_hypertable(conn, table):
         logger.info("ensure_timescale: %s is already a hypertable", table)
         return
-    # 表名来自固定常量，勿拼接用户输入
+    # 表名来自固定常量，勿拼接用户输入。
+    # 先将绑定参数声明为 text，避免 asyncpg 按 interval 编码字符串（该编码要求 timedelta）。
     sql = text(
         f"""
         SELECT create_hypertable(
           '{table}'::regclass,
           'collected_at',
-          chunk_time_interval => CAST(:chunk AS interval),
+          chunk_time_interval => CAST(CAST(:chunk AS text) AS interval),
           migrate_data => TRUE,
           if_not_exists => TRUE
         )
@@ -213,7 +214,7 @@ async def _refresh_compression_policy(conn, table: str, compress_after: str) -> 
     except SQLAlchemyError as e:
         logger.debug("ensure_timescale: remove_compression_policy %s: %s", table, e)
     await conn.execute(
-        text(f"SELECT add_compression_policy('{table}', CAST(:interval AS interval))"),
+        text(f"SELECT add_compression_policy('{table}', CAST(CAST(:interval AS text) AS interval))"),
         {"interval": compress_after},
     )
     logger.info(
@@ -230,7 +231,7 @@ async def _refresh_retention_policy(conn, table: str, retention: str) -> None:
     except SQLAlchemyError as e:
         logger.debug("ensure_timescale: remove_retention_policy %s: %s", table, e)
     await conn.execute(
-        text(f"SELECT add_retention_policy('{table}', CAST(:interval AS interval))"),
+        text(f"SELECT add_retention_policy('{table}', CAST(CAST(:interval AS text) AS interval))"),
         {"interval": retention},
     )
     logger.info(

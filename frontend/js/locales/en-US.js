@@ -477,6 +477,7 @@
             ai_alert_confidence_threshold: 'Minimum AI alert confidence threshold (0-1)',
             notification_cooldown_minutes: 'Notification cooldown window in minutes for alerts of the same type',
             monitoring_collection_interval_seconds: 'Global monitoring collection interval in seconds',
+            dashboard_refresh_interval_seconds: 'Dashboard auto-refresh interval in seconds (1–86400, default 15); takes effect when reopening the dashboard',
             network_probe_host: 'Network probe target address',
             app_external_base_url: 'External base URL used to generate notification detail links',
             smtp_host: 'SMTP server address', smtp_port: 'SMTP server port', smtp_username: 'SMTP username',

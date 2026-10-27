@@ -13,12 +13,23 @@ const MonitorPage = {
     currentTimeRange: 60, // default 1 hour in minutes
     isRealtime: true,
     chartMaxPoints: 240,
+    _dataVersion: 0,
+    _historyRequest: 0,
+    _statuses: {},
+    _liveMetrics: new Map(),
+    _chartTimestamp: null,
+    _cardTimestamp: null,
+    _customRange: null,
 
     /**
      * 解析后端返回的 UTC 时间字符串为本地 Date 对象
      * 后端存储的是 UTC naive datetime，返回时没有时区标识
      */
     _parseUTCDateTime(dateInput) {
+        // Legacy API timestamps without an offset also represent UTC.
+        if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?$/.test(dateInput.trim())) {
+            dateInput = dateInput.trim().replace(' ', 'T') + 'Z';
+        }
         const parsed = Format.parseDate(dateInput);
         if (parsed) return parsed;
 
@@ -294,6 +305,12 @@ const MonitorPage = {
     },
 
     async renderWithOptions(options = {}) {
+        const version = ++this._dataVersion;
+        this._statuses = {};
+        this._liveMetrics.clear();
+        this._chartTimestamp = null;
+        this._cardTimestamp = null;
+        this._customRange = null;
         this._renderOptions = options || {};
         const content = options.container || DOM.$('#page-content');
         this._container = content;
@@ -389,6 +406,7 @@ const MonitorPage = {
             if (value === 'custom') {
                 this._showCustomTimeDialog();
             } else {
+                this._customRange = null;
                 this.currentTimeRange = parseInt(value);
                 this.isRealtime = true;
                 const selectedDatasourceId = this._getSelectedDatasourceId();
@@ -411,7 +429,9 @@ const MonitorPage = {
             realtimeBtn.className = this.isRealtime ? 'btn btn-secondary' : 'btn btn-outline';
             const selectedDatasourceId = this._getSelectedDatasourceId();
             if (this.isRealtime && selectedDatasourceId) {
-                this._startMonitoring(selectedDatasourceId);
+                this._customRange = null;
+                timeRangeSelect.value = String(this.currentTimeRange);
+                this._reloadData(selectedDatasourceId);
             } else {
                 this._stopMonitoring();
             }
@@ -427,20 +447,24 @@ const MonitorPage = {
         refreshBtn.addEventListener('click', async () => {
             const selectedDatasourceId = this._getSelectedDatasourceId();
             if (!selectedDatasourceId) return;
+            const refreshVersion = this._dataVersion;
 
             // Disable button and show loading state
             refreshBtn.disabled = true;
             refreshBtn.innerHTML = I18n.t('pageCopy.monitor.collecting');
 
             try {
+                this._setStatus('refresh', null);
                 await API.refreshMetrics(selectedDatasourceId);
-                // Wait a moment for the metric to be collected and stored
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                // Reload latest data
-                await this._loadLatestData(selectedDatasourceId);
+                if (!this._isCurrent(selectedDatasourceId, refreshVersion)) return;
+                // Collection is awaited by the API. Reload cards and the selected chart range.
+                if (this._statuses.charts) this._initCharts();
+                await this._loadData(selectedDatasourceId);
             } catch (e) {
                 console.error('[Monitor] Failed to refresh metrics:', e);
-                alert(I18n.t('pageCopy.monitor.refreshFailed') + e.message);
+                if (this._isCurrent(selectedDatasourceId, refreshVersion)) {
+                    this._setStatus('refresh', I18n.t('pageCopy.monitor.refreshFailed') + e.message);
+                }
             } finally {
                 // Re-enable button
                 refreshBtn.disabled = false;
@@ -491,6 +515,12 @@ const MonitorPage = {
         healthBanner.innerHTML = I18n.t('pageCopy.monitor.databaseHealthStatusChecking');
         content.appendChild(healthBanner);
 
+        const status = DOM.el('div', {
+            id: 'monitor-status', className: 'monitor-status mb-24',
+            role: 'status', 'aria-live': 'polite', hidden: true
+        });
+        content.appendChild(status);
+
         // Database Metric cards row
         const dbMetricsRow = DOM.el('div', { className: 'grid-4 mb-24', id: 'monitor-metrics' });
         const connectionCard = DOM.el('div', { className: 'metric-card metric-card-connection-overview' });
@@ -537,109 +567,157 @@ const MonitorPage = {
 
         // Init charts after DOM is ready - use requestAnimationFrame to ensure canvas elements are rendered
         requestAnimationFrame(() => {
-            console.log('[Monitor] Starting chart initialization');
-            let successCount = 0;
-            let failCount = 0;
+            if (version !== this._dataVersion || !content.isConnected) return;
+            this._initCharts();
 
-            // Init all charts with unified blue style
-            for (const id of this.chartIds) {
-                const config = {};
-                // Set max to 100 for percentage charts
-                if (id === 'cache_hit') {
-                    config.options = { scales: { y: { max: 100, min: 0 } } };
-                } else if (id === 'connections') {
-                    config.data = {
-                        datasets: [
-                            this._buildMultiLineDataset(I18n.t('pageCopy.monitor.activeConnections2'), '#10b981', 'rgba(16,185,129,0.1)'),
-                            this._buildMultiLineDataset(I18n.t('pageCopy.monitor.totalConnections'), '#2f81f7', 'rgba(47,129,247,0.1)')
-                        ]
-                    };
-                    config.options = {
-                        plugins: {
-                            legend: { display: true, position: 'top', labels: { color: '#e6edf3', font: { size: 11 } } }
-                        }
-                    };
-                } else if (id === 'network') {
-                    const networkConfig = this._buildNetworkChartOptions();
-                    config.data = {
-                        datasets: [
-                            this._buildMultiLineDataset(I18n.t('pageCopy.monitor.receive'), '#10b981', 'rgba(16,185,129,0.1)'),
-                            this._buildMultiLineDataset(I18n.t('pageCopy.monitor.send'), '#8b5cf6', 'rgba(139,92,246,0.1)')
-                        ]
-                    };
-                    config.options = networkConfig.options;
-                    config.valueFormatter = networkConfig.valueFormatter;
-                }
-                const chart = ChartPanel.init(id, 'line', config);
-                if (chart) {
-                    successCount++;
-                } else {
-                    failCount++;
-                    console.error(`[Monitor] Failed to initialize chart: ${id}`);
-                }
-            }
-
-            // Init OS charts with unified blue style
-            for (const id of this.osChartIds) {
-                const config = {};
-                // Set max to 100 for percentage charts
-                if (id === 'cpu_usage' || id === 'memory_usage' || id === 'disk_usage') {
-                    config.options = { scales: { y: { max: 100, min: 0 } } };
-                }
-                // Multi-line charts with distinct colors for better differentiation
-                if (id === 'disk_io') {
-                    config.data = {
-                        datasets: [
-                            this._buildMultiLineDataset(I18n.t('pageCopy.monitor.readLabel'), '#2f81f7', 'rgba(47,129,247,0.1)'),
-                            this._buildMultiLineDataset(I18n.t('pageCopy.monitor.writeLabel'), '#f97316', 'rgba(249,115,22,0.1)')
-                        ]
-                    };
-                    config.options = {
-                        plugins: {
-                            legend: { display: true, position: 'top', labels: { color: '#e6edf3', font: { size: 11 } } }
-                        }
-                    };
-                } else if (id === 'network_io') {
-                    const networkConfig = this._buildNetworkChartOptions();
-                    config.data = {
-                        datasets: [
-                            this._buildMultiLineDataset(I18n.t('pageCopy.monitor.receive'), '#10b981', 'rgba(16,185,129,0.1)'),
-                            this._buildMultiLineDataset(I18n.t('pageCopy.monitor.send'), '#8b5cf6', 'rgba(139,92,246,0.1)')
-                        ]
-                    };
-                    config.options = networkConfig.options;
-                    config.valueFormatter = networkConfig.valueFormatter;
-                }
-                const chart = ChartPanel.init(id, 'line', config);
-                if (chart) {
-                    successCount++;
-                } else {
-                    failCount++;
-                    console.error(`[Monitor] Failed to initialize chart: ${id}`);
-                }
-            }
-
-            console.log(`[Monitor] Chart initialization complete: ${successCount} success, ${failCount} failed`);
-
-            // Load initial data and start WS AFTER charts are initialized
             const selectedDatasourceId = this._getSelectedDatasourceId();
             if (selectedDatasourceId) {
-                // Load health status first
+                this.currentDatasourceId = selectedDatasourceId;
                 this._loadHealthStatus(selectedDatasourceId);
-                // Load latest data first for immediate display, then load history
-                this._loadLatestData(selectedDatasourceId).then(() => {
-                    this._loadHistory(selectedDatasourceId);
-                });
-                if (this.isRealtime) {
-                    this._startMonitoring(selectedDatasourceId);
-                }
+                this._loadData(selectedDatasourceId);
+                if (this.isRealtime) this._startMonitoring(selectedDatasourceId);
             }
         });
 
         return () => this._cleanup();
     },
 
+    _initCharts() {
+        console.log('[Monitor] Starting chart initialization');
+        let successCount = 0;
+        let failCount = 0;
+
+        // Init all charts with unified blue style
+        for (const id of this.chartIds) {
+            const config = {};
+            // Set max to 100 for percentage charts
+            if (id === 'cache_hit') {
+                config.options = { scales: { y: { max: 100, min: 0 } } };
+            } else if (id === 'connections') {
+                config.data = {
+                    datasets: [
+                        this._buildMultiLineDataset(I18n.t('pageCopy.monitor.activeConnections2'), '#10b981', 'rgba(16,185,129,0.1)'),
+                        this._buildMultiLineDataset(I18n.t('pageCopy.monitor.totalConnections'), '#2f81f7', 'rgba(47,129,247,0.1)')
+                    ]
+                };
+                config.options = {
+                    plugins: {
+                        legend: { display: true, position: 'top', labels: { color: '#e6edf3', font: { size: 11 } } }
+                    }
+                };
+            } else if (id === 'network') {
+                const networkConfig = this._buildNetworkChartOptions();
+                config.data = {
+                    datasets: [
+                        this._buildMultiLineDataset(I18n.t('pageCopy.monitor.receive'), '#10b981', 'rgba(16,185,129,0.1)'),
+                        this._buildMultiLineDataset(I18n.t('pageCopy.monitor.send'), '#8b5cf6', 'rgba(139,92,246,0.1)')
+                    ]
+                };
+                config.options = networkConfig.options;
+                config.valueFormatter = networkConfig.valueFormatter;
+            }
+            const chart = ChartPanel.init(id, 'line', config);
+            if (chart) {
+                successCount++;
+            } else {
+                failCount++;
+                console.error(`[Monitor] Failed to initialize chart: ${id}`);
+            }
+        }
+
+        // Init OS charts with unified blue style
+        for (const id of this.osChartIds) {
+            const config = {};
+            // Set max to 100 for percentage charts
+            if (id === 'cpu_usage' || id === 'memory_usage' || id === 'disk_usage') {
+                config.options = { scales: { y: { max: 100, min: 0 } } };
+            }
+            // Multi-line charts with distinct colors for better differentiation
+            if (id === 'disk_io') {
+                config.data = {
+                    datasets: [
+                        this._buildMultiLineDataset(I18n.t('pageCopy.monitor.readLabel'), '#2f81f7', 'rgba(47,129,247,0.1)'),
+                        this._buildMultiLineDataset(I18n.t('pageCopy.monitor.writeLabel'), '#f97316', 'rgba(249,115,22,0.1)')
+                    ]
+                };
+                config.options = {
+                    plugins: {
+                        legend: { display: true, position: 'top', labels: { color: '#e6edf3', font: { size: 11 } } }
+                    }
+                };
+            } else if (id === 'network_io') {
+                const networkConfig = this._buildNetworkChartOptions();
+                config.data = {
+                    datasets: [
+                        this._buildMultiLineDataset(I18n.t('pageCopy.monitor.receive'), '#10b981', 'rgba(16,185,129,0.1)'),
+                        this._buildMultiLineDataset(I18n.t('pageCopy.monitor.send'), '#8b5cf6', 'rgba(139,92,246,0.1)')
+                    ]
+                };
+                config.options = networkConfig.options;
+                config.valueFormatter = networkConfig.valueFormatter;
+            }
+            const chart = ChartPanel.init(id, 'line', config);
+            if (chart) {
+                successCount++;
+            } else {
+                failCount++;
+                console.error(`[Monitor] Failed to initialize chart: ${id}`);
+            }
+        }
+
+        console.log(`[Monitor] Chart initialization complete: ${successCount} success, ${failCount} failed`);
+        this._setStatus('charts', failCount ? I18n.t('pageCopy.monitor.chartInitFailed') : null);
+    },
+
+    _isCurrent(connId, version) {
+        return version === this._dataVersion && this._container?.isConnected && connId === this._getSelectedDatasourceId();
+    },
+
+    _setStatus(source, message) {
+        if (message) this._statuses[source] = message;
+        else delete this._statuses[source];
+        const status = this._container?.querySelector('#monitor-status');
+        if (!status) return;
+        status.replaceChildren();
+        status.hidden = Object.keys(this._statuses).length === 0;
+        for (const text of Object.values(this._statuses)) {
+            status.appendChild(DOM.el('div', { textContent: text }));
+        }
+        if (status.hidden) return;
+        const retry = DOM.el('button', {
+            className: 'btn btn-secondary btn-sm', type: 'button',
+            textContent: I18n.t('pageCopy.monitor.retryLoading')
+        });
+        retry.addEventListener('click', async () => {
+            retry.disabled = true;
+            try {
+                if (this._statuses.charts) this._initCharts();
+                if (this._statuses.refresh) {
+                    this._container.querySelector('#refresh-btn')?.click();
+                } else {
+                    await this._loadData(this._getSelectedDatasourceId());
+                }
+                if (this.isRealtime && this._statuses.socket) this._startMonitoring(this._getSelectedDatasourceId());
+            } finally {
+                retry.disabled = false;
+            }
+        });
+        status.appendChild(retry);
+    },
+
+    _loadData(connId) {
+        return Promise.all([
+            this._customRange ? Promise.resolve() : this._loadLatestData(connId),
+            this._loadHistory(connId),
+        ]);
+    },
+
     _reloadData(connId) {
+        ++this._dataVersion;
+        this._liveMetrics.clear();
+        this._chartTimestamp = null;
+        this._cardTimestamp = null;
+        for (const source of ['history', 'latest', 'refresh', 'socket']) this._setStatus(source, null);
         // Stop WebSocket if running
         this._stopMonitoring();
 
@@ -656,9 +734,7 @@ const MonitorPage = {
         this._loadHealthStatus(connId);
 
         // Load new data
-        this._loadLatestData(connId).then(() => {
-            this._loadHistory(connId);
-        });
+        this._loadData(connId);
 
         // Start monitoring if realtime is enabled
         if (this.isRealtime) {
@@ -667,11 +743,14 @@ const MonitorPage = {
     },
 
     async _loadHealthStatus(connId) {
+        const version = this._dataVersion;
         try {
             const health = await API.getDatasourceHealth(connId);
+            if (!this._isCurrent(connId, version)) return;
             this._updateHealthBanner(health);
         } catch (e) {
             console.error('[Monitor] Failed to load health status:', e);
+            if (!this._isCurrent(connId, version)) return;
             this._updateHealthBanner({
                 healthy: false,
                 status: 'unknown',
@@ -822,7 +901,6 @@ const MonitorPage = {
                 alert(I18n.t('pageCopy.monitor.startTimeMustBeEarlierThanEnd'));
                 return;
             }
-            this.isRealtime = false;
             const selectedDatasourceId = this._getSelectedDatasourceId();
             if (!selectedDatasourceId) {
                 alert(I18n.t('pageCopy.monitor.pleaseSelectDatasourceFirst'));
@@ -852,141 +930,140 @@ const MonitorPage = {
     },
 
     async _loadCustomRange(connId, startTime, endTime) {
-        try {
-            console.log('[Monitor] Loading custom range:', startTime, 'to', endTime);
-
-            // Convert to ISO format for API
-            const start = new Date(startTime).toISOString();
-            const end = new Date(endTime).toISOString();
-
-            const metrics = await API.getMetrics(
-                connId,
-                `metric_type=db_status&start_time=${encodeURIComponent(start)}&end_time=${encodeURIComponent(end)}&limit=10000`
-            );
-
-            console.log('[Monitor] Loaded custom range metrics:', metrics.length, 'records');
-
-            if (metrics.length === 0) {
-                alert(I18n.t('pageCopy.monitor.thereIsNoDataInTheSelected'));
-                return false;
-            }
-
-            this._setChartMaxPoints(metrics.length);
-
-            // Clear charts
-            for (const id of [...this.chartIds, ...this.osChartIds]) {
-                ChartPanel.clear(id);
-            }
-
-            this._resetNetworkStates();
-
-            const reversed = [...metrics].reverse();
-
-            // Update latest metric card
-            if (metrics.length > 0) {
-                this._updateMetricCards(metrics[0].data);
-            }
-
-            // Batch populate charts
-            this._batchUpdateCharts(reversed);
-            return true;
-        } catch (e) {
-            console.error('[Monitor] Failed to load custom range:', e);
-            alert(I18n.t('pageCopy.monitor.failedToLoadData') + e.message);
-            return false;
+        const previousRange = this._customRange;
+        const wasRealtime = this.isRealtime;
+        const version = this._dataVersion;
+        this._customRange = {
+            start: new Date(startTime).toISOString(),
+            end: new Date(endTime).toISOString()
+        };
+        this.isRealtime = false;
+        this._stopMonitoring();
+        const hasData = await this._loadHistory(connId);
+        if (!this._isCurrent(connId, version)) return false;
+        if (!hasData) {
+            this._customRange = previousRange;
+            this.isRealtime = wasRealtime;
+            if (wasRealtime) this._startMonitoring(connId);
         }
+        return hasData;
+    },
+
+    _updateSnapshotCards(metric) {
+        const timestamp = this._parseUTCDateTime(metric.collected_at).getTime();
+        if (!Number.isFinite(timestamp) || (this._cardTimestamp !== null && timestamp < this._cardTimestamp)) return;
+        this._cardTimestamp = timestamp;
+        this._updateMetricCards(metric.data);
     },
 
     async _loadLatestData(connId) {
+        const version = this._dataVersion;
         try {
-            console.log('[Monitor] Loading latest data for connection:', connId);
             const latest = await API.getLatestMetric(connId, 'db_status');
-            if (latest && latest.data) {
-                console.log('[Monitor] Latest metric data:', latest.data);
-                this._updateMetricCards(latest.data);
-            }
+            if (!this._isCurrent(connId, version) || this._customRange) return;
+            if (latest?.data) this._updateSnapshotCards(latest);
+            this._setStatus('latest', null);
         } catch (e) {
             console.error('[Monitor] Failed to load latest data:', e);
+            if (this._isCurrent(connId, version)) {
+                this._setStatus('latest', I18n.t('pageCopy.monitor.latestLoadFailed', { message: e.message }));
+            }
         }
     },
 
     async _loadHistory(connId) {
+        const version = this._dataVersion;
+        const request = ++this._historyRequest;
+        const customRange = this._customRange;
+        const minutes = this.currentTimeRange;
+        const isCurrent = () => this._isCurrent(connId, version) && request === this._historyRequest;
         try {
-            console.log('[Monitor] Loading history for connection:', connId, 'range:', this.currentTimeRange, 'minutes');
-            const metrics = await API.getMetrics(connId, `metric_type=db_status&minutes=${this.currentTimeRange}&limit=10000`);
-            console.log('[Monitor] Loaded metrics:', metrics.length, 'records');
-            if (metrics.length === 0) {
-                console.warn('[Monitor] No metrics found');
-                return;
+            const params = customRange
+                ? `start_time=${encodeURIComponent(customRange.start)}&end_time=${encodeURIComponent(customRange.end)}`
+                : `minutes=${minutes}`;
+            const metrics = await API.getMetrics(connId, `metric_type=db_status&${params}&limit=10000`);
+            if (!isCurrent()) return false;
+            if (!Array.isArray(metrics)) throw new Error(I18n.t('pageCopy.monitor.invalidHistory'));
+
+            const start = customRange ? Date.parse(customRange.start) : Date.now() - minutes * 60000;
+            const end = customRange ? Date.parse(customRange.end) : Infinity;
+            // Merge packets received while the HTTP request was in flight, using collection
+            // time as the key so refresh and WebSocket delivery cannot duplicate a sample.
+            const snapshots = new Map();
+            for (const metric of [...metrics, ...(customRange ? [] : this._liveMetrics.values())]) {
+                const timestamp = this._parseUTCDateTime(metric.collected_at).getTime();
+                if (metric.data && Number.isFinite(timestamp) && timestamp >= start && timestamp <= end) {
+                    snapshots.set(timestamp, metric);
+                }
             }
-
-            // Filter metrics to only include those within the selected time range
-            // 注意：后端返回的是 UTC 时间，需要正确解析后再比较
-            const now = Date.now();
-            const rangeMs = this.currentTimeRange * 60 * 1000;
-            const cutoffTime = now - rangeMs;
-            const filtered = metrics.filter(m => {
-                const timestamp = this._parseUTCDateTime(m.collected_at).getTime();
-                return Number.isFinite(timestamp) && timestamp >= cutoffTime;
-            });
-
-            console.log('[Monitor] Filtered metrics:', filtered.length, 'records within range');
-            if (filtered.length === 0) {
-                console.warn('[Monitor] No metrics found within selected time range');
-                return;
-            }
-
-            const reversed = [...filtered].reverse();
-            this._setChartMaxPoints(filtered.length);
-
+            const ordered = [...snapshots.entries()].sort((a, b) => a[0] - b[0]);
+            this._setChartMaxPoints(ordered.length);
+            for (const id of [...this.chartIds, ...this.osChartIds]) ChartPanel.clear(id);
             this._resetNetworkStates();
-
-            // Batch populate charts with historical data for better performance
-            this._batchUpdateCharts(reversed);
-            console.log('[Monitor] History loaded successfully');
+            this._chartTimestamp = ordered.length ? ordered[ordered.length - 1][0] : null;
+            if (ordered.length) {
+                const latest = ordered[ordered.length - 1][1];
+                if (customRange) {
+                    this._cardTimestamp = null;
+                    this._updateMetricCards(latest.data);
+                } else {
+                    this._updateSnapshotCards(latest);
+                }
+                this._batchUpdateCharts(ordered.map(([, metric]) => metric));
+            }
+            this._setStatus('history', ordered.length ? null : I18n.t('pageCopy.monitor.thereIsNoDataInTheSelected'));
+            return true;
         } catch (e) {
             console.error('[Monitor] Failed to load history:', e);
+            if (isCurrent()) {
+                this._setStatus('history', I18n.t('pageCopy.monitor.historyLoadFailed', { message: e.message }));
+            }
+            return false;
         }
     },
 
     _startMonitoring(connId) {
-        // Stop existing WebSocket if any
         this._stopMonitoring();
-
-        console.log('[Monitor] Starting WebSocket monitoring for connection:', connId);
-        this.ws = new WSManager(`/ws/monitor/${connId}`);
-        this.ws.on('open', () => {
-            console.log('[Monitor] WebSocket connected');
+        const version = this._dataVersion;
+        const ws = new WSManager(`/ws/monitor/${connId}`);
+        this.ws = ws;
+        const isCurrent = () => this.ws === ws && this.isRealtime && this._isCurrent(connId, version);
+        ws.on('open', () => {
+            if (isCurrent()) this._setStatus('socket', null);
         });
-        this.ws.on('error', (error) => {
-            console.error('[Monitor] WebSocket error:', error);
-        });
-        this.ws.on('close', (event) => {
-            console.log('[Monitor] WebSocket closed:', event);
-        });
-        this.ws.on('message', (data) => {
-            if (data.type === 'heartbeat') {
-                console.log('[Monitor] Heartbeat received');
-                return;
+        const disconnected = () => {
+            if (isCurrent()) this._setStatus('socket', I18n.t('pageCopy.monitor.realtimeDisconnected'));
+        };
+        ws.on('error', disconnected);
+        ws.on('close', disconnected);
+        ws.on('message', (metric) => {
+            if (!isCurrent() || metric.type !== 'db_status' || !metric.data || this._customRange) return;
+            const timestamp = this._parseUTCDateTime(metric.collected_at).getTime();
+            if (!Number.isFinite(timestamp) || timestamp < Date.now() - this.currentTimeRange * 60000) return;
+            this._setStatus('socket', null);
+            this._liveMetrics.set(timestamp, metric);
+            // Keep the in-flight history buffer bounded and scoped to the visible range.
+            for (const time of this._liveMetrics.keys()) {
+                if (time < Date.now() - this.currentTimeRange * 60000) this._liveMetrics.delete(time);
             }
-            if (data.type === 'db_status' && data.data) {
-                console.log('[Monitor] Received metric data:', data.data);
-                // 使用服务器采集时间而非本地时间
-                const collectedAt = data.collected_at || new Date().toISOString();
-                const timestamp = this._parseUTCDateTime(collectedAt).getTime();
-                const time = this._formatChartLabel(collectedAt);
-                this._updateMetricCards(data.data);
-                this._updateCharts(data.data, time, timestamp);
+            while (this._liveMetrics.size > 10000) this._liveMetrics.delete(this._liveMetrics.keys().next().value);
+            this._updateSnapshotCards(metric);
+            if (this._chartTimestamp !== null && timestamp <= this._chartTimestamp) return;
+            this._chartTimestamp = timestamp;
+            this._updateCharts(metric.data, this._formatChartLabel(metric.collected_at), timestamp);
+            // A live sample resolves an empty range, but must not hide a failed history request.
+            if (this._statuses.history === I18n.t('pageCopy.monitor.thereIsNoDataInTheSelected')) {
+                this._setStatus('history', null);
             }
         });
-        this.ws.connect();
+        ws.connect();
     },
 
     _stopMonitoring() {
-        if (this.ws) {
-            this.ws.disconnect();
-            this.ws = null;
-        }
+        const ws = this.ws;
+        this.ws = null;
+        if (ws) ws.disconnect();
+        this._setStatus('socket', null);
     },
 
     _updateMetricCards(data) {
@@ -1219,6 +1296,9 @@ const MonitorPage = {
     },
 
     _cleanup() {
+        ++this._dataVersion;
+        this._liveMetrics.clear();
+        this._customRange = null;
         this.datasourceSelector?.destroy();
         this.datasourceSelector = null;
         this._stopMonitoring();

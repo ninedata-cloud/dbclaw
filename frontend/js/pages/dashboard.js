@@ -1,6 +1,7 @@
 /* Dashboard page - Tech Dark Theme */
 const DashboardPage = {
     _timer: null,
+    _refreshIntervalSeconds: 15,
     _datasources: [],
     _hosts: [],
     _healthStatuses: {},
@@ -133,10 +134,14 @@ const DashboardPage = {
         this._stopTimer();
 
         try {
-            const [datasources, hosts] = await Promise.all([
+            const [datasources, hosts, dashboardConfig] = await Promise.all([
                 API.getDatasources(),
-                API.getHosts()
+                API.getHosts(),
+                API.get('/api/system-configs/dashboard').catch(() => null)
             ]);
+            const interval = dashboardConfig?.refresh_interval_seconds;
+            this._refreshIntervalSeconds = Number.isInteger(interval) && interval >= 1 && interval <= 86400
+                ? interval : 15;
             Store.set('datasources', datasources);
             this._datasources = datasources;
             this._hosts = hosts;
@@ -181,7 +186,7 @@ const DashboardPage = {
     },
 
     _buildHeaderActions() {
-        const dbTypes = [...new Set(this._datasources.map(d => d.db_type))];
+        const dbTypes = [...new Set([...this._datasources.map(d => d.db_type), 'hana'])];
         const filtersContainer = DOM.el('div', { className: 'dashboard-filters' });
         filtersContainer.innerHTML = `
             <select id="filter-health" class="filter-select">
@@ -193,7 +198,7 @@ const DashboardPage = {
             </select>
             <select id="filter-dbtype" class="filter-select">
                 <option value="">${I18n.t('dashboard.allTypes')}</option>
-                ${dbTypes.map(t => `<option value="${t}">${t}</option>`).join('')}
+                ${dbTypes.map(t => `<option value="${Utils.escapeHtml(t)}">${Utils.escapeHtml(Format.dbType(t))}</option>`).join('')}
             </select>
             <select id="filter-host" class="filter-select">
                 <option value="">${I18n.t('dashboard.allHosts')}</option>
@@ -297,7 +302,7 @@ const DashboardPage = {
                     const status = healthStatuses[d.id] || 'unknown';
                     const statusCls = this._statusClass(status);
                     const name = Utils.escapeHtml(d.name || d.host || I18n.t('dashboard.datasourceFallback', { id: d.id }));
-                    const type = Utils.escapeHtml(d.db_type || '-');
+                    const type = Utils.escapeHtml(Format.dbType(d.db_type));
                     const host = Utils.escapeHtml(`${d.host || '-'}:${d.port || '-'}`);
                     const statusLabel = Utils.escapeHtml(this._healthLabelShort(status, this._healthReasons[d.id]));
                     return `
@@ -424,7 +429,7 @@ const DashboardPage = {
                     </div>
                     <div class="dash-card-header-right">
                         <span class="dash-card-health health-badge-${statusCls}" id="health-${conn.id}">${this._healthLabelShort(status, this._healthReasons[conn.id])}</span>
-                        <span class="dash-card-type type-${conn.db_type}">${conn.db_type}</span>
+                        <span class="dash-card-type type-${conn.db_type}">${Utils.escapeHtml(Format.dbType(conn.db_type))}</span>
                     </div>
                 </div>
                 <div class="dash-card-host">${conn.host}:${conn.port}${conn.database ? ' / ' + conn.database : ''}</div>
@@ -542,7 +547,7 @@ const DashboardPage = {
 
     _startTimer() {
         this._stopTimer();
-        this._timer = setInterval(() => this._refreshAll(), 15000);
+        this._timer = setInterval(() => this._refreshAll(), this._refreshIntervalSeconds * 1000);
     },
 
     _stopTimer() {

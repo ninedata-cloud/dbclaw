@@ -208,7 +208,6 @@
 .db-health-type {
     font-size: 10px;
     color: rgba(255,255,255,0.34);
-    text-transform: uppercase;
 }
 
 .db-health-status {
@@ -326,7 +325,7 @@
 .dash-card-type {
     font-size: 10px; font-weight: 700;
     padding: 2px 7px; border-radius: 4px; flex-shrink: 0;
-    text-transform: uppercase; letter-spacing: 0.05em;
+    letter-spacing: 0.05em;
 }
 
 .dash-card-host {

@@ -702,6 +702,12 @@
         "pollingStatus": "{value0} · {value1} · 上次刷新 {value2} · {value3}s 自动轮询"
     },
     "monitor": {
+        "chartInitFailed": "图表加载失败，请重试。若仍失败，请刷新页面。",
+        "retryLoading": "重试",
+        "latestLoadFailed": "最新指标加载失败：{message}",
+        "historyLoadFailed": "历史指标加载失败，已有曲线已保留：{message}",
+        "invalidHistory": "历史指标响应格式异常",
+        "realtimeDisconnected": "实时监控连接已断开，正在尝试重连。可以手动刷新指标。",
         "last1Minute": "最近 1 分钟",
         "last10Minutes": "最近 10 分钟",
         "last1Hour": "最近 1 小时",

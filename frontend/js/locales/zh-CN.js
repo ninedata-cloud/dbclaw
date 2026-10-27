@@ -474,6 +474,7 @@
             ai_alert_confidence_threshold: 'AI 判警最低置信度阈值（0-1）',
             notification_cooldown_minutes: '通知冷却窗口（分钟），同一类告警在窗口内默认不重复发送',
             monitoring_collection_interval_seconds: '全局监控采集周期（秒）',
+            dashboard_refresh_interval_seconds: '资源大盘自动刷新时间（秒），支持 1–86400 秒，默认 15 秒，重新进入资源大盘后生效',
             network_probe_host: '网络探针目标地址',
             app_external_base_url: '外部访问基础地址，用于生成通知中的详情链接',
             smtp_host: 'SMTP 服务器地址', smtp_port: 'SMTP 服务器端口', smtp_username: 'SMTP 登录用户名',

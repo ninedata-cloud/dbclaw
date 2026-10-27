@@ -34,6 +34,7 @@ const ChartPanel = {
         if (this.charts[id]) {
             console.log(`[ChartPanel] Destroying existing chart: ${id}`);
             this.charts[id].destroy();
+            delete this.charts[id];
         }
 
         console.log(`[ChartPanel] Initializing chart: ${id}`);
@@ -100,6 +101,8 @@ const ChartPanel = {
             return this.charts[id];
         } catch (error) {
             console.error(`[ChartPanel] Failed to initialize chart ${id}:`, error);
+            // Chart.js can register an instance before its constructor throws.
+            Chart.getChart?.(canvas)?.destroy();
             return null;
         }
     },

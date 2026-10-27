@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from backend.database import get_db
-from backend.dependencies import get_current_admin
+from backend.dependencies import get_current_admin, get_current_user
 from backend.models.user import User
 from backend.models.system_config import SystemConfig
 from backend.schemas.system_config import SystemConfigCreate, SystemConfigUpdate, SystemConfigResponse
@@ -27,6 +27,14 @@ router = APIRouter(prefix="/api/system-configs", tags=["system-configs"])
 
 
 def _validate_special_config(key: str, value: Optional[str], value_type: Optional[str]):
+    if key == config_service.DASHBOARD_REFRESH_INTERVAL_CONFIG_KEY:
+        if value_type is not None and value_type != "integer":
+            raise ApiError(400, "request.validation.invalid")
+        if value is not None:
+            try:
+                config_service.normalize_dashboard_refresh_interval_seconds(value)
+            except (TypeError, ValueError) as exc:
+                raise ApiError(400, "request.validation.invalid") from exc
     if key == "i18n.default_locale" and value is not None and not normalize_locale(value):
         raise ApiError(400, "auth.locale_invalid", {"locale": value})
     if key == "i18n.default_timezone" and value is not None and not normalize_timezone(value):
@@ -60,6 +68,17 @@ async def list_configs(
     """List all configurations"""
     configs = await config_service.get_all_configs(db, category)
     return configs
+
+
+@router.get("/dashboard")
+async def get_dashboard_config(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Expose only dashboard display settings to authenticated users."""
+    return {
+        "refresh_interval_seconds": await config_service.get_dashboard_refresh_interval_seconds(db),
+    }
 
 
 @router.get("/{id}", response_model=SystemConfigResponse)

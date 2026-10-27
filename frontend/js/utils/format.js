@@ -1,5 +1,19 @@
 /* Formatting utilities */
 const Format = {
+    dbType(value) {
+        const labels = {
+            mysql: 'MySQL',
+            postgresql: 'PostgreSQL',
+            sqlserver: 'SQL Server',
+            oracle: 'Oracle',
+            'tdsql-c-mysql': 'TDSQL-C MySQL',
+            'oceanbase-mysql': 'OceanBase MySQL',
+            opengauss: 'openGauss',
+            hana: 'SAP HANA',
+        };
+        return labels[value] || value || '-';
+    },
+
     parseDate(value) {
         if (!value) return null;
         if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;

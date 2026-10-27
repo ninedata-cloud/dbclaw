@@ -1,4 +1,17 @@
 /* === Charts === */
+.monitor-status {
+    padding: 12px 20px;
+    border: 1px solid var(--accent-yellow);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
+}
+
+.monitor-status > div {
+    margin-bottom: 8px;
+}
+
 .chart-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);

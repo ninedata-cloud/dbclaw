@@ -52,17 +52,7 @@ const DatasourcesPage = {
     },
 
     _getDbTypeLabel(dbType) {
-        const labels = {
-            mysql: 'MySQL',
-            postgresql: 'PostgreSQL',
-            sqlserver: 'SQL Server',
-            oracle: 'Oracle',
-            'tdsql-c-mysql': 'TDSQL-C MySQL',
-            'oceanbase-mysql': 'OceanBase MySQL',
-            opengauss: 'openGauss',
-            hana: 'SAP HANA',
-        };
-        return labels[dbType] || dbType || '-';
+        return Format.dbType(dbType);
     },
 
     _formatHourValue(hours) {
